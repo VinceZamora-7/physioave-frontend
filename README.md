@@ -59,7 +59,7 @@ npm ci
 
 ## Run in Development
 ```bash
-npm run dev
+npm run dev -- --host
 ```
 
 Vite default URL is typically `http://localhost:5173`.
