@@ -1,0 +1,28 @@
+/* Sidebar scrollbar (scoped by class) */
+.app-scrollbar {
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--app-fg), 0.18) transparent;
+}
+
+/* Chrome / Edge / Safari */
+.app-scrollbar::-webkit-scrollbar {
+  width: 10px;
+}
+
+.app-scrollbar::-webkit-scrollbar-track {
+  background: rgba(var(--app-border), 0.25);
+  border-radius: 999px;
+}
+
+.app-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(var(--app-fg), 0.22);
+  border-radius: 999px;
+  border: 3px solid transparent; /* makes it "pill" + spacing */
+  background-clip: content-box;
+}
+
+.app-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(var(--app-fg), 0.35);
+}
+

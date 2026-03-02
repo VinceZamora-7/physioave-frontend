@@ -1,0 +1,785 @@
+<template>
+  <main class="h-full p-3 sm:p-5 bg-[rgb(var(--app-bg))] text-[rgb(var(--app-fg))]">
+    <Message v-if="isError" severity="error" class="mb-3">Something went wrong!</Message>
+
+    <section
+      v-else
+      class="h-full rounded-3xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-3 sm:p-4"
+    >
+      <PatientsTable
+        :patients="patients"
+        :isLoading="isLoading"
+        :page="page"
+        :pageSize="pageSize"
+        :rowPerPageOptions="rowPerPageOptions"
+        @pageChange="onPageChangeDebounceFn($event, refetch)"
+      >
+        <template #header>
+          <PatientsTableHeader
+            v-model:selectedSearch="selectedSearch"
+            v-model:selectedStatus="selectedStatus"
+            v-model:selectedClinic="selectedClinic"
+            :statuses="statuses"
+            :clinics="clinics"
+            :isLoading="isLoading"
+            :isExportLoading="isPatientExportLoading"
+            @reset="resetFilters"
+            @save="onSave"
+            @export="onExportToExcelThrottleFn"
+          />
+        </template>
+
+        <template #actions="{ patient }">
+          <PatientRowActionsMenu
+            :disabled="isLoading"
+            :items="menuButtons(patient)"
+          />
+        </template>
+      </PatientsTable>
+
+    <PatientForm
+      ref="patientForm"
+      v-bind="patientFormProps"
+      @on-submit="onSubmit"
+    />
+
+    <PatientHMOInformationForm
+      ref="patientHMOInformationForm"
+      v-bind="patientHMOInformationFormProps"
+    />
+
+    <PatientMedicalCategoryDialog
+      ref="patientMedicalCategoryDialog"
+      v-bind="patientMedicalCategoryDialogProps"
+    />
+    <PatientMedicalDiagnoseDialog
+      ref="patientMedicalDiagnoseDialog"
+      v-bind="patientMedicalDiagnoseDialogProps"
+    />
+    <PatientMedicalHistoryDialog
+      ref="patientMedicalHistoryDialog"
+      v-bind="patientMedicalHistoryDialogProps"
+    />
+    <PatientMedicalImagingDialog
+      ref="patientMedicalImagingDialog"
+      v-bind="patientMedicalImagingDialogProps"
+    />
+
+    <PatientAttachmentDialog
+      ref="patientValidIdAttachmentDialog"
+      v-bind="patientValidIdAttachmentProps"/>
+
+    <PatientAttachmentDialog
+      ref="patientHMOValidIdAttachmentDialog"
+      v-bind="patientHMOValidIdAttachmentProps"/>
+
+    <PatientAttachmentDialog
+      ref="patientLaboratoryAttachmentDialog"
+      v-bind="patientLaboratoryAttachmentProps"/>
+
+    <PatientAttachmentDialog
+      ref="patientPrescriptionAttachmentDialog"
+      v-bind="patientPrescriptionAttachmentProps"/>
+
+    <PatientAttachmentDialog
+      ref="patientRehabPrescriptionAttachmentDialog"
+      v-bind="patientRehabPrescriptionAttachmentProps"/>
+    </section>
+  </main>
+</template>
+
+<script setup lang="ts">
+
+import {useConfirm, useToast} from "primevue";
+import {useQueryClient} from "@tanstack/vue-query";
+import PatientForm from "@/components/PatientForm.vue";
+import {computed, onMounted, ref, useTemplateRef} from "vue";
+import {useRouter} from "vue-router";
+import type {
+  Patient,
+  PatientEditRequestPayload,
+  PatientExportRequestParams,
+  PatientRequestBody,
+  PatientRequestParams
+} from "@/features/patients/types/patient";
+import type {
+  PatientAttachmentDialogFormProps,
+  PatientFormProps,
+  PatientHMOInformationFormProps,
+  PatientMedicalCategoryDialogProps,
+  PatientMedicalDiagnoseDialogProps,
+  PatientMedicalHistoryDialogProps,
+  PatientMedicalImagingDialogProps
+} from "@/features/patients/types/patient.type";
+import type {FormSubmitEvent} from "@primevue/forms";
+import {useRefreshToken} from "@/composables/refresh-token.composable.ts";
+import {
+  defaultPage,
+  defaultPageSize,
+  defaultStatus,
+  type Pageable,
+  type PageRequestWithStatus
+} from "@/models/paging.ts";
+import Message from "primevue/message";
+import {
+  defaultFilterDebounce,
+  defaultThrottle,
+  rowPerPageOptions,
+  Status,
+  statuses,
+  type UUID
+} from "@/utils/global.type.ts";
+import {useThrottleFn, watchDebounced} from "@vueuse/core";
+import type {AxiosResponse} from "axios";
+import {exportToExcel} from "@/utils/export-excel.util.ts";
+import {useIsLoading} from "@/composables/tanstack-loader.composable.ts";
+import type {MenuItem} from "primevue/menuitem";
+import {errorToast, infoToast, successToast, warningToast} from "@/utils/toast.util.ts";
+import type {APIError} from "@/utils/error-handler.ts";
+import {createDraftService} from "@/services/draft.service.ts";
+import type {
+  CivilStatus,
+  Gender,
+  HMOType,
+  MedicalCategory,
+  MedicalDiagnose,
+  MedicalHistory,
+  MedicalImaging,
+  ModeOfReferral,
+  Religion
+} from "@/models/reference.ts";
+import type {Lookup} from "@/models/global.model.ts";
+import type {Region, RegionRequestPayload} from "@/models/philippine-location.ts";
+import {createReferenceQueryService} from "@/services/reference.tanstack.service.ts";
+import type {PatientFormState} from "@/features/patients/schema/patient.schema";
+import {clinicStore} from "@/stores/clinic.store.ts";
+import {appointmentStore} from "@/stores/appointment.store.ts";
+import {usePaginationDebounce} from "@/composables/pagination-debounce.composable.ts";
+import PatientsTable from "@/features/patients/components/PatientsTable.vue";
+import PatientsTableHeader from "@/features/patients/components/PatientsTableHeader.vue";
+import PatientRowActionsMenu from "@/features/patients/components/PatientRowActionsMenu.vue";
+import PatientMedicalCategoryDialog from "@/components/PatientMedicalCategoryDialog.vue";
+import PatientMedicalDiagnoseDialog from "@/components/PatientMedicalDiagnoseDialog.vue";
+import PatientMedicalHistoryDialog from "@/components/PatientMedicalHistoryDialog.vue";
+import {billStore} from "@/stores/bill.store.ts";
+import PatientMedicalImagingDialog from "@/components/PatientMedicalImagingDialog.vue";
+import {
+  philippineLocationTanstackService
+} from "@/services/philippine-location.tanstack.service.ts";
+import {clinicTanstackService} from "@/features/clinics/queries/clinic.tanstack.service";
+import {
+  ClinicTanstackKey,
+  FileServerTanstackKey,
+  HMOTanstackKey,
+  PatientAttachmentTanstackKey,
+  PatientTanstackKey,
+  PhilippineLocationTanstackKey,
+  ReferenceTanstackKey
+} from "@/utils/keys/tanstack-key.ts";
+import {IndexedDBKey} from "@/utils/keys/indexeddb-key.ts";
+import {patientTanstackService} from "@/features/patients/queries/patient.tanstack.service";
+import {fileServerTanstackService} from "@/services/file-server.tanstack.service.ts";
+import PatientAttachmentDialog from "@/components/PatientAttachmentDialog.vue";
+import PatientHMOInformationForm from "@/components/PatientHMOInformationForm.vue";
+import {hmoTanstackService} from "@/features/hmos/queries/hmo.tanstack.service";
+import {staffTanstackService} from "@/features/staff/queries/staff.tanstack.service";
+
+const patientMedicalCategoryDialog = useTemplateRef<InstanceType<typeof PatientMedicalCategoryDialog>>('patientMedicalCategoryDialog')
+const patientMedicalDiagnoseDialog = useTemplateRef<InstanceType<typeof PatientMedicalDiagnoseDialog>>('patientMedicalDiagnoseDialog')
+const patientMedicalHistoryDialog = useTemplateRef<InstanceType<typeof PatientMedicalHistoryDialog>>('patientMedicalHistoryDialog')
+const patientMedicalImagingDialog = useTemplateRef<InstanceType<typeof PatientMedicalImagingDialog>>('patientMedicalImagingDialog')
+
+const patientValidIdAttachmentDialog = useTemplateRef<InstanceType<typeof PatientAttachmentDialog>>('patientValidIdAttachmentDialog')
+const patientHMOValidIdAttachmentDialog = useTemplateRef<InstanceType<typeof PatientAttachmentDialog>>('patientHMOValidIdAttachmentDialog')
+const patientLaboratoryAttachmentDialog = useTemplateRef<InstanceType<typeof PatientAttachmentDialog>>('patientLaboratoryAttachmentDialog')
+const patientPrescriptionAttachmentDialog = useTemplateRef<InstanceType<typeof PatientAttachmentDialog>>('patientPrescriptionAttachmentDialog')
+const patientRehabPrescriptionAttachmentDialog = useTemplateRef<InstanceType<typeof PatientAttachmentDialog>>('patientRehabPrescriptionAttachmentDialog')
+
+const patientForm = useTemplateRef<InstanceType<typeof PatientForm>>('patientForm')
+const patientHMOInformationForm = useTemplateRef<InstanceType<typeof PatientHMOInformationForm>>('patientHMOInformationForm')
+
+const useClinicStore = clinicStore()
+const useAppointmentStore = appointmentStore()
+const useBillStore = billStore()
+const router = useRouter()
+
+const toast = useToast()
+const confirm = useConfirm()
+const queryClient = useQueryClient()
+
+const isFSALoading = useIsLoading(FileServerTanstackKey.FSA)
+
+const isPatientLoading = useIsLoading(PatientTanstackKey.PATIENTS)
+const isPatientExportLoading = useIsLoading(PatientTanstackKey.PATIENTS_EXPORT)
+
+const isGendersLoading = useIsLoading(ReferenceTanstackKey.GENDERS)
+const isCivilStatusesLoading = useIsLoading(ReferenceTanstackKey.CIVIL_STATUSES)
+const isReligionsLoading = useIsLoading(ReferenceTanstackKey.RELIGIONS)
+const isModeOfReferralsLoading = useIsLoading(ReferenceTanstackKey.MODE_OF_REFERRALS)
+const isMedicalCategoriesLoading = useIsLoading(ReferenceTanstackKey.MEDICAL_CATEGORIES)
+const isMedicalDiagnosesLoading = useIsLoading(ReferenceTanstackKey.MEDICAL_DIAGNOSES)
+const isMedicalHistoriesLoading = useIsLoading(ReferenceTanstackKey.MEDICAL_HISTORIES)
+const isMedicalImagingsLoading = useIsLoading(ReferenceTanstackKey.MEDICAL_IMAGINGS)
+const isHMOTypesLoading = useIsLoading(ReferenceTanstackKey.HMO_TYPES)
+const isHMOLoading = useIsLoading(HMOTanstackKey.HMOS_LOOKUP)
+const isClinicsLoading = useIsLoading(ClinicTanstackKey.CLINICS_LOOKUP)
+
+const isRegionsLoading = useIsLoading(PhilippineLocationTanstackKey.REGIONS)
+const isProvincesLoading = useIsLoading(PhilippineLocationTanstackKey.PROVINCES)
+const isCitiesLoading = useIsLoading(PhilippineLocationTanstackKey.CITIES)
+const isBaranggaysLoading = useIsLoading(PhilippineLocationTanstackKey.BARANGGAYS)
+
+const isLoading = computed<boolean>(() =>
+  isFSALoading.value ||
+  isPatientLoading.value ||
+  isPatientExportLoading.value ||
+
+  isGendersLoading.value ||
+  isCivilStatusesLoading.value ||
+  isReligionsLoading.value ||
+  isModeOfReferralsLoading.value ||
+  isMedicalCategoriesLoading.value ||
+  isMedicalDiagnosesLoading.value ||
+  isMedicalHistoriesLoading.value ||
+  isMedicalImagingsLoading.value ||
+  isHMOTypesLoading.value ||
+  isHMOLoading.value ||
+  isClinicsLoading.value ||
+
+  isRegionsLoading.value ||
+  isProvincesLoading.value ||
+  isCitiesLoading.value ||
+  isBaranggaysLoading.value)
+
+const draftService = createDraftService<PatientFormState>(IndexedDBKey.PATIENT)
+
+const selectedPatient = ref<Patient | undefined>()
+
+const selectedClinic = ref<Lookup | undefined>()
+const selectedSearch = ref<string | undefined>()
+const selectedStatus = ref<Status>(defaultStatus)
+const {
+  page,
+  pageSize,
+  onPageChangeDebounceFn
+} = usePaginationDebounce<Pageable<Patient> | undefined>()
+
+watchDebounced(
+  [selectedClinic, selectedSearch, selectedStatus],
+  (): void => {
+    page.value = 1
+    void refetch()
+  },
+  {debounce: defaultFilterDebounce, flush: "post"},
+)
+
+const resetFilters = (): void => {
+  selectedSearch.value = undefined
+  selectedStatus.value = defaultStatus
+  selectedClinic.value = undefined
+}
+
+const genders = ref<Gender[]>([])
+const civilStatuses = ref<CivilStatus[]>([])
+const religions = ref<Religion[]>([])
+const modeOfReferrals = ref<ModeOfReferral[]>([])
+const clinics = ref<Lookup[]>([])
+const doctors = ref<Lookup[]>([])
+const regions = ref<Region[]>([])
+
+const medicalCategories = ref<MedicalCategory[]>([])
+const medicalDiagnoses = ref<MedicalDiagnose[]>([])
+const medicalHistories = ref<MedicalHistory[]>([])
+const medicalImagings = ref<MedicalImaging[]>([])
+
+const hmos = ref<Lookup[]>([])
+const hmoTypes = ref<HMOType[]>([])
+
+const patientFormProps = computed(() => ({
+  selectedPatient: selectedPatient.value,
+  isLoading: isLoading.value,
+  buttonProps: {
+    label: selectedPatient.value ? `Edit ${selectedPatient.value.full_name}` : `Save Patient`,
+    icon: selectedPatient.value ? 'pi pi-pen-to-square' : 'pi pi-save',
+    severity: selectedPatient.value ? 'success' : 'info'
+  },
+  draftService: draftService,
+  queryClient: queryClient,
+  genders: genders.value,
+  civilStatuses: civilStatuses.value,
+  religions: religions.value,
+  modeOfReferrals: modeOfReferrals.value,
+  clinics: clinics.value,
+  doctors: doctors.value,
+  regions: regions.value,
+}) satisfies PatientFormProps)
+
+const patientHMOInformationFormProps = computed(() => ({
+  isLoading: isLoading.value,
+  patient: selectedPatient.value,
+  hmoTypes: hmoTypes.value,
+  hmos: hmos.value
+}) satisfies PatientHMOInformationFormProps)
+
+const patientMedicalCategoryDialogProps = computed(() => ({
+  header: `Medical categories for ${selectedPatient.value?.full_name}`,
+  patient: selectedPatient.value,
+  medicalCategories: medicalCategories.value
+}) satisfies PatientMedicalCategoryDialogProps)
+
+const patientMedicalDiagnoseDialogProps = computed(() => ({
+  header: `Medical diagnosis for ${selectedPatient.value?.full_name}`,
+  patient: selectedPatient.value,
+  medicalDiagnoses: medicalDiagnoses.value
+}) satisfies PatientMedicalDiagnoseDialogProps)
+
+const patientMedicalHistoryDialogProps = computed(() => ({
+  header: `Medical histories for ${selectedPatient.value?.full_name}`,
+  patient: selectedPatient.value,
+  medicalHistories: medicalHistories.value
+}) satisfies PatientMedicalHistoryDialogProps)
+
+const patientMedicalImagingDialogProps = computed(() => ({
+  header: `Medical imagings for ${selectedPatient.value?.full_name}`,
+  patient: selectedPatient.value,
+  medicalImagings: medicalImagings.value
+}) satisfies PatientMedicalImagingDialogProps)
+
+const patientValidIdAttachmentProps = computed(() => ({
+  header: `Add ${selectedPatient.value?.full_name} valid id`,
+  patientAttachmentTanstackKey: PatientAttachmentTanstackKey.VALID_ID,
+  patient: selectedPatient.value
+}) satisfies PatientAttachmentDialogFormProps)
+
+const patientHMOValidIdAttachmentProps = computed(() => ({
+  header: `Add ${selectedPatient.value?.full_name} hmo valid id`,
+  patientAttachmentTanstackKey: PatientAttachmentTanstackKey.HMO_ID,
+  patient: selectedPatient.value
+}) satisfies PatientAttachmentDialogFormProps)
+
+const patientLaboratoryAttachmentProps = computed(() => ({
+  header: `Add ${selectedPatient.value?.full_name} laboratory`,
+  patientAttachmentTanstackKey: PatientAttachmentTanstackKey.LABORATORY,
+  patient: selectedPatient.value
+}) satisfies PatientAttachmentDialogFormProps)
+
+const patientPrescriptionAttachmentProps = computed(() => ({
+  header: `Add ${selectedPatient.value?.full_name} prescription`,
+  patientAttachmentTanstackKey: PatientAttachmentTanstackKey.PRESCRIPTION,
+  patient: selectedPatient.value
+}) satisfies PatientAttachmentDialogFormProps)
+
+const patientRehabPrescriptionAttachmentProps = computed(() => ({
+  header: `Add ${selectedPatient.value?.full_name} rehab prescription`,
+  patientAttachmentTanstackKey: PatientAttachmentTanstackKey.REHAB_PRESCRIPTION,
+  patient: selectedPatient.value
+}) satisfies PatientAttachmentDialogFormProps)
+
+const requestParams = computed(() => ({
+  pageable_request: {
+    page: page.value,
+    size: pageSize.value,
+    name: selectedSearch.value?.trim() || undefined,
+    status: selectedStatus.value
+  },
+  clinic_id: selectedClinic.value?.id,
+}) satisfies PatientRequestParams)
+
+const {
+  data: patients,
+  isError,
+  error,
+  refetch
+} = patientTanstackService.getAll(requestParams)
+useRefreshToken<Pageable<Patient> | undefined>(error, refetch)
+
+const {mutate: saveMutation} = patientTanstackService.save()
+const {mutate: editMutation} = patientTanstackService.update()
+const {mutate: toggleStatusMutation} = patientTanstackService.toggleStatus()
+
+
+const {
+  mutateAsync: folderSaveMutation
+} = fileServerTanstackService.saveFolder()
+
+const {
+  mutateAsync: folderDeleteMutation
+} = fileServerTanstackService.deleteFolder()
+
+const onSave = (): void => {
+  selectedPatient.value = undefined
+  patientForm.value?.toggleDialog()
+}
+
+const onSubmit = async (event: FormSubmitEvent): Promise<void> => {
+  confirm.require({
+    message: 'Are you sure you want to proceed?',
+    header: `${patientFormProps.value.buttonProps.label} Confirmation`,
+    icon: 'pi pi-exclamation-triangle',
+    rejectProps: {
+      label: 'Cancel',
+      severity: 'secondary',
+      outlined: true,
+      loading: isLoading.value
+    },
+    acceptProps: {
+      label: `${patientFormProps.value.buttonProps.label}`,
+      severity: `${patientFormProps.value.buttonProps.severity}`,
+      icon: `${patientFormProps.value.buttonProps.icon}`,
+      loading: isLoading.value
+    },
+    accept: async (): Promise<void> => {
+      const folder: UUID | undefined = await folderSaveMutation()
+      if (!folder) {
+        errorToast(toast, "Patient folder failed to created")
+        return
+      }
+
+      const body: PatientRequestBody = {
+        first_name: event.values?.first_name,
+        middle_name: event.values?.middle_name,
+        last_name: event.values?.last_name,
+        age: event.values?.age,
+        gender_id: event.values?.gender?.id,
+        civil_status_id: event.values?.civil_status?.id,
+        occupation: event.values?.occupation,
+        religion_id: event.values?.religion?.id,
+        mode_of_referral_id: event.values?.mode_of_referral?.id,
+        referred_by: event.values?.referred_by,
+        clinic_id: event.values?.clinic?.id,
+        phone_number: event.values?.phone_number,
+        email: event.values?.email,
+        fb_link: event.values?.fb_link,
+        region_id: event.values?.region?.id,
+        region_name: event.values?.region?.name,
+        province_id: event.values?.province?.id,
+        province_name: event.values?.province?.name,
+        city_id: event.values?.city?.id,
+        city_name: event.values?.city?.name,
+        baranggay_id: event.values?.baranggay?.id,
+        baranggay_name: event.values?.baranggay?.name,
+        details: event.values?.details,
+        folder: folder
+      }
+
+      if (selectedPatient.value) {
+        const payload: PatientEditRequestPayload = {
+          id: selectedPatient.value.id,
+          ...body,
+        }
+
+        editMutation(payload, {
+          async onSuccess() {
+            patientForm.value?.toggleDialog()
+            successToast(toast, 'Edit success')
+            event.reset()
+            await resetQueries()
+          },
+          async onError(error: APIError) {
+            errorToast(toast, `Edit failed ${error.message}`)
+            await resetQueries()
+          },
+        })
+        return
+      }
+
+      saveMutation(body, {
+        async onSuccess() {
+          patientForm.value?.toggleDialog()
+          successToast(toast, 'Save success')
+          event.reset()
+          await Promise.all([
+            resetQueries(),
+            draftService.delete()
+          ])
+        },
+        async onError(error: APIError) {
+          errorToast(toast, `Save failed ${error.message}`)
+          await Promise.all([
+            folderDeleteMutation(folder),
+            resetQueries(),
+          ])
+        },
+      })
+    }
+  })
+}
+
+
+const menuButtons = (patient: Patient): MenuItem[] => {
+  return [
+    {
+      label: `Edit this record`,
+      icon: 'pi pi-pen-to-square',
+      command: () => {
+        selectedPatient.value = patient
+        patientForm.value?.toggleDialog()
+      },
+    },
+    {
+      label: `Toggle Status`,
+      icon: 'pi pi-exclamation-triangle',
+      command: () => {
+        selectedPatient.value = patient
+        confirm.require({
+          message: `If you proceed this patient will be updated from ${statusLabel(selectedPatient.value.is_active)} to ${statusLabel(!selectedPatient.value.is_active)}`,
+          header: `Toggle Status for ${selectedPatient.value.full_name} Confirmation`,
+          icon: 'pi pi-exclamation-triangle',
+          rejectProps: {
+            label: 'Cancel',
+            severity: 'secondary',
+            outlined: true,
+            loading: isLoading.value
+          },
+          acceptProps: {
+            label: `Toggle Status`,
+            severity: `warning`,
+            icon: `pi pi-exclamation-triangle`,
+            loading: isLoading.value
+          },
+          accept: () => {
+            if (!selectedPatient.value?.id) {
+              warningToast(toast, "No selected patient")
+              return
+            }
+
+            toggleStatusMutation(selectedPatient.value.id, {
+              async onSuccess() {
+                successToast(toast, 'Toggle status success')
+                await resetQueries()
+              },
+              async onError(error: APIError) {
+                errorToast(toast, `Toggle status failed ${error.message}`)
+                await resetQueries()
+              },
+            })
+          },
+        })
+      }
+    },
+    {
+      separator: true
+    },
+    {
+      label: `View Appointments`,
+      icon: 'pi pi-calendar-clock',
+      command: async () => {
+        useAppointmentStore.patient = patient
+        infoToast(toast, `Viewing appointments for ${patient.full_name}`)
+        await router.push("/appointments")
+      }
+    },
+    {
+      label: `View Bills`,
+      icon: 'pi pi-receipt',
+      command: async () => {
+        useBillStore.patient = patient
+        infoToast(toast, `Viewing bills for ${patient.full_name}`)
+        await router.push("/billing")
+      },
+    },
+    {
+      label: 'View HMO Information',
+      icon: 'pi pi-address-book',
+      command: () => {
+        selectedPatient.value = patient
+        patientHMOInformationForm.value?.toggleDialog()
+      },
+    },
+    {
+      separator: true
+    },
+    {
+      label: 'Medical Information',
+      icon: 'pi pi-hourglass',
+      items: [
+        {
+          label: `View Medical Categories`,
+          icon: 'pi pi-hourglass',
+          command: () => {
+            selectedPatient.value = patient
+            patientMedicalCategoryDialog.value?.toggleDialog()
+          }
+        },
+        {
+          label: `View Medical Diagnosis`,
+          icon: 'pi pi-hourglass',
+          command: () => {
+            selectedPatient.value = patient
+            patientMedicalDiagnoseDialog.value?.toggleDialog()
+          }
+        },
+        {
+          label: `View Medical Histories`,
+          icon: 'pi pi-hourglass',
+          command: () => {
+            selectedPatient.value = patient
+            patientMedicalHistoryDialog.value?.toggleDialog()
+          }
+        },
+        {
+          label: `View Medical Imagings`,
+          icon: 'pi pi-hourglass',
+          command: () => {
+            selectedPatient.value = patient
+            patientMedicalImagingDialog.value?.toggleDialog()
+          },
+        }
+      ]
+    },
+    {
+      label: 'Attachments',
+      icon: 'pi pi-paperclip',
+      items: [
+        {
+          label: 'Valid ID',
+          icon: 'pi pi-paperclip',
+          command: async (): Promise<void> => {
+            selectedPatient.value = patient
+
+            patientValidIdAttachmentDialog.value?.toggleDialog()
+          },
+        },
+
+        {
+          label: 'HMO ID',
+          icon: 'pi pi-paperclip',
+          command: async (): Promise<void> => {
+            selectedPatient.value = patient
+            patientHMOValidIdAttachmentDialog.value?.toggleDialog()
+          },
+        },
+
+        {
+          label: 'Laboratory',
+          icon: 'pi pi-paperclip',
+          command: async (): Promise<void> => {
+            selectedPatient.value = patient
+            patientLaboratoryAttachmentDialog.value?.toggleDialog()
+          },
+        },
+
+        {
+          label: 'Prescription',
+          icon: 'pi pi-paperclip',
+          command: async (): Promise<void> => {
+            selectedPatient.value = patient
+            patientPrescriptionAttachmentDialog.value?.toggleDialog()
+          },
+        },
+
+        {
+          label: 'Rehab Prescription',
+          icon: 'pi pi-paperclip',
+          command: async (): Promise<void> => {
+            selectedPatient.value = patient
+            patientRehabPrescriptionAttachmentDialog.value?.toggleDialog()
+          },
+        },
+
+      ]
+    }
+  ]
+}
+
+const onExportToExcelThrottleFn = useThrottleFn(async (): Promise<void> => {
+  const params: PatientExportRequestParams = {
+    clinic_id: selectedClinic.value?.id,
+    page_request: {
+      name: selectedSearch.value?.trim() || undefined,
+      status: selectedStatus.value
+    }
+  }
+
+  const response: AxiosResponse<Blob> | undefined = await patientTanstackService.export(queryClient, params)
+  if (!response) return
+  exportToExcel(response)
+}, defaultThrottle)
+
+const statusLabel = (isActive: boolean): string => {
+  return isActive ? 'Active' : 'Inactive'
+}
+
+const initializeDropdowns = async (): Promise<void> => {
+  const requestParams: PageRequestWithStatus = {
+    page: defaultPage,
+    size: defaultPageSize,
+    status: defaultStatus
+  }
+
+  const regionRequestParams: RegionRequestPayload = {
+    page_request: {
+      page: defaultPage,
+      size: defaultPageSize,
+      name: undefined
+    }
+  }
+
+  const [
+    fetchedGenders,
+    fetchedCivilStatuses,
+    fetchedReligions,
+    fetchedModeOfReferrals,
+    fetchedClinics,
+    fetchedDoctors,
+    fetchedRegions,
+    fetchedMedicalCategories,
+    fetchedMedicalDiagnoses,
+    fetchedMedicalHistories,
+    fetchedMedicalImagings,
+    fetchedHMOTypes,
+    fetchedHMOs
+  ] = await Promise.allSettled([
+    createReferenceQueryService<Gender>(queryClient, ReferenceTanstackKey.GENDERS, requestParams),
+    createReferenceQueryService<CivilStatus>(queryClient, ReferenceTanstackKey.CIVIL_STATUSES, requestParams),
+    createReferenceQueryService<Religion>(queryClient, ReferenceTanstackKey.RELIGIONS, requestParams),
+    createReferenceQueryService<ModeOfReferral>(queryClient, ReferenceTanstackKey.MODE_OF_REFERRALS, requestParams),
+    clinicTanstackService.getAllLookup(queryClient, defaultPage, undefined),
+    staffTanstackService.getAllLookup(queryClient, undefined, defaultPage, undefined),
+    philippineLocationTanstackService.getAllRegions(queryClient, regionRequestParams),
+    createReferenceQueryService<MedicalCategory>(queryClient, ReferenceTanstackKey.MEDICAL_CATEGORIES, requestParams),
+    createReferenceQueryService<MedicalDiagnose>(queryClient, ReferenceTanstackKey.MEDICAL_DIAGNOSES, requestParams),
+    createReferenceQueryService<MedicalHistory>(queryClient, ReferenceTanstackKey.MEDICAL_HISTORIES, requestParams),
+    createReferenceQueryService<MedicalImaging>(queryClient, ReferenceTanstackKey.MEDICAL_IMAGINGS, requestParams),
+    createReferenceQueryService<HMOType>(queryClient, ReferenceTanstackKey.HMO_TYPES, requestParams),
+    hmoTanstackService.getAllLookup(queryClient, defaultPage, undefined)
+  ])
+
+  const contentOrEmpty = <T>(result: PromiseSettledResult<Pageable<T> | undefined>): T[] =>
+    result.status === "fulfilled" ? (result.value?.content ?? []) : []
+
+  genders.value = contentOrEmpty(fetchedGenders)
+  civilStatuses.value = contentOrEmpty(fetchedCivilStatuses)
+  religions.value = contentOrEmpty(fetchedReligions)
+  modeOfReferrals.value = contentOrEmpty(fetchedModeOfReferrals)
+  clinics.value = contentOrEmpty(fetchedClinics)
+  doctors.value = contentOrEmpty(fetchedDoctors)
+  regions.value = contentOrEmpty(fetchedRegions)
+
+  medicalCategories.value = contentOrEmpty(fetchedMedicalCategories)
+  medicalDiagnoses.value = contentOrEmpty(fetchedMedicalDiagnoses)
+  medicalHistories.value = contentOrEmpty(fetchedMedicalHistories)
+  medicalImagings.value = contentOrEmpty(fetchedMedicalImagings)
+
+  hmoTypes.value = contentOrEmpty(fetchedHMOTypes)
+  hmos.value = contentOrEmpty(fetchedHMOs)
+}
+
+const resetQueries = async (): Promise<void> => {
+  await queryClient.invalidateQueries({queryKey: [PatientTanstackKey.PATIENTS]})
+}
+
+const onClinicRedirect = async (): Promise<void> => {
+  const clinicFromStore: Lookup | undefined = useClinicStore.clinic
+  if (!clinicFromStore) return
+  selectedClinic.value = clinics.value.find(c => c.id === clinicFromStore.id)
+  useClinicStore.resetClinic()
+}
+
+onMounted(async (): Promise<void> => {
+  await initializeDropdowns()
+  await onClinicRedirect()
+})
+</script>
+
+

@@ -1,0 +1,14 @@
+.inidividual-link {
+  @apply transition-all flex px-4.5 font-normal hover:cursor-pointer border-transparent py-3;
+  color: rgb(var(--app-fg));
+}
+
+.inidividual-link:hover {
+  background: rgb(var(--app-card));
+}
+
+#app {
+  @apply h-full w-full;
+  background: rgb(var(--app-bg));
+  color: rgb(var(--app-fg));
+}

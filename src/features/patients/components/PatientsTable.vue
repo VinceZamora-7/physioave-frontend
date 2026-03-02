@@ -1,0 +1,168 @@
+<template>
+  <DataTable
+    :value="patients?.content"
+    :show-gridlines="true"
+    :removable-sort="true"
+    :scrollable="true"
+    class="h-full"
+    :pt="pt"
+  >
+    <template #header>
+      <slot name="header" />
+    </template>
+
+    <template #empty>
+      <div class="text-center font-semibold text-lg py-8">
+        <SkeletonLoader :loading="isLoading">
+          <span>No records found.</span>
+        </SkeletonLoader>
+      </div>
+    </template>
+
+    <Column :sortable="true" header="Full name" field="full_name">
+      <template #body="slotProps"><SkeletonLoader :loading="isLoading">{{ slotProps.data?.full_name }}</SkeletonLoader></template>
+    </Column>
+
+    <Column :sortable="true" header="Age" field="age">
+      <template #body="slotProps"><SkeletonLoader :loading="isLoading">{{ slotProps.data?.age }}</SkeletonLoader></template>
+    </Column>
+
+    <Column :sortable="true" header="Gender" field="gender_name">
+      <template #body="slotProps"><SkeletonLoader :loading="isLoading">{{ slotProps.data?.gender_name }}</SkeletonLoader></template>
+    </Column>
+
+    <Column :sortable="true" header="Civil Status" field="civil_status_name">
+      <template #body="slotProps"><SkeletonLoader :loading="isLoading">{{ slotProps.data?.civil_status_name }}</SkeletonLoader></template>
+    </Column>
+
+    <Column :sortable="true" header="Religion" field="religion_name">
+      <template #body="slotProps"><SkeletonLoader :loading="isLoading">{{ slotProps.data?.religion_name }}</SkeletonLoader></template>
+    </Column>
+
+    <Column :sortable="true" header="Mode of referral" field="mode_of_referral_name">
+      <template #body="slotProps"><SkeletonLoader :loading="isLoading">{{ slotProps.data?.mode_of_referral_name }}</SkeletonLoader></template>
+    </Column>
+
+    <Column :sortable="true" header="Clinic" field="clinic_name">
+      <template #body="slotProps"><SkeletonLoader :loading="isLoading">{{ slotProps.data?.clinic_name }}</SkeletonLoader></template>
+    </Column>
+
+    <Column :sortable="true" header="Phone number" field="phone_number">
+      <template #body="slotProps">
+        <SkeletonLoader :loading="isLoading">
+          <span
+            v-if="slotProps.data?.phone_number"
+            v-tooltip="'Click to copy to clipboard'"
+            class="cursor-copy"
+            @click="copyPhoneNumber(slotProps.data?.phone_number)"
+          >
+            {{ slotProps.data?.phone_number }}
+          </span>
+        </SkeletonLoader>
+      </template>
+    </Column>
+
+    <Column :sortable="true" header="Email" field="email">
+      <template #body="slotProps">
+        <SkeletonLoader :loading="isLoading">
+          <span
+            v-if="slotProps.data?.email"
+            v-tooltip="'Click to copy to clipboard'"
+            class="cursor-copy"
+            @click="copyEmail(slotProps.data?.email)"
+          >
+            {{ slotProps.data?.email }}
+          </span>
+          <span v-else>No email provided</span>
+        </SkeletonLoader>
+      </template>
+    </Column>
+
+    <Column :sortable="true" header="Facebook link" field="fb_link">
+      <template #body="slotProps">
+        <SkeletonLoader :loading="isLoading">
+          <Button
+            v-tooltip="slotProps.data?.fb_link"
+            :loading="isLoading"
+            as="a"
+            label="View"
+            :href="slotProps.data?.fb_link"
+            target="_blank"
+            rel="noopener"
+          />
+        </SkeletonLoader>
+      </template>
+    </Column>
+
+    <Column header="Status" field="is_active">
+      <template #body="slotProps">
+        <SkeletonLoader :loading="isLoading">
+          <Tag :severity="slotProps.data?.is_active ? 'success' : 'danger'" :value="slotProps.data?.is_active ? 'Active' : 'Inactive'" />
+        </SkeletonLoader>
+      </template>
+    </Column>
+
+    <Column header="Actions" :pt="{ headerCell: { class: 'w-[96px]' }, bodyCell: { class: 'w-[96px]' } }">
+      <template #body="slotProps">
+        <SkeletonLoader :loading="isLoading">
+          <slot name="actions" :patient="slotProps.data" />
+        </SkeletonLoader>
+      </template>
+    </Column>
+
+    <template #footer>
+      <div class="w-full overflow-x-auto">
+        <div class="min-w-[1200px] lg:min-w-0">
+          <Paginator
+            current-page-report-template="Showing {first} to {last} of {totalRecords} records (Page {currentPage} of {totalPages})"
+            template="CurrentPageReport FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown JumpToPageInput"
+            :first="(page - 1) * pageSize"
+            :rows="pageSize"
+            :totalRecords="patients?.total_elements"
+            :rowsPerPageOptions="rowPerPageOptions"
+            @page="$emit('pageChange', $event)"
+          />
+        </div>
+      </div>
+    </template>
+  </DataTable>
+</template>
+
+<script setup lang="ts">
+import { useClipboard } from "@vueuse/core"
+import DataTable from "primevue/datatable"
+import Column from "primevue/column"
+import Tag from "primevue/tag"
+import Button from "primevue/button"
+import { Paginator } from "primevue"
+
+import SkeletonLoader from "@/composables/SkeletonLoader.vue"
+import type { Pageable } from "@/models/paging"
+import type { Patient } from "@/features/patients/types/patient"
+
+defineProps<{
+  patients?: Pageable<Patient>
+  isLoading: boolean
+  page: number
+  pageSize: number
+  rowPerPageOptions: number[]
+}>()
+
+defineEmits<{
+  (e: "pageChange", ev: any): void
+}>()
+
+const { copy: copyPhoneNumber } = useClipboard()
+const { copy: copyEmail } = useClipboard()
+
+const pt = {
+  root: { class: "flex flex-col h-full" },
+  header: { class: "bg-[rgb(var(--app-card))] border-b border-[rgb(var(--app-border))]" },
+  footer: { class: "bg-[rgb(var(--app-card))] border-t border-[rgb(var(--app-border))]" },
+  column: {
+    headerCell: { class: "text-center" },
+    bodyCell: { class: "text-center" },
+    columnTitle: { class: "mx-auto font-semibold" },
+  },
+} as const
+</script>

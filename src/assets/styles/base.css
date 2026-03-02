@@ -1,0 +1,9 @@
+html {
+  @apply font-poppins font-light;
+}
+
+body {
+  @apply m-0 flex h-screen max-w-screen flex-col;
+  background: rgb(var(--app-bg));
+  color: rgb(var(--app-fg));
+}
