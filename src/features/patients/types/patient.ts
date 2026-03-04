@@ -9,7 +9,7 @@ export interface BasePatient {
   gender_id: number
   civil_status_id: number
   occupation?: string
-  religion_id: number
+  religion_id?: number
   mode_of_referral_id?: number
   referred_by?: string
   clinic_id: number
@@ -38,7 +38,7 @@ export interface Patient extends BasePatient {
 
   gender_name: string
   civil_status_name: string
-  religion_name: string
+  religion_name?: string
   mode_of_referral_name?: string
   clinic_name: string
 

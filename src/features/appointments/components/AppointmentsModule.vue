@@ -1,329 +1,377 @@
 <template>
-  <main class="h-full p-3 sm:p-5 bg-[rgb(var(--app-bg))] text-[rgb(var(--app-fg))]">
-    <section class="rounded-3xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 space-y-4">
-      <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 class="text-lg font-semibold">Clinic Workflow</h2>
-          <p class="text-sm opacity-70">Appointment scheduling, attendance, and home service tracking</p>
-        </div>
-        <Tag v-if="selectedPatientName" :value="`Patient: ${selectedPatientName}`" severity="info" />
+  <main class="h-full p-3 sm:p-5 bg-[rgb(var(--app-bg))] text-[rgb(var(--app-fg))] space-y-4">
+    <section class="rounded-3xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 space-y-3">
+      <div class="flex flex-wrap items-end gap-3">
+        <Button label="Create Appointment" icon="pi pi-plus" @click="openCreateDialog" />
+        <IftaLabel>
+          <DatePicker v-model="calendarDate" fluid :manualInput="false" />
+          <label>Calendar Day</label>
+        </IftaLabel>
+        <IftaLabel>
+          <InputText v-model="statusFilter" fluid placeholder="Status (optional)" />
+          <label>Status filter</label>
+        </IftaLabel>
+        <Button label="Refresh Table" icon="pi pi-refresh" outlined @click="refreshAll" />
+        <Button label="Export CSV" icon="pi pi-download" severity="secondary" @click="onExportCsv" />
       </div>
 
-      <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <IftaLabel>
-          <InputText v-model="form.patient_name" fluid />
-          <label>Patient</label>
-        </IftaLabel>
-
-        <IftaLabel>
-          <InputText v-model="form.doctor_name" fluid placeholder="Doctor / therapist" />
-          <label>Doctor</label>
-        </IftaLabel>
-
-        <IftaLabel>
-          <InputText v-model="form.clinic_name" fluid placeholder="Clinic name" />
-          <label>Clinic</label>
-        </IftaLabel>
-
-        <IftaLabel>
-          <InputText v-model="form.appointment_type" fluid placeholder="Initial / Follow-up / Session" />
-          <label>Type</label>
-        </IftaLabel>
-
-        <IftaLabel class="xl:col-span-2">
-          <DatePicker
-            v-model="appointmentAt"
-            showTime
-            hourFormat="12"
-            fluid
-            :manualInput="false"
-          />
-          <label>Appointment Date and Time</label>
-        </IftaLabel>
-
-        <div class="flex items-center gap-2">
-          <Checkbox v-model="form.is_home_service" input-id="home-service" binary />
-          <label for="home-service" class="text-sm">Home service</label>
-        </div>
-
-        <Button label="Schedule Appointment" icon="pi pi-calendar-plus" @click="submitAppointment" />
-      </div>
-
-      <DataTable :value="rows" dataKey="id" paginator :rows="8" responsiveLayout="scroll" size="small">
+      <DataTable
+        :value="appointments"
+        dataKey="id"
+        paginator
+        :rows="pageSize"
+        :first="(page - 1) * pageSize"
+        :totalRecords="totalElements"
+        :loading="isLoading"
+        @page="onPage"
+        selectionMode="single"
+        @rowSelect="onSelectRow"
+      >
         <Column field="patient_name" header="Patient" />
         <Column field="doctor_name" header="Doctor" />
-        <Column field="appointment_at" header="Schedule">
-          <template #body="{ data }">{{ formatDateTime(data.appointment_at) }}</template>
+        <Column field="starts_at" header="Start">
+          <template #body="{data}">{{ formatDateTime(data.starts_at) }}</template>
         </Column>
-        <Column field="status" header="Status">
-          <template #body="{ data }">
-            <Select
-              :modelValue="data.status"
-              :options="appointmentStatuses"
-              class="w-40"
-              @update:modelValue="onStatusChange(data.id, $event)"
-            />
+        <Column field="appointment_status" header="Appt Status" />
+        <Column field="billing_status" header="Billing">
+          <template #body="{data}">
+            <Tag :value="data.billing_status" :severity="billingSeverity(data.billing_status)" />
           </template>
         </Column>
-        <Column field="attendance" header="Attendance">
-          <template #body="{ data }">
-            <Select
-              :modelValue="data.attendance"
-              :options="attendanceStatuses"
-              class="w-36"
-              @update:modelValue="onAttendanceChange(data.id, $event)"
-            />
-          </template>
-        </Column>
-        <Column field="home_service_attendance" header="Home Service">
-          <template #body="{ data }">
-            <Select
-              :disabled="!data.is_home_service"
-              :modelValue="data.home_service_attendance"
-              :options="homeServiceStatuses"
-              class="w-44"
-              @update:modelValue="onHomeServiceChange(data.id, $event)"
-            />
-          </template>
-        </Column>
+        <Column field="reschedule_count" header="Reschedules" />
         <Column header="Actions">
-          <template #body="{ data }">
-            <Button
-              text
-              severity="danger"
-              icon="pi pi-trash"
-              @click="removeRow(data.id)"
-            />
+          <template #body="{data}">
+            <Button size="small" text icon="pi pi-calendar-plus" @click="openReschedule(data)" />
           </template>
         </Column>
       </DataTable>
     </section>
 
-    <section class="mt-5 rounded-3xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 space-y-4">
-      <div>
-        <h3 class="text-lg font-semibold">Treatment Card</h3>
-        <p class="text-sm opacity-70">Session-by-session treatment details</p>
-      </div>
+    <section class="rounded-3xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 space-y-3">
+      <h3 class="text-lg font-semibold">Calendar Day Bookings</h3>
+      <DataTable :value="dayBookings" dataKey="id" size="small" selectionMode="single" @rowSelect="onSelectRow">
+        <Column field="patient_name" header="Patient" />
+        <Column field="starts_at" header="Start">
+          <template #body="{data}">{{ formatDateTime(data.starts_at) }}</template>
+        </Column>
+        <Column field="billing_status" header="Billing">
+          <template #body="{data}">
+            <Tag :value="data.billing_status" :severity="billingSeverity(data.billing_status)" />
+          </template>
+        </Column>
+      </DataTable>
+    </section>
 
-      <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+    <section v-if="selectedDetail" class="rounded-3xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 space-y-2">
+      <h3 class="text-lg font-semibold">Appointment Detail</h3>
+      <p><strong>Patient:</strong> {{ selectedDetail.patient_name }}</p>
+      <p><strong>Doctor:</strong> {{ selectedDetail.doctor_name || "N/A" }}</p>
+      <p><strong>Schedule:</strong> {{ formatDateTime(selectedDetail.starts_at) }} - {{ formatDateTime(selectedDetail.ends_at) }}</p>
+      <p><strong>Billing Status:</strong> {{ selectedDetail.billing_status }}</p>
+      <div class="flex flex-wrap gap-2">
+        <Button label="Go to Patient" icon="pi pi-user" outlined @click="goToPatients" />
+        <Button label="Go to Billing" icon="pi pi-receipt" severity="secondary" outlined @click="goToBilling" />
+      </div>
+    </section>
+
+    <Dialog v-model:visible="rescheduleVisible" modal header="Reschedule Appointment" :style="{width:'520px'}">
+      <div class="space-y-3">
+        <p v-if="activeAppointment">Current reschedules: <strong>{{ activeAppointment.reschedule_count }}</strong> / 3</p>
         <IftaLabel>
-          <InputText v-model="treatment.patient_name" fluid />
+          <DatePicker v-model="rescheduleStart" showTime fluid :manualInput="false" />
+          <label>New Start</label>
+        </IftaLabel>
+        <IftaLabel>
+          <DatePicker v-model="rescheduleEnd" showTime fluid :manualInput="false" />
+          <label>New End</label>
+        </IftaLabel>
+        <IftaLabel>
+          <InputText v-model="overrideReason" fluid :disabled="!needsOverrideReason" />
+          <label>Owner override reason (required after 3)</label>
+        </IftaLabel>
+        <small class="opacity-70">If max reschedule reached, only Owner override is accepted.</small>
+      </div>
+      <template #footer>
+        <Button label="Cancel" text @click="rescheduleVisible = false" />
+        <Button label="Submit Reschedule" icon="pi pi-check" @click="submitReschedule" />
+      </template>
+    </Dialog>
+
+    <Dialog v-model:visible="createVisible" modal header="Create Appointment" :style="{width:'560px'}">
+      <div class="space-y-3">
+        <IftaLabel>
+          <Select
+            v-model="createPatient"
+            :options="patientOptions"
+            optionLabel="name"
+            optionValue="id"
+            filter
+            fluid
+            placeholder="Select patient"
+          />
           <label>Patient</label>
         </IftaLabel>
 
         <IftaLabel>
-          <InputNumber v-model="treatment.session_no" :min="1" fluid />
-          <label>Session No.</label>
+          <Select
+            v-model="createDoctor"
+            :options="doctorOptions"
+            optionLabel="name"
+            optionValue="id"
+            filter
+            showClear
+            fluid
+            placeholder="Select doctor (optional)"
+          />
+          <label>Doctor (optional)</label>
         </IftaLabel>
 
         <IftaLabel>
-          <DatePicker v-model="treatmentDate" fluid :manualInput="false" />
-          <label>Treatment Date</label>
+          <DatePicker v-model="createStart" showTime fluid :manualInput="false" />
+          <label>Start</label>
         </IftaLabel>
-
         <IftaLabel>
-          <InputText v-model="treatment.therapist" fluid />
-          <label>Therapist</label>
-        </IftaLabel>
-
-        <IftaLabel class="xl:col-span-2">
-          <InputText v-model="treatment.diagnosis" fluid />
-          <label>Diagnosis</label>
-        </IftaLabel>
-
-        <IftaLabel class="xl:col-span-2">
-          <InputText v-model="treatment.treatment_plan" fluid />
-          <label>Treatment Plan</label>
-        </IftaLabel>
-
-        <IftaLabel class="xl:col-span-4">
-          <InputText v-model="treatment.remarks" fluid />
-          <label>Remarks</label>
+          <DatePicker v-model="createEnd" showTime fluid :manualInput="false" />
+          <label>End</label>
         </IftaLabel>
       </div>
-
-      <Button label="Save Treatment Card Entry" icon="pi pi-save" @click="submitTreatmentCard" />
-
-      <DataTable :value="treatmentRows" dataKey="id" paginator :rows="6" responsiveLayout="scroll" size="small">
-        <Column field="patient_name" header="Patient" />
-        <Column field="session_no" header="Session" />
-        <Column field="treatment_date" header="Date" />
-        <Column field="diagnosis" header="Diagnosis" />
-        <Column field="treatment_plan" header="Treatment Plan" />
-        <Column field="therapist" header="Therapist" />
-        <Column header="Actions">
-          <template #body="{ data }">
-            <Button
-              text
-              severity="danger"
-              icon="pi pi-trash"
-              @click="removeTreatmentRow(data.id)"
-            />
-          </template>
-        </Column>
-      </DataTable>
-    </section>
+      <template #footer>
+        <Button label="Cancel" text @click="createVisible = false" />
+        <Button label="Create" icon="pi pi-check" @click="submitCreateAppointment" />
+      </template>
+    </Dialog>
   </main>
 </template>
 
 <script setup lang="ts">
-import {computed, ref} from "vue";
+import {computed, onMounted, ref, watch} from "vue";
+import {useRouter} from "vue-router";
 import {useToast} from "primevue";
+import axios from "axios";
 import Button from "primevue/button";
-import Checkbox from "primevue/checkbox";
 import Column from "primevue/column";
-import DataTable from "primevue/datatable";
+import DataTable, {type DataTablePageEvent} from "primevue/datatable";
 import DatePicker from "primevue/datepicker";
+import Dialog from "primevue/dialog";
 import IftaLabel from "primevue/iftalabel";
-import InputNumber from "primevue/inputnumber";
 import InputText from "primevue/inputtext";
 import Select from "primevue/select";
 import Tag from "primevue/tag";
-import {appointmentStore, type AppointmentStatus, type AttendanceStatus, type HomeServiceAttendanceStatus} from "@/stores/appointment.store";
-import {auditStore} from "@/stores/audit.store";
-import {successToast, warningToast} from "@/utils/toast.util";
+import {appointmentPhase1Service, type AppointmentDetail, type AppointmentListItem} from "@/features/appointments/api/appointment-phase1.service";
+import {exportToExcel} from "@/utils/export-excel.util";
+import {errorToast, successToast} from "@/utils/toast.util";
+import type {Lookup} from "@/models/global.model";
+import {patientService} from "@/features/patients/api/patient.service";
+import {staffService} from "@/features/staff/api/staff.service";
+import {defaultPage, defaultPageSize} from "@/models/paging";
+import {Status} from "@/utils/global.type";
 
+const router = useRouter()
 const toast = useToast()
-const useAppointmentStore = appointmentStore()
-const useAuditStore = auditStore()
 
-const selectedPatientName = computed(() => useAppointmentStore.patient?.full_name)
+const appointments = ref<AppointmentListItem[]>([])
+const dayBookings = ref<AppointmentListItem[]>([])
+const selectedDetail = ref<AppointmentDetail>()
+const isLoading = ref(false)
 
-const appointmentStatuses: AppointmentStatus[] = ["scheduled", "completed", "cancelled", "no-show"]
-const attendanceStatuses: AttendanceStatus[] = ["pending", "present", "absent"]
-const homeServiceStatuses: HomeServiceAttendanceStatus[] = ["not-applicable", "en-route", "arrived", "completed", "cancelled"]
+const page = ref(1)
+const pageSize = ref(10)
+const totalElements = ref(0)
+const statusFilter = ref<string>()
+const calendarDate = ref<Date>(new Date())
 
-const appointmentAt = ref<Date>(new Date())
-const form = ref({
-  patient_name: selectedPatientName.value ?? "",
-  doctor_name: useAppointmentStore.staff?.name ?? "",
-  clinic_name: useAppointmentStore.patient?.clinic_name ?? "",
-  appointment_type: "Session",
-  is_home_service: false
-})
+const rescheduleVisible = ref(false)
+const activeAppointment = ref<AppointmentListItem>()
+const rescheduleStart = ref<Date>(new Date())
+const rescheduleEnd = ref<Date>(new Date())
+const overrideReason = ref("")
 
-const treatmentDate = ref<Date>(new Date())
-const treatment = ref({
-  patient_name: selectedPatientName.value ?? "",
-  session_no: 1,
-  diagnosis: "",
-  treatment_plan: "",
-  therapist: useAppointmentStore.staff?.name ?? "",
-  remarks: ""
-})
+const createVisible = ref(false)
+const patientOptions = ref<Lookup[]>([])
+const doctorOptions = ref<Lookup[]>([])
+const createPatient = ref<number>()
+const createDoctor = ref<number>()
+const createStart = ref<Date>(new Date())
+const createEnd = ref<Date>(new Date(Date.now() + 60 * 60 * 1000))
 
-const rows = computed(() => useAppointmentStore.selectedPatientAppointments)
-const treatmentRows = computed(() => useAppointmentStore.selectedPatientTreatmentCards)
+const needsOverrideReason = computed(() => (activeAppointment.value?.reschedule_count ?? 0) >= 3)
 
-const formatDateTime = (value: string): string =>
-  new Date(value).toLocaleString()
+const selectedDateIso = computed(() => calendarDate.value.toISOString().slice(0, 10))
 
-const submitAppointment = (): void => {
-  const patientId = useAppointmentStore.patient?.id
-  if (!patientId || !form.value.patient_name.trim() || !form.value.doctor_name.trim()) {
-    warningToast(toast, "Patient and doctor are required")
+const billingSeverity = (status: string): "success" | "warn" | "danger" | "info" => {
+  const normalized = status.toUpperCase()
+  if (normalized === "PAID") return "success"
+  if (normalized === "PARTIAL" || normalized === "PENDING") return "warn"
+  if (normalized === "VOID") return "danger"
+  return "info"
+}
+
+const formatDateTime = (value: string): string => new Date(value).toLocaleString()
+
+const fetchAppointments = async (): Promise<void> => {
+  try {
+    isLoading.value = true
+    const response = await appointmentPhase1Service.getAll({
+      page: page.value,
+      size: pageSize.value,
+      status: statusFilter.value?.trim() || undefined,
+      date: selectedDateIso.value
+    })
+    appointments.value = response?.content ?? []
+    totalElements.value = response?.total_elements ?? 0
+  } catch (error: unknown) {
+    errorToast(toast, "Failed to load appointments")
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const fetchDayBookings = async (): Promise<void> => {
+  try {
+    dayBookings.value = await appointmentPhase1Service.getDay(selectedDateIso.value) ?? []
+  } catch (error: unknown) {
+    dayBookings.value = []
+  }
+}
+
+const refreshAll = async (): Promise<void> => {
+  await fetchAppointments()
+  await fetchDayBookings()
+}
+
+const loadCreateLookups = async (): Promise<void> => {
+  const [patientsLookup, doctorsLookup] = await Promise.all([
+    patientService.getAllLookup({
+      clinic_id: undefined,
+      pageable_request: {
+        page: defaultPage,
+        size: defaultPageSize,
+        status: Status.ACTIVE,
+        name: undefined
+      }
+    }),
+    staffService.getAllLookup({
+      clinic_id: undefined,
+      pageable_request: {
+        page: defaultPage,
+        size: defaultPageSize,
+        status: Status.ACTIVE,
+        name: undefined
+      }
+    })
+  ])
+
+  patientOptions.value = patientsLookup?.content ?? []
+  doctorOptions.value = doctorsLookup?.content ?? []
+}
+
+const openCreateDialog = async (): Promise<void> => {
+  if (!patientOptions.value.length) {
+    await loadCreateLookups()
+  }
+  createPatient.value = undefined
+  createDoctor.value = undefined
+  createStart.value = new Date()
+  createEnd.value = new Date(Date.now() + 60 * 60 * 1000)
+  createVisible.value = true
+}
+
+const submitCreateAppointment = async (): Promise<void> => {
+  if (!createPatient.value) {
+    errorToast(toast, "Patient is required")
     return
   }
 
-  const created = useAppointmentStore.scheduleAppointment({
-    patient_id: patientId,
-    patient_name: form.value.patient_name.trim(),
-    doctor_id: useAppointmentStore.staff?.id,
-    doctor_name: form.value.doctor_name.trim(),
-    clinic_name: form.value.clinic_name.trim() || "No clinic",
-    appointment_at: appointmentAt.value.toISOString(),
-    appointment_type: form.value.appointment_type.trim() || "Session",
-    status: "scheduled",
-    attendance: "pending",
-    is_home_service: form.value.is_home_service,
-    home_service_attendance: form.value.is_home_service ? "en-route" : "not-applicable",
-    notes: undefined
-  })
-
-  useAuditStore.logAction({
-    user: "Current User",
-    module: "Appointments",
-    action: "Create",
-    details: `Scheduled appointment for ${created.patient_name} with ${created.doctor_name}`
-  })
-
-  successToast(toast, "Appointment scheduled")
-}
-
-const onStatusChange = (id: string, value: AppointmentStatus): void => {
-  useAppointmentStore.updateAppointment(id, {status: value})
-  useAuditStore.logAction({
-    user: "Current User",
-    module: "Appointments",
-    action: "Status Update",
-    details: `Appointment status changed to ${value}`
-  })
-}
-
-const onAttendanceChange = (id: string, value: AttendanceStatus): void => {
-  useAppointmentStore.updateAppointment(id, {attendance: value})
-  useAuditStore.logAction({
-    user: "Current User",
-    module: "Appointments",
-    action: "Attendance Update",
-    details: `Attendance changed to ${value}`
-  })
-}
-
-const onHomeServiceChange = (id: string, value: HomeServiceAttendanceStatus): void => {
-  useAppointmentStore.updateAppointment(id, {home_service_attendance: value})
-  useAuditStore.logAction({
-    user: "Current User",
-    module: "Appointments",
-    action: "Home Service Update",
-    details: `Home service attendance changed to ${value}`
-  })
-}
-
-const removeRow = (id: string): void => {
-  useAppointmentStore.removeAppointment(id)
-  useAuditStore.logAction({
-    user: "Current User",
-    module: "Appointments",
-    action: "Delete",
-    details: "Deleted appointment record"
-  })
-}
-
-const submitTreatmentCard = (): void => {
-  const patientId = useAppointmentStore.patient?.id
-  if (!patientId || !treatment.value.diagnosis.trim() || !treatment.value.treatment_plan.trim()) {
-    warningToast(toast, "Patient, diagnosis, and treatment plan are required")
-    return
+  try {
+    await appointmentPhase1Service.create({
+      patient_id: createPatient.value,
+      doctor_id: createDoctor.value,
+      starts_at: createStart.value.toISOString(),
+      ends_at: createEnd.value.toISOString()
+    })
+    successToast(toast, "Appointment created")
+    createVisible.value = false
+    await refreshAll()
+  } catch (error: unknown) {
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status
+      const detail = error.response?.data?.message || error.response?.data?.detail || error.message
+      if (status === 401) {
+        errorToast(toast, "Session expired (401). Please log in again.")
+        return
+      }
+      if (status === 403) {
+        errorToast(toast, "Permission denied (403): cannot create appointment.")
+        return
+      }
+      errorToast(toast, `Create failed${status ? ` (${status})` : ""}: ${detail}`)
+      return
+    }
+    errorToast(toast, "Failed to create appointment")
   }
-
-  const created = useAppointmentStore.saveTreatmentCard({
-    patient_id: patientId,
-    patient_name: treatment.value.patient_name.trim(),
-    session_no: treatment.value.session_no || 1,
-    treatment_date: treatmentDate.value.toISOString().slice(0, 10),
-    diagnosis: treatment.value.diagnosis.trim(),
-    treatment_plan: treatment.value.treatment_plan.trim(),
-    therapist: treatment.value.therapist.trim() || "N/A",
-    remarks: treatment.value.remarks.trim() || undefined
-  })
-
-  useAuditStore.logAction({
-    user: "Current User",
-    module: "Treatment Card",
-    action: "Create",
-    details: `Saved treatment card session #${created.session_no} for ${created.patient_name}`
-  })
-  successToast(toast, "Treatment card saved")
 }
 
-const removeTreatmentRow = (id: string): void => {
-  useAppointmentStore.removeTreatmentCard(id)
-  useAuditStore.logAction({
-    user: "Current User",
-    module: "Treatment Card",
-    action: "Delete",
-    details: "Deleted treatment card entry"
-  })
+const onPage = async (event: DataTablePageEvent): Promise<void> => {
+  page.value = Math.floor((event.first ?? 0) / (event.rows ?? pageSize.value)) + 1
+  pageSize.value = event.rows ?? pageSize.value
+  await fetchAppointments()
 }
+
+const onSelectRow = async (event: {data: AppointmentListItem}): Promise<void> => {
+  const detail = await appointmentPhase1Service.getById(event.data.id)
+  selectedDetail.value = detail
+}
+
+const openReschedule = (appointment: AppointmentListItem): void => {
+  activeAppointment.value = appointment
+  rescheduleStart.value = new Date(appointment.starts_at)
+  rescheduleEnd.value = new Date(appointment.ends_at)
+  overrideReason.value = ""
+  rescheduleVisible.value = true
+}
+
+const submitReschedule = async (): Promise<void> => {
+  if (!activeAppointment.value) return
+  try {
+    await appointmentPhase1Service.reschedule(activeAppointment.value.id, {
+      starts_at: rescheduleStart.value.toISOString(),
+      ends_at: rescheduleEnd.value.toISOString(),
+      override_reason: overrideReason.value.trim() || undefined
+    })
+    successToast(toast, "Reschedule successful")
+    rescheduleVisible.value = false
+    await refreshAll()
+    if (selectedDetail.value?.id === activeAppointment.value.id) {
+      selectedDetail.value = await appointmentPhase1Service.getById(activeAppointment.value.id)
+    }
+  } catch (error: unknown) {
+    errorToast(toast, "Reschedule blocked. Check max count or owner override reason.")
+  }
+}
+
+const onExportCsv = async (): Promise<void> => {
+  const response = await appointmentPhase1Service.exportCsv({
+    status: statusFilter.value?.trim() || undefined,
+    date: selectedDateIso.value
+  })
+  if (!response) return
+  exportToExcel(response)
+}
+
+const goToPatients = async (): Promise<void> => {
+  await router.push("/patients")
+}
+
+const goToBilling = async (): Promise<void> => {
+  await router.push("/billing")
+}
+
+watch([calendarDate, statusFilter], async () => {
+  page.value = 1
+  await refreshAll()
+})
+
+onMounted(async () => {
+  await refreshAll()
+})
 </script>

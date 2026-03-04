@@ -21,12 +21,14 @@ import type { Staff } from "@/features/staff/types/staff"
 const props = defineProps<{
   staff: Staff
   disabled?: boolean
+  canUpdate?: boolean
+  canDelete?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: "edit", staff: Staff): void
   (e: "toggleStatus", staff: Staff): void
-  (e: "viewAppointments", staff: Staff): void
+  (e: "hardDelete", staff: Staff): void
 }>()
 
 const menuRef = ref<any>(null)
@@ -40,16 +42,19 @@ const items = computed<MenuItem[]>(() => [
     label: "Edit this record",
     icon: "pi pi-pen-to-square",
     command: () => emit("edit", props.staff),
+    visible: props.canUpdate ?? false,
   },
   {
     label: "Toggle Status",
     icon: "pi pi-exclamation-triangle",
     command: () => emit("toggleStatus", props.staff),
+    visible: props.canUpdate ?? false,
   },
   {
-    label: "View Appointments",
-    icon: "pi pi-calendar-clock",
-    command: () => emit("viewAppointments", props.staff),
+    label: "Permanently Delete",
+    icon: "pi pi-times-circle",
+    command: () => emit("hardDelete", props.staff),
+    visible: !props.staff.is_active && (props.canDelete ?? false),
   },
 ])
 </script>

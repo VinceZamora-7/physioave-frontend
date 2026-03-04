@@ -20,7 +20,7 @@
     </template>
 
     <Column :sortable="true" header="Full name" field="full_name">
-      <template #body="slotProps"><SkeletonLoader :loading="isLoading">{{ slotProps.data?.full_name }}</SkeletonLoader></template>
+      <template #body="slotProps"><SkeletonLoader :loading="isLoading">{{ getDisplayFullName(slotProps.data) }}</SkeletonLoader></template>
     </Column>
 
     <Column :sortable="true" header="Age" field="age">
@@ -29,18 +29,6 @@
 
     <Column :sortable="true" header="Gender" field="gender_name">
       <template #body="slotProps"><SkeletonLoader :loading="isLoading">{{ slotProps.data?.gender_name }}</SkeletonLoader></template>
-    </Column>
-
-    <Column :sortable="true" header="Civil Status" field="civil_status_name">
-      <template #body="slotProps"><SkeletonLoader :loading="isLoading">{{ slotProps.data?.civil_status_name }}</SkeletonLoader></template>
-    </Column>
-
-    <Column :sortable="true" header="Religion" field="religion_name">
-      <template #body="slotProps"><SkeletonLoader :loading="isLoading">{{ slotProps.data?.religion_name }}</SkeletonLoader></template>
-    </Column>
-
-    <Column :sortable="true" header="Mode of referral" field="mode_of_referral_name">
-      <template #body="slotProps"><SkeletonLoader :loading="isLoading">{{ slotProps.data?.mode_of_referral_name }}</SkeletonLoader></template>
     </Column>
 
     <Column :sortable="true" header="Clinic" field="clinic_name">
@@ -58,46 +46,6 @@
           >
             {{ slotProps.data?.phone_number }}
           </span>
-        </SkeletonLoader>
-      </template>
-    </Column>
-
-    <Column :sortable="true" header="Email" field="email">
-      <template #body="slotProps">
-        <SkeletonLoader :loading="isLoading">
-          <span
-            v-if="slotProps.data?.email"
-            v-tooltip="'Click to copy to clipboard'"
-            class="cursor-copy"
-            @click="copyEmail(slotProps.data?.email)"
-          >
-            {{ slotProps.data?.email }}
-          </span>
-          <span v-else>No email provided</span>
-        </SkeletonLoader>
-      </template>
-    </Column>
-
-    <Column :sortable="true" header="Facebook link" field="fb_link">
-      <template #body="slotProps">
-        <SkeletonLoader :loading="isLoading">
-          <Button
-            v-tooltip="slotProps.data?.fb_link"
-            :loading="isLoading"
-            as="a"
-            label="View"
-            :href="slotProps.data?.fb_link"
-            target="_blank"
-            rel="noopener"
-          />
-        </SkeletonLoader>
-      </template>
-    </Column>
-
-    <Column header="Status" field="is_active">
-      <template #body="slotProps">
-        <SkeletonLoader :loading="isLoading">
-          <Tag :severity="slotProps.data?.is_active ? 'success' : 'danger'" :value="slotProps.data?.is_active ? 'Active' : 'Inactive'" />
         </SkeletonLoader>
       </template>
     </Column>
@@ -132,8 +80,6 @@
 import { useClipboard } from "@vueuse/core"
 import DataTable from "primevue/datatable"
 import Column from "primevue/column"
-import Tag from "primevue/tag"
-import Button from "primevue/button"
 import { Paginator } from "primevue"
 
 import SkeletonLoader from "@/composables/SkeletonLoader.vue"
@@ -153,7 +99,13 @@ defineEmits<{
 }>()
 
 const { copy: copyPhoneNumber } = useClipboard()
-const { copy: copyEmail } = useClipboard()
+
+const getDisplayFullName = (patient?: Patient): string => {
+  if (!patient) return ""
+  return [patient.first_name, patient.middle_name, patient.last_name]
+    .filter((part): part is string => Boolean(part && part.trim()))
+    .join(" ")
+}
 
 const pt = {
   root: { class: "flex flex-col h-full" },

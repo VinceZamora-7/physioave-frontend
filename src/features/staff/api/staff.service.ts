@@ -26,6 +26,10 @@ interface StaffService {
   save(body: StaffRequestBody): Promise<void | undefined>
 
   toggleStatus(id: number): Promise<void | undefined>
+
+  softDelete(id: number): Promise<void | undefined>
+
+  hardDelete(id: number): Promise<void | undefined>
 }
 
 export const staffService: StaffService = {
@@ -90,6 +94,24 @@ export const staffService: StaffService = {
     try {
       const {data: response} = await pamsAPI.patch<void>(`/${ResourceKey.STAFFS}/${id}/status`)
 
+      return response
+    } catch (error: unknown) {
+      errorHandler(error)
+    }
+  },
+
+  async softDelete(id: number): Promise<void | undefined> {
+    try {
+      const {data: response} = await pamsAPI.delete<void>(`/${ResourceKey.STAFFS}/${id}`)
+      return response
+    } catch (error: unknown) {
+      errorHandler(error)
+    }
+  },
+
+  async hardDelete(id: number): Promise<void | undefined> {
+    try {
+      const {data: response} = await pamsAPI.delete<void>(`/${ResourceKey.STAFFS}/${id}/hard`)
       return response
     } catch (error: unknown) {
       errorHandler(error)

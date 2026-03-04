@@ -70,7 +70,7 @@
 
       <div class="flex flex-col sm:flex-row gap-2 w-full lg:w-auto lg:ml-auto lg:justify-end">
         <Button
-          label="Save Patient"
+          label="Add Patient"
           icon="pi pi-plus"
           severity="info"
           :loading="isLoading"

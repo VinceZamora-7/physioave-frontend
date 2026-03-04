@@ -8,30 +8,39 @@ import {
 } from "@/schema/philippine-location.schema.ts";
 
 export const patientSchema = z.strictObject({
-  first_name: z.string("First name is required").max(100, "First name must be 100 characters and below only"),
-  middle_name: z.preprocess(value => value === "" ? undefined : value, z.string().max(100).optional()),
-  last_name: z.string("Last name is required").max(100, "Last name must be 100 characters and below only"),
+  first_name: z.string("First name is required").trim().min(1, "First name is required").max(100, "First name must be 100 characters and below only"),
+  middle_name: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().min(1, "Middle name is required").max(100).optional()),
+  has_no_middle_name: z.boolean().optional().default(false),
+  last_name: z.string("Last name is required").trim().min(1, "Last name is required").max(100, "Last name must be 100 characters and below only"),
   age: z.number("Age is required").min(1, "Must be minimum of 1").max(150, "Must be maximum of 150"),
   gender: lookupSchema('gender is required'),
   civil_status: lookupSchema('civil_status is required'),
-  occupation: z.preprocess(value => value === "" ? undefined : value, z.string().max(100).optional()),
-  religion: lookupSchema('religion is required'),
+  occupation: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().max(100).optional()),
+  religion: z.preprocess(value => value ?? undefined, lookupSchema('religion is required').optional()),
   mode_of_referral: z.preprocess(value => value ?? undefined, lookupSchema('mode_of_referral is required').optional()),
-  referred_by: z.preprocess(value => value === "" ? undefined : value, z.string().max(100).optional()),
+  referred_by: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().max(100).optional()),
   clinic: lookupSchema('clinic is required'),
 
   // Contact information
   phone_number: z.string("Phone number is required").length(11).regex(/^09\d*$/, "Must start with 09 and contain only digits"),
-  email: z.preprocess(value => value === "" ? undefined : value, z.email().max(100, "Email must be 100 characters and below only").optional()),
-  fb_link: z.preprocess(value => value === "" ? undefined : value, z.url("Must be a valid url").max(100, "Facebook link must be 100 characters and below only").optional()),
+  email: z.preprocess(value => value === "" || value == null ? undefined : value, z.email().max(100, "Email must be 100 characters and below only").optional()),
+  fb_link: z.preprocess(value => value === "" || value == null ? undefined : value, z.url("Must be a valid url").max(100, "Facebook link must be 100 characters and below only").optional()),
 
   // Address information
-  region: z.preprocess(value => value ?? undefined, regionSchema.optional()),
-  province: z.preprocess(value => value ?? undefined, provinceSchema.optional()),
-  city: z.preprocess(value => value ?? undefined, citySchema.optional()),
-  baranggay: z.preprocess(value => value ?? undefined, baranggaySchema.optional()),
+  region: regionSchema,
+  province: provinceSchema,
+  city: citySchema,
+  baranggay: baranggaySchema,
 
-  details: z.preprocess(value => value === "" ? undefined : value, z.string().max(255).optional())
+  details: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().max(255).optional())
+}).superRefine((value, ctx) => {
+  if (!value.has_no_middle_name && !value.middle_name) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["middle_name"],
+      message: "Middle name is required unless patient has no middle name."
+    })
+  }
 })
 export type PatientFormState = z.infer<typeof patientSchema>
 

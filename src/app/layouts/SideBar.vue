@@ -66,40 +66,19 @@
     <!-- NAV (scrolls) -->
     <nav class="mt-4 flex-1 min-h-0 overflow-y-auto px-2 pb-4 app-scrollbar">
       <div class="space-y-6">
+
+        
         <div>
-          <p
-            v-if="!collapsed"
-            class="px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
+          <button
+            type="button"
+            class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
+            @click="patientCareOpen = !patientCareOpen"
           >
-            MAIN
-          </p>
+            <span v-if="!collapsed">PATIENT CARE</span>
+            <i class="pi text-[11px]" :class="patientCareOpen ? 'pi-chevron-down' : 'pi-chevron-right'" />
+          </button>
 
-          <ul class="mt-2 space-y-1">
-            <li>
-              <button
-                type="button"
-                @click="goToAndClose('clinics')"
-                :class="itemClass('clinics')"
-                aria-label="Clinic"
-                title="Clinic"
-              >
-                <span :class="iconWrapClass('clinics')"><i class="pi pi-map-marker text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">Clinic</span>
-              </button>
-            </li>
-
-            <li>
-              <button
-                type="button"
-                @click="goToAndClose('staffs')"
-                :class="itemClass('staffs')"
-                aria-label="Staff"
-                title="Staff"
-              >
-                <span :class="iconWrapClass('staffs')"><i class="pi pi-users text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">Staff</span>
-              </button>
-            </li>
+          <ul v-show="patientCareOpen" class="mt-2 space-y-1">
 
             <li>
               <button
@@ -126,6 +105,22 @@
                 <span v-if="!collapsed" class="truncate">Appointments</span>
               </button>
             </li>
+          </ul>
+        </div>
+
+
+
+        <div>
+          <button
+            type="button"
+            class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
+            @click="billingOpen = !billingOpen"
+          >
+            <span v-if="!collapsed">BILLING</span>
+            <i class="pi text-[11px]" :class="billingOpen ? 'pi-chevron-down' : 'pi-chevron-right'" />
+          </button>
+
+          <ul v-show="billingOpen" class="mt-2 space-y-1">
 
             <li>
               <button
@@ -165,31 +160,22 @@
                 <span v-if="!collapsed" class="truncate">HMO</span>
               </button>
             </li>
-
-            <li>
-              <button
-                type="button"
-                @click="goToAndClose('refresh-tokens')"
-                :class="itemClass('refresh-tokens')"
-                aria-label="Refresh Tokens"
-                title="Refresh Tokens"
-              >
-                <span :class="iconWrapClass('refresh-tokens')"><i class="pi pi-hourglass text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">Refresh Tokens</span>
-              </button>
-            </li>
           </ul>
         </div>
 
-        <div>
-          <p
-            v-if="!collapsed"
-            class="px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
-          >
-            OFFERS
-          </p>
 
-          <ul class="mt-2 space-y-1">
+
+        <div>
+          <button
+            type="button"
+            class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
+            @click="technicalOpen = !technicalOpen"
+          >
+            <span v-if="!collapsed">TECHNICAL</span>
+            <i class="pi text-[11px]" :class="technicalOpen ? 'pi-chevron-down' : 'pi-chevron-right'" />
+          </button>
+
+          <ul v-show="technicalOpen" class="mt-2 space-y-1">
             <li>
               <button
                 type="button"
@@ -226,6 +212,58 @@
               >
                 <span :class="iconWrapClass('evaluations')"><i class="pi pi-book text-[16px]" /></span>
                 <span v-if="!collapsed" class="truncate">Evaluation</span>
+              </button>
+            </li>
+
+            <li>
+              <button
+                type="button"
+                @click="goToAndClose('refresh-tokens')"
+                :class="itemClass('refresh-tokens')"
+                aria-label="Refresh Tokens"
+                title="Refresh Tokens"
+              >
+                <span :class="iconWrapClass('refresh-tokens')"><i class="pi pi-hourglass text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">Refresh Tokens</span>
+              </button>
+            </li>
+          </ul>
+        </div>
+
+                        <div>
+          <button
+            type="button"
+            class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
+            @click="operationsOpen = !operationsOpen"
+          >
+            <span v-if="!collapsed">OPERATIONS</span>
+            <i class="pi text-[11px]" :class="operationsOpen ? 'pi-chevron-down' : 'pi-chevron-right'" />
+          </button>
+
+          <ul v-show="operationsOpen" class="mt-2 space-y-1">
+            <li>
+              <button
+                type="button"
+                @click="goToAndClose('clinics')"
+                :class="itemClass('clinics')"
+                aria-label="Clinic"
+                title="Clinic"
+              >
+                <span :class="iconWrapClass('clinics')"><i class="pi pi-map-marker text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">Clinic</span>
+              </button>
+            </li>
+
+            <li>
+              <button
+                type="button"
+                @click="goToAndClose('staffs')"
+                :class="itemClass('staffs')"
+                aria-label="Staff"
+                title="Staff"
+              >
+                <span :class="iconWrapClass('staffs')"><i class="pi pi-users text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">Staff</span>
               </button>
             </li>
           </ul>
@@ -326,6 +364,10 @@ const { mutate, isPending } = useLogout()
 
 const mobileOpen = ref(false)
 const userSnapshot = ref<Record<string, unknown> | null>(null)
+const operationsOpen = ref(true)
+const patientCareOpen = ref(true)
+const billingOpen = ref(true)
+const technicalOpen = ref(true)
 
 // v-model ready collapsed state
 const collapsed = ref<boolean>(props.collapsed ?? true)

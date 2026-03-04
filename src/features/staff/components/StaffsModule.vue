@@ -8,7 +8,7 @@
     >
       <StaffsTable
         :staffs="staffs"
-        :isLoading="isLoading"
+        :isLoading="isTableLoading"
         :page="page"
         :pageSize="pageSize"
         :rowPerPageOptions="rowPerPageOptions"
@@ -21,7 +21,7 @@
             v-model:selectedClinic="selectedClinic"
             :statuses="statuses"
             :clinics="clinics"
-            :isLoading="isLoading"
+            :isLoading="isUiLoading"
             :isExportLoading="isExportLoading"
             @reset="resetFilters"
             @save="openCreate"
@@ -32,15 +32,17 @@
         <template #actions="{ staff }">
           <StaffRowActionsMenu
             :staff="staff"
-            :disabled="isLoading"
+            :disabled="isUiLoading"
+            :canUpdate="canUpdateStaff"
+            :canDelete="canDeleteStaff"
             @edit="openEdit"
             @toggleStatus="confirmToggleStatus"
-            @viewAppointments="viewAppointments"
+            @hardDelete="confirmHardDelete"
           />
         </template>
       </StaffsTable>
 
-      <StaffEditorDialog ref="editor" :roles="roles" :clinics="clinics" :isLoading="isLoading" />
+      <StaffEditorDialog ref="editor" :roles="roles" :clinics="clinics" :isLoading="isUiLoading" />
     </section>
   </main>
 </template>
@@ -87,24 +89,24 @@ import type { Lookup } from "@/models/global.model"
 
 import { createReferenceQueryService } from "@/services/reference.tanstack.service"
 import { clinicStore } from "@/stores/clinic.store"
-import { appointmentStore } from "@/stores/appointment.store"
 import { ClinicTanstackKey, ReferenceTanstackKey, StaffTanstackKey } from "@/utils/keys/tanstack-key"
-import {useRouter} from "vue-router";
 
 const toast = useToast()
 const confirm = useConfirm()
 const queryClient = useQueryClient()
 const useClinicStore = clinicStore()
-const useAppointmentStore = appointmentStore()
-const router = useRouter()
 
 const editor = ref<InstanceType<typeof StaffEditorDialog> | null>(null)
+const roleName = ref<string>("")
+const canUpdateStaff = computed(() => roleName.value === "Owner")
+const canDeleteStaff = computed(() => roleName.value === "Owner")
 
 const isExportLoading = useIsLoading(StaffTanstackKey.STAFFS_EXPORT)
 const isClinicLoading = useIsLoading(ClinicTanstackKey.CLINICS_LOOKUP)
 const isRoleLoading = useIsLoading(ReferenceTanstackKey.ROLES)
 const isStaffLoading = useIsLoading(StaffTanstackKey.STAFFS)
-const isLoading = computed(() => isClinicLoading.value || isRoleLoading.value || isStaffLoading.value)
+const isTableLoading = computed(() => isStaffLoading.value)
+const isUiLoading = computed(() => isClinicLoading.value || isRoleLoading.value || isStaffLoading.value)
 
 const roles = ref<Role[]>([])
 const clinics = ref<Lookup[]>([])
@@ -152,6 +154,7 @@ const openEdit = (staff: Staff) => editor.value?.openEdit(staff)
 const statusLabel = (isActive: boolean) => (isActive ? "Active" : "Inactive")
 
 const { mutate: toggleStatusMutation } = staffTanstackService.toggleStatus()
+const { mutate: hardDeleteMutation } = staffTanstackService.hardDelete()
 
 const resetQueries = async () => {
   await queryClient.invalidateQueries({ queryKey: [StaffTanstackKey.STAFFS] })
@@ -166,13 +169,13 @@ const confirmToggleStatus = (staff: Staff) => {
       label: "Cancel",
       severity: "secondary",
       outlined: true,
-      loading: isLoading.value,
+      loading: isUiLoading.value,
     },
     acceptProps: {
       label: "Toggle Status",
       severity: "warning",
       icon: "pi pi-exclamation-triangle",
-      loading: isLoading.value,
+      loading: isUiLoading.value,
     },
     accept: () => {
       if (!staff.id) {
@@ -186,6 +189,24 @@ const confirmToggleStatus = (staff: Staff) => {
           await resetQueries()
         },
         async onError(err: APIError) {
+          const status = (err as any)?.status ?? (err as any)?.response?.status
+          const message = `${(err as any)?.message ?? ""}`.toLowerCase()
+          const isPermissionDenied =
+            status === 403 ||
+            message.includes("forbidden") ||
+            message.includes("access denied") ||
+            message.includes("permission")
+
+          if (isPermissionDenied) {
+            toast.add({
+              severity: "error",
+              summary: "Permission Denied",
+              detail: "Toggle status failed: you do not have permission (403).",
+              life: 3000,
+            })
+            await resetQueries()
+            return
+          }
           errorToast(toast, `Toggle status failed ${err.message}`)
           await resetQueries()
         },
@@ -194,10 +215,36 @@ const confirmToggleStatus = (staff: Staff) => {
   })
 }
 
-const viewAppointments = async (staff: Staff) => {
-  useAppointmentStore.staff = staff
-  infoToast(toast, `Viewing appointments for ${staff.name}`)
-  await router.push("/appointments")
+const confirmHardDelete = (staff: Staff) => {
+  confirm.require({
+    message: `Delete ${staff.name}? This permanently removes the record.`,
+    header: "Permanently Delete Staff",
+    icon: "pi pi-exclamation-triangle",
+    rejectProps: {
+      label: "Cancel",
+      severity: "secondary",
+      outlined: true,
+      loading: isUiLoading.value,
+    },
+    acceptProps: {
+      label: "Permanently Delete",
+      severity: "danger",
+      icon: "pi pi-times-circle",
+      loading: isUiLoading.value,
+    },
+    accept: () => {
+      hardDeleteMutation(staff.id, {
+        async onSuccess() {
+          successToast(toast, "Delete success")
+          await resetQueries()
+        },
+        async onError(err: APIError) {
+          errorToast(toast, `Delete failed ${err.message}`)
+          await resetQueries()
+        },
+      })
+    },
+  })
 }
 
 const onExportToExcelThrottleFn = useThrottleFn(async () => {
@@ -238,7 +285,27 @@ const applyClinicRedirect = async () => {
   useClinicStore.resetClinic()
 }
 
+const syncRoleFromStorage = () => {
+  const candidateKeys = ["auth_user", "currentUser", "user", "profile", "loggedInUser"]
+  for (const key of candidateKeys) {
+    const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key)
+    if (!raw) continue
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>
+      const role = parsed.role_name ?? parsed.role ?? parsed.userRole ?? parsed.primaryRole
+      if (typeof role === "string" && role.trim()) {
+        roleName.value = role.trim()
+        return
+      }
+    } catch {
+      // ignore malformed storage value
+    }
+  }
+  roleName.value = ""
+}
+
 onMounted(async () => {
+  syncRoleFromStorage()
   await initializeDropdowns()
   await applyClinicRedirect()
 })

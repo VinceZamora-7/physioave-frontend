@@ -1,9 +1,19 @@
 <template>
   <main class="h-full p-3 sm:p-5 bg-[rgb(var(--app-bg))] text-[rgb(var(--app-fg))]">
     <Message v-if="isError" severity="error" class="mb-3">Something went wrong!</Message>
+    <div class="mb-3 flex justify-end">
+      <Button
+        label="Export CSV"
+        icon="pi pi-download"
+        severity="secondary"
+        outlined
+        :loading="isLoading"
+        @click="onExportCsv"
+      />
+    </div>
 
     <section
-      v-else
+      v-if="!isError"
       class="h-full rounded-3xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-3 sm:p-4"
     >
       <PatientsTable
@@ -30,12 +40,78 @@
         </template>
 
         <template #actions="{ patient }">
-          <PatientRowActionsMenu
+          <Button
+            label="View"
+            icon="pi pi-eye"
+            severity="secondary"
+            outlined
+            size="small"
             :disabled="isLoading"
-            :items="menuButtons(patient)"
+            @click="onPatientRowClick(patient)"
           />
         </template>
       </PatientsTable>
+
+      <Dialog
+        v-model:visible="patientDetailsVisible"
+        modal
+        header="Patient Full Details"
+        :style="{ width: '62rem', maxWidth: '95vw' }"
+        :draggable="false"
+      >
+        <div v-if="selectedPatientDetails" class="space-y-4">
+          <div class="rounded-2xl border border-sky-200/60 bg-gradient-to-r from-sky-50 to-cyan-50 p-4 dark:border-sky-900/50 dark:from-slate-900 dark:to-slate-800">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div class="text-lg font-semibold tracking-tight">{{ selectedPatientDetails.full_name }}</div>
+                <div class="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                  {{ selectedPatientDetails.gender_name }} • {{ selectedPatientDetails.age }} years old
+                </div>
+                <div class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Assigned clinic: {{ selectedPatientDetails.clinic_name }}
+                </div>
+              </div>
+              <Tag
+                :severity="selectedPatientDetails.is_active ? 'success' : 'danger'"
+                :value="selectedPatientDetails.is_active ? 'Active' : 'Inactive'"
+              />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4">
+              <div class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Personal Information</div>
+              <div class="space-y-2 text-sm">
+                <div><span class="font-medium">Civil Status:</span> {{ selectedPatientDetails.civil_status_name }}</div>
+                <div><span class="font-medium">Religion:</span> {{ selectedPatientDetails.religion_name ?? "N/A" }}</div>
+                <div><span class="font-medium">Mode of Referral:</span> {{ selectedPatientDetails.mode_of_referral_name ?? "N/A" }}</div>
+                <div><span class="font-medium">Doctor Referral:</span> {{ selectedPatientDetails.referred_by ?? "N/A" }}</div>
+              </div>
+            </div>
+
+            <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4">
+              <div class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Contact Information</div>
+              <div class="space-y-2 text-sm">
+                <div><span class="font-medium">Phone Number:</span> {{ selectedPatientDetails.phone_number }}</div>
+                <div><span class="font-medium">Email:</span> {{ selectedPatientDetails.email ?? "N/A" }}</div>
+                <div><span class="font-medium">Facebook Link:</span> {{ selectedPatientDetails.fb_link ?? "N/A" }}</div>
+              </div>
+            </div>
+
+            <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 md:col-span-2">
+              <div class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Address Information</div>
+              <div class="text-sm">
+                {{ formatPatientAddress(selectedPatientDetails) }}
+              </div>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4">
+            <div class="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Call To Actions</div>
+            <Menu :model="menuButtons(selectedPatientDetails)" />
+          </div>
+        </div>
+      </Dialog>
 
     <PatientForm
       ref="patientForm"
@@ -121,6 +197,8 @@ import {
   type PageRequestWithStatus
 } from "@/models/paging.ts";
 import Message from "primevue/message";
+import Dialog from "primevue/dialog";
+import Tag from "primevue/tag";
 import {
   defaultFilterDebounce,
   defaultThrottle,
@@ -133,6 +211,8 @@ import {useThrottleFn, watchDebounced} from "@vueuse/core";
 import type {AxiosResponse} from "axios";
 import {exportToExcel} from "@/utils/export-excel.util.ts";
 import {useIsLoading} from "@/composables/tanstack-loader.composable.ts";
+import Button from "primevue/button";
+import Menu from "primevue/menu";
 import type {MenuItem} from "primevue/menuitem";
 import {errorToast, infoToast, successToast, warningToast} from "@/utils/toast.util.ts";
 import type {APIError} from "@/utils/error-handler.ts";
@@ -157,7 +237,6 @@ import {appointmentStore} from "@/stores/appointment.store.ts";
 import {usePaginationDebounce} from "@/composables/pagination-debounce.composable.ts";
 import PatientsTable from "@/features/patients/components/PatientsTable.vue";
 import PatientsTableHeader from "@/features/patients/components/PatientsTableHeader.vue";
-import PatientRowActionsMenu from "@/features/patients/components/PatientRowActionsMenu.vue";
 import PatientMedicalCategoryDialog from "@/components/PatientMedicalCategoryDialog.vue";
 import PatientMedicalDiagnoseDialog from "@/components/PatientMedicalDiagnoseDialog.vue";
 import PatientMedicalHistoryDialog from "@/components/PatientMedicalHistoryDialog.vue";
@@ -183,6 +262,7 @@ import PatientAttachmentDialog from "@/components/PatientAttachmentDialog.vue";
 import PatientHMOInformationForm from "@/components/PatientHMOInformationForm.vue";
 import {hmoTanstackService} from "@/features/hmos/queries/hmo.tanstack.service";
 import {staffTanstackService} from "@/features/staff/queries/staff.tanstack.service";
+import {pamsAPI} from "@/utils/axios-interceptor.ts";
 
 const patientMedicalCategoryDialog = useTemplateRef<InstanceType<typeof PatientMedicalCategoryDialog>>('patientMedicalCategoryDialog')
 const patientMedicalDiagnoseDialog = useTemplateRef<InstanceType<typeof PatientMedicalDiagnoseDialog>>('patientMedicalDiagnoseDialog')
@@ -254,6 +334,25 @@ const isLoading = computed<boolean>(() =>
 const draftService = createDraftService<PatientFormState>(IndexedDBKey.PATIENT)
 
 const selectedPatient = ref<Patient | undefined>()
+const selectedPatientDetails = ref<Patient | undefined>()
+const patientDetailsVisible = ref<boolean>(false)
+
+const onPatientRowClick = (patient: Patient): void => {
+  selectedPatientDetails.value = patient
+  patientDetailsVisible.value = true
+}
+
+const formatPatientAddress = (patient: Patient): string => {
+  const addressParts = [
+    patient.details,
+    patient.baranggay_name,
+    patient.city_name,
+    patient.province_name,
+    patient.region_name
+  ].filter(Boolean)
+
+  return addressParts.length ? addressParts.join(", ") : "N/A"
+}
 
 const selectedClinic = ref<Lookup | undefined>()
 const selectedSearch = ref<string | undefined>()
@@ -299,7 +398,7 @@ const patientFormProps = computed(() => ({
   selectedPatient: selectedPatient.value,
   isLoading: isLoading.value,
   buttonProps: {
-    label: selectedPatient.value ? `Edit ${selectedPatient.value.full_name}` : `Save Patient`,
+    label: selectedPatient.value ? `Edit ${selectedPatient.value.full_name}` : `Add Patient`,
     icon: selectedPatient.value ? 'pi pi-pen-to-square' : 'pi pi-save',
     severity: selectedPatient.value ? 'success' : 'info'
   },
@@ -696,6 +795,18 @@ const onExportToExcelThrottleFn = useThrottleFn(async (): Promise<void> => {
   exportToExcel(response)
 }, defaultThrottle)
 
+const onExportCsv = async (): Promise<void> => {
+  const response: AxiosResponse<Blob> = await pamsAPI.get("/patients/export/csv", {
+    params: {
+      clinic_id: selectedClinic.value?.id,
+      name: selectedSearch.value?.trim() || undefined,
+      status: selectedStatus.value
+    },
+    responseType: "blob"
+  })
+  exportToExcel(response)
+}
+
 const statusLabel = (isActive: boolean): string => {
   return isActive ? 'Active' : 'Inactive'
 }
@@ -781,5 +892,3 @@ onMounted(async (): Promise<void> => {
   await onClinicRedirect()
 })
 </script>
-
-

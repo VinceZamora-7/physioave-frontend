@@ -1,137 +1,95 @@
 <template>
-  <main class="h-full p-3 sm:p-5 bg-[rgb(var(--app-bg))] text-[rgb(var(--app-fg))]">
-    <section class="rounded-3xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 space-y-4">
-      <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 class="text-lg font-semibold">Billing and Finance</h2>
-          <p class="text-sm opacity-70">Package-style billing history per session plus daily income/expense</p>
-        </div>
-        <Tag v-if="selectedPatientName" :value="`Patient: ${selectedPatientName}`" severity="info" />
-      </div>
-
+  <main class="h-full p-3 sm:p-5 bg-[rgb(var(--app-bg))] text-[rgb(var(--app-fg))] space-y-4">
+    <section class="rounded-3xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 space-y-3">
+      <h2 class="text-lg font-semibold">Billing Core (Phase 1)</h2>
       <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <IftaLabel>
-          <InputText v-model="billForm.patient_name" fluid />
-          <label>Patient</label>
+          <InputNumber v-model="form.patient_id" :min="1" fluid />
+          <label>Patient ID</label>
         </IftaLabel>
-
         <IftaLabel>
-          <DatePicker v-model="billDate" fluid :manualInput="false" />
-          <label>Session Date</label>
+          <InputNumber v-model="form.appointment_id" :min="1" fluid />
+          <label>Appointment ID (optional)</label>
         </IftaLabel>
-
         <IftaLabel>
-          <Select v-model="billForm.service_type" :options="serviceTypes" fluid />
+          <Select v-model="form.billing_type" :options="billingTypeOptions" optionLabel="label" optionValue="value" fluid />
+          <label>Billing Type</label>
+        </IftaLabel>
+        <IftaLabel>
+          <Select v-model="form.service_type" :options="serviceTypeOptions" optionLabel="label" optionValue="value" fluid />
           <label>Service Type</label>
         </IftaLabel>
-
         <IftaLabel>
-          <InputText v-model="billForm.service_name" fluid />
+          <Select
+            v-model="form.package_id"
+            :options="packageOptions"
+            optionLabel="name"
+            optionValue="id"
+            filter
+            showClear
+            fluid
+          />
+          <label>Package (sorted)</label>
+        </IftaLabel>
+        <IftaLabel>
+          <InputText v-model="form.service_name" fluid />
           <label>Service Name</label>
         </IftaLabel>
-
         <IftaLabel>
-          <InputText v-model="billForm.package_name" fluid />
-          <label>Package Name</label>
-        </IftaLabel>
-
-        <IftaLabel>
-          <InputNumber v-model="billForm.session_no" :min="1" fluid />
-          <label>Session No.</label>
-        </IftaLabel>
-
-        <IftaLabel>
-          <InputNumber v-model="billForm.amount_due" mode="currency" currency="PHP" locale="en-PH" fluid />
+          <InputNumber v-model="form.amount_due" mode="currency" currency="PHP" locale="en-PH" fluid />
           <label>Amount Due</label>
         </IftaLabel>
-
         <IftaLabel>
-          <InputNumber v-model="billForm.amount_paid" mode="currency" currency="PHP" locale="en-PH" fluid />
+          <InputNumber v-model="form.amount_paid" mode="currency" currency="PHP" locale="en-PH" fluid />
           <label>Amount Paid</label>
         </IftaLabel>
-
-        <IftaLabel>
-          <Select v-model="billForm.payment_method" :options="paymentMethods" fluid />
-          <label>Payment Method</label>
-        </IftaLabel>
       </div>
-
-      <Button label="Add Billing Session" icon="pi pi-plus" @click="submitBill" />
-
-      <DataTable :value="billRows" dataKey="id" paginator :rows="8" responsiveLayout="scroll" size="small">
-        <Column field="session_date" header="Date" />
-        <Column field="patient_name" header="Patient" />
-        <Column field="service_type" header="Type" />
-        <Column field="package_name" header="Package" />
-        <Column field="session_no" header="Session #" />
-        <Column field="amount_due" header="Due">
-          <template #body="{ data }">{{ asCurrency(data.amount_due) }}</template>
-        </Column>
-        <Column field="amount_paid" header="Paid">
-          <template #body="{ data }">{{ asCurrency(data.amount_paid) }}</template>
-        </Column>
-        <Column field="payment_method" header="Method" />
-        <Column header="Actions">
-          <template #body="{ data }">
-            <Button text severity="danger" icon="pi pi-trash" @click="removeBillRow(data.id)" />
-          </template>
-        </Column>
-      </DataTable>
+      <div class="flex flex-wrap gap-2">
+        <Button label="Create Billing" icon="pi pi-save" @click="createBilling" />
+        <Button label="Refresh Table" icon="pi pi-refresh" outlined @click="fetchBillings" />
+      </div>
     </section>
 
-    <section class="mt-5 rounded-3xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 space-y-4">
-      <h3 class="text-lg font-semibold">Daily Income and Expense</h3>
-
-      <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+    <section class="rounded-3xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 space-y-3">
+      <div class="flex flex-wrap items-end gap-2">
         <IftaLabel>
-          <DatePicker v-model="reportDateModel" fluid :manualInput="false" />
-          <label>Report Date</label>
+          <InputText v-model="filters.name" fluid />
+          <label>Patient filter</label>
         </IftaLabel>
-
         <IftaLabel>
-          <InputText v-model="expenseForm.category" fluid />
-          <label>Expense Category</label>
+          <InputText v-model="filters.billing_status" fluid placeholder="PAID/PENDING/PARTIAL" />
+          <label>Status</label>
         </IftaLabel>
-
-        <IftaLabel class="xl:col-span-2">
-          <InputText v-model="expenseForm.notes" fluid />
-          <label>Expense Notes</label>
-        </IftaLabel>
-
-        <IftaLabel>
-          <InputNumber v-model="expenseForm.amount" mode="currency" currency="PHP" locale="en-PH" fluid />
-          <label>Expense Amount</label>
-        </IftaLabel>
+        <Button label="Export CSV" icon="pi pi-download" severity="secondary" @click="exportCsv" />
       </div>
 
-      <Button label="Add Expense" icon="pi pi-minus-circle" severity="warn" @click="submitExpense" />
-
-      <div class="grid gap-3 sm:grid-cols-3">
-        <Card>
-          <template #title>Income</template>
-          <template #content><span class="text-xl font-semibold">{{ asCurrency(summary.income) }}</span></template>
-        </Card>
-        <Card>
-          <template #title>Expenses</template>
-          <template #content><span class="text-xl font-semibold">{{ asCurrency(summary.expenses) }}</span></template>
-        </Card>
-        <Card>
-          <template #title>Net</template>
-          <template #content><span class="text-xl font-semibold">{{ asCurrency(summary.net) }}</span></template>
-        </Card>
-      </div>
-
-      <DataTable :value="expenseRows" dataKey="id" paginator :rows="6" responsiveLayout="scroll" size="small">
-        <Column field="expense_date" header="Date" />
-        <Column field="category" header="Category" />
-        <Column field="notes" header="Notes" />
-        <Column field="amount" header="Amount">
-          <template #body="{ data }">{{ asCurrency(data.amount) }}</template>
+      <DataTable
+        :value="billings"
+        dataKey="id"
+        paginator
+        :rows="pageSize"
+        :first="(page - 1) * pageSize"
+        :totalRecords="totalElements"
+        :loading="isLoading"
+        @page="onPage"
+      >
+        <Column field="created_at" header="Created">
+          <template #body="{data}">{{ formatDateTime(data.created_at) }}</template>
         </Column>
-        <Column header="Actions">
-          <template #body="{ data }">
-            <Button text severity="danger" icon="pi pi-trash" @click="removeExpenseRow(data.id)" />
+        <Column field="patient_name" header="Patient" />
+        <Column field="billing_type" header="Billing Type" />
+        <Column field="service_type" header="Service Type" />
+        <Column field="package_name" header="Package" />
+        <Column field="billing_status" header="Status">
+          <template #body="{data}">
+            <Tag :value="data.billing_status" :severity="statusSeverity(data.billing_status)" />
           </template>
+        </Column>
+        <Column field="amount_due" header="Due">
+          <template #body="{data}">{{ asCurrency(data.amount_due) }}</template>
+        </Column>
+        <Column field="amount_paid" header="Paid">
+          <template #body="{data}">{{ asCurrency(data.amount_paid) }}</template>
         </Column>
       </DataTable>
     </section>
@@ -139,128 +97,139 @@
 </template>
 
 <script setup lang="ts">
-import {computed, ref} from "vue";
+import {onMounted, ref} from "vue";
 import {useToast} from "primevue";
 import Button from "primevue/button";
-import Card from "primevue/card";
 import Column from "primevue/column";
-import DataTable from "primevue/datatable";
-import DatePicker from "primevue/datepicker";
+import DataTable, {type DataTablePageEvent} from "primevue/datatable";
 import IftaLabel from "primevue/iftalabel";
 import InputNumber from "primevue/inputnumber";
 import InputText from "primevue/inputtext";
 import Select from "primevue/select";
 import Tag from "primevue/tag";
-import {billStore, type BillingServiceType, type PaymentMethod} from "@/stores/bill.store";
-import {auditStore} from "@/stores/audit.store";
-import {successToast, warningToast} from "@/utils/toast.util";
+import {billingPhase1Service, type BillingRequest, type BillingType, type PackageLookup, type ServiceType, type BillingListItem} from "@/features/billing/api/billing-phase1.service";
+import {exportToExcel} from "@/utils/export-excel.util";
+import {errorToast, successToast} from "@/utils/toast.util";
 
-const useBillStore = billStore()
-const useAuditStore = auditStore()
 const toast = useToast()
+const isLoading = ref(false)
+const page = ref(1)
+const pageSize = ref(10)
+const totalElements = ref(0)
+const billings = ref<BillingListItem[]>([])
+const packageOptions = ref<PackageLookup[]>([])
 
-const selectedPatientName = computed(() => useBillStore.patient?.full_name)
-const reportDateModel = ref<Date>(new Date())
-const billDate = ref<Date>(new Date())
+const billingTypeOptions = [
+  {label: "Individual Pricing", value: "INDIVIDUAL_PRICING"},
+  {label: "Package Billing", value: "PACKAGE_BILLING"},
+  {label: "Ala Carte", value: "ALA_CARTE"},
+]
 
-const serviceTypes: BillingServiceType[] = ["single", "package", "home-service"]
-const paymentMethods: PaymentMethod[] = ["cash", "gcash", "bank-transfer", "card"]
+const serviceTypeOptions = [
+  {label: "Single", value: "SINGLE"},
+  {label: "Package", value: "PACKAGE"},
+  {label: "HMO", value: "HMO"},
+]
 
-const billForm = ref({
-  patient_name: selectedPatientName.value ?? "",
-  service_type: "package" as BillingServiceType,
-  service_name: "",
-  package_name: "",
-  session_no: 1,
+const form = ref<{
+  patient_id?: number
+  appointment_id?: number
+  package_id?: number
+  billing_type: BillingType
+  service_type: ServiceType
+  service_name?: string
+  amount_due: number
+  amount_paid: number
+}>({
+  billing_type: "INDIVIDUAL_PRICING",
+  service_type: "SINGLE",
   amount_due: 0,
   amount_paid: 0,
-  payment_method: "cash" as PaymentMethod
 })
 
-const expenseForm = ref({
-  category: "",
-  amount: 0,
-  notes: ""
+const filters = ref({
+  name: "",
+  billing_status: ""
 })
-
-const reportDate = computed(() => reportDateModel.value.toISOString().slice(0, 10))
-const billRows = computed(() => useBillStore.selectedPatientBills)
-const expenseRows = computed(() => useBillStore.expenses.filter(expense => expense.expense_date === reportDate.value))
-const summary = computed(() => useBillStore.getDailySummary(reportDate.value))
 
 const asCurrency = (value: number): string =>
-  value.toLocaleString("en-PH", {style: "currency", currency: "PHP"})
+  Number(value ?? 0).toLocaleString("en-PH", {style: "currency", currency: "PHP"})
 
-const submitBill = (): void => {
-  const patientId = useBillStore.patient?.id
-  if (!patientId || !billForm.value.patient_name.trim() || billForm.value.amount_due <= 0) {
-    warningToast(toast, "Patient and amount due are required")
+const statusSeverity = (status: string): "success" | "warn" | "danger" | "info" => {
+  const normalized = status.toUpperCase()
+  if (normalized === "PAID") return "success"
+  if (normalized === "PARTIAL" || normalized === "PENDING") return "warn"
+  if (normalized === "VOID") return "danger"
+  return "info"
+}
+
+const formatDateTime = (value: string): string => new Date(value).toLocaleString()
+
+const loadPackages = async (): Promise<void> => {
+  packageOptions.value = await billingPhase1Service.getPackages() ?? []
+}
+
+const fetchBillings = async (): Promise<void> => {
+  try {
+    isLoading.value = true
+    const response = await billingPhase1Service.getAll({
+      page: page.value,
+      size: pageSize.value,
+      name: filters.value.name.trim() || undefined,
+      billing_status: filters.value.billing_status.trim() || undefined
+    })
+    billings.value = response?.content ?? []
+    totalElements.value = response?.total_elements ?? 0
+  } catch (error: unknown) {
+    errorToast(toast, "Failed to load billings")
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const createBilling = async (): Promise<void> => {
+  if (!form.value.patient_id || form.value.amount_due <= 0) {
+    errorToast(toast, "Patient ID and amount due are required")
     return
   }
 
-  const created = useBillStore.addBill({
-    patient_id: patientId,
-    patient_name: billForm.value.patient_name.trim(),
-    session_date: billDate.value.toISOString().slice(0, 10),
-    service_type: billForm.value.service_type,
-    service_name: billForm.value.service_name.trim() || "Session",
-    package_name: billForm.value.package_name.trim() || undefined,
-    session_no: billForm.value.session_no || undefined,
-    amount_due: billForm.value.amount_due,
-    amount_paid: billForm.value.amount_paid,
-    payment_method: billForm.value.payment_method,
-    notes: undefined
-  })
-
-  useAuditStore.logAction({
-    user: "Current User",
-    module: "Billing",
-    action: "Create",
-    details: `Created billing for ${created.patient_name} (${created.service_type})`
-  })
-  successToast(toast, "Billing session added")
-}
-
-const removeBillRow = (id: string): void => {
-  useBillStore.removeBill(id)
-  useAuditStore.logAction({
-    user: "Current User",
-    module: "Billing",
-    action: "Delete",
-    details: "Deleted billing record"
-  })
-}
-
-const submitExpense = (): void => {
-  if (!expenseForm.value.category.trim() || expenseForm.value.amount <= 0) {
-    warningToast(toast, "Expense category and amount are required")
-    return
+  const payload: BillingRequest = {
+    patient_id: form.value.patient_id,
+    appointment_id: form.value.appointment_id,
+    package_id: form.value.package_id,
+    billing_type: form.value.billing_type,
+    service_type: form.value.service_type,
+    service_name: form.value.service_name?.trim() || undefined,
+    amount_due: form.value.amount_due,
+    amount_paid: form.value.amount_paid,
   }
 
-  const created = useBillStore.addExpense({
-    expense_date: reportDate.value,
-    category: expenseForm.value.category.trim(),
-    amount: expenseForm.value.amount,
-    notes: expenseForm.value.notes.trim() || undefined,
-    created_by: "Current User"
-  })
-
-  useAuditStore.logAction({
-    user: "Current User",
-    module: "Finance",
-    action: "Create Expense",
-    details: `Logged ${created.category} expense`
-  })
-  successToast(toast, "Expense added")
+  try {
+    await billingPhase1Service.save(payload)
+    successToast(toast, "Billing created")
+    await fetchBillings()
+  } catch (error: unknown) {
+    errorToast(toast, "Failed to create billing")
+  }
 }
 
-const removeExpenseRow = (id: string): void => {
-  useBillStore.removeExpense(id)
-  useAuditStore.logAction({
-    user: "Current User",
-    module: "Finance",
-    action: "Delete Expense",
-    details: "Deleted expense record"
+const exportCsv = async (): Promise<void> => {
+  const response = await billingPhase1Service.exportCsv({
+    name: filters.value.name.trim() || undefined,
+    billing_status: filters.value.billing_status.trim() || undefined
   })
+  if (!response) return
+  exportToExcel(response)
 }
+
+const onPage = async (event: DataTablePageEvent): Promise<void> => {
+  page.value = Math.floor((event.first ?? 0) / (event.rows ?? pageSize.value)) + 1
+  pageSize.value = event.rows ?? pageSize.value
+  await fetchBillings()
+}
+
+onMounted(async () => {
+  await Promise.all([loadPackages(), fetchBillings()])
+})
 </script>
+

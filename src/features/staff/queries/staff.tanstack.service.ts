@@ -115,5 +115,21 @@ export const staffTanstackService = {
       mutationKey: [key],
       mutationFn: staffService.toggleStatus
     })
+  },
+
+  softDelete(key: StaffTanstackKey = StaffTanstackKey.STAFFS
+  ) {
+    return useMutation<void | undefined, Error, number>({
+      mutationKey: [key],
+      mutationFn: staffService.softDelete
+    })
+  },
+
+  hardDelete(key: StaffTanstackKey = StaffTanstackKey.STAFFS
+  ) {
+    return useMutation<void | undefined, Error, number>({
+      mutationKey: [key],
+      mutationFn: staffService.hardDelete
+    })
   }
 }
