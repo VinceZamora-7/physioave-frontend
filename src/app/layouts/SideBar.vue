@@ -66,6 +66,29 @@
     <!-- NAV (scrolls) -->
     <nav class="mt-4 flex-1 min-h-0 overflow-y-auto px-2 pb-4 app-scrollbar">
       <div class="space-y-6">
+        <div>
+          <button
+            type="button"
+            class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
+          >
+            <span v-if="!collapsed">OVERVIEW</span>
+          </button>
+
+          <ul class="mt-2 space-y-1">
+            <li>
+              <button
+                type="button"
+                @click="goToAndClose('dashboard')"
+                :class="itemClass('dashboard')"
+                aria-label="Dashboard"
+                title="Dashboard"
+              >
+                <span :class="iconWrapClass('dashboard')"><i class="pi pi-chart-line text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">Dashboard</span>
+              </button>
+            </li>
+          </ul>
+        </div>
 
         
         <div>
@@ -103,6 +126,19 @@
               >
                 <span :class="iconWrapClass('appointments')"><i class="pi pi-calendar text-[16px]" /></span>
                 <span v-if="!collapsed" class="truncate">Appointments</span>
+              </button>
+            </li>
+
+            <li>
+              <button
+                type="button"
+                @click="goToAndClose('promos-offers')"
+                :class="itemClass('promos-offers')"
+                aria-label="Promos and Offers"
+                title="Promos and Offers"
+              >
+                <span :class="iconWrapClass('promos-offers')"><i class="pi pi-tags text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">Promos & Offers</span>
               </button>
             </li>
           </ul>

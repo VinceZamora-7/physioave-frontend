@@ -1,5 +1,5 @@
 <template>
-  <main class="h-full p-3 sm:p-5 bg-[rgb(var(--app-bg))] text-[rgb(var(--app-fg))]">
+  <main class="app-page-shell">
     <Message v-if="isError" severity="error" class="mb-3">Something went wrong!</Message>
     <div class="mb-3 flex justify-end">
       <Button
@@ -14,7 +14,7 @@
 
     <section
       v-if="!isError"
-      class="h-full rounded-3xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-3 sm:p-4"
+      class="app-section-card"
     >
       <PatientsTable
         :patients="patients"
@@ -169,8 +169,8 @@
 import {useConfirm, useToast} from "primevue";
 import {useQueryClient} from "@tanstack/vue-query";
 import PatientForm from "@/components/PatientForm.vue";
-import {computed, onMounted, ref, useTemplateRef} from "vue";
-import {useRouter} from "vue-router";
+import {computed, onMounted, ref, useTemplateRef, watch} from "vue";
+import {useRoute, useRouter} from "vue-router";
 import type {
   Patient,
   PatientEditRequestPayload,
@@ -282,6 +282,7 @@ const useClinicStore = clinicStore()
 const useAppointmentStore = appointmentStore()
 const useBillStore = billStore()
 const router = useRouter()
+const route = useRoute()
 
 const toast = useToast()
 const confirm = useConfirm()
@@ -336,10 +337,48 @@ const draftService = createDraftService<PatientFormState>(IndexedDBKey.PATIENT)
 const selectedPatient = ref<Patient | undefined>()
 const selectedPatientDetails = ref<Patient | undefined>()
 const patientDetailsVisible = ref<boolean>(false)
+const pendingPatientDrillDownId = ref<number>()
+const pendingPatientDrillDownName = ref<string>()
 
 const onPatientRowClick = (patient: Patient): void => {
   selectedPatientDetails.value = patient
   patientDetailsVisible.value = true
+}
+
+const applyAppointmentDrillDown = async (): Promise<void> => {
+  const patientIdRaw = route.query.patientId
+  const patientNameRaw = route.query.name
+
+  const patientId = Number(Array.isArray(patientIdRaw) ? patientIdRaw[0] : patientIdRaw)
+  const patientName = (Array.isArray(patientNameRaw) ? patientNameRaw[0] : patientNameRaw)?.toString().trim()
+
+  pendingPatientDrillDownId.value = Number.isFinite(patientId) && patientId > 0 ? patientId : undefined
+  pendingPatientDrillDownName.value = patientName || undefined
+
+  if (pendingPatientDrillDownName.value) {
+    selectedSearch.value = pendingPatientDrillDownName.value
+    page.value = 1
+    await refetch()
+  }
+}
+
+const tryOpenDrillDownPatient = (): void => {
+  if (!pendingPatientDrillDownId.value && !pendingPatientDrillDownName.value) return
+  const content = patients.value?.content ?? []
+  if (!content.length) return
+
+  const byId = pendingPatientDrillDownId.value
+    ? content.find(patient => patient.id === pendingPatientDrillDownId.value)
+    : undefined
+  const byName = pendingPatientDrillDownName.value
+    ? content.find(patient => patient.full_name.toLowerCase() === pendingPatientDrillDownName.value?.toLowerCase())
+    : undefined
+
+  const target = byId ?? byName ?? content[0]
+  onPatientRowClick(target)
+
+  pendingPatientDrillDownId.value = undefined
+  pendingPatientDrillDownName.value = undefined
 }
 
 const formatPatientAddress = (patient: Patient): string => {
@@ -890,5 +929,15 @@ const onClinicRedirect = async (): Promise<void> => {
 onMounted(async (): Promise<void> => {
   await initializeDropdowns()
   await onClinicRedirect()
+  await applyAppointmentDrillDown()
 })
+
+watch(
+  () => patients.value?.content,
+  () => {
+    tryOpenDrillDownPatient()
+  },
+  {deep: true}
+)
 </script>
+

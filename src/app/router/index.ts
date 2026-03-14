@@ -28,7 +28,13 @@ const router = createRouter({
       children: [
         {
           path: '',
-          redirect: {name: 'clinics'}
+          redirect: {name: 'dashboard'}
+        },
+        {
+          path: '/dashboard',
+          name: 'dashboard',
+          component: () => import('@/features/dashboard/pages/DashboardView.vue'),
+          meta: {requireAuth: true}
         },
         {
           path: '/clinics',
@@ -52,6 +58,12 @@ const router = createRouter({
           path: '/patients',
           name: 'patients',
           component: () => import('@/features/patients/pages/PatientView.vue'),
+          meta: {requireAuth: true}
+        },
+        {
+          path: '/promos-offers',
+          name: 'promos-offers',
+          component: () => import('@/features/promos-offers/pages/PromosOffersView.vue'),
           meta: {requireAuth: true}
         },
         {

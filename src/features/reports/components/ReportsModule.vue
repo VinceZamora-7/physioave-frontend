@@ -1,7 +1,7 @@
 <template>
-  <main class="h-full p-3 sm:p-5 bg-[rgb(var(--app-bg))] text-[rgb(var(--app-fg))]">
-    <section class="rounded-3xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 space-y-4">
-      <h2 class="text-lg font-semibold">Accomplishment Report</h2>
+  <main class="app-page-shell">
+    <section class="app-section-card-comfy space-y-4">
+      <h2 class="app-section-title">Accomplishment Report</h2>
       <p class="text-sm opacity-70">Summary by module and action count (from user logs)</p>
 
       <DataTable :value="accomplishments" responsiveLayout="scroll" size="small">
@@ -11,10 +11,10 @@
       </DataTable>
     </section>
 
-    <section class="mt-5 rounded-3xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 space-y-4">
+    <section class="mt-5 app-section-card-comfy space-y-4">
       <div class="flex items-center justify-between">
         <div>
-          <h3 class="text-lg font-semibold">User Logs</h3>
+          <h3 class="app-section-title">User Logs</h3>
           <p class="text-sm opacity-70">Track edits and transactions for accountability</p>
         </div>
         <Button
@@ -37,8 +37,8 @@
       </DataTable>
     </section>
 
-    <section class="mt-5 rounded-3xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 space-y-4">
-      <h3 class="text-lg font-semibold">Permissions Matrix</h3>
+    <section class="mt-5 app-section-card-comfy space-y-4">
+      <h3 class="app-section-title">Permissions Matrix</h3>
       <p class="text-sm opacity-70">Role-based checks to reduce untracked edits and skimming risk</p>
 
       <DataTable :value="permissions" responsiveLayout="scroll" size="small">
@@ -108,3 +108,4 @@ const clearLogs = (): void => {
   useAuditStore.clearLogs()
 }
 </script>
+

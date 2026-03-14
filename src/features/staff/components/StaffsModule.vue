@@ -1,10 +1,10 @@
 <template>
-  <main class="h-full p-3 sm:p-5 bg-[rgb(var(--app-bg))] text-[rgb(var(--app-fg))]">
+  <main class="app-page-shell">
     <Message v-if="isError" severity="error" class="mb-3">Something went wrong!</Message>
 
     <section
       v-else
-      class="h-full rounded-3xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-3 sm:p-4"
+      class="app-section-card"
     >
       <StaffsTable
         :staffs="staffs"
@@ -310,3 +310,4 @@ onMounted(async () => {
   await applyClinicRedirect()
 })
 </script>
+
