@@ -13,8 +13,16 @@ const router = createRouter({
       }
     },
     {
-      path: "/:catchAll(.*)",
+      path: '/error',
       name: 'error',
+      component: () => import('@/app/pages/ErrorView.vue'),
+      meta: {
+        requiresAuth: false
+      }
+    },
+    {
+      path: "/:catchAll(.*)",
+      name: 'not-found',
       component: () => import('@/app/pages/ErrorView.vue'),
       meta: {
         requiresAuth: false

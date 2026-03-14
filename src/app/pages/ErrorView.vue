@@ -3,7 +3,6 @@
     class="relative min-h-screen w-screen overflow-hidden grid place-items-center px-6 py-16 sm:py-24
            bg-[rgb(var(--app-bg))] text-[rgb(var(--app-fg))]"
   >
-    <!-- decorative blobs (brand) -->
     <div
       class="pointer-events-none absolute -top-24 -left-24 h-72 w-72 rounded-full blur-3xl opacity-25
              bg-[#3C88B1]/40"
@@ -20,28 +19,25 @@
              backdrop-blur-xl
              shadow-[0_20px_60px_-20px_rgba(0,0,0,0.35)]"
     >
-      <!-- top accent -->
       <div
         class="absolute inset-x-0 top-0 h-1.5 rounded-t-3xl
                bg-gradient-to-r from-[#242757] via-[#5E1869] to-[#A91D8B]"
       />
 
-      <!-- badge -->
       <div class="mx-auto w-fit rounded-full px-3 py-1 text-xs font-semibold text-white
                   bg-gradient-to-r from-[#242757] via-[#5E1869] to-[#A91D8B]">
-        404 • Not Found
+        {{ badgeLabel }}
       </div>
 
       <h1 class="mt-5 text-3xl sm:text-5xl font-bold tracking-tight">
-        Page not found
+        {{ title }}
       </h1>
 
       <p class="mt-4 text-sm sm:text-base text-slate-600 dark:text-slate-300">
-        Sorry, we couldn’t find the page you’re looking for. It might have been moved or deleted.
+        {{ description }}
       </p>
 
       <div class="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
-        <!-- back -->
         <button
           type="button"
           @click="router.back()"
@@ -53,7 +49,6 @@
           Go back
         </button>
 
-        <!-- go home (optional) -->
         <RouterLink
           :to="{ name: 'login' }"
           class="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5
@@ -76,7 +71,34 @@
 </template>
 
 <script setup lang="ts">
-import { useRouter } from "vue-router"
+import { computed } from "vue"
+import { useRoute, useRouter } from "vue-router"
 
 const router = useRouter()
+const route = useRoute()
+
+const errorCode = computed(() => {
+  const raw = route.query.error
+  return typeof raw === "string" ? raw : ""
+})
+
+const badgeLabel = computed(() => {
+  return errorCode.value ? "Authentication Error" : "404 - Not Found"
+})
+
+const title = computed(() => {
+  if (errorCode.value === "staff_not_found") return "Access not allowed"
+  if (errorCode.value === "staff_inactive") return "Account is inactive"
+  if (errorCode.value === "oauth2_failed") return "Google sign-in failed"
+  if (errorCode.value === "login_failed") return "Login failed"
+  return "Page not found"
+})
+
+const description = computed(() => {
+  if (errorCode.value === "staff_not_found") return "Your Google account is not registered in this system. Please contact your administrator for access."
+  if (errorCode.value === "staff_inactive") return "Your account exists but is currently inactive. Please contact your administrator."
+  if (errorCode.value === "oauth2_failed") return "Google authentication failed before login could be completed. Please try again."
+  if (errorCode.value === "login_failed") return "We could not complete your login request. Please try again or contact your administrator."
+  return "Sorry, we couldn't find the page you're looking for. It might have been moved or deleted."
+})
 </script>
