@@ -7,7 +7,7 @@ import {
 } from "@tanstack/vue-query";
 import {defaultPageSize, defaultStatus, type Pageable} from "@/models/paging.ts";
 import {patientService} from "@/features/patients/api/patient.service";
-import type {Ref} from "vue";
+import {computed, type Ref} from "vue";
 import type {
   Patient,
   PatientEditRequestPayload,
@@ -24,8 +24,17 @@ export const patientTanstackService = {
   getAll(params: Ref<PatientRequestParams>,
          key: PatientTanstackKey = PatientTanstackKey.PATIENTS
   ) {
+    const queryKey = computed(() => [
+      key,
+      params.value.pageable_request.page,
+      params.value.pageable_request.size,
+      params.value.pageable_request.name ?? null,
+      params.value.pageable_request.status,
+      params.value.clinic_id ?? null,
+    ])
+
     return useQuery<Pageable<Patient> | undefined>({
-      queryKey: [key],
+      queryKey,
       queryFn: () => patientService.getAll(params.value),
       placeholderData: keepPreviousData,
       retry: 1,

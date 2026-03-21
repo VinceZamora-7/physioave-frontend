@@ -1,5 +1,5 @@
 <template>
-  <main class="h-full p-3 sm:p-5 bg-[rgb(var(--app-bg))] text-[rgb(var(--app-fg))]">
+  <main class="app-page-shell">
     <Message v-if="isError" severity="error" class="mb-3">Something went wrong!</Message>
     <div class="mb-3 flex justify-end">
       <Button
@@ -7,18 +7,18 @@
         icon="pi pi-download"
         severity="secondary"
         outlined
-        :loading="isLoading"
+        :loading="isPatientExportLoading"
         @click="onExportCsv"
       />
     </div>
 
     <section
       v-if="!isError"
-      class="h-full rounded-3xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-3 sm:p-4"
+      class="app-section-card"
     >
       <PatientsTable
         :patients="patients"
-        :isLoading="isLoading"
+        :isLoading="isTableLoading"
         :page="page"
         :pageSize="pageSize"
         :rowPerPageOptions="rowPerPageOptions"
@@ -31,7 +31,7 @@
             v-model:selectedClinic="selectedClinic"
             :statuses="statuses"
             :clinics="clinics"
-            :isLoading="isLoading"
+            :isLoading="isFilterLoading"
             :isExportLoading="isPatientExportLoading"
             @reset="resetFilters"
             @save="onSave"
@@ -46,7 +46,7 @@
             severity="secondary"
             outlined
             size="small"
-            :disabled="isLoading"
+            :disabled="isTableLoading"
             @click="onPatientRowClick(patient)"
           />
         </template>
@@ -169,8 +169,8 @@
 import {useConfirm, useToast} from "primevue";
 import {useQueryClient} from "@tanstack/vue-query";
 import PatientForm from "@/components/PatientForm.vue";
-import {computed, onMounted, ref, useTemplateRef} from "vue";
-import {useRouter} from "vue-router";
+import {computed, onMounted, ref, useTemplateRef, watch} from "vue";
+import {useRoute, useRouter} from "vue-router";
 import type {
   Patient,
   PatientEditRequestPayload,
@@ -205,6 +205,7 @@ import {
   rowPerPageOptions,
   Status,
   statuses,
+  toUUID,
   type UUID
 } from "@/utils/global.type.ts";
 import {useThrottleFn, watchDebounced} from "@vueuse/core";
@@ -282,6 +283,7 @@ const useClinicStore = clinicStore()
 const useAppointmentStore = appointmentStore()
 const useBillStore = billStore()
 const router = useRouter()
+const route = useRoute()
 
 const toast = useToast()
 const confirm = useConfirm()
@@ -309,10 +311,17 @@ const isProvincesLoading = useIsLoading(PhilippineLocationTanstackKey.PROVINCES)
 const isCitiesLoading = useIsLoading(PhilippineLocationTanstackKey.CITIES)
 const isBaranggaysLoading = useIsLoading(PhilippineLocationTanstackKey.BARANGGAYS)
 
+const isTableLoading = computed<boolean>(() =>
+  isPatientLoading.value ||
+  isPatientExportLoading.value)
+
+const isFilterLoading = computed<boolean>(() =>
+  isPatientLoading.value ||
+  isClinicsLoading.value)
+
 const isLoading = computed<boolean>(() =>
   isFSALoading.value ||
-  isPatientLoading.value ||
-  isPatientExportLoading.value ||
+  isTableLoading.value ||
 
   isGendersLoading.value ||
   isCivilStatusesLoading.value ||
@@ -336,10 +345,48 @@ const draftService = createDraftService<PatientFormState>(IndexedDBKey.PATIENT)
 const selectedPatient = ref<Patient | undefined>()
 const selectedPatientDetails = ref<Patient | undefined>()
 const patientDetailsVisible = ref<boolean>(false)
+const pendingPatientDrillDownId = ref<number>()
+const pendingPatientDrillDownName = ref<string>()
 
 const onPatientRowClick = (patient: Patient): void => {
   selectedPatientDetails.value = patient
   patientDetailsVisible.value = true
+}
+
+const applyAppointmentDrillDown = async (): Promise<void> => {
+  const patientIdRaw = route.query.patientId
+  const patientNameRaw = route.query.name
+
+  const patientId = Number(Array.isArray(patientIdRaw) ? patientIdRaw[0] : patientIdRaw)
+  const patientName = (Array.isArray(patientNameRaw) ? patientNameRaw[0] : patientNameRaw)?.toString().trim()
+
+  pendingPatientDrillDownId.value = Number.isFinite(patientId) && patientId > 0 ? patientId : undefined
+  pendingPatientDrillDownName.value = patientName || undefined
+
+  if (pendingPatientDrillDownName.value) {
+    selectedSearch.value = pendingPatientDrillDownName.value
+    page.value = 1
+    await refetch()
+  }
+}
+
+const tryOpenDrillDownPatient = (): void => {
+  if (!pendingPatientDrillDownId.value && !pendingPatientDrillDownName.value) return
+  const content = patients.value?.content ?? []
+  if (!content.length) return
+
+  const byId = pendingPatientDrillDownId.value
+    ? content.find(patient => patient.id === pendingPatientDrillDownId.value)
+    : undefined
+  const byName = pendingPatientDrillDownName.value
+    ? content.find(patient => patient.full_name.toLowerCase() === pendingPatientDrillDownName.value?.toLowerCase())
+    : undefined
+
+  const target = byId ?? byName ?? content[0]
+  onPatientRowClick(target)
+
+  pendingPatientDrillDownId.value = undefined
+  pendingPatientDrillDownName.value = undefined
 }
 
 const formatPatientAddress = (patient: Patient): string => {
@@ -497,13 +544,7 @@ const {mutate: editMutation} = patientTanstackService.update()
 const {mutate: toggleStatusMutation} = patientTanstackService.toggleStatus()
 
 
-const {
-  mutateAsync: folderSaveMutation
-} = fileServerTanstackService.saveFolder()
-
-const {
-  mutateAsync: folderDeleteMutation
-} = fileServerTanstackService.deleteFolder()
+const folderSaveMutation = (): UUID => toUUID(crypto.randomUUID())
 
 const onSave = (): void => {
   selectedPatient.value = undefined
@@ -528,11 +569,7 @@ const onSubmit = async (event: FormSubmitEvent): Promise<void> => {
       loading: isLoading.value
     },
     accept: async (): Promise<void> => {
-      const folder: UUID | undefined = await folderSaveMutation()
-      if (!folder) {
-        errorToast(toast, "Patient folder failed to created")
-        return
-      }
+      const folder: UUID = folderSaveMutation()
 
       const body: PatientRequestBody = {
         first_name: event.values?.first_name,
@@ -594,10 +631,7 @@ const onSubmit = async (event: FormSubmitEvent): Promise<void> => {
         },
         async onError(error: APIError) {
           errorToast(toast, `Save failed ${error.message}`)
-          await Promise.all([
-            folderDeleteMutation(folder),
-            resetQueries(),
-          ])
+          await resetQueries()
         },
       })
     }
@@ -888,7 +922,18 @@ const onClinicRedirect = async (): Promise<void> => {
 }
 
 onMounted(async (): Promise<void> => {
-  await initializeDropdowns()
-  await onClinicRedirect()
+  void initializeDropdowns().then(async () => {
+    await onClinicRedirect()
+  })
+  await applyAppointmentDrillDown()
 })
+
+watch(
+  () => patients.value?.content,
+  () => {
+    tryOpenDrillDownPatient()
+  },
+  {deep: true}
+)
 </script>
+

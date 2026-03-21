@@ -20,7 +20,7 @@ export const philippineLocationTanstackService = {
     key: PhilippineLocationTanstackKey = PhilippineLocationTanstackKey.REGIONS
   ) {
     return queryClient.fetchQuery<Pageable<Region> | undefined>({
-      queryKey: [key],
+      queryKey: [key, payload.page_request.page, payload.page_request.size, payload.page_request.name ?? ""],
       queryFn: () => plaService.getAllRegions(payload),
       retry: 2
     })
@@ -32,7 +32,7 @@ export const philippineLocationTanstackService = {
     key: PhilippineLocationTanstackKey = PhilippineLocationTanstackKey.PROVINCES
   ) {
     return queryClient.fetchQuery<Pageable<Province> | undefined>({
-      queryKey: [key],
+      queryKey: [key, payload.region_id, payload.page_request.page, payload.page_request.size, payload.page_request.name ?? ""],
       queryFn: () => plaService.getAllProvinces(payload),
       retry: 2
     })
@@ -44,7 +44,7 @@ export const philippineLocationTanstackService = {
     key: PhilippineLocationTanstackKey = PhilippineLocationTanstackKey.CITIES
   ) {
     return queryClient.fetchQuery<Pageable<City> | undefined>({
-      queryKey: [key],
+      queryKey: [key, payload.region_id, payload.province_id, payload.page_request.page, payload.page_request.size, payload.page_request.name ?? ""],
       queryFn: () => plaService.getAllCities(payload),
       retry: 2
     })
@@ -56,7 +56,7 @@ export const philippineLocationTanstackService = {
     key: PhilippineLocationTanstackKey = PhilippineLocationTanstackKey.BARANGGAYS
   ) {
     return queryClient.fetchQuery<Pageable<Baranggay> | undefined>({
-      queryKey: [key],
+      queryKey: [key, payload.region_id, payload.province_id, payload.city_id, payload.page_request.page, payload.page_request.size, payload.page_request.name ?? ""],
       queryFn: () => {
         return plaService.getAllBaranggays(payload)
       },

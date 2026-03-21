@@ -36,7 +36,13 @@ const router = createRouter({
       children: [
         {
           path: '',
-          redirect: {name: 'clinics'}
+          redirect: {name: 'dashboard'}
+        },
+        {
+          path: '/dashboard',
+          name: 'dashboard',
+          component: () => import('@/features/dashboard/pages/DashboardView.vue'),
+          meta: {requireAuth: true}
         },
         {
           path: '/clinics',
@@ -60,6 +66,36 @@ const router = createRouter({
           path: '/patients',
           name: 'patients',
           component: () => import('@/features/patients/pages/PatientView.vue'),
+          meta: {requireAuth: true}
+        },
+        {
+          path: '/promos-offers',
+          name: 'promos-offers',
+          component: () => import('@/features/promos-offers/pages/PromosOffersView.vue'),
+          meta: {requireAuth: true}
+        },
+        {
+          path: '/promos-offers/self-pay-single-service',
+          name: 'promos-offers-single-service',
+          component: () => import('@/features/promos-offers/pages/PromosOffersSingleServiceView.vue'),
+          meta: {requireAuth: true}
+        },
+        {
+          path: '/promos-offers/self-pay-package-service',
+          name: 'promos-offers-package-service',
+          component: () => import('@/features/promos-offers/pages/PromosOffersPackageServiceView.vue'),
+          meta: {requireAuth: true}
+        },
+        {
+          path: '/promos-offers/hmo',
+          name: 'promos-offers-hmo',
+          component: () => import('@/features/promos-offers/pages/PromosOffersHmoView.vue'),
+          meta: {requireAuth: true}
+        },
+        {
+          path: '/promos-offers/lgu',
+          name: 'promos-offers-lgu',
+          component: () => import('@/features/promos-offers/pages/PromosOffersLguView.vue'),
           meta: {requireAuth: true}
         },
         {

@@ -27,10 +27,10 @@ export const patientSchema = z.strictObject({
   fb_link: z.preprocess(value => value === "" || value == null ? undefined : value, z.url("Must be a valid url").max(100, "Facebook link must be 100 characters and below only").optional()),
 
   // Address information
-  region: regionSchema,
-  province: provinceSchema,
-  city: citySchema,
-  baranggay: baranggaySchema,
+  region: z.preprocess(value => value ?? undefined, regionSchema.optional()),
+  province: z.preprocess(value => value ?? undefined, provinceSchema.optional()),
+  city: z.preprocess(value => value ?? undefined, citySchema.optional()),
+  baranggay: z.preprocess(value => value ?? undefined, baranggaySchema.optional()),
 
   details: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().max(255).optional())
 }).superRefine((value, ctx) => {

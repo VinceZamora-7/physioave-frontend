@@ -12,3 +12,55 @@
   background: rgb(var(--app-bg));
   color: rgb(var(--app-fg));
 }
+
+.app-page-shell {
+  @apply h-full p-3 sm:p-5;
+  background: rgb(var(--app-bg));
+  color: rgb(var(--app-fg));
+}
+
+.app-section-card {
+  @apply rounded-3xl border p-3 sm:p-4;
+  border-color: rgb(var(--app-border));
+  background: rgb(var(--app-card));
+}
+
+.app-section-card-comfy {
+  @apply rounded-3xl border p-4 sm:p-5;
+  border-color: rgb(var(--app-border));
+  background: rgb(var(--app-card));
+}
+
+.app-section-title {
+  @apply text-lg font-semibold tracking-tight;
+  color: rgb(var(--app-fg));
+}
+
+.app-inline-banner {
+  @apply rounded-2xl border p-3;
+  border-color: rgba(var(--app-secondary), 0.35);
+  background: rgba(var(--app-secondary), 0.10);
+  color: rgb(var(--app-fg));
+}
+
+.app-table-header {
+  @apply flex flex-col gap-3;
+  color: rgb(var(--app-fg));
+}
+
+.app-table-header-row {
+  @apply flex flex-col gap-3 lg:flex-row lg:items-center;
+}
+
+.app-table-header-filters {
+  @apply flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap;
+}
+
+.app-table-header-actions {
+  @apply flex flex-col sm:flex-row gap-2 w-full lg:w-auto lg:ml-auto lg:justify-end;
+}
+
+.app-divider {
+  @apply h-px w-full opacity-80;
+  background: rgb(var(--app-border));
+}

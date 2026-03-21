@@ -1,9 +1,9 @@
 <template>
-  <main class="h-full p-3 sm:p-5 bg-[rgb(var(--app-bg))] text-[rgb(var(--app-fg))]">
+  <main class="app-page-shell">
     <Message v-if="isError" severity="error" class="mb-3"> Something went wrong!</Message>
     <section
       v-else
-      class="h-full rounded-3xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-3 sm:p-4"
+      class="app-section-card"
     >
       <DataTable
       :value="hmos?.content"
@@ -73,7 +73,7 @@
             <Button
               :loading="isLoading"
               icon="pi pi-save"
-              severity="info"
+              severity="primary"
               label="Save HMO"
               size="small"
               class="w-full sm:w-auto"
@@ -82,7 +82,7 @@
             <Button
               :loading="isExportLoading"
               icon="pi pi-file-export"
-              severity="info"
+              severity="primary"
               label="Export"
               size="small"
               class="w-full sm:w-auto"
@@ -115,7 +115,7 @@
           <SkeletonLoader :loading="isLoading">
             <Button
               :loading="isLoading"
-              severity="info"
+              severity="primary"
               label="View Machines"
               @click="onViewMachines(slotProps.data)"
             />
@@ -128,7 +128,7 @@
           <SkeletonLoader :loading="isLoading">
             <Button
               :loading="isLoading"
-              severity="info"
+              severity="primary"
               label="View Techniques"
               @click="onViewTechniques(slotProps.data)"
             />
@@ -141,7 +141,7 @@
           <SkeletonLoader :loading="isLoading">
             <Button
               :loading="isLoading"
-              severity="info"
+              severity="primary"
               label="View Evaluations"
               @click="onViewEvaluations(slotProps.data)"
             />
@@ -476,4 +476,6 @@ const onViewEvaluations = (hmo: HMO): void => {
   infoToast(toast, "Not implemented yet")
 }
 </script>
+
+
 

@@ -1,54 +1,108 @@
 <template>
-  <main class="h-full p-3 sm:p-5 bg-[rgb(var(--app-bg))] text-[rgb(var(--app-fg))] space-y-4">
-    <section class="rounded-3xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 space-y-3">
-      <div class="flex flex-wrap items-end gap-3">
-        <Button label="Create Appointment" icon="pi pi-plus" @click="openCreateDialog" />
-        <IftaLabel>
-          <DatePicker v-model="calendarDate" fluid :manualInput="false" />
-          <label>Calendar Day</label>
+  <main class="app-page-shell space-y-5">
+    <section :class="sectionCardClass">
+      <div class="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h3 :class="sectionTitleClass">Clinic Calendar</h3>
+          <span class="text-sm opacity-70">Selected: {{ selectedDateLabel }}</span>
+        </div>
+        <IftaLabel class="min-w-[260px]">
+          <Select
+            v-model="selectedClinicId"
+            :options="clinicOptions"
+            optionLabel="name"
+            optionValue="id"
+            fluid
+            filter
+            placeholder="Select clinic schedule"
+          />
+          <label>Clinic Schedule</label>
         </IftaLabel>
+      </div>
+      <small v-if="selectedClinicScheduleLabel" class="opacity-70">{{ selectedClinicScheduleLabel }}</small>
+      <DatePicker
+        v-model="calendarDate"
+        inline
+        fluid
+        :manualInput="false"
+        showWeek
+        :disabledDays="calendarDisabledDays"
+        @month-change="onCalendarMonthChange"
+      >
+        <template #date="slotProps">
+          <div class="relative h-8 w-8 grid place-items-center">
+            <span>{{ slotProps.date.day }}</span>
+            <span
+              v-if="hasBookingDot(slotProps.date)"
+              class="absolute bottom-[2px] h-1.5 w-1.5 rounded-full bg-red-500"
+            />
+          </div>
+        </template>
+      </DatePicker>
+    </section>
+
+    <section :class="sectionCardClass">
+      <div class="flex items-center justify-between gap-2">
+        <h3 :class="sectionTitleClass">Appointments</h3>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
         <IftaLabel>
           <InputText v-model="statusFilter" fluid placeholder="Status (optional)" />
           <label>Status filter</label>
         </IftaLabel>
-        <Button label="Refresh Table" icon="pi pi-refresh" outlined @click="refreshAll" />
-        <Button label="Export CSV" icon="pi pi-download" severity="secondary" @click="onExportCsv" />
+        <div class="flex flex-wrap items-end gap-2 md:col-span-2 xl:col-span-3">
+          <Button label="Create Appointment" icon="pi pi-plus" @click="openCreateDialog" />
+          <Button label="Refresh Table" icon="pi pi-refresh" outlined @click="refreshAll" />
+          <Button label="Export CSV" icon="pi pi-download" severity="secondary" outlined @click="onExportCsv" />
+        </div>
       </div>
 
-      <DataTable
-        :value="appointments"
-        dataKey="id"
-        paginator
-        :rows="pageSize"
-        :first="(page - 1) * pageSize"
-        :totalRecords="totalElements"
-        :loading="isLoading"
-        @page="onPage"
-        selectionMode="single"
-        @rowSelect="onSelectRow"
-      >
-        <Column field="patient_name" header="Patient" />
-        <Column field="doctor_name" header="Doctor" />
-        <Column field="starts_at" header="Start">
-          <template #body="{data}">{{ formatDateTime(data.starts_at) }}</template>
-        </Column>
-        <Column field="appointment_status" header="Appt Status" />
-        <Column field="billing_status" header="Billing">
-          <template #body="{data}">
-            <Tag :value="data.billing_status" :severity="billingSeverity(data.billing_status)" />
-          </template>
-        </Column>
-        <Column field="reschedule_count" header="Reschedules" />
-        <Column header="Actions">
-          <template #body="{data}">
-            <Button size="small" text icon="pi pi-calendar-plus" @click="openReschedule(data)" />
-          </template>
-        </Column>
-      </DataTable>
+      <div class="overflow-x-auto">
+        <DataTable
+          :value="appointments"
+          dataKey="id"
+          paginator
+          :rows="pageSize"
+          :first="(page - 1) * pageSize"
+          :totalRecords="totalElements"
+          :loading="isLoading"
+          @page="onPage"
+          selectionMode="single"
+          @rowSelect="onSelectRow"
+        >
+          <Column field="patient_name" header="Patient" />
+          <Column field="doctor_name" header="Doctor" />
+          <Column field="starts_at" header="Start">
+            <template #body="{data}">{{ formatDateTime(data.starts_at) }}</template>
+          </Column>
+          <Column field="appointment_status" header="Appt Status" />
+          <Column field="billing_status" header="Billing">
+            <template #body="{data}">
+              <Tag :value="displayBillingStatus(data.billing_status)" :severity="billingSeverity(data.billing_status)" />
+            </template>
+          </Column>
+          <Column field="reschedule_count" header="Reschedules" />
+          <Column header="Actions">
+            <template #body="{data}">
+              <div class="flex items-center gap-1">
+                <Button size="small" text icon="pi pi-calendar-plus" @click="openReschedule(data)" />
+                <Button
+                  v-if="canDeleteAppointments"
+                  size="small"
+                  text
+                  severity="danger"
+                  icon="pi pi-trash"
+                  @click="confirmDeleteAppointment(data)"
+                />
+              </div>
+            </template>
+          </Column>
+        </DataTable>
+      </div>
     </section>
 
-    <section class="rounded-3xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 space-y-3">
-      <h3 class="text-lg font-semibold">Calendar Day Bookings</h3>
+    <section :class="sectionCardClass">
+      <h3 :class="sectionTitleClass">Calendar Day Bookings</h3>
       <DataTable :value="dayBookings" dataKey="id" size="small" selectionMode="single" @rowSelect="onSelectRow">
         <Column field="patient_name" header="Patient" />
         <Column field="starts_at" header="Start">
@@ -56,33 +110,75 @@
         </Column>
         <Column field="billing_status" header="Billing">
           <template #body="{data}">
-            <Tag :value="data.billing_status" :severity="billingSeverity(data.billing_status)" />
+            <Tag :value="displayBillingStatus(data.billing_status)" :severity="billingSeverity(data.billing_status)" />
           </template>
         </Column>
       </DataTable>
     </section>
 
-    <section v-if="selectedDetail" class="rounded-3xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 space-y-2">
-      <h3 class="text-lg font-semibold">Appointment Detail</h3>
-      <p><strong>Patient:</strong> {{ selectedDetail.patient_name }}</p>
-      <p><strong>Doctor:</strong> {{ selectedDetail.doctor_name || "N/A" }}</p>
-      <p><strong>Schedule:</strong> {{ formatDateTime(selectedDetail.starts_at) }} - {{ formatDateTime(selectedDetail.ends_at) }}</p>
-      <p><strong>Billing Status:</strong> {{ selectedDetail.billing_status }}</p>
-      <div class="flex flex-wrap gap-2">
-        <Button label="Go to Patient" icon="pi pi-user" outlined @click="goToPatients" />
-        <Button label="Go to Billing" icon="pi pi-receipt" severity="secondary" outlined @click="goToBilling" />
+    <section v-if="selectedDetail" :class="sectionCardClass">
+      <h3 :class="sectionTitleClass">Appointment Detail</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+        <div :class="detailCardClass">
+          <div class="text-xs uppercase tracking-wide opacity-70">Patient</div>
+          <div class="font-medium">{{ selectedDetail.patient_name }}</div>
+        </div>
+        <div :class="detailCardClass">
+          <div class="text-xs uppercase tracking-wide opacity-70">Doctor</div>
+          <div class="font-medium">{{ selectedDetail.doctor_name || "N/A" }}</div>
+        </div>
+        <div :class="detailCardClass">
+          <div class="text-xs uppercase tracking-wide opacity-70">Schedule</div>
+          <div class="font-medium">{{ formatDateTime(selectedDetail.starts_at) }} - {{ formatDateTime(selectedDetail.ends_at) }}</div>
+        </div>
+        <div :class="detailCardClass">
+          <div class="text-xs uppercase tracking-wide opacity-70">Billing Status</div>
+          <div class="mt-1">
+            <Tag :value="displayBillingStatus(selectedDetail.billing_status)" :severity="billingSeverity(selectedDetail.billing_status)" />
+          </div>
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-2 pt-1">
+        <Button label="Open Patient Record" icon="pi pi-user" outlined class="min-w-[190px]" @click="goToPatients" />
+        <Button
+          :label="selectedDetail.billing_id ? 'Open Billing Record' : 'Create Billing'"
+          icon="pi pi-receipt"
+          severity="secondary"
+          outlined
+          class="min-w-[190px]"
+          @click="goToBilling"
+        />
       </div>
     </section>
 
     <Dialog v-model:visible="rescheduleVisible" modal header="Reschedule Appointment" :style="{width:'520px'}">
       <div class="space-y-3">
         <p v-if="activeAppointment">Current reschedules: <strong>{{ activeAppointment.reschedule_count }}</strong> / 3</p>
+        <Message v-if="needsOverrideReason" severity="warn" :closable="false">
+          Max reschedule reached. Owner override is required and a reason is mandatory.
+        </Message>
         <IftaLabel>
-          <DatePicker v-model="rescheduleStart" showTime fluid :manualInput="false" />
+          <DatePicker
+            v-model="rescheduleStart"
+            showTime
+            fluid
+            :manualInput="false"
+            :stepMinute="5"
+            :disabledDays="calendarDisabledDays"
+            hourFormat="24"
+          />
           <label>New Start</label>
         </IftaLabel>
         <IftaLabel>
-          <DatePicker v-model="rescheduleEnd" showTime fluid :manualInput="false" />
+          <DatePicker
+            v-model="rescheduleEnd"
+            showTime
+            fluid
+            :manualInput="false"
+            :stepMinute="5"
+            :disabledDays="calendarDisabledDays"
+            hourFormat="24"
+          />
           <label>New End</label>
         </IftaLabel>
         <IftaLabel>
@@ -127,11 +223,268 @@
         </IftaLabel>
 
         <IftaLabel>
-          <DatePicker v-model="createStart" showTime fluid :manualInput="false" />
+          <Select
+            v-model="createBillingType"
+            :options="billingTypeOptions"
+            optionLabel="label"
+            optionValue="value"
+            fluid
+          />
+          <label>Billing Type</label>
+        </IftaLabel>
+
+        <div class="space-y-3 pt-2">
+          <div class="flex items-center justify-between">
+            <h4 class="font-semibold text-sm">Select Services</h4>
+            <small class="opacity-70">At least one service required</small>
+          </div>
+
+          <!-- Mode Toggle -->
+          <SelectButton
+            v-if="createBillingType !== 'SELF_PAY_PACKAGE'"
+            v-model="serviceMode"
+            :options="serviceModeOptions"
+            optionLabel="label"
+            optionValue="value"
+            class="w-full"
+          />
+
+          <!-- Package Service: show package picker + individual selectors together -->
+          <div v-if="createBillingType === 'SELF_PAY_PACKAGE'" class="space-y-3">
+            <IftaLabel>
+              <Select
+                v-model="selectedPackageOfferId"
+                :options="activePackageServiceOffers"
+                optionLabel="name"
+                optionValue="id"
+                filter
+                placeholder="Select package offer"
+                fluid
+                @update:modelValue="selectPackageOffer"
+              />
+              <label>Package Offer</label>
+            </IftaLabel>
+            <small v-if="activePackageServiceOffers.length === 0" class="opacity-60">No package offers available. Add them in Self Pay: Package Service Management.</small>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <IftaLabel>
+                <Select
+                  v-model="selectedMachineId"
+                  :options="machineServices"
+                  optionLabel="name"
+                  optionValue="id"
+                  filter
+                  placeholder="Select machine"
+                  fluid
+                  @update:modelValue="addServiceLine('machine')"
+                />
+                <label>Machine</label>
+              </IftaLabel>
+
+              <IftaLabel>
+                <Select
+                  v-model="selectedTechniqueId"
+                  :options="techniqueServices"
+                  optionLabel="name"
+                  optionValue="id"
+                  filter
+                  placeholder="Select technique"
+                  fluid
+                  @update:modelValue="addServiceLine('technique')"
+                />
+                <label>Technique</label>
+              </IftaLabel>
+
+              <IftaLabel>
+                <Select
+                  v-model="selectedEvaluationId"
+                  :options="evaluationServices"
+                  optionLabel="name"
+                  optionValue="id"
+                  filter
+                  placeholder="Select evaluation"
+                  fluid
+                  @update:modelValue="addServiceLine('evaluation')"
+                />
+                <label>Evaluation</label>
+              </IftaLabel>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-2 items-end">
+                <IftaLabel>
+                  <Select
+                    v-model="selectedAddOnType"
+                    :options="addOnTypeOptions"
+                    optionLabel="label"
+                    optionValue="value"
+                    placeholder="Select add-on type"
+                    fluid
+                  />
+                  <label>Add-on Type</label>
+                </IftaLabel>
+                <IftaLabel>
+                  <Select
+                    v-model="selectedAddOnId"
+                    :options="currentAddOnServices"
+                    optionLabel="name"
+                    optionValue="id"
+                    filter
+                    placeholder="Select add-on"
+                    fluid
+                    @update:modelValue="addServiceLine(selectedAddOnType)"
+                  />
+                  <label>Add-on</label>
+                </IftaLabel>
+              </div>
+            </div>
+          </div>
+
+          <!-- Individual Service Selection Dropdowns -->
+          <div v-else-if="serviceMode === 'individual'" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <IftaLabel>
+              <Select
+                v-model="selectedMachineId"
+                :options="machineServices"
+                optionLabel="name"
+                optionValue="id"
+                filter
+                placeholder="Select machine"
+                fluid
+                @update:modelValue="addServiceLine('machine')"
+              />
+              <label>Machine</label>
+            </IftaLabel>
+
+            <IftaLabel>
+              <Select
+                v-model="selectedTechniqueId"
+                :options="techniqueServices"
+                optionLabel="name"
+                optionValue="id"
+                filter
+                placeholder="Select technique"
+                fluid
+                @update:modelValue="addServiceLine('technique')"
+              />
+              <label>Technique</label>
+            </IftaLabel>
+
+            <IftaLabel>
+              <Select
+                v-model="selectedEvaluationId"
+                :options="evaluationServices"
+                optionLabel="name"
+                optionValue="id"
+                filter
+                placeholder="Select evaluation"
+                fluid
+                @update:modelValue="addServiceLine('evaluation')"
+              />
+              <label>Evaluation</label>
+            </IftaLabel>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 items-end">
+              <IftaLabel>
+                <Select
+                  v-model="selectedAddOnType"
+                  :options="addOnTypeOptions"
+                  optionLabel="label"
+                  optionValue="value"
+                  placeholder="Select add-on type"
+                  fluid
+                />
+                <label>Add-on Type</label>
+              </IftaLabel>
+              <IftaLabel>
+                <Select
+                  v-model="selectedAddOnId"
+                  :options="currentAddOnServices"
+                  optionLabel="name"
+                  optionValue="id"
+                  filter
+                  placeholder="Select add-on"
+                  fluid
+                  @update:modelValue="addServiceLine(selectedAddOnType)"
+                />
+                <label>Add-on</label>
+              </IftaLabel>
+            </div>
+          </div>
+
+          <!-- Bundled Service Selection -->
+          <div v-else-if="serviceMode === 'bundled'" class="space-y-2">
+            <IftaLabel>
+              <Select
+                v-model="selectedBundleId"
+                :options="activeBundledServices"
+                optionLabel="name"
+                optionValue="id"
+                filter
+                placeholder="Select a bundle"
+                fluid
+                @update:modelValue="selectBundle"
+              />
+              <label>Bundle</label>
+            </IftaLabel>
+            <small v-if="activeBundledServices.length === 0" class="opacity-60">No bundles available. Add them in Single Pay: Single Service Management.</small>
+          </div>
+
+          <!-- Selected Services Summary -->
+          <div v-if="selectedServiceLines.length > 0" class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3 space-y-2 text-sm">
+            <div class="flex justify-between font-medium">
+              <span>{{ selectedServiceLines.length }} item{{ selectedServiceLines.length === 1 ? '' : 's' }} selected</span>
+              <span>{{ subtotalFromServiceLines.toLocaleString("en-PH", {style: "currency", currency: "PHP"}) }}</span>
+            </div>
+            <div class="space-y-1 max-h-32 overflow-y-auto">
+              <div v-for="(line, idx) in selectedServiceLines" :key="idx" class="flex items-center justify-between text-xs opacity-80">
+                <div class="flex items-center gap-1 min-w-0 mr-2">
+                  <Tag v-if="line.type === 'bundle'" value="Bundle" severity="contrast" class="text-xs shrink-0" />
+                  <Tag v-else-if="line.type === 'package'" value="Package" severity="info" class="text-xs shrink-0" />
+                  <span class="truncate">{{ line.name }}</span>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                  <span v-if="line.originalPrice && line.originalPrice > line.price" class="line-through opacity-50">{{ line.originalPrice.toLocaleString("en-PH", {style: "currency", currency: "PHP"}) }}</span>
+                  <span>{{ line.price.toLocaleString("en-PH", {style: "currency", currency: "PHP"}) }}</span>
+                  <Button size="small" text severity="danger" icon="pi pi-trash" @click="removeServiceLine(idx)" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <IftaLabel>
+          <InputText v-model="createBillingNotes" fluid placeholder="Optional notes for billing" />
+          <label>Billing Notes</label>
+        </IftaLabel>
+
+        <small class="opacity-70">
+          Applied clinic schedule: {{ selectedClinicScheduleLabel || "No clinic resolved yet" }}
+        </small>
+        <Message v-if="isOvernightClinicSchedule" severity="warn" :closable="false">
+          This clinic schedule is overnight. If this is unintended, verify clinic end time (AM/PM).
+        </Message>
+
+        <IftaLabel>
+          <DatePicker
+            v-model="createStart"
+            showTime
+            fluid
+            :manualInput="false"
+            :stepMinute="5"
+            :disabledDays="calendarDisabledDays"
+            hourFormat="24"
+          />
           <label>Start</label>
         </IftaLabel>
         <IftaLabel>
-          <DatePicker v-model="createEnd" showTime fluid :manualInput="false" />
+          <DatePicker
+            v-model="createEnd"
+            showTime
+            fluid
+            :manualInput="false"
+            :stepMinute="5"
+            :disabledDays="calendarDisabledDays"
+            hourFormat="24"
+          />
           <label>End</label>
         </IftaLabel>
       </div>
@@ -146,7 +499,7 @@
 <script setup lang="ts">
 import {computed, onMounted, ref, watch} from "vue";
 import {useRouter} from "vue-router";
-import {useToast} from "primevue";
+import {useConfirm, useToast} from "primevue";
 import axios from "axios";
 import Button from "primevue/button";
 import Column from "primevue/column";
@@ -154,8 +507,11 @@ import DataTable, {type DataTablePageEvent} from "primevue/datatable";
 import DatePicker from "primevue/datepicker";
 import Dialog from "primevue/dialog";
 import IftaLabel from "primevue/iftalabel";
+import InputNumber from "primevue/inputnumber";
 import InputText from "primevue/inputtext";
+import Message from "primevue/message";
 import Select from "primevue/select";
+import SelectButton from "primevue/selectbutton";
 import Tag from "primevue/tag";
 import {appointmentPhase1Service, type AppointmentDetail, type AppointmentListItem} from "@/features/appointments/api/appointment-phase1.service";
 import {exportToExcel} from "@/utils/export-excel.util";
@@ -163,11 +519,26 @@ import {errorToast, successToast} from "@/utils/toast.util";
 import type {Lookup} from "@/models/global.model";
 import {patientService} from "@/features/patients/api/patient.service";
 import {staffService} from "@/features/staff/api/staff.service";
+import {clinicService} from "@/features/clinics/api/clinic.service";
 import {defaultPage, defaultPageSize} from "@/models/paging";
 import {Status} from "@/utils/global.type";
+import type {Clinic} from "@/features/clinics/types/clinic";
+import type {Patient} from "@/features/patients/types/patient";
+import type {Staff} from "@/features/staff/types/staff";
+import {pamsAPI} from "@/utils/axios-interceptor";
+import type {Pageable} from "@/models/paging";
+import type {OfferLookupDTO} from "@/models/global.model";
+
+interface BillingPickerLookup {
+  id: string | number
+  name: string
+  price: number
+}
 
 const router = useRouter()
 const toast = useToast()
+const confirm = useConfirm()
+const roleName = ref("")
 
 const appointments = ref<AppointmentListItem[]>([])
 const dayBookings = ref<AppointmentListItem[]>([])
@@ -187,26 +558,503 @@ const rescheduleEnd = ref<Date>(new Date())
 const overrideReason = ref("")
 
 const createVisible = ref(false)
-const patientOptions = ref<Lookup[]>([])
-const doctorOptions = ref<Lookup[]>([])
+type AppointmentPersonOption = {id: number; name: string; clinic_id: number}
+type BillingType = "SELF_PAY_SINGLE" | "SELF_PAY_PACKAGE" | "HMO_BILLING" | "LGU_BILLING"
+type SingleService = {
+  id: string
+  type: "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service"
+  name: string
+  price: number
+  status: string
+}
+type BundledService = {
+  id: string
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds: string[]
+  bundledPrice: number
+  status: string
+}
+type PackageServiceOffer = {
+  id: string
+  name: string
+  bundleId?: string
+  bundleQty: number
+  machineIds?: string[]
+  machineQty?: number
+  machineItems?: Array<{id: string; qty: number}>
+  techniqueIds?: string[]
+  techniqueQty?: number
+  techniqueItems?: Array<{id: string; qty: number}>
+  evaluationIds: string[]
+  evaluationItems?: Array<{id: string; qty: number}>
+  addOnIds?: string[]
+  addOnQty?: number
+  addOnItems?: Array<{id: string; qty: number}>
+    sessionIds?: string[]
+    sessionQty?: number
+    sessionItems?: Array<{id: string; qty: number}>
+  evaluationQty: number
+  packagePrice: number
+  status: string
+}
+const patientOptions = ref<AppointmentPersonOption[]>([])
+const doctorOptions = ref<AppointmentPersonOption[]>([])
+const clinicOptions = ref<Clinic[]>([])
+const billingTypeOptions = [
+  {label: "Self Pay: Single Service", value: "SELF_PAY_SINGLE"},
+  {label: "Self Pay: Package Service", value: "SELF_PAY_PACKAGE"},
+  {label: "HMO", value: "HMO_BILLING"},
+  {label: "LGU", value: "LGU_BILLING"},
+]
+const selectedClinicId = ref<number>()
 const createPatient = ref<number>()
 const createDoctor = ref<number>()
+const createBillingType = ref<BillingType>("SELF_PAY_SINGLE")
+const createBillingNotes = ref("")
 const createStart = ref<Date>(new Date())
 const createEnd = ref<Date>(new Date(Date.now() + 60 * 60 * 1000))
+const allSinglePayServices = ref<SingleService[]>([])
+const allBundledServices = ref<BundledService[]>([])
+const allPackageServiceOffers = ref<PackageServiceOffer[]>([])
+
+// Service selection state
+type ServiceMode = "individual" | "bundled"
+const serviceMode = ref<ServiceMode>("individual")
+const serviceModeOptions = [
+  {label: "Individual", value: "individual"},
+  {label: "Bundled", value: "bundled"},
+]
+const selectedMachineId = ref<string>()
+const selectedTechniqueId = ref<string>()
+const selectedEvaluationId = ref<string>()
+const selectedAddOnType = ref<"add-on-machine" | "add-on-technique" | "add-on-home-service">("add-on-machine")
+const selectedAddOnId = ref<string>()
+const selectedBundleId = ref<string>()
+const selectedPackageOfferId = ref<string>()
+const selectedServiceLines = ref<Array<{type: string; id: string; name: string; price: number; originalPrice?: number}>>([])
+const bookedDateKeys = ref<Set<string>>(new Set())
+const bookedMonthCache = ref<Map<string, Set<string>>>(new Map())
+const visibleMonth = ref<number>(new Date().getMonth())
+const visibleYear = ref<number>(new Date().getFullYear())
 
 const needsOverrideReason = computed(() => (activeAppointment.value?.reschedule_count ?? 0) >= 3)
+const canDeleteAppointments = computed(() => roleName.value === "Owner")
 
-const selectedDateIso = computed(() => calendarDate.value.toISOString().slice(0, 10))
+const asCurrency = (value: number): string =>
+  Number(value ?? 0).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
+
+const addOnTypeOptions = [
+  { label: "Machine Add-on", value: "add-on-machine" as const },
+  { label: "Technique Add-on", value: "add-on-technique" as const },
+  { label: "Home Service", value: "add-on-home-service" as const },
+]
+
+const machineServices = computed(() =>
+  allSinglePayServices.value.filter(s => s.type === "machine")
+)
+
+const techniqueServices = computed(() =>
+  allSinglePayServices.value.filter(s => s.type === "technique")
+)
+
+const evaluationServices = computed(() =>
+  allSinglePayServices.value.filter(s => s.type === "evaluation")
+)
+
+const currentAddOnServices = computed(() =>
+  allSinglePayServices.value.filter(s => s.type === selectedAddOnType.value)
+)
+
+const subtotalFromServiceLines = computed(() =>
+  selectedServiceLines.value.reduce((sum, line) => sum + line.price, 0)
+)
+
+const activeBundledServices = computed(() =>
+  allBundledServices.value.filter(b => b.status !== "Inactive")
+)
+
+const activePackageServiceOffers = computed(() =>
+  allPackageServiceOffers.value.filter(p => p.status !== "Inactive")
+)
+
+const availableServiceCategories = computed(() => {
+  const categories = [
+    { type: "machine", label: "Machines", services: allSinglePayServices.value.filter(s => s.type === "machine") },
+    { type: "technique", label: "Techniques", services: allSinglePayServices.value.filter(s => s.type === "technique") },
+    { type: "evaluation", label: "Evaluations", services: allSinglePayServices.value.filter(s => s.type === "evaluation") },
+    { type: "add-on-machine", label: "Add-ons (Machine)", services: allSinglePayServices.value.filter(s => s.type === "add-on-machine") },
+    { type: "add-on-technique", label: "Add-ons (Technique)", services: allSinglePayServices.value.filter(s => s.type === "add-on-technique") },
+    { type: "add-on-home-service", label: "Add-ons (Home Service)", services: allSinglePayServices.value.filter(s => s.type === "add-on-home-service") },
+  ]
+  return categories.filter(cat => cat.services.length > 0)
+})
+
+const formatLocalDateKey = (date: Date): string => {
+  const yyyy = String(date.getFullYear())
+  const mm = String(date.getMonth() + 1).padStart(2, "0")
+  const dd = String(date.getDate()).padStart(2, "0")
+  return `${yyyy}-${mm}-${dd}`
+}
+
+const selectedDateIso = computed(() => formatLocalDateKey(calendarDate.value))
+const sectionCardClass = "app-section-card-comfy space-y-4"
+const sectionTitleClass = "app-section-title"
+const detailCardClass = "rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3"
+const selectedClinic = computed(() => clinicOptions.value.find(clinic => clinic.id === selectedClinicId.value))
+const selectedDateLabel = computed(() =>
+  calendarDate.value.toLocaleDateString("en-PH", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric"
+  })
+)
+const selectedClinicScheduleLabel = computed(() => {
+  if (!selectedClinic.value) return ""
+  return `${selectedClinic.value.name}: ${selectedClinic.value.start_day_name} to ${selectedClinic.value.end_day_name}, ${selectedClinic.value.start_time_formatted} - ${selectedClinic.value.end_time_formatted}`
+})
+const isOvernightClinicSchedule = computed(() => {
+  const start = getClinicStartMinutes()
+  const end = getClinicEndMinutes()
+  if (start == null || end == null) return false
+  return end < start
+})
+const calendarDisabledDays = computed<number[]>(() => {
+  if (!selectedClinic.value) return []
+  const disabled: number[] = []
+  for (let jsDay = 0; jsDay < 7; jsDay++) {
+    const clinicDay = jsDay === 0 ? 7 : jsDay
+    if (!isClinicDayAllowed(clinicDay)) disabled.push(jsDay)
+  }
+  return disabled
+})
 
 const billingSeverity = (status: string): "success" | "warn" | "danger" | "info" => {
-  const normalized = status.toUpperCase()
+  const normalized = (status || "UNBILLED").toUpperCase()
   if (normalized === "PAID") return "success"
   if (normalized === "PARTIAL" || normalized === "PENDING") return "warn"
   if (normalized === "VOID") return "danger"
   return "info"
 }
+const displayBillingStatus = (status?: string): string => (status?.trim() || "UNBILLED").toUpperCase()
 
 const formatDateTime = (value: string): string => new Date(value).toLocaleString()
+const toDateKey = (year: number, month: number, day: number): string => {
+  const mm = String(month + 1).padStart(2, "0")
+  const dd = String(day).padStart(2, "0")
+  return `${year}-${mm}-${dd}`
+}
+
+const fetchLookup = async (path: string): Promise<BillingPickerLookup[]> => {
+  const {data} = await pamsAPI.get<Pageable<OfferLookupDTO>>(path, {params: {page: 1, size: 500, status: Status.ACTIVE}})
+  return (data?.content ?? []).map(item => ({id: item.id, name: item.name, price: Number(item.price)}))
+}
+
+const loadSinglePayServices = (): void => {
+  try {
+    const stored = localStorage.getItem("singlePayServices")
+    allSinglePayServices.value = stored ? JSON.parse(stored) : []
+  } catch {
+    allSinglePayServices.value = []
+  }
+  try {
+    const stored = localStorage.getItem("bundledServices")
+    allBundledServices.value = stored ? JSON.parse(stored) : []
+  } catch {
+    allBundledServices.value = []
+  }
+  try {
+    const stored = localStorage.getItem("packageServiceOffers")
+    allPackageServiceOffers.value = stored ? JSON.parse(stored) : []
+  } catch {
+    allPackageServiceOffers.value = []
+  }
+}
+
+const calculatePackageOfferRegularTotal = (item: PackageServiceOffer): number => {
+  const bundle = item.bundleId ? allBundledServices.value.find(entry => entry.id === item.bundleId) : undefined
+  const bundlePortion = Number(bundle?.bundledPrice ?? 0) * Number(item.bundleQty ?? 1)
+  const machineItems = item.machineItems?.length
+    ? item.machineItems
+    : (item.machineIds ?? []).map(id => ({id, qty: Number(item.machineQty ?? 1)}))
+  const techniqueItems = item.techniqueItems?.length
+    ? item.techniqueItems
+    : (item.techniqueIds ?? []).map(id => ({id, qty: Number(item.techniqueQty ?? 1)}))
+  const evaluationItems = item.evaluationItems?.length
+    ? item.evaluationItems
+    : (item.evaluationIds ?? []).map(id => ({id, qty: Number(item.evaluationQty ?? 1)}))
+  const addOnItems = item.addOnItems?.length
+    ? item.addOnItems
+    : (item.addOnIds ?? []).map(id => ({id, qty: Number(item.addOnQty ?? 1)}))
+
+  const machinePortion = machineItems.reduce((sum, entry) => {
+    const unitPrice = allSinglePayServices.value.find(service => service.id === entry.id)?.price ?? 0
+    return sum + unitPrice * Number(entry.qty ?? 1)
+  }, 0)
+  const techniquePortion = techniqueItems.reduce((sum, entry) => {
+    const unitPrice = allSinglePayServices.value.find(service => service.id === entry.id)?.price ?? 0
+    return sum + unitPrice * Number(entry.qty ?? 1)
+  }, 0)
+  const evaluationPortion = evaluationItems.reduce((sum, entry) => {
+    const unitPrice = allSinglePayServices.value.find(service => service.id === entry.id)?.price ?? 0
+    return sum + unitPrice * Number(entry.qty ?? 1)
+  }, 0)
+  const addOnPortion = addOnItems.reduce((sum, entry) => {
+    const unitPrice = allSinglePayServices.value.find(service => service.id === entry.id)?.price ?? 0
+    return sum + unitPrice * Number(entry.qty ?? 1)
+  }, 0)
+  return bundlePortion + machinePortion + techniquePortion + evaluationPortion + addOnPortion
+}
+
+const selectPackageOffer = (packageId: string): void => {
+  const pkg = allPackageServiceOffers.value.find(item => item.id === packageId)
+  if (!pkg) return
+
+  if (selectedServiceLines.value.find(line => line.id === pkg.id && line.type === "package")) {
+    selectedPackageOfferId.value = undefined
+    return
+  }
+
+  selectedServiceLines.value.push({
+    type: "package",
+    id: pkg.id,
+    name: pkg.name,
+    price: Number(pkg.packagePrice ?? 0),
+    originalPrice: calculatePackageOfferRegularTotal(pkg)
+  })
+  selectedPackageOfferId.value = undefined
+}
+
+const selectBundle = (bundleId: string): void => {
+  const bundle = allBundledServices.value.find(b => b.id === bundleId)
+  if (!bundle) return
+
+  // Calculate original price from individual services
+  const allIds = [...bundle.machineIds, ...bundle.techniqueIds, ...bundle.evaluationIds, ...bundle.addOnIds]
+  const originalPrice = allIds.reduce((sum, id) => {
+    return sum + (allSinglePayServices.value.find(s => s.id === id)?.price ?? 0)
+  }, 0)
+
+  // Prevent adding the same bundle twice
+  if (selectedServiceLines.value.find(l => l.id === bundle.id && l.type === "bundle")) {
+    selectedBundleId.value = undefined
+    return
+  }
+
+  selectedServiceLines.value.push({
+    type: "bundle",
+    id: bundle.id,
+    name: bundle.name,
+    price: bundle.bundledPrice,
+    originalPrice
+  })
+  selectedBundleId.value = undefined
+}
+
+const addServiceLine = (type: string): void => {
+  let serviceId: string | undefined
+  let service: SingleService | undefined
+
+  if (type === "machine") {
+    serviceId = selectedMachineId.value
+  } else if (type === "technique") {
+    serviceId = selectedTechniqueId.value
+  } else if (type === "evaluation") {
+    serviceId = selectedEvaluationId.value
+  } else if (type === "add-on-machine" || type === "add-on-technique" || type === "add-on-home-service") {
+    serviceId = selectedAddOnId.value
+  }
+
+  if (!serviceId) return
+
+  service = allSinglePayServices.value.find(s => s.id === serviceId)
+  if (!service) return
+
+  // Check if service already in selected lines
+  const exists = selectedServiceLines.value.find(line => line.id === serviceId && line.type === type)
+  if (!exists) {
+    selectedServiceLines.value.push({
+      type: service.type,
+      id: service.id,
+      name: service.name,
+      price: service.price
+    })
+  }
+
+  // Reset the dropdown
+  if (type === "machine") selectedMachineId.value = undefined
+  else if (type === "technique") selectedTechniqueId.value = undefined
+  else if (type === "evaluation") selectedEvaluationId.value = undefined
+  else if (type.startsWith("add-on")) selectedAddOnId.value = undefined
+}
+
+const removeServiceLine = (index: number): void => {
+  selectedServiceLines.value.splice(index, 1)
+}
+
+const hasBookingDot = (date: {year: number; month: number; day: number}): boolean => {
+  // PrimeVue month in slot date can vary by version (0-based vs 1-based).
+  const monthAsZeroBased = toDateKey(date.year, date.month, date.day)
+  const monthAsOneBased = `${date.year}-${String(date.month).padStart(2, "0")}-${String(date.day).padStart(2, "0")}`
+  return bookedDateKeys.value.has(monthAsZeroBased) || bookedDateKeys.value.has(monthAsOneBased)
+}
+
+const toMinutesFromTime = (value: unknown): number | undefined => {
+  if (value instanceof Date) return value.getHours() * 60 + value.getMinutes()
+  if (typeof value !== "string") return undefined
+  const hhmmss = value.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/)
+  if (hhmmss) return Number(hhmmss[1]) * 60 + Number(hhmmss[2])
+  const ampm = value.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
+  if (ampm) {
+    let hour = Number(ampm[1]) % 12
+    if (ampm[3].toUpperCase() === "PM") hour += 12
+    return hour * 60 + Number(ampm[2])
+  }
+  return undefined
+}
+
+const getClinicStartMinutes = (): number | undefined => {
+  const clinic = selectedClinic.value
+  if (!clinic) return undefined
+  return toMinutesFromTime((clinic as {start_time_formatted?: string}).start_time_formatted) ??
+    toMinutesFromTime(clinic.start_time)
+}
+
+const getClinicEndMinutes = (): number | undefined => {
+  const clinic = selectedClinic.value
+  if (!clinic) return undefined
+  return toMinutesFromTime((clinic as {end_time_formatted?: string}).end_time_formatted) ??
+    toMinutesFromTime(clinic.end_time)
+}
+
+const isClinicDayAllowed = (clinicDay: number): boolean => {
+  const clinic = selectedClinic.value
+  if (!clinic) return true
+  if (clinic.start_day <= clinic.end_day) {
+    return clinicDay >= clinic.start_day && clinicDay <= clinic.end_day
+  }
+  return clinicDay >= clinic.start_day || clinicDay <= clinic.end_day
+}
+
+const isWithinClinicTime = (date: Date): boolean => {
+  if (!selectedClinic.value) return true
+  const startMinutes = getClinicStartMinutes()
+  const endMinutes = getClinicEndMinutes()
+  if (startMinutes == null || endMinutes == null) return true
+  const minutes = date.getHours() * 60 + date.getMinutes()
+  if (endMinutes >= startMinutes) {
+    return minutes >= startMinutes && minutes <= endMinutes
+  }
+  // Overnight schedule support (e.g. 8:00 AM to 5:00 AM next day).
+  return minutes >= startMinutes || minutes <= endMinutes
+}
+
+const isFiveMinuteAligned = (date: Date): boolean => {
+  return date.getMinutes() % 5 === 0 && date.getSeconds() === 0
+}
+
+const validateClinicSchedule = (start: Date, end: Date): boolean => {
+  if (end <= start) {
+    errorToast(toast, "End time must be after start time")
+    return false
+  }
+
+  const startClinicDay = start.getDay() === 0 ? 7 : start.getDay()
+  const endClinicDay = end.getDay() === 0 ? 7 : end.getDay()
+
+  if (!isClinicDayAllowed(startClinicDay) || !isClinicDayAllowed(endClinicDay)) {
+    errorToast(toast, "Selected date is outside clinic operating days")
+    return false
+  }
+
+  if (!isWithinClinicTime(start) || !isWithinClinicTime(end)) {
+    errorToast(toast, "Selected time is outside clinic operating hours")
+    return false
+  }
+
+  if (!isFiveMinuteAligned(start) || !isFiveMinuteAligned(end)) {
+    errorToast(toast, "Time must be in 5-minute increments")
+    return false
+  }
+  return true
+}
+
+const findNextAllowedDate = (baseDate: Date): Date => {
+  const next = new Date(baseDate)
+  for (let i = 0; i < 14; i++) {
+    const clinicDay = next.getDay() === 0 ? 7 : next.getDay()
+    if (isClinicDayAllowed(clinicDay)) return next
+    next.setDate(next.getDate() + 1)
+  }
+  return baseDate
+}
+
+const snapToFiveMinutes = (date: Date): Date => {
+  const result = new Date(date)
+  const snappedMinutes = Math.floor(result.getMinutes() / 5) * 5
+  result.setMinutes(snappedMinutes, 0, 0)
+  return result
+}
+
+const alignToClinicStart = (date: Date): Date => {
+  const result = new Date(date)
+  result.setSeconds(0, 0)
+  const clinicStart = getClinicStartMinutes()
+  if (clinicStart != null) {
+    result.setHours(Math.floor(clinicStart / 60), clinicStart % 60, 0, 0)
+  } else {
+    return snapToFiveMinutes(result)
+  }
+  return result
+}
+
+const fetchBookedDatesForMonth = async (year: number, month: number): Promise<void> => {
+  const monthKey = `${year}-${String(month + 1).padStart(2, "0")}`
+  const cached = bookedMonthCache.value.get(monthKey)
+  if (cached) {
+    bookedDateKeys.value = new Set(cached)
+    return
+  }
+
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const monthDots = new Set<string>()
+
+  // Use sequential requests to avoid overloading API and missing dots from transient failures.
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateKey = toDateKey(year, month, day)
+    let hasBooking = false
+    try {
+      const rows = await appointmentPhase1Service.getDay(dateKey)
+      hasBooking = (rows ?? []).length > 0
+    } catch {
+      try {
+        const retryRows = await appointmentPhase1Service.getDay(dateKey)
+        hasBooking = (retryRows ?? []).length > 0
+      } catch {
+        hasBooking = false
+      }
+    }
+    if (hasBooking) monthDots.add(dateKey)
+  }
+
+  bookedMonthCache.value.set(monthKey, monthDots)
+  bookedDateKeys.value = new Set(monthDots)
+}
+
+const refreshBookedDotsForVisibleMonth = async (): Promise<void> => {
+  const monthKey = `${visibleYear.value}-${String(visibleMonth.value + 1).padStart(2, "0")}`
+  bookedMonthCache.value.delete(monthKey)
+  await fetchBookedDatesForMonth(visibleYear.value, visibleMonth.value)
+}
+
+const onCalendarMonthChange = async (event: {month: number; year: number}): Promise<void> => {
+  visibleMonth.value = event.month
+  visibleYear.value = event.year
+  await fetchBookedDatesForMonth(visibleYear.value, visibleMonth.value)
+}
 
 const fetchAppointments = async (): Promise<void> => {
   try {
@@ -240,29 +1088,52 @@ const refreshAll = async (): Promise<void> => {
 }
 
 const loadCreateLookups = async (): Promise<void> => {
-  const [patientsLookup, doctorsLookup] = await Promise.all([
-    patientService.getAllLookup({
+  const [patientsPage, doctorsPage, clinics] = await Promise.all([
+    patientService.getAll({
       clinic_id: undefined,
       pageable_request: {
         page: defaultPage,
-        size: defaultPageSize,
+        size: 100,
         status: Status.ACTIVE,
         name: undefined
       }
     }),
-    staffService.getAllLookup({
+    staffService.getAll({
       clinic_id: undefined,
       pageable_request: {
         page: defaultPage,
-        size: defaultPageSize,
+        size: 100,
         status: Status.ACTIVE,
         name: undefined
       }
-    })
+    }),
+    clinicService.getAll({
+      page: defaultPage,
+      size: 100,
+      status: Status.ACTIVE,
+      name: undefined
+    }),
   ])
 
-  patientOptions.value = patientsLookup?.content ?? []
-  doctorOptions.value = doctorsLookup?.content ?? []
+  patientOptions.value = (patientsPage?.content ?? []).map((patient: Patient) => ({
+    id: patient.id,
+    name: [patient.first_name, patient.middle_name, patient.last_name]
+      .filter((part): part is string => !!part && part.toLowerCase() !== "null")
+      .join(" "),
+    clinic_id: patient.clinic_id
+  }))
+  doctorOptions.value = (doctorsPage?.content ?? []).map((doctor: Staff) => ({
+    id: doctor.id,
+    name: doctor.name,
+    clinic_id: doctor.clinic_id
+  }))
+  clinicOptions.value = clinics?.content ?? []
+  if (!selectedClinicId.value && clinicOptions.value.length) {
+    selectedClinicId.value = clinicOptions.value[0].id
+  }
+
+  // Load Single Pay services from localStorage
+  loadSinglePayServices()
 }
 
 const openCreateDialog = async (): Promise<void> => {
@@ -271,8 +1142,21 @@ const openCreateDialog = async (): Promise<void> => {
   }
   createPatient.value = undefined
   createDoctor.value = undefined
-  createStart.value = new Date()
-  createEnd.value = new Date(Date.now() + 60 * 60 * 1000)
+  createBillingType.value = "SELF_PAY_SINGLE"
+  createBillingNotes.value = ""
+  selectedMachineId.value = undefined
+  selectedTechniqueId.value = undefined
+  selectedEvaluationId.value = undefined
+  selectedAddOnType.value = "add-on-machine"
+  selectedAddOnId.value = undefined
+  selectedBundleId.value = undefined
+  selectedPackageOfferId.value = undefined
+  serviceMode.value = "individual"
+  selectedServiceLines.value = []
+  loadSinglePayServices()
+  const base = alignToClinicStart(findNextAllowedDate(new Date(calendarDate.value)))
+  createStart.value = base
+  createEnd.value = new Date(base.getTime() + 60 * 60 * 1000)
   createVisible.value = true
 }
 
@@ -281,17 +1165,38 @@ const submitCreateAppointment = async (): Promise<void> => {
     errorToast(toast, "Patient is required")
     return
   }
+  if (selectedServiceLines.value.length === 0) {
+    errorToast(toast, "At least one service is required")
+    return
+  }
+  if (!validateClinicSchedule(createStart.value, createEnd.value)) return
+
+  const appointmentPayload: Parameters<typeof appointmentPhase1Service.create>[0] = {
+    patient_id: createPatient.value,
+    doctor_id: createDoctor.value,
+    starts_at: createStart.value.toISOString(),
+    ends_at: createEnd.value.toISOString(),
+    amount_due: subtotalFromServiceLines.value,
+    service_name: `${createBillingType.value.replace("_", " ")} - ${selectedServiceLines.value.length} items`,
+    billing_type: createBillingType.value,
+    service_type: createBillingType.value === "SELF_PAY_PACKAGE" ? "PACKAGE" : "SINGLE",
+    line_items_json: JSON.stringify(selectedServiceLines.value.map(line => ({
+      id: line.id,
+      type: line.type,
+      name: line.name,
+      quantity: 1,
+      price: line.price,
+      originalPrice: line.originalPrice
+    }))),
+    notes: createBillingNotes.value.trim() || undefined,
+  }
 
   try {
-    await appointmentPhase1Service.create({
-      patient_id: createPatient.value,
-      doctor_id: createDoctor.value,
-      starts_at: createStart.value.toISOString(),
-      ends_at: createEnd.value.toISOString()
-    })
-    successToast(toast, "Appointment created")
+    await appointmentPhase1Service.create(appointmentPayload)
+    successToast(toast, "Appointment created with services")
     createVisible.value = false
     await refreshAll()
+    await refreshBookedDotsForVisibleMonth()
   } catch (error: unknown) {
     if (axios.isAxiosError(error)) {
       const status = error.response?.status
@@ -324,14 +1229,19 @@ const onSelectRow = async (event: {data: AppointmentListItem}): Promise<void> =>
 
 const openReschedule = (appointment: AppointmentListItem): void => {
   activeAppointment.value = appointment
-  rescheduleStart.value = new Date(appointment.starts_at)
-  rescheduleEnd.value = new Date(appointment.ends_at)
+  rescheduleStart.value = snapToFiveMinutes(new Date(appointment.starts_at))
+  rescheduleEnd.value = snapToFiveMinutes(new Date(appointment.ends_at))
   overrideReason.value = ""
   rescheduleVisible.value = true
 }
 
 const submitReschedule = async (): Promise<void> => {
   if (!activeAppointment.value) return
+  if (needsOverrideReason.value && !overrideReason.value.trim()) {
+    errorToast(toast, "Owner override reason is required after 3 reschedules")
+    return
+  }
+  if (!validateClinicSchedule(rescheduleStart.value, rescheduleEnd.value)) return
   try {
     await appointmentPhase1Service.reschedule(activeAppointment.value.id, {
       starts_at: rescheduleStart.value.toISOString(),
@@ -341,6 +1251,7 @@ const submitReschedule = async (): Promise<void> => {
     successToast(toast, "Reschedule successful")
     rescheduleVisible.value = false
     await refreshAll()
+    await refreshBookedDotsForVisibleMonth()
     if (selectedDetail.value?.id === activeAppointment.value.id) {
       selectedDetail.value = await appointmentPhase1Service.getById(activeAppointment.value.id)
     }
@@ -358,12 +1269,77 @@ const onExportCsv = async (): Promise<void> => {
   exportToExcel(response)
 }
 
+const syncRoleFromStorage = () => {
+  const candidateKeys = ["auth_user", "currentUser", "user", "profile", "loggedInUser"]
+  for (const key of candidateKeys) {
+    const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key)
+    if (!raw) continue
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>
+      const role = parsed.role_name ?? parsed.role ?? parsed.userRole ?? parsed.primaryRole
+      if (typeof role === "string" && role.trim()) {
+        roleName.value = role.trim()
+        return
+      }
+    } catch {
+      // ignore malformed value
+    }
+  }
+  roleName.value = ""
+}
+
+const confirmDeleteAppointment = (appointment: AppointmentListItem): void => {
+  confirm.require({
+    message: `Delete appointment for ${appointment.patient_name}?`,
+    header: "Delete Appointment",
+    icon: "pi pi-exclamation-triangle",
+    rejectProps: {
+      label: "Cancel",
+      severity: "secondary",
+      outlined: true,
+    },
+    acceptProps: {
+      label: "Delete",
+      severity: "danger",
+      icon: "pi pi-trash",
+    },
+    accept: async () => {
+      try {
+        await appointmentPhase1Service.delete(appointment.id)
+        successToast(toast, "Appointment deleted")
+        if (selectedDetail.value?.id === appointment.id) {
+          selectedDetail.value = undefined
+        }
+        await refreshAll()
+        await refreshBookedDotsForVisibleMonth()
+      } catch {
+        errorToast(toast, "Delete appointment failed")
+      }
+    },
+  })
+}
+
 const goToPatients = async (): Promise<void> => {
-  await router.push("/patients")
+  if (!selectedDetail.value) return
+  await router.push({
+    path: "/patients",
+    query: {
+      patientId: String(selectedDetail.value.patient_id),
+      name: selectedDetail.value.patient_name
+    }
+  })
 }
 
 const goToBilling = async (): Promise<void> => {
-  await router.push("/billing")
+  if (!selectedDetail.value) return
+  await router.push({
+    path: "/billing",
+    query: {
+      patientId: String(selectedDetail.value.patient_id),
+      appointmentId: String(selectedDetail.value.id),
+      ...(selectedDetail.value.billing_id ? {billingId: String(selectedDetail.value.billing_id)} : {})
+    }
+  })
 }
 
 watch([calendarDate, statusFilter], async () => {
@@ -371,7 +1347,35 @@ watch([calendarDate, statusFilter], async () => {
   await refreshAll()
 })
 
+watch(selectedClinicId, () => {
+  const normalizedDate = findNextAllowedDate(new Date(calendarDate.value))
+  if (normalizedDate.toDateString() !== calendarDate.value.toDateString()) {
+    calendarDate.value = normalizedDate
+  }
+})
+
+watch(createPatient, (patientId) => {
+  if (!patientId) return
+  const selectedPatientOption = patientOptions.value.find(option => option.id === patientId)
+  if (selectedPatientOption?.clinic_id) {
+    selectedClinicId.value = selectedPatientOption.clinic_id
+  }
+})
+
+watch(createDoctor, (doctorId) => {
+  if (!doctorId || createPatient.value) return
+  const selectedDoctorOption = doctorOptions.value.find(option => option.id === doctorId)
+  if (selectedDoctorOption?.clinic_id) {
+    selectedClinicId.value = selectedDoctorOption.clinic_id
+  }
+})
+
 onMounted(async () => {
+  syncRoleFromStorage()
+  await loadCreateLookups()
+  await fetchBookedDatesForMonth(visibleYear.value, visibleMonth.value)
   await refreshAll()
 })
 </script>
+
+

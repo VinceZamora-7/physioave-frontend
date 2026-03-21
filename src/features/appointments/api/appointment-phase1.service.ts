@@ -37,6 +37,13 @@ export interface AppointmentCreatePayload {
   ends_at: string
   appointment_type_id?: number
   appointment_status_id?: number
+  billing_type?: "INDIVIDUAL_PRICING" | "PACKAGE_BILLING" | "ALA_CARTE" | "SELF_PAY_SINGLE" | "SELF_PAY_PACKAGE" | "HMO_BILLING" | "LGU_BILLING"
+  service_type?: "SINGLE" | "PACKAGE" | "HMO" | "LGU"
+  package_id?: number
+  service_name?: string
+  amount_due?: number
+  line_items_json?: string
+  notes?: string
 }
 
 export const appointmentPhase1Service = {
@@ -100,6 +107,11 @@ export const appointmentPhase1Service = {
   async reschedule(id: number, payload: ReschedulePayload): Promise<void> {
     await this.withRefreshRetry(async () => {
       await pamsAPI.post(`/appointments/${id}/reschedule`, payload)
+    })
+  },
+  async delete(id: number): Promise<void> {
+    await this.withRefreshRetry(async () => {
+      await pamsAPI.delete(`/appointments/${id}`)
     })
   },
   async exportCsv(params: Record<string, unknown>): Promise<AxiosResponse<Blob> | undefined> {

@@ -25,6 +25,8 @@ export const errorHandler = (error: unknown): never => {
     let message = error.message
     if (typeof data === "string") {
       message = data
+    } else if (typeof data?.message === "string" && data.message.trim()) {
+      message = data.message
     } else if (data?.detail) {
       message = data.detail
     } else if (Array.isArray(data?.errors) && data.errors.length) {
@@ -46,6 +48,8 @@ export const errorHandler = (error: unknown): never => {
     let message = e?.message
     if (typeof data === "string") {
       message = data
+    } else if (typeof data?.message === "string" && data.message.trim()) {
+      message = data.message
     } else if (data?.detail) {
       message = data.detail
     } else if (Array.isArray(data?.errors) && data.errors.length) {

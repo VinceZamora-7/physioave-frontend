@@ -24,6 +24,7 @@ export enum OfferResourceKey {
   MACHINES = 'machines',
   TECHNIQUES = 'techniques',
   EVALUATIONS = 'evaluations',
+  SESSIONS = 'sessions',
 }
 
 export enum PatientAttachmentResourceKey {

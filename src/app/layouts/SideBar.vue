@@ -66,6 +66,29 @@
     <!-- NAV (scrolls) -->
     <nav class="mt-4 flex-1 min-h-0 overflow-y-auto px-2 pb-4 app-scrollbar">
       <div class="space-y-6">
+        <div>
+          <button
+            type="button"
+            class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
+          >
+            <span v-if="!collapsed">OVERVIEW</span>
+          </button>
+
+          <ul class="mt-2 space-y-1">
+            <li>
+              <button
+                type="button"
+                @click="goToAndClose('dashboard')"
+                :class="itemClass('dashboard')"
+                aria-label="Dashboard"
+                title="Dashboard"
+              >
+                <span :class="iconWrapClass('dashboard')"><i class="pi pi-chart-line text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">Dashboard</span>
+              </button>
+            </li>
+          </ul>
+        </div>
 
         
         <div>
@@ -105,6 +128,7 @@
                 <span v-if="!collapsed" class="truncate">Appointments</span>
               </button>
             </li>
+
           </ul>
         </div>
 
@@ -164,6 +188,71 @@
         </div>
 
 
+
+        <div>
+          <button
+            type="button"
+            class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
+            @click="promosOffersOpen = !promosOffersOpen"
+          >
+            <span v-if="!collapsed">PROMOS AND OFFERS</span>
+            <i class="pi text-[11px]" :class="promosOffersOpen ? 'pi-chevron-down' : 'pi-chevron-right'" />
+          </button>
+
+          <ul v-show="promosOffersOpen" class="mt-2 space-y-1">
+            <li>
+              <button
+                type="button"
+                @click="goToAndClose('promos-offers-single-service')"
+                :class="itemClass('promos-offers-single-service')"
+                aria-label="Single Pay: Single Service"
+                title="Single Pay: Single Service"
+              >
+                <span :class="iconWrapClass('promos-offers-single-service')"><i class="pi pi-bolt text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">Single Pay: Single Service</span>
+              </button>
+            </li>
+
+            <li>
+              <button
+                type="button"
+                @click="goToAndClose('promos-offers-package-service')"
+                :class="itemClass('promos-offers-package-service')"
+                aria-label="Self-Pay: Package Service"
+                title="Self-Pay: Package Service"
+              >
+                <span :class="iconWrapClass('promos-offers-package-service')"><i class="pi pi-box text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">Self-Pay: Package Service</span>
+              </button>
+            </li>
+
+            <li>
+              <button
+                type="button"
+                @click="goToAndClose('promos-offers-hmo')"
+                :class="itemClass('promos-offers-hmo')"
+                aria-label="HMO"
+                title="HMO"
+              >
+                <span :class="iconWrapClass('promos-offers-hmo')"><i class="pi pi-briefcase text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">HMO</span>
+              </button>
+            </li>
+
+            <li>
+              <button
+                type="button"
+                @click="goToAndClose('promos-offers-lgu')"
+                :class="itemClass('promos-offers-lgu')"
+                aria-label="LGU"
+                title="LGU"
+              >
+                <span :class="iconWrapClass('promos-offers-lgu')"><i class="pi pi-building-columns text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">LGU</span>
+              </button>
+            </li>
+          </ul>
+        </div>
 
         <div>
           <button
@@ -367,6 +456,7 @@ const userSnapshot = ref<Record<string, unknown> | null>(null)
 const operationsOpen = ref(true)
 const patientCareOpen = ref(true)
 const billingOpen = ref(true)
+const promosOffersOpen = ref(true)
 const technicalOpen = ref(true)
 
 // v-model ready collapsed state

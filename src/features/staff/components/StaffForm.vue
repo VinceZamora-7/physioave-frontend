@@ -77,7 +77,7 @@
         <IftaLabel>
           <Select
             v-model="$field.value"
-            :options="roles"
+            :options="filteredRoles"
             :fluid="true"
             :filter="true"
             :filter-fields="['name']"
@@ -145,6 +145,16 @@ const emit = defineEmits<StaffFormEmits>()
 const props = defineProps<StaffFormProps>()
 const {selectedStaff, isLoading: isParentLoading, roles, clinics} = toRefs(props)
 
+const assignableRoleNames = new Set<string>([
+  "Chief Operations Officer - COO (Admin 1 Account)",
+  "Operations Manager (Admin 2 Account)",
+  "Doctor Consultant (Rehabilitation Medicine)",
+  "Admin/Receptionist",
+  "Senior Physical Therapist (Neurologic Specialization)",
+  "Junior Physical Therapist (Musculoskeletal Specialization)",
+  "Junior Physical Therapist (Pediatric Specialization)",
+])
+
 const isClinicsLoading = useIsLoading(ClinicTanstackKey.CLINICS)
 const isRolesLoading = useIsLoading(ReferenceTanstackKey.ROLES)
 
@@ -152,6 +162,16 @@ const [visible, toggle] = useToggle()
 
 const isEditing = computed<boolean>(() => !!selectedStaff.value)
 const isLoading = computed<boolean>(() => isParentLoading.value || isClinicsLoading.value || isRolesLoading.value)
+const filteredRoles = computed(() => {
+  const allowedRoles = roles.value?.filter(role => assignableRoleNames.has(role.name)) ?? []
+  const selectedRole = roles.value?.find(role => role.id === selectedStaff.value?.role_id)
+
+  if (!selectedRole || allowedRoles.some(role => role.id === selectedRole.id)) {
+    return allowedRoles
+  }
+
+  return [selectedRole, ...allowedRoles]
+})
 
 const resolver = ref(zodResolver(staffSchema))
 
@@ -169,7 +189,7 @@ const onShow = async (): Promise<void> => {
     name: selectedStaff.value?.name,
     email: selectedStaff.value?.email,
     clinic: clinics.value?.find(c => c.id === selectedStaff.value?.clinic_id),
-    role: roles.value?.find(r => r.id === selectedStaff.value?.role_id)
+    role: filteredRoles.value?.find(r => r.id === selectedStaff.value?.role_id)
   }
   form.value?.setValues(initialValues)
 }

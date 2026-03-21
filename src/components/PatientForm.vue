@@ -295,9 +295,6 @@
         <h3 class="mb-4 text-sm font-semibold tracking-wide text-slate-600 dark:text-slate-300">
           Address Information
         </h3>
-        <p class="mb-4 text-xs text-slate-500 dark:text-slate-400">
-          Region, Province, City, and Barangay are linked automatically based on your selection.
-        </p>
 
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           <FormField v-slot="$field" name="region">
@@ -322,7 +319,7 @@
                   <span v-else>{{ slotProps.placeholder }}</span>
                 </template>
               </Select>
-              <label for="region">Region <span class="text-rose-600">*</span></label>
+              <label for="region">Region (Optional)</label>
               <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
             </IftaLabel>
           </FormField>
@@ -341,7 +338,7 @@
                 :filter-fields="['name']"
                 @value-change="onProvinceChange"
               />
-              <label for="province">Province <span class="text-rose-600">*</span></label>
+              <label for="province">Province (Optional)</label>
               <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
             </IftaLabel>
           </FormField>
@@ -360,7 +357,7 @@
                 :filter-fields="['name']"
                 @value-change="onCityChange"
               />
-              <label for="city">City <span class="text-rose-600">*</span></label>
+              <label for="city">City (Optional)</label>
               <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
             </IftaLabel>
           </FormField>
@@ -378,7 +375,7 @@
                 :filter="true"
                 :filter-fields="['name']"
               />
-              <label for="baranggay">Barangay <span class="text-rose-600">*</span></label>
+              <label for="baranggay">Barangay (Optional)</label>
               <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
             </IftaLabel>
           </FormField>
@@ -428,6 +425,8 @@ import Message from "primevue/message";
 import Select from "primevue/select";
 import InputMask from "primevue/inputmask";
 import Checkbox from "primevue/checkbox";
+import type { GooglePlaceAddress } from "@/components/GooglePlacesAutocomplete.vue";
+import GooglePlacesAutocomplete from "@/components/GooglePlacesAutocomplete.vue";
 import type {
   Baranggay,
   BaranggayRequestPayload,
@@ -464,6 +463,7 @@ const fallbackRegions = ref<Region[]>([])
 const fallbackClinics = ref<Lookup[]>([])
 const customDoctors = ref<Array<{ id: number; name: string }>>([])
 const newDoctorReferral = ref<string>("")
+const googleAddressInput = ref<string>("")
 
 const emit = defineEmits<PatientFormEmits>()
 const props = defineProps<PatientFormProps>()
@@ -515,6 +515,12 @@ const addDoctorReferral = (field: SelectFieldState): void => {
 const onNoMiddleNameToggle = (checked: boolean): void => {
   if (!checked) return
   form.value?.setFieldValue("middle_name", undefined)
+}
+
+const onGooglePlaceChanged = (place: GooglePlaceAddress): void => {
+  const formatted = place.formattedAddress?.trim()
+  if (!formatted) return
+  form.value?.setFieldValue("details", formatted)
 }
 
 const onRegionChange = async (region: Region): Promise<void> => {
