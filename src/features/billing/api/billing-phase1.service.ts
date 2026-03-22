@@ -20,6 +20,7 @@ export interface BillingLineItem {
   price: number
   quantity: number
   originalPrice?: number
+  body_area?: string
 }
 
 export interface BillingListItem {

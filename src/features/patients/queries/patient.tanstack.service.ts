@@ -107,7 +107,7 @@ export const patientTanstackService = {
   },
 
   save(key: PatientTanstackKey = PatientTanstackKey.PATIENTS) {
-    return useMutation<void | undefined, Error, PatientRequestBody>({
+    return useMutation<{id: number} | undefined, Error, PatientRequestBody>({
       mutationKey: [key],
       mutationFn: patientService.save
     })

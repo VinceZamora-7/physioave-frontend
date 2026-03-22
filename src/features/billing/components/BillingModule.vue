@@ -29,6 +29,18 @@
         </IftaLabel>
       </div>
 
+      <!-- HMO plan indicator -->
+      <template v-if="form.billing_type === 'HMO_BILLING'">
+        <Message v-if="billingPatientHmoInfo" severity="info" :closable="false" size="small">
+          <span class="font-medium">{{ billingPatientHmoInfo.hmo_name }}</span>
+          &nbsp;·&nbsp;{{ billingPatientHmoInfo.hmo_type_name }}
+          &nbsp;·&nbsp;{{ billingPatientHmoInfo.company_name }}
+        </Message>
+        <Message v-else-if="form.patient_id && !syncingBillingHmoRates" severity="warn" :closable="false" size="small">
+          No HMO information on file for this patient. Please register HMO via the Patients module first.
+        </Message>
+      </template>
+
       <section class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3 space-y-3">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <h4 class="text-sm font-semibold">Line Items</h4>
@@ -55,7 +67,7 @@
         </div>
 
         <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <IftaLabel>
+          <IftaLabel v-if="form.billing_type !== 'HMO_BILLING'">
             <Select
               v-model="selectedPackageOfferId"
               :options="activePackageOffers"
@@ -103,7 +115,7 @@
           </div>
         </div>
 
-        <div class="flex flex-wrap gap-2">
+        <div v-if="form.billing_type !== 'HMO_BILLING'" class="flex flex-wrap gap-2">
           <Button
             label="Add Package Offer"
             icon="pi pi-box"
@@ -136,11 +148,42 @@
               </div>
             </template>
           </Column>
-          <Column header="Unit Price" style="width: 140px">
+          <Column header="Body Area" style="width: 160px">
             <template #body="{data}">
-              <div>
-                <div>{{ asCurrency(data.price) }}</div>
-                <div v-if="data.type === 'bundle' && data.originalPrice && data.originalPrice > data.price" class="text-xs opacity-50 line-through">{{ asCurrency(data.originalPrice) }}</div>
+              <InputText
+                v-if="data.type !== 'bundle' && data.type !== 'package'"
+                :modelValue="data.body_area ?? ''"
+                placeholder="e.g. Lower Back"
+                class="w-full text-sm"
+                @update:modelValue="val => setLineBodyArea(data.key, val as string)"
+              />
+            </template>
+          </Column>
+          <Column header="Unit Price" style="width: 180px">
+            <template #body="{data}">
+              <div class="flex flex-col gap-0.5">
+                <div class="flex items-center gap-1">
+                  <InputNumber
+                    :modelValue="resolveEffectiveBillingLinePrice(data)"
+                    :min="0"
+                    :minFractionDigits="2"
+                    :maxFractionDigits="2"
+                    inputClass="w-24 text-sm"
+                    @update:modelValue="val => setLinePriceOverride(data.key, val)"
+                  />
+                  <Button
+                    v-if="data.priceOverride != null"
+                    text
+                    rounded
+                    size="small"
+                    severity="secondary"
+                    icon="pi pi-times"
+                    v-tooltip.top="'Reset to default price'"
+                    class="p-0 flex-shrink-0"
+                    @click="clearLinePriceOverride(data.key)"
+                  />
+                </div>
+                <div v-if="resolveBillingLineOriginalPrice(data) > resolveEffectiveBillingLinePrice(data)" class="text-xs opacity-50 line-through">{{ asCurrency(resolveBillingLineOriginalPrice(data)) }}</div>
               </div>
             </template>
           </Column>
@@ -157,12 +200,12 @@
           <Column header="Line Total" style="width: 130px">
             <template #body="{data}">
               <div>
-                <div>{{ asCurrency(data.price * data.quantity) }}</div>
+                <div>{{ asCurrency(resolveEffectiveBillingLinePrice(data) * data.quantity) }}</div>
                 <div
-                  v-if="data.type === 'bundle' && data.originalPrice && data.originalPrice > data.price"
+                  v-if="resolveBillingLineOriginalPrice(data) > resolveEffectiveBillingLinePrice(data)"
                   class="text-xs opacity-50 line-through"
                 >
-                  {{ asCurrency(data.originalPrice * data.quantity) }}
+                  {{ asCurrency(resolveBillingLineOriginalPrice(data) * data.quantity) }}
                 </div>
               </div>
             </template>
@@ -483,6 +526,7 @@ import Dialog from "primevue/dialog"
 import IftaLabel from "primevue/iftalabel"
 import InputNumber from "primevue/inputnumber"
 import InputText from "primevue/inputtext"
+import Message from "primevue/message"
 import Select from "primevue/select"
 import Tag from "primevue/tag"
 import {useToast} from "primevue/usetoast"
@@ -505,6 +549,12 @@ import type {Patient} from "@/features/patients/types/patient"
 import {type BillingPickerLookup} from "@/features/billing/components/SingleServiceItemPicker.vue"
 import {errorToast, successToast} from "@/utils/toast.util"
 import {Status} from "@/utils/global.type"
+import {patientHMOInformationService} from "@/services/patient-hmo-information.service"
+import {hmoMachineRateService} from "@/services/hmo-machine-rate.service"
+import {hmoTechniqueRateService} from "@/services/hmo-technique-rate.service"
+import {hmoEvaluationRateService} from "@/services/hmo-evaluation-rate.service"
+import {hmoAddOnRateService} from "@/services/hmo-add-on-rate.service"
+import type {PatientHMOInformation} from "@/models/hmo-information"
 
 const toast = useToast()
 const isLoading = ref(false)
@@ -745,6 +795,22 @@ const evaluations = ref<BillingPickerLookup[]>([])
 const addOnMachines = ref<BillingPickerLookup[]>([])
 const addOnTechniques = ref<BillingPickerLookup[]>([])
 const addOnHomeServices = ref<BillingPickerLookup[]>([])
+const billingPatientHmoId = ref<number | null>(null)
+const billingPatientHmoInfo = ref<PatientHMOInformation | null>(null)
+const syncingBillingHmoRates = ref(false)
+const billingPatientMachineRateMap = ref<Map<number, number>>(new Map())
+const billingPatientTechniqueRateMap = ref<Map<number, number>>(new Map())
+const billingPatientEvaluationRateMap = ref<Map<number, number>>(new Map())
+const billingPatientAddOnMachineRateMap = ref<Map<number, number>>(new Map())
+const billingPatientAddOnTechniqueRateMap = ref<Map<number, number>>(new Map())
+const billingPatientAddOnHomeServiceRateMap = ref<Map<number, number>>(new Map())
+// Null = no HMO filter active; Set = only these IDs are covered by the HMO plan
+const billingHmoMachineIds = ref<Set<number> | null>(null)
+const billingHmoTechniqueIds = ref<Set<number> | null>(null)
+const billingHmoEvaluationIds = ref<Set<number> | null>(null)
+const billingHmoAddOnMachineIds = ref<Set<number> | null>(null)
+const billingHmoAddOnTechniqueIds = ref<Set<number> | null>(null)
+const billingHmoAddOnHomeServiceIds = ref<Set<number> | null>(null)
 
 type SelectedLine = {
   key: string
@@ -754,6 +820,8 @@ type SelectedLine = {
   price: number
   quantity: number
   originalPrice?: number
+  priceOverride?: number
+  body_area?: string
 }
 
 const selectedLines = ref<SelectedLine[]>([])
@@ -779,14 +847,19 @@ const lineTypeOptions: Array<{label: string; value: SelectedLine["type"]}> = [
   {label: "Add-on (Home Service)", value: "add-on-home-service"},
 ]
 
+function filterByHmoIds(items: BillingPickerLookup[], allowed: Set<number> | null): BillingPickerLookup[] {
+  if (form.value.billing_type !== "HMO_BILLING" || allowed === null) return items
+  return items.filter(item => allowed.has(Number(item.id)))
+}
+
 const currentLineTypeOptions = computed(() => {
   const type = selectedLineType.value
-  if (type === "machine") return machines.value
-  if (type === "technique") return techniques.value
-  if (type === "evaluation") return evaluations.value
-  if (type === "add-on-machine") return addOnMachines.value
-  if (type === "add-on-technique") return addOnTechniques.value
-  return addOnHomeServices.value
+  if (type === "machine")             return filterByHmoIds(machines.value,        billingHmoMachineIds.value)
+  if (type === "technique")           return filterByHmoIds(techniques.value,       billingHmoTechniqueIds.value)
+  if (type === "evaluation")          return filterByHmoIds(evaluations.value,      billingHmoEvaluationIds.value)
+  if (type === "add-on-machine")      return filterByHmoIds(addOnMachines.value,    billingHmoAddOnMachineIds.value)
+  if (type === "add-on-technique")    return filterByHmoIds(addOnTechniques.value,  billingHmoAddOnTechniqueIds.value)
+  return filterByHmoIds(addOnHomeServices.value, billingHmoAddOnHomeServiceIds.value)
 })
 
 const selectedIndividualLines = computed(() =>
@@ -849,6 +922,7 @@ const findExistingBundleFromSelection = computed(() => {
 const existingBundleMatchName = computed(() => findExistingBundleFromSelection.value?.name)
 
 const canCreateBundleFromSelection = computed(() => {
+  if (form.value.billing_type === "HMO_BILLING") return false
   if (!selectedLines.value.length) return false
   if (selectedLines.value.some(line => line.type === "bundle" || line.type === "package")) return false
   if (!selectedIndividualLines.value.length) return false
@@ -928,6 +1002,26 @@ const setLineQuantity = (key: string, value: number | null | undefined): void =>
   )
 }
 
+const setLinePriceOverride = (key: string, value: number | null | undefined): void => {
+  if (value == null) return
+  const price = Math.max(0, Number(value))
+  selectedLines.value = selectedLines.value.map(item =>
+    item.key === key ? { ...item, priceOverride: price } : item
+  )
+}
+
+const clearLinePriceOverride = (key: string): void => {
+  selectedLines.value = selectedLines.value.map(item =>
+    item.key === key ? { ...item, priceOverride: undefined } : item
+  )
+}
+
+const setLineBodyArea = (key: string, value: string): void => {
+  selectedLines.value = selectedLines.value.map(item =>
+    item.key === key ? { ...item, body_area: value || undefined } : item
+  )
+}
+
 const addSelectedLine = (): void => {
   if (!selectedLineId.value) return
   const found = currentLineTypeOptions.value.find(item => String(item.id) === String(selectedLineId.value))
@@ -963,15 +1057,159 @@ const addSelectedPackageOffer = (): void => {
   selectedPackageOfferId.value = undefined
 }
 
+// Returns price before any manual override (catalogue price or HMO negotiated rate)
+const resolveNaturalLinePrice = (line: SelectedLine): number => {
+  if (form.value.billing_type !== "HMO_BILLING") return Number(line.price ?? 0)
+  const itemId = Number(line.id)
+  if (!Number.isFinite(itemId) || itemId <= 0) return Number(line.price ?? 0)
+
+  let hmoRate: number | undefined
+  if (line.type === "machine")             hmoRate = billingPatientMachineRateMap.value.get(itemId)
+  else if (line.type === "technique")      hmoRate = billingPatientTechniqueRateMap.value.get(itemId)
+  else if (line.type === "evaluation")     hmoRate = billingPatientEvaluationRateMap.value.get(itemId)
+  else if (line.type === "add-on-machine") hmoRate = billingPatientAddOnMachineRateMap.value.get(itemId)
+  else if (line.type === "add-on-technique") hmoRate = billingPatientAddOnTechniqueRateMap.value.get(itemId)
+  else if (line.type === "add-on-home-service") hmoRate = billingPatientAddOnHomeServiceRateMap.value.get(itemId)
+  return hmoRate ?? Number(line.price ?? 0)
+}
+
+// Returns the price to bill — manual override takes precedence over HMO/catalogue price
+const resolveEffectiveBillingLinePrice = (line: SelectedLine): number => {
+  if (line.priceOverride != null) return Number(line.priceOverride)
+  return resolveNaturalLinePrice(line)
+}
+
+const resolveBillingLineOriginalPrice = (line: SelectedLine): number => Number(line.originalPrice ?? line.price ?? 0)
+
+const syncBillingPatientHmoRates = async (): Promise<void> => {
+  billingPatientHmoId.value = null
+  billingPatientHmoInfo.value = null
+  billingPatientMachineRateMap.value = new Map()
+  billingPatientTechniqueRateMap.value = new Map()
+  billingPatientEvaluationRateMap.value = new Map()
+  billingPatientAddOnMachineRateMap.value = new Map()
+  billingPatientAddOnTechniqueRateMap.value = new Map()
+  billingPatientAddOnHomeServiceRateMap.value = new Map()
+  billingHmoMachineIds.value = null
+  billingHmoTechniqueIds.value = null
+  billingHmoEvaluationIds.value = null
+  billingHmoAddOnMachineIds.value = null
+  billingHmoAddOnTechniqueIds.value = null
+  billingHmoAddOnHomeServiceIds.value = null
+
+  if (form.value.billing_type !== "HMO_BILLING") return
+  const patientId = Number(form.value.patient_id)
+  if (!Number.isFinite(patientId) || patientId <= 0) return
+
+  syncingBillingHmoRates.value = true
+  try {
+  const hmoInfo = await patientHMOInformationService.getByPatientId(patientId)
+  billingPatientHmoInfo.value = hmoInfo ?? null
+  const hmoId = Number(hmoInfo?.hmo_id)
+  if (!Number.isFinite(hmoId) || hmoId <= 0) return
+
+  billingPatientHmoId.value = hmoId
+
+  const [machineRates, techniqueRates, evaluationRates, addOnRates] = await Promise.all([
+    hmoMachineRateService.getAll(hmoId),
+    hmoTechniqueRateService.getAll(hmoId),
+    hmoEvaluationRateService.getAll(hmoId),
+    hmoAddOnRateService.getAll(hmoId),
+  ])
+
+  const machineMap = new Map<number, number>()
+  const machineIds = new Set<number>()
+  for (const r of machineRates ?? []) {
+    const id = Number(r.machine_id); const price = Number(r.rate)
+    if (Number.isFinite(id) && id > 0 && Number.isFinite(price) && price >= 0) {
+      machineMap.set(id, price); machineIds.add(id)
+    }
+  }
+  billingPatientMachineRateMap.value = machineMap
+  billingHmoMachineIds.value = machineIds
+
+  const techniqueMap = new Map<number, number>()
+  const techniqueIds = new Set<number>()
+  for (const r of techniqueRates ?? []) {
+    const id = Number(r.technique_id); const price = Number(r.rate)
+    if (Number.isFinite(id) && id > 0 && Number.isFinite(price) && price >= 0) {
+      techniqueMap.set(id, price); techniqueIds.add(id)
+    }
+  }
+  billingPatientTechniqueRateMap.value = techniqueMap
+  billingHmoTechniqueIds.value = techniqueIds
+
+  const evaluationMap = new Map<number, number>()
+  const evaluationIds = new Set<number>()
+  for (const r of evaluationRates ?? []) {
+    const id = Number(r.evaluation_id); const price = Number(r.rate)
+    if (Number.isFinite(id) && id > 0 && Number.isFinite(price) && price >= 0) {
+      evaluationMap.set(id, price); evaluationIds.add(id)
+    }
+  }
+  billingPatientEvaluationRateMap.value = evaluationMap
+  billingHmoEvaluationIds.value = evaluationIds
+
+  const addOnMachineMap = new Map<number, number>()
+  const addOnMachineIds = new Set<number>()
+  const addOnTechniqueMap = new Map<number, number>()
+  const addOnTechniqueIds = new Set<number>()
+  const addOnHomeServiceMap = new Map<number, number>()
+  const addOnHomeServiceIds = new Set<number>()
+  for (const r of addOnRates ?? []) {
+    const price = Number(r.rate)
+    if (!Number.isFinite(price) || price < 0) continue
+    if (r.add_on_type === "ADD_ON_MACHINE" && r.add_on_machine_id != null) {
+      const id = Number(r.add_on_machine_id)
+      if (id > 0) { addOnMachineMap.set(id, price); addOnMachineIds.add(id) }
+    } else if (r.add_on_type === "ADD_ON_TECHNIQUE" && r.add_on_technique_id != null) {
+      const id = Number(r.add_on_technique_id)
+      if (id > 0) { addOnTechniqueMap.set(id, price); addOnTechniqueIds.add(id) }
+    } else if (r.add_on_type === "ADD_ON_HOME_SERVICE" && r.add_on_home_service_id != null) {
+      const id = Number(r.add_on_home_service_id)
+      if (id > 0) { addOnHomeServiceMap.set(id, price); addOnHomeServiceIds.add(id) }
+    }
+  }
+  billingPatientAddOnMachineRateMap.value = addOnMachineMap
+  billingHmoAddOnMachineIds.value = addOnMachineIds
+  billingPatientAddOnTechniqueRateMap.value = addOnTechniqueMap
+  billingHmoAddOnTechniqueIds.value = addOnTechniqueIds
+  billingPatientAddOnHomeServiceRateMap.value = addOnHomeServiceMap
+  billingHmoAddOnHomeServiceIds.value = addOnHomeServiceIds
+  } finally {
+    syncingBillingHmoRates.value = false
+  }
+}
+
 const lineItemsAsPayload = computed((): BillingLineItem[] =>
-  selectedLines.value.map(item => ({
-    id: item.id,
-    type: item.type as BillingLineItem["type"],
-    name: item.name,
-    price: Number(item.price ?? 0),
-    quantity: Number(item.quantity ?? 1),
-    originalPrice: item.originalPrice != null ? Number(item.originalPrice) : undefined
-  }))
+  selectedLines.value.map(item => {
+    const effectivePrice = resolveEffectiveBillingLinePrice(item)
+    const naturalPrice = resolveNaturalLinePrice(item)
+    const cataloguePrice = Number(item.price ?? 0)
+
+    // Track reference price for strikethrough on receipt:
+    // manual override → show what natural/negotiated price would have been
+    // HMO discount only → show catalogue price
+    // no change → no originalPrice
+    let originalPrice: number | undefined
+    if (item.priceOverride != null && effectivePrice !== naturalPrice) {
+      originalPrice = naturalPrice
+    } else if (item.originalPrice != null) {
+      originalPrice = Number(item.originalPrice)
+    } else if (naturalPrice !== cataloguePrice) {
+      originalPrice = cataloguePrice
+    }
+
+    return {
+      id: item.id,
+      type: item.type as BillingLineItem["type"],
+      name: item.name,
+      price: effectivePrice,
+      quantity: Number(item.quantity ?? 1),
+      originalPrice,
+      body_area: item.body_area || undefined
+    }
+  })
 )
 
 const originalSubtotalFromLines = computed(() =>
@@ -1102,7 +1340,10 @@ const copyFromLastSession = async (): Promise<void> => {
       return
     }
 
-    const lines = parseBillingLines(detail.line_items_json)
+    let lines = parseBillingLines(detail.line_items_json)
+    if (form.value.billing_type === "HMO_BILLING") {
+      lines = lines.filter(line => line.type !== "bundle" && line.type !== "package")
+    }
     if (!lines.length) {
       errorToast(toast, "Previous billing had no line items to copy")
       return
@@ -1288,7 +1529,7 @@ const normalizeServiceType = (value: string): ServiceType => {
 const parseBillingLines = (raw?: string): SelectedLine[] => {
   if (!raw) return []
   try {
-    const parsed = JSON.parse(raw) as Array<{id?: string | number; type?: string; name?: string; price?: number; quantity?: number; originalPrice?: number}>
+    const parsed = JSON.parse(raw) as Array<{id?: string | number; type?: string; name?: string; price?: number; quantity?: number; originalPrice?: number; body_area?: string}>
     if (!Array.isArray(parsed)) return []
     return parsed.map(line => ({
       key: crypto.randomUUID(),
@@ -1297,7 +1538,8 @@ const parseBillingLines = (raw?: string): SelectedLine[] => {
       name: line.name ?? "—",
       price: Number(line.price ?? 0),
       quantity: Math.max(1, Number(line.quantity ?? 1)),
-      originalPrice: line.originalPrice ? Number(line.originalPrice) : undefined
+      originalPrice: line.originalPrice ? Number(line.originalPrice) : undefined,
+      body_area: line.body_area || undefined
     }))
   } catch {
     return []
@@ -1317,9 +1559,19 @@ watch(
       ALA_CARTE: "SINGLE",
     }
     form.value.service_type = serviceTypeMap[value] ?? "SINGLE"
-    if (value === "HMO_BILLING") form.value.payment_type = "HMO"
-    else if (value === "LGU_BILLING") form.value.payment_type = "LGU"
+    if (value === "HMO_BILLING") {
+      form.value.payment_type = "HMO"
+      selectedLines.value = selectedLines.value.filter(line => line.type !== "bundle" && line.type !== "package")
+      selectedPackageOfferId.value = undefined
+    } else if (value === "LGU_BILLING") form.value.payment_type = "LGU"
     else form.value.payment_type = undefined
+  }
+)
+
+watch(
+  [() => form.value.patient_id, () => form.value.billing_type],
+  async () => {
+    await syncBillingPatientHmoRates()
   }
 )
 

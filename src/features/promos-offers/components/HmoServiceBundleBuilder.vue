@@ -88,10 +88,10 @@
           <template #body="{data}">{{ asCurrency(data.rate) }}</template>
         </Column>
         <Column header="Actions" style="width: 120px">
-          <template #body="{data, index}">
+          <template #body="{data}">
             <div class="flex gap-1">
-              <Button size="small" text icon="pi pi-pencil" @click="openEditRateDialog(data, index)" v-tooltip="'Edit rate'" />
-              <Button size="small" text severity="danger" icon="pi pi-trash" @click="confirmDeleteRate(data, index)" v-tooltip="'Delete rate'" />
+              <Button size="small" text icon="pi pi-pencil" @click="openEditRateDialog(data, selectedProfileRates.findIndex(item => item.serviceId === data.serviceId))" v-tooltip="'Edit rate'" />
+              <Button size="small" text severity="danger" icon="pi pi-trash" @click="confirmDeleteRate(data)" v-tooltip="'Delete rate'" />
             </div>
           </template>
         </Column>
@@ -237,7 +237,7 @@
         <IftaLabel>
           <Select
             v-model="rateForm.serviceId"
-            :options="allServices"
+            :options="machineRateOptions"
             optionLabel="name"
             optionValue="id"
             showClear
@@ -277,7 +277,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue"
+import { computed, onMounted, reactive, ref, watch } from "vue"
 import Button from "primevue/button"
 import Column from "primevue/column"
 import ConfirmDialog from "primevue/confirmdialog"
@@ -290,10 +290,12 @@ import Select from "primevue/select"
 import Tag from "primevue/tag"
 import { useConfirm, useToast } from "primevue"
 import {authMeService} from "@/services/auth-me.service"
+import { hmoMachineRateService } from "@/services/hmo-machine-rate.service"
+import { hmoService } from "@/services/hmo.service"
+import { machineService } from "@/services/machine.service"
+import { Status } from "@/utils/global.type"
 import { errorToast, successToast } from "@/utils/toast.util"
 import {
-  HMO_PRICE_LISTS_KEY,
-  HMO_PROFILES_KEY,
   SINGLE_PAY_SERVICES_KEY,
   readPromosStorageArray,
   writePromosStorageArray
@@ -341,9 +343,10 @@ const PRIVILEGED_ROLE_KEYWORDS = [
 ]
 
 const allServices = ref<HmoService[]>([])
+const machineCatalog = ref<Array<{ id: number; name: string; price: number }>>([])
 const hmoProfiles = ref<HmoProfile[]>([])
-const hmoPriceLists = ref<Record<string, HmoPriceListRate[]>>({})
 const selectedProfileId = ref<string>()
+const selectedProfileRates = ref<HmoPriceListRate[]>([])
 
 const profileForm = reactive<{
   name: string
@@ -371,8 +374,12 @@ const selectedProfileName = computed(() =>
   activeProfiles.value.find(profile => profile.id === selectedProfileId.value)?.name
 )
 
-const selectedProfileRates = computed(() =>
-  selectedProfileId.value ? (hmoPriceLists.value[selectedProfileId.value] ?? []) : []
+const machineRateOptions = computed(() =>
+  machineCatalog.value.map(machine => ({
+    id: String(machine.id),
+    name: machine.name,
+    price: machine.price
+  }))
 )
 
 const selectedProfileRateMap = computed(() => {
@@ -480,27 +487,63 @@ const loadServices = async (): Promise<void> => {
   }
 }
 
-const loadProfilesAndRates = (): void => {
+const loadMachineCatalog = async (): Promise<void> => {
   try {
-    hmoProfiles.value = readPromosStorageArray<HmoProfile>(HMO_PROFILES_KEY)
+    const lookup = await machineService.getAllLookup({
+      page: 1,
+      size: 1000,
+      name: "",
+      status: Status.ACTIVE
+    })
+    machineCatalog.value = (lookup?.content ?? []).map(machine => ({
+      id: Number(machine.id),
+      name: machine.name,
+      price: Number(machine.price ?? 0)
+    }))
   } catch {
-    hmoProfiles.value = []
-  }
-  try {
-    const parsed = JSON.parse(localStorage.getItem(HMO_PRICE_LISTS_KEY) || "{}") as Record<string, HmoPriceListRate[]>
-    hmoPriceLists.value = parsed && typeof parsed === "object" ? parsed : {}
-  } catch {
-    hmoPriceLists.value = {}
-  }
-
-  if (!selectedProfileId.value && hmoProfiles.value.length) {
-    selectedProfileId.value = hmoProfiles.value[0].id
+    machineCatalog.value = []
   }
 }
 
-const persistProfilesAndRates = (): void => {
-  writePromosStorageArray(HMO_PROFILES_KEY, hmoProfiles.value)
-  localStorage.setItem(HMO_PRICE_LISTS_KEY, JSON.stringify(hmoPriceLists.value))
+const loadSelectedProfileRates = async (): Promise<void> => {
+  if (!selectedProfileId.value) {
+    selectedProfileRates.value = []
+    return
+  }
+
+  const hmoId = Number(selectedProfileId.value)
+  if (!Number.isFinite(hmoId) || hmoId <= 0) {
+    selectedProfileRates.value = []
+    return
+  }
+
+  const rates = await hmoMachineRateService.getAll(hmoId)
+  selectedProfileRates.value = (rates ?? []).map(rate => ({
+    serviceId: String(rate.machine_id),
+    serviceName: rate.machine_name,
+    rate: Number(rate.rate)
+  }))
+}
+
+const loadProfilesAndRates = async (): Promise<void> => {
+  const paged = await hmoService.getAllLookup({
+    page: 1,
+    size: 1000,
+    name: "",
+    status: Status.ACTIVE
+  })
+
+  hmoProfiles.value = (paged?.content ?? []).map(profile => ({
+    id: String(profile.id),
+    name: profile.name,
+    status: "Active"
+  }))
+
+  if (!selectedProfileId.value || !hmoProfiles.value.some(profile => profile.id === selectedProfileId.value)) {
+    selectedProfileId.value = hmoProfiles.value[0]?.id
+  }
+
+  await loadSelectedProfileRates()
 }
 
 const openProfileDialog = (): void => {
@@ -510,7 +553,7 @@ const openProfileDialog = (): void => {
   profileDialogVisible.value = true
 }
 
-const saveProfile = (): void => {
+const saveProfile = async (): Promise<void> => {
   if (!ensureConfidentialAccess()) return
   const name = profileForm.name.trim()
   if (!name) {
@@ -524,15 +567,13 @@ const saveProfile = (): void => {
     return
   }
 
-  const profile: HmoProfile = {
-    id: `hmo-profile-${Date.now()}`,
-    name,
-    code: profileForm.code.trim() || undefined,
-    status: "Active"
+  await hmoService.save({ name })
+  await loadProfilesAndRates()
+  const created = hmoProfiles.value.find(profile => profile.name.trim().toLowerCase() === name.toLowerCase())
+  if (created) {
+    selectedProfileId.value = created.id
+    await loadSelectedProfileRates()
   }
-  hmoProfiles.value.push(profile)
-  selectedProfileId.value = profile.id
-  persistProfilesAndRates()
   profileDialogVisible.value = false
   successToast(toast, "HMO profile created")
 }
@@ -547,7 +588,7 @@ const getRateServiceLabel = (rate: HmoPriceListRate): string => {
 
 const onRateServiceSelected = (serviceId?: string): void => {
   if (!serviceId) return
-  const matched = allServices.value.find(service => service.id === serviceId)
+  const matched = machineCatalog.value.find(service => String(service.id) === serviceId)
   if (matched) {
     rateForm.serviceName = matched.name
   }
@@ -575,10 +616,15 @@ const openEditRateDialog = (rate: HmoPriceListRate, index: number): void => {
   rateDialogVisible.value = true
 }
 
-const saveRate = (): void => {
+const saveRate = async (): Promise<void> => {
   if (!ensureConfidentialAccess()) return
   if (!selectedProfileId.value) {
     errorToast(toast, "Select an HMO profile first")
+    return
+  }
+
+  if (!rateForm.serviceId) {
+    errorToast(toast, "Select a machine from the catalog")
     return
   }
 
@@ -592,47 +638,40 @@ const saveRate = (): void => {
     return
   }
 
-  const rates = [...selectedProfileRates.value]
-  const duplicateIndex = rates.findIndex((rate, index) => {
-    if (editingRateIndex.value != null && index === editingRateIndex.value) return false
-    if (rateForm.serviceId && rate.serviceId) return rate.serviceId === rateForm.serviceId
-    return rate.serviceName.trim().toLowerCase() === serviceName.toLowerCase()
-  })
-  if (duplicateIndex >= 0) {
-    errorToast(toast, "A custom rate for this service already exists")
+  const machineId = Number(rateForm.serviceId)
+  if (!Number.isFinite(machineId) || machineId <= 0) {
+    errorToast(toast, "Selected machine is invalid")
     return
   }
 
-  const payload: HmoPriceListRate = {
-    serviceId: rateForm.serviceId,
-    serviceName,
-    rate: Number(rateForm.rate)
+  const matchedMachine = machineCatalog.value.find(machine => machine.id === machineId)
+  if (!matchedMachine) {
+    errorToast(toast, "Selected machine is not available")
+    return
   }
 
-  if (editingRateIndex.value == null) {
-    rates.push(payload)
-  } else {
-    rates[editingRateIndex.value] = payload
-  }
-
-  hmoPriceLists.value[selectedProfileId.value] = rates
-  persistProfilesAndRates()
+  await hmoMachineRateService.upsert(Number(selectedProfileId.value), machineId, Number(rateForm.rate))
+  await loadSelectedProfileRates()
   rateDialogVisible.value = false
   successToast(toast, editingRateIndex.value == null ? "Custom rate added" : "Custom rate updated")
 }
 
-const confirmDeleteRate = (rate: HmoPriceListRate, index: number): void => {
+const confirmDeleteRate = (rate: HmoPriceListRate): void => {
   if (!ensureConfidentialAccess()) return
   if (!selectedProfileId.value) return
   confirm.require({
     message: `Delete custom rate for "${getRateServiceLabel(rate)}"?`,
     header: "Confirm",
     icon: "pi pi-exclamation-triangle",
-    accept: () => {
-      const rates = [...selectedProfileRates.value]
-      rates.splice(index, 1)
-      hmoPriceLists.value[selectedProfileId.value as string] = rates
-      persistProfilesAndRates()
+    accept: async () => {
+      const machineId = Number(rate.serviceId)
+      if (!Number.isFinite(machineId) || machineId <= 0) {
+        errorToast(toast, "Selected custom rate cannot be deleted")
+        return
+      }
+
+      await hmoMachineRateService.remove(Number(selectedProfileId.value), machineId)
+      await loadSelectedProfileRates()
       successToast(toast, "Custom rate deleted")
     }
   })
@@ -701,7 +740,7 @@ const onSelectPriceListFile = async (event: Event): Promise<void> => {
       return
     }
 
-    const uploadedRates: HmoPriceListRate[] = []
+    const uploadedRates: Array<{ machineId: number; rate: number }> = []
     let skippedCount = 0
 
     for (let i = 1; i < lines.length; i++) {
@@ -713,12 +752,13 @@ const onSelectPriceListFile = async (event: Event): Promise<void> => {
         continue
       }
 
-      const service = allServices.value.find(item => item.name.trim().toLowerCase() === serviceName.toLowerCase())
-      uploadedRates.push({
-        serviceId: service?.id,
-        serviceName,
-        rate
-      })
+      const service = machineCatalog.value.find(item => item.name.trim().toLowerCase() === serviceName.toLowerCase())
+      if (!service) {
+        skippedCount++
+        continue
+      }
+
+      uploadedRates.push({ machineId: service.id, rate })
     }
 
     if (!uploadedRates.length) {
@@ -726,8 +766,12 @@ const onSelectPriceListFile = async (event: Event): Promise<void> => {
       return
     }
 
-    hmoPriceLists.value[selectedProfileId.value] = uploadedRates
-    persistProfilesAndRates()
+    await Promise.all(
+      uploadedRates.map((entry) =>
+        hmoMachineRateService.upsert(Number(selectedProfileId.value), entry.machineId, entry.rate)
+      )
+    )
+    await loadSelectedProfileRates()
 
     if (skippedCount > 0) {
       successToast(toast, `Price list uploaded (${uploadedRates.length} rows). Skipped ${skippedCount} invalid row(s).`)
@@ -741,12 +785,22 @@ const onSelectPriceListFile = async (event: Event): Promise<void> => {
   }
 }
 
-const clearSelectedProfilePriceList = (): void => {
+const clearSelectedProfilePriceList = async (): Promise<void> => {
   if (!ensureConfidentialAccess()) return
   if (!selectedProfileId.value) return
-  delete hmoPriceLists.value[selectedProfileId.value]
-  persistProfilesAndRates()
-  successToast(toast, "Custom price list cleared")
+
+  try {
+    const deleteTasks = selectedProfileRates.value
+      .map(rate => Number(rate.serviceId))
+      .filter(machineId => Number.isFinite(machineId) && machineId > 0)
+      .map(machineId => hmoMachineRateService.remove(Number(selectedProfileId.value), machineId))
+
+    await Promise.all(deleteTasks)
+    await loadSelectedProfileRates()
+    successToast(toast, "Custom price list cleared")
+  } catch {
+    errorToast(toast, "Failed to clear custom price list")
+  }
 }
 
 const getCustomRate = (service: HmoService): number | undefined => {
@@ -858,19 +912,31 @@ onMounted(() => {
       const wasPrivileged = canViewConfidentialRates.value
       currentRoleName.value = role
       if (!wasPrivileged && canViewConfidentialRates.value) {
-        loadProfilesAndRates()
+        void loadProfilesAndRates()
+        void loadMachineCatalog()
       }
     })
     .catch(() => {
       // Keep storage-derived role fallback.
     })
 
-  loadServices()
+  void loadServices()
   if (canViewConfidentialRates.value) {
-    loadProfilesAndRates()
+    void loadProfilesAndRates()
+    void loadMachineCatalog()
   } else {
     hmoProfiles.value = []
-    hmoPriceLists.value = {}
+    selectedProfileRates.value = []
+    machineCatalog.value = []
   }
+})
+
+watch(selectedProfileId, () => {
+  if (!canViewConfidentialRates.value) {
+    selectedProfileRates.value = []
+    return
+  }
+
+  void loadSelectedProfileRates()
 })
 </script>

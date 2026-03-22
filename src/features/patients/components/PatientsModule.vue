@@ -60,7 +60,7 @@
         :draggable="false"
       >
         <div v-if="selectedPatientDetails" class="space-y-4">
-          <div class="rounded-2xl border border-sky-200/60 bg-gradient-to-r from-sky-50 to-cyan-50 p-4 dark:border-sky-900/50 dark:from-slate-900 dark:to-slate-800">
+          <div class="rounded-2xl border border-[#A91D8B]/25 bg-[linear-gradient(120deg,rgba(36,39,87,0.14),rgba(94,24,105,0.10),rgba(169,29,139,0.18))] shadow-[0_18px_40px_rgba(36,39,87,0.12)] p-4">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <div class="text-lg font-semibold tracking-tight">{{ selectedPatientDetails.full_name }}</div>
@@ -620,7 +620,7 @@ const onSubmit = async (event: FormSubmitEvent): Promise<void> => {
       }
 
       saveMutation(body, {
-        async onSuccess() {
+        async onSuccess(result) {
           patientForm.value?.toggleDialog()
           successToast(toast, 'Save success')
           event.reset()
@@ -628,6 +628,30 @@ const onSubmit = async (event: FormSubmitEvent): Promise<void> => {
             resetQueries(),
             draftService.delete()
           ])
+
+          const newPatientId = result?.id ?? 0
+          if (newPatientId > 0) {
+            const fullName = [body.first_name, body.middle_name, body.last_name]
+              .filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
+            selectedPatient.value = {
+              ...body,
+              id: newPatientId,
+              full_name: fullName,
+              gender_name: '',
+              civil_status_name: '',
+              clinic_name: '',
+              is_active: true,
+            }
+            confirm.require({
+              message: `Would you like to register HMO information for ${fullName}?`,
+              header: 'Register HMO Information',
+              icon: 'pi pi-address-book',
+              acceptLabel: 'Yes, register now',
+              rejectLabel: 'Skip',
+              accept: () => { patientHMOInformationForm.value?.toggleDialog() },
+              reject: () => { selectedPatient.value = undefined },
+            })
+          }
         },
         async onError(error: APIError) {
           errorToast(toast, `Save failed ${error.message}`)
@@ -936,4 +960,3 @@ watch(
   {deep: true}
 )
 </script>
-

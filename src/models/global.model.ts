@@ -14,4 +14,5 @@ export interface Attachment {
   checksum: string
   media_type: string
   extension: string
+  file_url?: string
 }

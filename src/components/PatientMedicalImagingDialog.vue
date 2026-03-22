@@ -1,185 +1,176 @@
 <template>
-  <Message severity="error" v-if="isError"> Something went wrong!</Message>
+  <Message v-if="isError" severity="error"> Something went wrong! </Message>
   <Dialog
     v-else
     v-model:visible="visible"
-    :style="{ width: '70rem' }"
+    :style="{ width: '72rem', maxWidth: '95vw' }"
     :header="header"
     modal
     :draggable="false"
     :resizable="false"
     @show="onShow"
   >
-    <DataTable
-      :value="patientMedicalImagings?.content"
-      :show-gridlines="true"
-      :removable-sort="true"
-      :scrollable="true"
-      :pt="{
-        root: { class: 'flex flex-col h-full' },
-        column: {
-          headerCell: {
-            class: 'text-center',
-          },
-          bodyCell: { class: 'text-center' },
-          columnTitle: { class: 'mx-auto font-semibold' },
-        },
-
-      }"
-    >
-      <template v-slot:empty>
-        <div class="text-center font-bold text-2xl">
-          <SkeletonLoader :loading="isLoading">
-            <span>No records found.</span>
-          </SkeletonLoader>
-        </div>
-      </template>
-
-      <template v-slot:header>
-        <section class="flex justify-end items-center gap-4 w-full">
+    <section class="space-y-4">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <InputText
+          v-model="searchTerm"
+          :disabled="isLoading"
+          placeholder="Search medical imaging"
+          class="w-full sm:max-w-sm"
+        />
+        <div class="flex gap-3">
           <Button
             :loading="isLoading"
             icon="pi pi-save"
             severity="info"
+            :pt="ptModalPrimaryBtn"
             label="Add medical imaging"
-            @click="onSave"
+            @click="onSave()"
           />
           <Button
             :loading="isLoading"
             icon="pi pi-file-export"
             severity="info"
+            :pt="ptModalPrimaryBtn"
             label="Export to excel"
             @click="onExportToExcelThrottleFn"
           />
-        </section>
-      </template>
+        </div>
+      </div>
 
-      <Column :sortable="true" header="Medical imaging" field="medical_imaging_name">
-        <template v-slot:body="slotProps">
-          <SkeletonLoader :loading="isLoading">
-            {{ slotProps.data?.medical_imaging_name }}
-          </SkeletonLoader>
-        </template>
-      </Column>
+      <div class="rounded-2xl border border-surface-200 bg-surface-0 p-3">
+        <SkeletonLoader :loading="isLoading">
+          <div class="grid gap-3">
+            <div
+              v-for="medicalImaging in filteredMedicalImagings"
+              :key="medicalImaging.id"
+              class="rounded-xl border px-4 py-3 transition-colors"
+              :class="isImagingSelected(medicalImaging.id)
+                ? 'border-[rgba(var(--app-accent),0.40)] bg-[linear-gradient(135deg,rgba(var(--app-primary),0.08),rgba(var(--app-accent),0.10))]'
+                : 'border-surface-200 bg-surface-0'"
+            >
+              <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div class="flex items-start gap-3">
+                  <Checkbox
+                    binary
+                    :modelValue="isImagingSelected(medicalImaging.id)"
+                    disabled
+                  />
+                  <div>
+                    <div class="font-medium">{{ medicalImaging.name }}</div>
+                    <div class="text-xs opacity-70">
+                      {{ isImagingSelected(medicalImaging.id) ? 'Attachment uploaded' : 'No attachment uploaded yet' }}
+                    </div>
+                  </div>
+                </div>
 
-      <Column
-        :sortable="true"
-        header="Attachment"
-        field="file_id"
-      >
-        <template v-slot:body="slotProps">
-          <SkeletonLoader :loading="isLoading">
-            <Button
-              :loading="isLoading"
-              icon="pi pi-file"
-              severity="info"
-              v-tooltip="slotProps.data.file_id"
-              label="Preview attachment"
-              @click="filePreviewFn(slotProps.data?.file_id)"
-            />
-          </SkeletonLoader>
-        </template>
-      </Column>
+                <div class="flex flex-wrap gap-2">
+                  <Button
+                    v-if="!getAssignedImaging(medicalImaging.id)"
+                    :loading="isLoading"
+                    icon="pi pi-upload"
+                    severity="info"
+                    :pt="ptModalPrimaryBtn"
+                    label="Upload attachment"
+                    @click="onSave(medicalImaging)"
+                  />
+                  <template v-else>
+                    <Button
+                      :loading="isLoading"
+                      icon="pi pi-file"
+                      severity="info"
+                      :pt="ptModalPrimaryBtn"
+                      label="Preview attachment"
+                      @click="filePreviewFn(getAssignedImaging(medicalImaging.id)?.file_id)"
+                    />
+                    <Button
+                      :loading="isLoading"
+                      icon="pi pi-trash"
+                      severity="danger"
+                      label="Remove"
+                      @click="onDelete(getAssignedImaging(medicalImaging.id)!)"
+                    />
+                  </template>
+                </div>
+              </div>
+            </div>
+          </div>
+        </SkeletonLoader>
 
-      <Column header="Actions">
-        <template v-slot:body="slotProps">
-          <SkeletonLoader :loading="isLoading">
-            <Button
-              :loading="isLoading"
-              icon="pi pi-trash"
-              severity="danger"
-              label="Remove this record"
-              @click="onDelete(slotProps.data)"
-            />
-          </SkeletonLoader>
-        </template>
-      </Column>
-
-      <template v-slot:footer>
-        <Paginator
-          current-page-report-template="Showing {first} to {last} of {totalRecords} records (Page {currentPage} of {totalPages})"
-          template="CurrentPageReport FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown JumpToPageInput"
-          :first="(page - 1) * pageSize"
-          :rows="pageSize"
-          :totalRecords="patientMedicalImagings?.total_elements"
-          :rowsPerPageOptions="rowPerPageOptions"
-          @page="onPageChangeDebounceFn($event, refetch)"
-        />
-      </template>
-    </DataTable>
+        <div
+          v-if="!isLoading && !filteredMedicalImagings.length"
+          class="py-8 text-center text-sm opacity-70"
+        >
+          No medical imagings found.
+        </div>
+      </div>
+    </section>
   </Dialog>
+
   <PatientMedicalImagingDialogForm
     ref="patientMedicalImagingDialogForm"
     v-bind="patientMedicalImagingDialogFormProps"
     @on-submit="onPatientMedicalDialogFormSubmit"
+    @on-close="selectedMedicalImagingDraft = undefined"
   />
 </template>
 
 <script setup lang="ts">
-
-import Dialog from "primevue/dialog";
-import {useThrottleFn, useToggle} from "@vueuse/core";
-import {defaultThrottle, type DialogExpose, rowPerPageOptions} from "@/utils/global.type.ts";
+import { useQueryClient } from "@tanstack/vue-query"
+import type { AxiosResponse } from "axios"
+import Button from "primevue/button"
+import Checkbox from "primevue/checkbox"
+import Dialog from "primevue/dialog"
+import InputText from "primevue/inputtext"
+import Message from "primevue/message"
+import { useConfirm, useToast } from "primevue"
+import { computed, ref, toRefs, useTemplateRef } from "vue"
+import { useThrottleFn, useToggle } from "@vueuse/core"
 import type {
   PatientMedicalImagingDialogFormProps,
   PatientMedicalImagingDialogFormSubmitEvent,
   PatientMedicalImagingDialogProps
-} from "@/components/patient.type.ts";
-import {usePaginationDebounce} from "@/composables/pagination-debounce.composable.ts";
-import {type Pageable} from "@/models/paging.ts";
-import {computed, toRefs, useTemplateRef} from "vue";
+} from "@/components/patient.type.ts"
+import SkeletonLoader from "@/composables/SkeletonLoader.vue"
+import PatientMedicalImagingDialogForm from "@/components/PatientMedicalImagingDialogForm.vue"
+import { useFileDelete } from "@/composables/file-delete.composable.ts"
+import { useFilePreview } from "@/composables/file-preview.composable.ts"
+import { useFileSave } from "@/composables/file-save.composable.ts"
+import { useRefreshToken } from "@/composables/refresh-token.composable.ts"
+import { useIsLoading } from "@/composables/tanstack-loader.composable.ts"
+import type { APIError } from "@/utils/error-handler.ts"
+import type { FileDTO } from "@/models/file-server.ts"
 import type {
   PatientMedicalImaging,
-  PatientMedicalImagingDeletePayload,
   PatientMedicalImagingPayload,
   PatientMedicalRequestPayload
-} from "@/models/patient-medical.ts";
-import {useQueryClient} from "@tanstack/vue-query";
-import SkeletonLoader from "@/composables/SkeletonLoader.vue";
-import {Paginator, useConfirm, useToast} from "primevue";
-import DataTable from "primevue/datatable";
-import {useIsLoading} from "@/composables/tanstack-loader.composable.ts";
-import Message from "primevue/message";
-import Column from "primevue/column";
-import Button from "primevue/button";
-import type {AxiosResponse} from "axios";
-import {exportToExcel} from "@/utils/export-excel.util.ts";
-import {errorToast, successToast, warningToast} from "@/utils/toast.util.ts";
-import type {APIError} from "@/utils/error-handler.ts";
-import {useRefreshToken} from "@/composables/refresh-token.composable.ts";
-import {
-  patientMedicalImagingTanstackService
-} from "@/services/patient-medical-imaging.tanstack.service.ts";
-import PatientMedicalImagingDialogForm from "@/components/PatientMedicalImagingDialogForm.vue";
-import type {FileDTO} from "@/models/file-server.ts";
-import {FileServerTanstackKey, PatientTanstackKey} from "@/utils/keys/tanstack-key.ts";
-import {useFileDelete} from "@/composables/file-delete.composable.ts";
-import {useFileSave} from "@/composables/file-save.composable.ts";
-import {useFilePreview} from "@/composables/file-preview.composable.ts";
+} from "@/models/patient-medical.ts"
+import type { MedicalImaging } from "@/models/reference.ts"
+import { patientMedicalImagingTanstackService } from "@/services/patient-medical-imaging.tanstack.service.ts"
+import { exportToExcel } from "@/utils/export-excel.util.ts"
+import { defaultThrottle, type DialogExpose } from "@/utils/global.type.ts"
+import { ptModalPrimaryBtn } from "@/features/shared/table-header.styles"
+import { FileServerTanstackKey, PatientTanstackKey } from "@/utils/keys/tanstack-key.ts"
+import { errorToast, successToast, warningToast } from "@/utils/toast.util.ts"
 
-const patientMedicalImagingDialogForm = useTemplateRef<InstanceType<typeof PatientMedicalImagingDialogForm>>('patientMedicalImagingDialogForm')
+const patientMedicalImagingDialogForm = useTemplateRef<InstanceType<typeof PatientMedicalImagingDialogForm>>("patientMedicalImagingDialogForm")
 
 const toast = useToast()
 const confirm = useConfirm()
 const queryClient = useQueryClient()
 
 const props = defineProps<PatientMedicalImagingDialogProps>()
-const {patient, medicalImagings} = toRefs(props)
+const { patient, medicalImagings } = toRefs(props)
 
 const patientId = computed<number>(() => patient.value?.id ?? 0)
+const [visible, toggle] = useToggle()
+const searchTerm = ref("")
+const selectedMedicalImagingDraft = ref<MedicalImaging | undefined>()
 
 const isExportLoading = useIsLoading(PatientTanstackKey.PATIENT_MEDICAL_IMAGING_EXPORT)
 const isPatientMedicalImagingLoading = useIsLoading(PatientTanstackKey.PATIENT_MEDICAL_IMAGING)
 const isFSALoading = useIsLoading(FileServerTanstackKey.FSA)
 const isLoading = computed<boolean>(() => isExportLoading.value || isPatientMedicalImagingLoading.value || isFSALoading.value)
-
-const [visible, toggle] = useToggle()
-
-const {
-  page,
-  pageSize,
-  onPageChangeDebounceFn
-} = usePaginationDebounce<Pageable<PatientMedicalImaging> | undefined>()
 
 const {
   previewFn: filePreviewFn
@@ -196,14 +187,15 @@ const {
 const patientMedicalImagingDialogFormProps = computed(() => ({
   isLoading: isLoading.value,
   header: `Add medical imaging for ${patient.value?.full_name}`,
-  medicalImagings: medicalImagings.value
+  medicalImagings: medicalImagings.value,
+  selectedMedicalImaging: selectedMedicalImagingDraft.value
 }) satisfies PatientMedicalImagingDialogFormProps)
 
 const requestPayload = computed(() => ({
   patient_id: patientId.value,
   page_request: {
-    page: page.value,
-    size: pageSize.value,
+    page: 1,
+    size: Math.max(medicalImagings.value.length, 1)
   }
 }) satisfies PatientMedicalRequestPayload)
 
@@ -213,7 +205,7 @@ const {
   refetch,
   error
 } = patientMedicalImagingTanstackService.getAll(requestPayload)
-useRefreshToken<Pageable<PatientMedicalImaging> | undefined>(error, refetch)
+useRefreshToken(error, refetch)
 
 const {
   mutate: saveMutation
@@ -223,71 +215,92 @@ const {
   mutate: removeMutation
 } = patientMedicalImagingTanstackService.remove()
 
+const assignedImagingMap = computed(() => new Map(
+  (patientMedicalImagings.value?.content ?? []).map((imaging) => [imaging.medical_imaging_id, imaging])
+))
+
+const filteredMedicalImagings = computed(() => {
+  const keyword = searchTerm.value.trim().toLowerCase()
+  if (!keyword) {
+    return medicalImagings.value
+  }
+
+  return medicalImagings.value.filter((imaging) =>
+    imaging.name.toLowerCase().includes(keyword)
+  )
+})
+
+const getAssignedImaging = (medicalImagingId: number): PatientMedicalImaging | undefined => assignedImagingMap.value.get(medicalImagingId)
+
+const isImagingSelected = (medicalImagingId: number): boolean => assignedImagingMap.value.has(medicalImagingId)
+
+const refreshImagings = async (): Promise<void> => {
+  await refetch()
+}
+
 const onDelete = async (patientMedicalImaging: PatientMedicalImaging): Promise<void> => {
   confirm.require({
     message: `Are you sure you want to remove "${patientMedicalImaging.medical_imaging_name}" from this patient’s medical record? This action cannot be undone.`,
-    header: `Remove patient medical imaging`,
-    icon: 'pi pi-exclamation-triangle',
+    header: "Remove patient medical imaging",
+    icon: "pi pi-exclamation-triangle",
     rejectProps: {
-      label: 'Cancel',
-      severity: 'secondary',
+      label: "Cancel",
+      severity: "secondary",
       outlined: true,
-      loading: isLoading
+      loading: isLoading.value
     },
     acceptProps: {
-      label: 'Remove',
-      severity: 'danger',
-      icon: 'pi pi-trash',
-      loading: isLoading
+      label: "Remove",
+      severity: "danger",
+      icon: "pi pi-trash",
+      loading: isLoading.value
     },
     accept: async () => {
-      const payload: PatientMedicalImagingDeletePayload = {
+      removeMutation({
         patient_id: patientMedicalImaging.patient_id,
         medical_imaging_id: patientMedicalImaging.medical_imaging_id
-      }
-
-      removeMutation(payload, {
+      }, {
         async onSuccess() {
-          successToast(toast, 'Record successfully removed.')
+          successToast(toast, "Record successfully removed.")
           await Promise.all([
-            resetQueries(),
-            fileDeleteFn(patientMedicalImaging.file_id),
+            refreshImagings(),
+            fileDeleteFn(patientMedicalImaging.file_id)
           ])
         },
         async onError(error: APIError) {
           errorToast(toast, `Failed to uploaded record: ${error.message}`)
-          await resetQueries()
+          await refreshImagings()
         }
       })
-    },
+    }
   })
-
 }
 
-const onSave = (): void => {
+const onSave = (medicalImaging?: MedicalImaging): void => {
+  selectedMedicalImagingDraft.value = medicalImaging
   patientMedicalImagingDialogForm.value?.toggleDialog()
 }
 
 const onPatientMedicalDialogFormSubmit = (event: PatientMedicalImagingDialogFormSubmitEvent): void => {
   confirm.require({
     message: `Are you sure you want to save "${event.medicalImaging?.name}" from this patient’s medical record?`,
-    header: `Save patient medical imaging confirmation`,
-    icon: 'pi pi-exclamation-triangle',
+    header: "Save patient medical imaging confirmation",
+    icon: "pi pi-exclamation-triangle",
     rejectProps: {
-      label: 'Cancel',
-      severity: 'secondary',
+      label: "Cancel",
+      severity: "secondary",
       outlined: true,
-      loading: isLoading
+      loading: isLoading.value
     },
     acceptProps: {
-      label: `Save patient medical imaging`,
-      severity: `info`,
-      icon: `pi pi-save`,
-      loading: isLoading
+      label: "Save patient medical imaging",
+      severity: "info",
+      icon: "pi pi-save",
+      loading: isLoading.value
     },
     accept: async () => {
       if (!patient.value) {
-        warningToast(toast, 'No selected patient')
+        warningToast(toast, "No selected patient")
         return
       }
 
@@ -315,17 +328,18 @@ const onPatientMedicalDialogFormSubmit = (event: PatientMedicalImagingDialogForm
 
       saveMutation(payload, {
         async onSuccess() {
-          successToast(toast, 'Record successfully uploaded.')
-          await resetQueries()
+          successToast(toast, "Record successfully uploaded.")
+          await refreshImagings()
+          selectedMedicalImagingDraft.value = undefined
           patientMedicalImagingDialogForm.value?.toggleDialog()
         },
         async onError(error: APIError) {
           errorToast(toast, `Failed to uploaded record: ${error.message}`)
           await Promise.all([
             fileDeleteFn(fileDTO.file_id),
-            resetQueries()
+            refreshImagings()
           ])
-        },
+        }
       })
     }
   })
@@ -343,14 +357,11 @@ const onExportToExcelThrottleFn = useThrottleFn(async (): Promise<void> => {
 }, defaultThrottle)
 
 const onShow = async (): Promise<void> => {
+  searchTerm.value = ""
   await refetch()
 }
 
-const resetQueries = async (): Promise<void> => {
-  await queryClient.prefetchQuery({queryKey: [PatientTanstackKey.PATIENT_MEDICAL_IMAGING]})
-}
-
 defineExpose<DialogExpose>({
-  toggleDialog: toggle,
+  toggleDialog: toggle
 })
 </script>

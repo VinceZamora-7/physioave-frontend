@@ -4,9 +4,9 @@
       <div class="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
         <div class="space-y-2">
           <p class="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Promos And Offers</p>
-          <h1 class="text-2xl font-semibold text-[rgb(var(--app-fg))]">Self Pay: Package Service Management</h1>
+          <h1 class="text-2xl font-semibold text-[rgb(var(--app-fg))]">{{ props.pageTitle }}</h1>
           <p class="max-w-3xl text-sm leading-6 opacity-80">
-            Manage the same service inventory used by single-service billing, reuse service bundles, and assemble package offers with session counts, evaluations, regular totals, and package prices.
+            {{ props.pageDescription }}
           </p>
         </div>
 
@@ -167,8 +167,8 @@
     <section class="app-section-card-comfy space-y-3">
       <div class="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
         <div class="space-y-1">
-          <h3 class="text-sm font-semibold">Bundled Services</h3>
-          <p class="text-xs opacity-70">Same bundled-services table and logic used in Self Pay: Single Service.</p>
+          <h3 class="text-sm font-semibold">{{ props.bundledSectionTitle }}</h3>
+          <p class="text-xs opacity-70">{{ props.bundledSectionDescription }}</p>
         </div>
         <Button label="Add New Bundle" icon="pi pi-plus" @click="openAddBundleDialog" />
       </div>
@@ -531,6 +531,21 @@ interface PackageService {
 
 const toast = useToast()
 const confirm = useConfirm()
+const props = withDefaults(defineProps<{
+  pageTitle?: string
+  pageDescription?: string
+  bundledSectionTitle?: string
+  bundledSectionDescription?: string
+  bundleStorageKey?: string
+  packageStorageKey?: string
+}>(), {
+  pageTitle: "Self Pay: Package Service Management",
+  pageDescription: "Manage the same service inventory used by single-service billing, reuse service bundles, and assemble package offers with session counts, evaluations, regular totals, and package prices.",
+  bundledSectionTitle: "Bundled Services",
+  bundledSectionDescription: "Same bundled-services table and logic used in Self Pay: Single Service.",
+  bundleStorageKey: BUNDLED_SERVICES_KEY,
+  packageStorageKey: PACKAGE_SERVICES_KEY,
+})
 const isLoading = ref(false)
 const dialogVisible = ref(false)
 const editingId = ref<string | null>(null)
@@ -804,7 +819,7 @@ const loadServices = (): void => {
 
 const loadBundles = (): void => {
   try {
-    allBundles.value = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
+    allBundles.value = readPromosStorageArray<BundledService>(props.bundleStorageKey)
   } catch {
     allBundles.value = []
   }
@@ -812,7 +827,7 @@ const loadBundles = (): void => {
 
 const loadPackages = (): void => {
   try {
-    allPackages.value = readPromosStorageArray<PackageService>(PACKAGE_SERVICES_KEY)
+    allPackages.value = readPromosStorageArray<PackageService>(props.packageStorageKey)
   } catch {
     allPackages.value = []
   }
@@ -975,7 +990,7 @@ const saveBundle = (): void => {
     })
   }
 
-  writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
+  writePromosStorageArray(props.bundleStorageKey, allBundles.value)
   bundleDialogVisible.value = false
   successToast(toast, editingBundleId.value ? "Bundle updated" : "Bundle added")
   refreshAll()
@@ -988,7 +1003,7 @@ const confirmDeleteBundle = (bundle: BundledService): void => {
     icon: "pi pi-exclamation-triangle",
     accept: () => {
       allBundles.value = allBundles.value.filter(entry => entry.id !== bundle.id)
-      writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
+      writePromosStorageArray(props.bundleStorageKey, allBundles.value)
       successToast(toast, "Bundle deleted")
       refreshAll()
     }
@@ -1112,7 +1127,7 @@ const savePackage = (): void => {
     allPackages.value.push(payload)
   }
 
-  writePromosStorageArray(PACKAGE_SERVICES_KEY, allPackages.value)
+  writePromosStorageArray(props.packageStorageKey, allPackages.value)
   packageDialogVisible.value = false
   successToast(toast, editingPackageId.value ? "Package updated" : "Package added")
   refreshAll()
@@ -1125,7 +1140,7 @@ const confirmDeletePackage = (item: PackageService): void => {
     icon: "pi pi-exclamation-triangle",
     accept: () => {
       allPackages.value = allPackages.value.filter(entry => entry.id !== item.id)
-      writePromosStorageArray(PACKAGE_SERVICES_KEY, allPackages.value)
+      writePromosStorageArray(props.packageStorageKey, allPackages.value)
       successToast(toast, "Package deleted")
       refreshAll()
     }

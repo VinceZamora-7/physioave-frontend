@@ -7,7 +7,7 @@ export const toUUID = (value: string): UUID => {
   return value as UUID
 }
 
-export const acceptedFileTypes: string = 'image/jpeg, image/png, application/pdf'
+export const acceptedFileTypes: string = '.jpg,.jpeg,.png,.pdf,image/jpeg,image/jpg,image/pjpeg,image/png,application/pdf'
 export const maxFileSize = Number(import.meta.env.VITE_MAX_FILE_SIZE_IN_BYTES)
 
 export enum Status {

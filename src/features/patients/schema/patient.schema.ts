@@ -27,10 +27,10 @@ export const patientSchema = z.strictObject({
   fb_link: z.preprocess(value => value === "" || value == null ? undefined : value, z.url("Must be a valid url").max(100, "Facebook link must be 100 characters and below only").optional()),
 
   // Address information
-  region: z.preprocess(value => value ?? undefined, regionSchema.optional()),
-  province: z.preprocess(value => value ?? undefined, provinceSchema.optional()),
-  city: z.preprocess(value => value ?? undefined, citySchema.optional()),
-  baranggay: z.preprocess(value => value ?? undefined, baranggaySchema.optional()),
+  region: z.preprocess(value => value ?? undefined, regionSchema),
+  province: z.preprocess(value => value ?? undefined, provinceSchema),
+  city: z.preprocess(value => value ?? undefined, citySchema),
+  baranggay: z.preprocess(value => value ?? undefined, baranggaySchema),
 
   details: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().max(255).optional())
 }).superRefine((value, ctx) => {
@@ -46,6 +46,15 @@ export type PatientFormState = z.infer<typeof patientSchema>
 
 export const patientHMOInformationSchema = z.strictObject({
   company_name: z.string("Company name is required").max(100, "Company name must be 100 characters and below only"),
+  member_id: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().max(100).optional()),
+  card_number: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().max(100).optional()),
+  plan_name: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().max(100).optional()),
+  principal_name: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().max(100).optional()),
+  relationship_to_principal: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().max(100).optional()),
+  approval_code: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().max(100).optional()),
+  validity_start_date: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD format").optional()),
+  validity_end_date: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD format").optional()),
+  notes: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().max(255).optional()),
   hmo: lookupSchema('HMO is required'),
   hmo_type: lookupSchema('HMO Type is required')
 })

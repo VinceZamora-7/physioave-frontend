@@ -1,9 +1,48 @@
 <template>
   <main class="app-page-shell space-y-5">
+    <section class="rounded-3xl border border-[#A91D8B]/25 bg-[linear-gradient(120deg,rgba(36,39,87,0.14),rgba(94,24,105,0.10),rgba(169,29,139,0.18))] shadow-[0_18px_40px_rgba(36,39,87,0.12)] p-4 sm:p-5">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div class="space-y-2">
+          <div class="text-lg font-semibold tracking-tight">Appointments Workbench</div>
+          <p class="max-w-2xl text-sm text-slate-600 dark:text-slate-300">
+            Manage clinic schedules, review same-day bookings, and jump straight into patient or billing follow-up from one place.
+          </p>
+          <div class="flex flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-300">
+            <span class="rounded-full border border-white/40 bg-white/55 px-3 py-1 dark:border-white/10 dark:bg-white/10">
+              Date: {{ selectedDateLabel }}
+            </span>
+            <span class="rounded-full border border-white/40 bg-white/55 px-3 py-1 dark:border-white/10 dark:bg-white/10">
+              Clinic: {{ selectedClinic?.name || "Select clinic schedule" }}
+            </span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <article class="rounded-2xl border border-white/40 bg-white/60 p-3 dark:border-white/10 dark:bg-white/10">
+            <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Appointments</div>
+            <div class="mt-1 text-2xl font-semibold">{{ totalElements }}</div>
+          </article>
+          <article class="rounded-2xl border border-white/40 bg-white/60 p-3 dark:border-white/10 dark:bg-white/10">
+            <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Day Bookings</div>
+            <div class="mt-1 text-2xl font-semibold">{{ dayBookings.length }}</div>
+          </article>
+          <article class="rounded-2xl border border-white/40 bg-white/60 p-3 dark:border-white/10 dark:bg-white/10">
+            <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Rescheduled</div>
+            <div class="mt-1 text-2xl font-semibold">{{ rescheduledAppointmentsCount }}</div>
+          </article>
+          <article class="rounded-2xl border border-white/40 bg-white/60 p-3 dark:border-white/10 dark:bg-white/10">
+            <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Needs Billing</div>
+            <div class="mt-1 text-2xl font-semibold">{{ billingAttentionCount }}</div>
+          </article>
+        </div>
+      </div>
+    </section>
+
     <section :class="sectionCardClass">
       <div class="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h3 :class="sectionTitleClass">Clinic Calendar</h3>
+          <p class="text-sm opacity-70">Pick a clinic schedule first to see valid booking days and booking dots for the month.</p>
           <span class="text-sm opacity-70">Selected: {{ selectedDateLabel }}</span>
         </div>
         <IftaLabel class="min-w-[260px]">
@@ -15,6 +54,7 @@
             fluid
             filter
             placeholder="Select clinic schedule"
+            :pt="ptSelect"
           />
           <label>Clinic Schedule</label>
         </IftaLabel>
@@ -43,17 +83,27 @@
 
     <section :class="sectionCardClass">
       <div class="flex items-center justify-between gap-2">
-        <h3 :class="sectionTitleClass">Appointments</h3>
+        <div>
+          <h3 :class="sectionTitleClass">Appointments</h3>
+          <p class="text-sm opacity-70">Filter the selected date, open full detail, and move quickly into reschedule or billing actions.</p>
+        </div>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
         <IftaLabel>
-          <InputText v-model="statusFilter" fluid placeholder="Status (optional)" />
+          <Select
+            v-model="statusFilter"
+            :options="appointmentStatusOptions"
+            showClear
+            fluid
+            placeholder="All statuses"
+            :pt="ptSelect"
+          />
           <label>Status filter</label>
         </IftaLabel>
         <div class="flex flex-wrap items-end gap-2 md:col-span-2 xl:col-span-3">
-          <Button label="Create Appointment" icon="pi pi-plus" @click="openCreateDialog" />
-          <Button label="Refresh Table" icon="pi pi-refresh" outlined @click="refreshAll" />
-          <Button label="Export CSV" icon="pi pi-download" severity="secondary" outlined @click="onExportCsv" />
+          <Button label="Create Appointment" icon="pi pi-plus" :pt="ptPrimaryBtn" @click="openCreateDialog" />
+          <Button label="Refresh Table" icon="pi pi-refresh" outlined :pt="ptOutlinedBtn" @click="refreshAll" />
+          <Button label="Export CSV" icon="pi pi-download" severity="secondary" outlined :pt="ptOutlinedBtn" @click="onExportCsv" />
         </div>
       </div>
 
@@ -66,16 +116,26 @@
           :first="(page - 1) * pageSize"
           :totalRecords="totalElements"
           :loading="isLoading"
+          size="small"
           @page="onPage"
           selectionMode="single"
           @rowSelect="onSelectRow"
         >
+          <template #empty>
+            <div class="py-8 text-center text-sm opacity-70">
+              No appointments found for the selected date and filter.
+            </div>
+          </template>
           <Column field="patient_name" header="Patient" />
           <Column field="doctor_name" header="Doctor" />
           <Column field="starts_at" header="Start">
             <template #body="{data}">{{ formatDateTime(data.starts_at) }}</template>
           </Column>
-          <Column field="appointment_status" header="Appt Status" />
+          <Column field="appointment_status" header="Appt Status">
+            <template #body="{data}">
+              <Tag :value="displayAppointmentStatus(data.appointment_status)" :severity="appointmentSeverity(data.appointment_status)" />
+            </template>
+          </Column>
           <Column field="billing_status" header="Billing">
             <template #body="{data}">
               <Tag :value="displayBillingStatus(data.billing_status)" :severity="billingSeverity(data.billing_status)" />
@@ -102,11 +162,24 @@
     </section>
 
     <section :class="sectionCardClass">
-      <h3 :class="sectionTitleClass">Calendar Day Bookings</h3>
+      <div>
+        <h3 :class="sectionTitleClass">Calendar Day Bookings</h3>
+        <p class="text-sm opacity-70">A quick same-day list so you can review what is actually booked on the selected date.</p>
+      </div>
       <DataTable :value="dayBookings" dataKey="id" size="small" selectionMode="single" @rowSelect="onSelectRow">
+        <template #empty>
+          <div class="py-6 text-center text-sm opacity-70">
+            No bookings found for this day.
+          </div>
+        </template>
         <Column field="patient_name" header="Patient" />
         <Column field="starts_at" header="Start">
           <template #body="{data}">{{ formatDateTime(data.starts_at) }}</template>
+        </Column>
+        <Column field="appointment_status" header="Status">
+          <template #body="{data}">
+            <Tag :value="displayAppointmentStatus(data.appointment_status)" :severity="appointmentSeverity(data.appointment_status)" />
+          </template>
         </Column>
         <Column field="billing_status" header="Billing">
           <template #body="{data}">
@@ -117,7 +190,18 @@
     </section>
 
     <section v-if="selectedDetail" :class="sectionCardClass">
-      <h3 :class="sectionTitleClass">Appointment Detail</h3>
+      <div class="rounded-2xl border border-[#A91D8B]/20 bg-[linear-gradient(120deg,rgba(36,39,87,0.08),rgba(94,24,105,0.06),rgba(169,29,139,0.10))] p-4">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 :class="sectionTitleClass">Appointment Detail</h3>
+            <p class="mt-1 text-sm opacity-70">Selected appointment summary and fast links to the related patient and billing records.</p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <Tag :value="displayAppointmentStatus(selectedDetail.appointment_status)" :severity="appointmentSeverity(selectedDetail.appointment_status)" />
+            <Tag :value="displayBillingStatus(selectedDetail.billing_status)" :severity="billingSeverity(selectedDetail.billing_status)" />
+          </div>
+        </div>
+      </div>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
         <div :class="detailCardClass">
           <div class="text-xs uppercase tracking-wide opacity-70">Patient</div>
@@ -132,19 +216,20 @@
           <div class="font-medium">{{ formatDateTime(selectedDetail.starts_at) }} - {{ formatDateTime(selectedDetail.ends_at) }}</div>
         </div>
         <div :class="detailCardClass">
-          <div class="text-xs uppercase tracking-wide opacity-70">Billing Status</div>
+          <div class="text-xs uppercase tracking-wide opacity-70">Appointment Status</div>
           <div class="mt-1">
-            <Tag :value="displayBillingStatus(selectedDetail.billing_status)" :severity="billingSeverity(selectedDetail.billing_status)" />
+            <Tag :value="displayAppointmentStatus(selectedDetail.appointment_status)" :severity="appointmentSeverity(selectedDetail.appointment_status)" />
           </div>
         </div>
       </div>
       <div class="flex flex-wrap gap-2 pt-1">
-        <Button label="Open Patient Record" icon="pi pi-user" outlined class="min-w-[190px]" @click="goToPatients" />
+        <Button label="Open Patient Record" icon="pi pi-user" outlined :pt="ptOutlinedBtn" class="min-w-[190px]" @click="goToPatients" />
         <Button
           :label="selectedDetail.billing_id ? 'Open Billing Record' : 'Create Billing'"
           icon="pi pi-receipt"
           severity="secondary"
           outlined
+          :pt="ptOutlinedBtn"
           class="min-w-[190px]"
           @click="goToBilling"
         />
@@ -189,7 +274,7 @@
       </div>
       <template #footer>
         <Button label="Cancel" text @click="rescheduleVisible = false" />
-        <Button label="Submit Reschedule" icon="pi pi-check" @click="submitReschedule" />
+        <Button label="Submit Reschedule" icon="pi pi-check" :pt="ptModalPrimaryBtn" @click="submitReschedule" />
       </template>
     </Dialog>
 
@@ -233,6 +318,18 @@
           <label>Billing Type</label>
         </IftaLabel>
 
+        <!-- HMO plan indicator for HMO_BILLING -->
+        <template v-if="createBillingType === 'HMO_BILLING'">
+          <Message v-if="createPatientHmoInfo" severity="info" :closable="false" size="small">
+            <span class="font-medium">{{ createPatientHmoInfo.hmo_name }}</span>
+            &nbsp;·&nbsp;{{ createPatientHmoInfo.hmo_type_name }}
+            &nbsp;·&nbsp;{{ createPatientHmoInfo.company_name }}
+          </Message>
+          <Message v-else-if="createPatient && !syncingCreateHmoRates" severity="warn" :closable="false" size="small">
+            No HMO information on file for this patient. Please register HMO via the Patients module first.
+          </Message>
+        </template>
+
         <div class="space-y-3 pt-2">
           <div class="flex items-center justify-between">
             <h4 class="font-semibold text-sm">Select Services</h4>
@@ -243,7 +340,7 @@
           <SelectButton
             v-if="createBillingType !== 'SELF_PAY_PACKAGE'"
             v-model="serviceMode"
-            :options="serviceModeOptions"
+            :options="visibleServiceModeOptions"
             optionLabel="label"
             optionValue="value"
             class="w-full"
@@ -442,8 +539,8 @@
                   <span class="truncate">{{ line.name }}</span>
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
-                  <span v-if="line.originalPrice && line.originalPrice > line.price" class="line-through opacity-50">{{ line.originalPrice.toLocaleString("en-PH", {style: "currency", currency: "PHP"}) }}</span>
-                  <span>{{ line.price.toLocaleString("en-PH", {style: "currency", currency: "PHP"}) }}</span>
+                  <span v-if="getCreateLineOriginalPrice(line) > getEffectiveCreateLinePrice(line)" class="line-through opacity-50">{{ getCreateLineOriginalPrice(line).toLocaleString("en-PH", {style: "currency", currency: "PHP"}) }}</span>
+                  <span>{{ getEffectiveCreateLinePrice(line).toLocaleString("en-PH", {style: "currency", currency: "PHP"}) }}</span>
                   <Button size="small" text severity="danger" icon="pi pi-trash" @click="removeServiceLine(idx)" />
                 </div>
               </div>
@@ -490,7 +587,7 @@
       </div>
       <template #footer>
         <Button label="Cancel" text @click="createVisible = false" />
-        <Button label="Create" icon="pi pi-check" @click="submitCreateAppointment" />
+        <Button label="Create" icon="pi pi-check" :pt="ptModalPrimaryBtn" @click="submitCreateAppointment" />
       </template>
     </Dialog>
   </main>
@@ -528,6 +625,13 @@ import type {Staff} from "@/features/staff/types/staff";
 import {pamsAPI} from "@/utils/axios-interceptor";
 import type {Pageable} from "@/models/paging";
 import type {OfferLookupDTO} from "@/models/global.model";
+import {patientHMOInformationService} from "@/services/patient-hmo-information.service";
+import type {PatientHMOInformation} from "@/models/hmo-information";
+import {hmoMachineRateService} from "@/services/hmo-machine-rate.service";
+import {hmoTechniqueRateService} from "@/services/hmo-technique-rate.service";
+import {hmoEvaluationRateService} from "@/services/hmo-evaluation-rate.service";
+import {hmoAddOnRateService} from "@/services/hmo-add-on-rate.service";
+import { ptModalPrimaryBtn, ptOutlinedBtn, ptPrimaryBtn, ptSelect } from "@/features/shared/table-header.styles";
 
 interface BillingPickerLookup {
   id: string | number
@@ -609,6 +713,7 @@ const billingTypeOptions = [
   {label: "HMO", value: "HMO_BILLING"},
   {label: "LGU", value: "LGU_BILLING"},
 ]
+const appointmentStatusOptions = ["Pending", "Rescheduled", "No show", "Cancelled", "Completed"]
 const selectedClinicId = ref<number>()
 const createPatient = ref<number>()
 const createDoctor = ref<number>()
@@ -627,6 +732,11 @@ const serviceModeOptions = [
   {label: "Individual", value: "individual"},
   {label: "Bundled", value: "bundled"},
 ]
+const visibleServiceModeOptions = computed(() =>
+  createBillingType.value === "HMO_BILLING"
+    ? serviceModeOptions.filter(option => option.value === "individual")
+    : serviceModeOptions
+)
 const selectedMachineId = ref<string>()
 const selectedTechniqueId = ref<string>()
 const selectedEvaluationId = ref<string>()
@@ -635,6 +745,22 @@ const selectedAddOnId = ref<string>()
 const selectedBundleId = ref<string>()
 const selectedPackageOfferId = ref<string>()
 const selectedServiceLines = ref<Array<{type: string; id: string; name: string; price: number; originalPrice?: number}>>([])
+const createPatientHmoId = ref<number | null>(null)
+const createPatientHmoInfo = ref<PatientHMOInformation | null>(null)
+const syncingCreateHmoRates = ref(false)
+const createPatientMachineRateMap = ref<Map<number, number>>(new Map())
+const createPatientTechniqueRateMap = ref<Map<number, number>>(new Map())
+const createPatientEvaluationRateMap = ref<Map<number, number>>(new Map())
+const createPatientAddOnMachineRateMap = ref<Map<number, number>>(new Map())
+const createPatientAddOnTechniqueRateMap = ref<Map<number, number>>(new Map())
+const createPatientAddOnHomeServiceRateMap = ref<Map<number, number>>(new Map())
+// Null = no HMO filter active; Set = only these IDs are covered by the HMO plan
+const createHmoMachineIds = ref<Set<number> | null>(null)
+const createHmoTechniqueIds = ref<Set<number> | null>(null)
+const createHmoEvaluationIds = ref<Set<number> | null>(null)
+const createHmoAddOnMachineIds = ref<Set<number> | null>(null)
+const createHmoAddOnTechniqueIds = ref<Set<number> | null>(null)
+const createHmoAddOnHomeServiceIds = ref<Set<number> | null>(null)
 const bookedDateKeys = ref<Set<string>>(new Set())
 const bookedMonthCache = ref<Map<string, Set<string>>>(new Map())
 const visibleMonth = ref<number>(new Date().getMonth())
@@ -652,25 +778,152 @@ const addOnTypeOptions = [
   { label: "Home Service", value: "add-on-home-service" as const },
 ]
 
+function filterServicesByHmoIds<T extends { id: string; type: string }>(services: T[], allowed: Set<number> | null): T[] {
+  if (createBillingType.value !== "HMO_BILLING" || allowed === null) return services
+  return services.filter(s => allowed.has(Number(s.id)))
+}
+
 const machineServices = computed(() =>
-  allSinglePayServices.value.filter(s => s.type === "machine")
+  filterServicesByHmoIds(allSinglePayServices.value.filter(s => s.type === "machine"), createHmoMachineIds.value)
 )
 
 const techniqueServices = computed(() =>
-  allSinglePayServices.value.filter(s => s.type === "technique")
+  filterServicesByHmoIds(allSinglePayServices.value.filter(s => s.type === "technique"), createHmoTechniqueIds.value)
 )
 
 const evaluationServices = computed(() =>
-  allSinglePayServices.value.filter(s => s.type === "evaluation")
+  filterServicesByHmoIds(allSinglePayServices.value.filter(s => s.type === "evaluation"), createHmoEvaluationIds.value)
 )
 
-const currentAddOnServices = computed(() =>
-  allSinglePayServices.value.filter(s => s.type === selectedAddOnType.value)
-)
+const currentAddOnServices = computed(() => {
+  const type = selectedAddOnType.value
+  const raw = allSinglePayServices.value.filter(s => s.type === type)
+  if (type === "add-on-machine")   return filterServicesByHmoIds(raw, createHmoAddOnMachineIds.value)
+  if (type === "add-on-technique") return filterServicesByHmoIds(raw, createHmoAddOnTechniqueIds.value)
+  return filterServicesByHmoIds(raw, createHmoAddOnHomeServiceIds.value)
+})
+
+const getEffectiveCreateLinePrice = (line: {type: string; id: string; price: number}): number => {
+  if (createBillingType.value !== "HMO_BILLING") return Number(line.price ?? 0)
+  const itemId = Number(line.id)
+  if (!Number.isFinite(itemId) || itemId <= 0) return Number(line.price ?? 0)
+
+  let hmoRate: number | undefined
+  if (line.type === "machine")             hmoRate = createPatientMachineRateMap.value.get(itemId)
+  else if (line.type === "technique")      hmoRate = createPatientTechniqueRateMap.value.get(itemId)
+  else if (line.type === "evaluation")     hmoRate = createPatientEvaluationRateMap.value.get(itemId)
+  else if (line.type === "add-on-machine") hmoRate = createPatientAddOnMachineRateMap.value.get(itemId)
+  else if (line.type === "add-on-technique") hmoRate = createPatientAddOnTechniqueRateMap.value.get(itemId)
+  else if (line.type === "add-on-home-service") hmoRate = createPatientAddOnHomeServiceRateMap.value.get(itemId)
+  return hmoRate ?? Number(line.price ?? 0)
+}
+
+const getCreateLineOriginalPrice = (line: {price: number; originalPrice?: number}): number =>
+  Number(line.originalPrice ?? line.price ?? 0)
 
 const subtotalFromServiceLines = computed(() =>
-  selectedServiceLines.value.reduce((sum, line) => sum + line.price, 0)
+  selectedServiceLines.value.reduce((sum, line) => sum + getEffectiveCreateLinePrice(line), 0)
 )
+
+const syncCreatePatientHmoRates = async (): Promise<void> => {
+  createPatientHmoId.value = null
+  createPatientHmoInfo.value = null
+  createPatientMachineRateMap.value = new Map()
+  createPatientTechniqueRateMap.value = new Map()
+  createPatientEvaluationRateMap.value = new Map()
+  createPatientAddOnMachineRateMap.value = new Map()
+  createPatientAddOnTechniqueRateMap.value = new Map()
+  createPatientAddOnHomeServiceRateMap.value = new Map()
+  createHmoMachineIds.value = null
+  createHmoTechniqueIds.value = null
+  createHmoEvaluationIds.value = null
+  createHmoAddOnMachineIds.value = null
+  createHmoAddOnTechniqueIds.value = null
+  createHmoAddOnHomeServiceIds.value = null
+
+  if (createBillingType.value !== "HMO_BILLING") return
+  const patientId = Number(createPatient.value)
+  if (!Number.isFinite(patientId) || patientId <= 0) return
+
+  syncingCreateHmoRates.value = true
+  try {
+  const hmoInfo = await patientHMOInformationService.getByPatientId(patientId)
+  createPatientHmoInfo.value = hmoInfo ?? null
+  const hmoId = Number(hmoInfo?.hmo_id)
+  if (!Number.isFinite(hmoId) || hmoId <= 0) return
+
+  createPatientHmoId.value = hmoId
+
+  const [machineRates, techniqueRates, evaluationRates, addOnRates] = await Promise.all([
+    hmoMachineRateService.getAll(hmoId),
+    hmoTechniqueRateService.getAll(hmoId),
+    hmoEvaluationRateService.getAll(hmoId),
+    hmoAddOnRateService.getAll(hmoId),
+  ])
+
+  const machineMap = new Map<number, number>()
+  const machineIds = new Set<number>()
+  for (const r of machineRates ?? []) {
+    const id = Number(r.machine_id); const price = Number(r.rate)
+    if (Number.isFinite(id) && id > 0 && Number.isFinite(price) && price >= 0) {
+      machineMap.set(id, price); machineIds.add(id)
+    }
+  }
+  createPatientMachineRateMap.value = machineMap
+  createHmoMachineIds.value = machineIds
+
+  const techniqueMap = new Map<number, number>()
+  const techniqueIds = new Set<number>()
+  for (const r of techniqueRates ?? []) {
+    const id = Number(r.technique_id); const price = Number(r.rate)
+    if (Number.isFinite(id) && id > 0 && Number.isFinite(price) && price >= 0) {
+      techniqueMap.set(id, price); techniqueIds.add(id)
+    }
+  }
+  createPatientTechniqueRateMap.value = techniqueMap
+  createHmoTechniqueIds.value = techniqueIds
+
+  const evaluationMap = new Map<number, number>()
+  const evaluationIds = new Set<number>()
+  for (const r of evaluationRates ?? []) {
+    const id = Number(r.evaluation_id); const price = Number(r.rate)
+    if (Number.isFinite(id) && id > 0 && Number.isFinite(price) && price >= 0) {
+      evaluationMap.set(id, price); evaluationIds.add(id)
+    }
+  }
+  createPatientEvaluationRateMap.value = evaluationMap
+  createHmoEvaluationIds.value = evaluationIds
+
+  const addOnMachineMap = new Map<number, number>()
+  const addOnMachineIds = new Set<number>()
+  const addOnTechniqueMap = new Map<number, number>()
+  const addOnTechniqueIds = new Set<number>()
+  const addOnHomeServiceMap = new Map<number, number>()
+  const addOnHomeServiceIds = new Set<number>()
+  for (const r of addOnRates ?? []) {
+    const price = Number(r.rate)
+    if (!Number.isFinite(price) || price < 0) continue
+    if (r.add_on_type === "ADD_ON_MACHINE" && r.add_on_machine_id != null) {
+      const id = Number(r.add_on_machine_id)
+      if (id > 0) { addOnMachineMap.set(id, price); addOnMachineIds.add(id) }
+    } else if (r.add_on_type === "ADD_ON_TECHNIQUE" && r.add_on_technique_id != null) {
+      const id = Number(r.add_on_technique_id)
+      if (id > 0) { addOnTechniqueMap.set(id, price); addOnTechniqueIds.add(id) }
+    } else if (r.add_on_type === "ADD_ON_HOME_SERVICE" && r.add_on_home_service_id != null) {
+      const id = Number(r.add_on_home_service_id)
+      if (id > 0) { addOnHomeServiceMap.set(id, price); addOnHomeServiceIds.add(id) }
+    }
+  }
+  createPatientAddOnMachineRateMap.value = addOnMachineMap
+  createHmoAddOnMachineIds.value = addOnMachineIds
+  createPatientAddOnTechniqueRateMap.value = addOnTechniqueMap
+  createHmoAddOnTechniqueIds.value = addOnTechniqueIds
+  createPatientAddOnHomeServiceRateMap.value = addOnHomeServiceMap
+  createHmoAddOnHomeServiceIds.value = addOnHomeServiceIds
+  } finally {
+    syncingCreateHmoRates.value = false
+  }
+}
 
 const activeBundledServices = computed(() =>
   allBundledServices.value.filter(b => b.status !== "Inactive")
@@ -682,12 +935,12 @@ const activePackageServiceOffers = computed(() =>
 
 const availableServiceCategories = computed(() => {
   const categories = [
-    { type: "machine", label: "Machines", services: allSinglePayServices.value.filter(s => s.type === "machine") },
-    { type: "technique", label: "Techniques", services: allSinglePayServices.value.filter(s => s.type === "technique") },
-    { type: "evaluation", label: "Evaluations", services: allSinglePayServices.value.filter(s => s.type === "evaluation") },
-    { type: "add-on-machine", label: "Add-ons (Machine)", services: allSinglePayServices.value.filter(s => s.type === "add-on-machine") },
-    { type: "add-on-technique", label: "Add-ons (Technique)", services: allSinglePayServices.value.filter(s => s.type === "add-on-technique") },
-    { type: "add-on-home-service", label: "Add-ons (Home Service)", services: allSinglePayServices.value.filter(s => s.type === "add-on-home-service") },
+    { type: "machine", label: "Machines", services: filterServicesByHmoIds(allSinglePayServices.value.filter(s => s.type === "machine"), createHmoMachineIds.value) },
+    { type: "technique", label: "Techniques", services: filterServicesByHmoIds(allSinglePayServices.value.filter(s => s.type === "technique"), createHmoTechniqueIds.value) },
+    { type: "evaluation", label: "Evaluations", services: filterServicesByHmoIds(allSinglePayServices.value.filter(s => s.type === "evaluation"), createHmoEvaluationIds.value) },
+    { type: "add-on-machine", label: "Add-ons (Machine)", services: filterServicesByHmoIds(allSinglePayServices.value.filter(s => s.type === "add-on-machine"), createHmoAddOnMachineIds.value) },
+    { type: "add-on-technique", label: "Add-ons (Technique)", services: filterServicesByHmoIds(allSinglePayServices.value.filter(s => s.type === "add-on-technique"), createHmoAddOnTechniqueIds.value) },
+    { type: "add-on-home-service", label: "Add-ons (Home Service)", services: filterServicesByHmoIds(allSinglePayServices.value.filter(s => s.type === "add-on-home-service"), createHmoAddOnHomeServiceIds.value) },
   ]
   return categories.filter(cat => cat.services.length > 0)
 })
@@ -703,6 +956,13 @@ const selectedDateIso = computed(() => formatLocalDateKey(calendarDate.value))
 const sectionCardClass = "app-section-card-comfy space-y-4"
 const sectionTitleClass = "app-section-title"
 const detailCardClass = "rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3"
+const rescheduledAppointmentsCount = computed(() => appointments.value.filter(item => Number(item.reschedule_count ?? 0) > 0).length)
+const billingAttentionCount = computed(() =>
+  appointments.value.filter(item => {
+    const status = displayBillingStatus(item.billing_status)
+    return status !== "PAID"
+  }).length
+)
 const selectedClinic = computed(() => clinicOptions.value.find(clinic => clinic.id === selectedClinicId.value))
 const selectedDateLabel = computed(() =>
   calendarDate.value.toLocaleDateString("en-PH", {
@@ -739,6 +999,14 @@ const billingSeverity = (status: string): "success" | "warn" | "danger" | "info"
   if (normalized === "VOID") return "danger"
   return "info"
 }
+const appointmentSeverity = (status?: string): "success" | "warn" | "danger" | "info" => {
+  const normalized = (status || "PENDING").trim().toUpperCase()
+  if (normalized === "COMPLETED") return "success"
+  if (normalized === "RESCHEDULED") return "warn"
+  if (normalized === "CANCELLED" || normalized === "NO SHOW" || normalized === "NO_SHOW") return "danger"
+  return "info"
+}
+const displayAppointmentStatus = (status?: string): string => (status?.trim() || "Pending").toUpperCase()
 const displayBillingStatus = (status?: string): string => (status?.trim() || "UNBILLED").toUpperCase()
 
 const formatDateTime = (value: string): string => new Date(value).toLocaleString()
@@ -829,6 +1097,11 @@ const selectPackageOffer = (packageId: string): void => {
 }
 
 const selectBundle = (bundleId: string): void => {
+  if (createBillingType.value === "HMO_BILLING") {
+    selectedBundleId.value = undefined
+    return
+  }
+
   const bundle = allBundledServices.value.find(b => b.id === bundleId)
   if (!bundle) return
 
@@ -1153,6 +1426,21 @@ const openCreateDialog = async (): Promise<void> => {
   selectedPackageOfferId.value = undefined
   serviceMode.value = "individual"
   selectedServiceLines.value = []
+  createPatientHmoId.value = null
+  createPatientHmoInfo.value = null
+  syncingCreateHmoRates.value = false
+  createPatientMachineRateMap.value = new Map()
+  createPatientTechniqueRateMap.value = new Map()
+  createPatientEvaluationRateMap.value = new Map()
+  createPatientAddOnMachineRateMap.value = new Map()
+  createPatientAddOnTechniqueRateMap.value = new Map()
+  createPatientAddOnHomeServiceRateMap.value = new Map()
+  createHmoMachineIds.value = null
+  createHmoTechniqueIds.value = null
+  createHmoEvaluationIds.value = null
+  createHmoAddOnMachineIds.value = null
+  createHmoAddOnTechniqueIds.value = null
+  createHmoAddOnHomeServiceIds.value = null
   loadSinglePayServices()
   const base = alignToClinicStart(findNextAllowedDate(new Date(calendarDate.value)))
   createStart.value = base
@@ -1185,8 +1473,8 @@ const submitCreateAppointment = async (): Promise<void> => {
       type: line.type,
       name: line.name,
       quantity: 1,
-      price: line.price,
-      originalPrice: line.originalPrice
+      price: getEffectiveCreateLinePrice(line),
+      originalPrice: getCreateLineOriginalPrice(line)
     }))),
     notes: createBillingNotes.value.trim() || undefined,
   }
@@ -1370,6 +1658,17 @@ watch(createDoctor, (doctorId) => {
   }
 })
 
+watch(createBillingType, (billingType) => {
+  if (billingType !== "HMO_BILLING") return
+  serviceMode.value = "individual"
+  selectedBundleId.value = undefined
+  selectedServiceLines.value = selectedServiceLines.value.filter(line => line.type !== "bundle")
+})
+
+watch([createPatient, createBillingType], async () => {
+  await syncCreatePatientHmoRates()
+})
+
 onMounted(async () => {
   syncRoleFromStorage()
   await loadCreateLookups()
@@ -1377,5 +1676,4 @@ onMounted(async () => {
   await refreshAll()
 })
 </script>
-
 

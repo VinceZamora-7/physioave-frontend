@@ -1,5 +1,14 @@
 export interface PatientHMOInformationRequest {
   company_name: string
+  member_id?: string
+  card_number?: string
+  plan_name?: string
+  principal_name?: string
+  relationship_to_principal?: string
+  approval_code?: string
+  validity_start_date?: string
+  validity_end_date?: string
+  notes?: string
   hmo_id: number
   hmo_type_id: number
 }

@@ -69,6 +69,7 @@ export interface PatientMedicalImagingDialogFormProps {
   isLoading: boolean
   header: string
   medicalImagings: MedicalImaging[]
+  selectedMedicalImaging?: MedicalImaging
 }
 
 export interface PatientMedicalImagingDialogFormSubmitEvent {

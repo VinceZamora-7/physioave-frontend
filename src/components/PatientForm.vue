@@ -215,7 +215,13 @@
                   placeholder="Add doctor not on list"
                   @keyup.enter="addDoctorReferral($field)"
                 />
-                <Button type="button" label="Add" icon="pi pi-plus" @click="addDoctorReferral($field)" />
+                <Button
+                  type="button"
+                  label="Add"
+                  icon="pi pi-plus"
+                  :pt="ptModalPrimaryBtn"
+                  @click="addDoctorReferral($field)"
+                />
               </div>
               <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
             </IftaLabel>
@@ -319,7 +325,7 @@
                   <span v-else>{{ slotProps.placeholder }}</span>
                 </template>
               </Select>
-              <label for="region">Region (Optional)</label>
+              <label for="region">Region</label>
               <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
             </IftaLabel>
           </FormField>
@@ -338,7 +344,7 @@
                 :filter-fields="['name']"
                 @value-change="onProvinceChange"
               />
-              <label for="province">Province (Optional)</label>
+              <label for="province">Province</label>
               <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
             </IftaLabel>
           </FormField>
@@ -357,7 +363,7 @@
                 :filter-fields="['name']"
                 @value-change="onCityChange"
               />
-              <label for="city">City (Optional)</label>
+              <label for="city">City</label>
               <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
             </IftaLabel>
           </FormField>
@@ -375,7 +381,7 @@
                 :filter="true"
                 :filter-fields="['name']"
               />
-              <label for="baranggay">Barangay (Optional)</label>
+              <label for="baranggay">Barangay</label>
               <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
             </IftaLabel>
           </FormField>
@@ -403,6 +409,7 @@
           :label="buttonProps.label"
           :icon="buttonProps.icon"
           :severity="buttonProps.severity"
+          :pt="ptModalPrimaryBtn"
           type="submit"
         />
       </div>
@@ -425,6 +432,7 @@ import Message from "primevue/message";
 import Select from "primevue/select";
 import InputMask from "primevue/inputmask";
 import Checkbox from "primevue/checkbox";
+import { ptModalPrimaryBtn } from "@/features/shared/table-header.styles";
 import type { GooglePlaceAddress } from "@/components/GooglePlacesAutocomplete.vue";
 import GooglePlacesAutocomplete from "@/components/GooglePlacesAutocomplete.vue";
 import type {
