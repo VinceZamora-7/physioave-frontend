@@ -9,6 +9,7 @@ export interface AuthMe {
   role_id: number
   role_name: string
   is_active: boolean
+  permissions: string[]
 }
 
 interface AuthMeService {

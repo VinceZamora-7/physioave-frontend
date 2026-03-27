@@ -6,7 +6,7 @@
           <p class="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Promos And Offers</p>
           <h1 class="text-2xl font-semibold text-[rgb(var(--app-fg))]">Single Pay: Single Service Management</h1>
           <p class="max-w-3xl text-sm leading-6 opacity-80">
-            Manage individual service items (machines, techniques, evaluations, add-ons) with prices. These items are available for selection when creating Single Pay: Single Service appointments and billings.
+            Manage individual service items (machines, techniques, evaluations, add-ons) with prices. These items are available for selection when creating Single Pay: Single Service appointments and billings. Home Service add-ons created here will automatically switch an appointment to Home Care when selected.
           </p>
         </div>
 
@@ -151,9 +151,14 @@
         </IftaLabel>
 
         <IftaLabel>
-          <InputText v-model="formData.name" fluid placeholder="Enter service name" />
+          <InputText v-model="formData.name" fluid :placeholder="serviceNamePlaceholder" />
           <label>Service Name</label>
         </IftaLabel>
+        <small class="block opacity-70">{{ serviceTypeGuidance }}</small>
+
+        <Message v-if="formData.type === 'add-on-home-service'" severity="info" :closable="false">
+          Use this for travel-based Home Service add-ons like <span class="font-medium">Add-on: Home Service - 1 km</span>. Appointments will treat this type as Home Care automatically.
+        </Message>
 
         <IftaLabel>
           <InputNumber
@@ -303,6 +308,7 @@ import Dialog from "primevue/dialog"
 import IftaLabel from "primevue/iftalabel"
 import InputNumber from "primevue/inputnumber"
 import InputText from "primevue/inputtext"
+import Message from "primevue/message"
 import Select from "primevue/select"
 import MultiSelect from "primevue/multiselect"
 import Tag from "primevue/tag"
@@ -384,7 +390,8 @@ const typeOptions = [
   { label: "Machine & Modalities", value: "machine" },
   { label: "Technique", value: "technique" },
   { label: "Evaluations", value: "evaluation" },
-  { label: "Add-Ons", value: "add-on-machine" }
+  { label: "Add-ons", value: "add-on-machine" },
+  { label: "Add-on (Home Service)", value: "add-on-home-service" }
 ]
 
 const formData = reactive<{
@@ -402,14 +409,29 @@ const formData = reactive<{
 const asCurrency = (value: number): string =>
   Number(value ?? 0).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
 
+const serviceNamePlaceholder = computed(() => {
+  if (formData.type === "add-on-home-service") return "Example: Add-on: Home Service - 1 km"
+  return "Enter service name"
+})
+
+const serviceTypeGuidance = computed(() => {
+  if (formData.type === "add-on-home-service") {
+    return "Home Service add-ons are used for travel tiers and will mark Appointments as Home Care when selected."
+  }
+  if (formData.type === "add-on-machine") {
+    return "Use this for regular add-ons that should stay under the Add-ons picker."
+  }
+  return "Choose a clear service name so staff can find it quickly during booking and billing."
+})
+
 const formatType = (type: ServiceType): string => {
   const typeMap: Record<ServiceType, string> = {
     machine: "Machine",
     technique: "Technique",
     evaluation: "Evaluation",
-    "add-on-machine": "Add-Ons",
-    "add-on-technique": "Add-Ons",
-    "add-on-home-service": "Add-Ons"
+    "add-on-machine": "Add-ons",
+    "add-on-technique": "Add-ons",
+    "add-on-home-service": "Add-on (Home Service)"
   }
   return typeMap[type] || type
 }
@@ -421,7 +443,7 @@ const getTypeSeverity = (type: ServiceType): string => {
     evaluation: "warning",
     "add-on-machine": "secondary",
     "add-on-technique": "secondary",
-    "add-on-home-service": "secondary"
+    "add-on-home-service": "warn"
   }
   return severityMap[type] || "info"
 }
@@ -448,7 +470,11 @@ const openAddDialog = (): void => {
 
 const openEditDialog = (service: SingleService): void => {
   editingId.value = service.id
-  formData.type = service.type.startsWith("add-on") ? "add-on-machine" : service.type
+  formData.type = service.type === "add-on-home-service"
+    ? "add-on-home-service"
+    : service.type.startsWith("add-on")
+      ? "add-on-machine"
+      : service.type
   formData.name = service.name
   formData.price = service.price
   formData.status = service.status

@@ -49,10 +49,18 @@
       </template>
     </Column>
 
-    <Column header="Role" field="role_name" :sortable="true">
+    <Column header="Job Title" field="role_name" :sortable="true">
       <template #body="slotProps">
         <SkeletonLoader :loading="isLoading">
           {{ slotProps.data?.role_name }}
+        </SkeletonLoader>
+      </template>
+    </Column>
+
+    <Column header="Specialty" field="specialty_tag_name" :sortable="true">
+      <template #body="slotProps">
+        <SkeletonLoader :loading="isLoading">
+          {{ slotProps.data?.specialty_tag_name || "N/A" }}
         </SkeletonLoader>
       </template>
     </Column>
@@ -78,7 +86,7 @@
 
     <template #footer>
       <div class="w-full overflow-x-auto">
-        <div class="min-w-[920px] lg:min-w-0">
+        <div class="min-w-[1080px] lg:min-w-0">
           <Paginator
             current-page-report-template="Showing {first} to {last} of {totalRecords} records (Page {currentPage} of {totalPages})"
             template="CurrentPageReport FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown JumpToPageInput"

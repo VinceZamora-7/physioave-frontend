@@ -14,7 +14,9 @@
         :isLoading="isLoading"
         :page="page"
         :pageSize="pageSize"
+        :selectedClinic="selectedClinic"
         :rowPerPageOptions="rowPerPageOptions"
+        @selectClinic="selectedClinic = $event"
         @pageChange="onPageChangeDebounceFn($event, refetch)"
       >
         <template #header>
@@ -42,13 +44,18 @@
         </template>
       </ClinicsTable>
 
+      <ClinicTreatmentAreasCard
+        :selectedClinic="selectedClinic"
+        :canManage="canManageTreatmentAreas"
+      />
+
       <ClinicEditorDialog ref="editor" />
     </section>
   </main>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue"
+import { computed, ref, watch } from "vue"
 import Message from "primevue/message"
 import { useConfirm, useToast } from "primevue"
 import { useQueryClient } from "@tanstack/vue-query"
@@ -60,6 +67,7 @@ import ClinicsTable from "@/features/clinics/components/ClinicsTable.vue"
 import ClinicsTableHeader from "@/features/clinics/components/ClinicsTableHeader.vue"
 import ClinicRowActionsMenu from "@/features/clinics/components/ClinicRowActionsMenu.vue"
 import ClinicEditorDialog from "@/features/clinics/components/ClinicEditorDialog.vue"
+import ClinicTreatmentAreasCard from "@/features/clinics/components/ClinicTreatmentAreasCard.vue"
 
 import { clinicTanstackService } from "@/features/clinics/queries/clinic.tanstack.service"
 import { useIsLoading } from "@/composables/tanstack-loader.composable"
@@ -93,6 +101,8 @@ const queryClient = useQueryClient()
 const useClinicStore = clinicStore()
 
 const editor = ref<InstanceType<typeof ClinicEditorDialog> | null>(null)
+const selectedClinic = ref<Clinic>()
+const roleName = ref("")
 
 // loading states
 const isExportLoading = useIsLoading(ClinicTanstackKey.CLINICS_EXPORT)
@@ -116,6 +126,8 @@ const requestParams = computed(
     }) satisfies PageableRequest
 )
 
+const canManageTreatmentAreas = computed(() => roleName.value === "Owner")
+
 // query
 const { data: clinics, isError, error, refetch } = clinicTanstackService.getAll(requestParams)
 useRefreshToken<Pageable<Clinic> | undefined>(error, refetch)
@@ -133,6 +145,25 @@ watchDebounced(
 const resetFilters = () => {
   selectedSearch.value = undefined
   selectedStatus.value = defaultStatus
+}
+
+const syncRoleFromStorage = () => {
+  const candidateKeys = ["auth_user", "currentUser", "user", "profile", "loggedInUser"]
+  for (const key of candidateKeys) {
+    const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key)
+    if (!raw) continue
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>
+      const role = parsed.role_name ?? parsed.role ?? parsed.userRole ?? parsed.primaryRole
+      if (typeof role === "string" && role.trim()) {
+        roleName.value = role.trim()
+        return
+      }
+    } catch {
+      // ignore malformed storage value
+    }
+  }
+  roleName.value = ""
 }
 
 // open dialog
@@ -205,5 +236,21 @@ const onExportToExcelThrottleFn = useThrottleFn(async () => {
   if (!response) return
   exportToExcel(response)
 }, defaultThrottle)
-</script>
 
+watch(
+  () => clinics.value?.content ?? [],
+  (items) => {
+    if (!items.length) {
+      selectedClinic.value = undefined
+      return
+    }
+
+    const currentClinicId = selectedClinic.value?.id
+    const matchedClinic = currentClinicId ? items.find((clinic) => clinic.id === currentClinicId) : undefined
+    selectedClinic.value = matchedClinic ?? items[0]
+  },
+  { immediate: true }
+)
+
+syncRoleFromStorage()
+</script>

@@ -70,6 +70,31 @@
 
       <div class="app-table-header-actions">
         <Button
+          v-if="canManageRoles"
+          label="Specialties"
+          icon="pi pi-bookmark"
+          severity="secondary"
+          variant="outlined"
+          :loading="isLoading"
+          class="w-full sm:w-auto"
+          :pt="ptOutlinedBtn"
+          @click="emit('manageSpecialties')"
+        />
+
+        <Button
+          v-if="canManageRoles"
+          label="Job Titles & Permissions"
+          icon="pi pi-shield"
+          severity="secondary"
+          variant="outlined"
+          :loading="isLoading"
+          class="w-full sm:w-auto"
+          :pt="ptOutlinedBtn"
+          @click="emit('manageRoles')"
+        />
+
+        <Button
+          v-if="canCreateStaff"
           label="Save Staff"
           icon="pi pi-plus"
           severity="primary"
@@ -114,6 +139,8 @@ const props = defineProps<{
   clinics: Lookup[]
   isLoading: boolean
   isExportLoading: boolean
+  canCreateStaff: boolean
+  canManageRoles: boolean
   selectedSearch?: string
   selectedStatus: Status
   selectedClinic?: Lookup
@@ -125,6 +152,8 @@ const emit = defineEmits<{
   (e: "update:selectedClinic", v: Lookup | undefined): void
   (e: "reset"): void
   (e: "save"): void
+  (e: "manageSpecialties"): void
+  (e: "manageRoles"): void
   (e: "export"): void
 }>()
 

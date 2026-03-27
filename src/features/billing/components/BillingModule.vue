@@ -41,6 +41,37 @@
         </Message>
       </template>
 
+      <template v-if="form.billing_type === 'LGU_BILLING'">
+        <Message v-if="loadingLguBudgetSummary" severity="secondary" :closable="false" size="small">
+          Loading active LGU fund summary...
+        </Message>
+        <Message v-else-if="activeLguBudgetSummary" severity="info" :closable="false" size="small">
+          <span class="font-medium">{{ activeLguBudgetSummary.program_name }}</span>
+          &nbsp;·&nbsp;{{ activeLguBudgetSummary.period_year }}-{{ String(activeLguBudgetSummary.period_month).padStart(2, "0") }}
+          &nbsp;·&nbsp;Remaining {{ asCurrency(activeLguBudgetSummary.remaining_amount) }}
+          <template v-if="lguProjectedRemainingAfterSave != null">
+            &nbsp;·&nbsp;After this billing {{ asCurrency(lguProjectedRemainingAfterSave) }}
+          </template>
+        </Message>
+        <Message
+          v-if="activeLguBudgetSummary && lguAvailableBeforeSave != null && editingLguReservedAmount > 0"
+          severity="secondary"
+          :closable="false"
+          size="small"
+        >
+          Available for this edited billing: {{ asCurrency(lguAvailableBeforeSave) }}
+        </Message>
+        <Message v-else-if="lguBudgetSummaryError" severity="warn" :closable="false" size="small">
+          {{ lguBudgetSummaryError }}
+        </Message>
+        <Message v-else-if="form.patient_id" severity="warn" :closable="false" size="small">
+          No active LGU budget period is configured for this patient/appointment yet. LGU billing cannot be saved until a budget period is opened.
+        </Message>
+        <Message v-if="lguWillExceedRemainingFund" severity="error" :closable="false" size="small">
+          This billing is higher than the remaining LGU fund. Saving will be blocked until enough budget is available.
+        </Message>
+      </template>
+
       <section class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3 space-y-3">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <h4 class="text-sm font-semibold">Line Items</h4>
@@ -243,15 +274,25 @@
           <label>Payment Type</label>
         </IftaLabel>
 
-        <IftaLabel>
+        <IftaLabel v-if="isSelfPay">
           <InputNumber v-model="form.amount_paid" mode="currency" currency="PHP" locale="en-PH" fluid />
           <label>Amount Paid</label>
         </IftaLabel>
 
-        <IftaLabel>
+        <IftaLabel v-if="isSelfPay">
           <InputNumber v-model="form.amount_tendered" mode="currency" currency="PHP" locale="en-PH" fluid />
           <label>Amount Tendered</label>
         </IftaLabel>
+
+        <div
+          v-if="!isSelfPay"
+          class="md:col-span-2 xl:col-span-2 rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3 text-sm"
+        >
+          <div class="text-xs uppercase tracking-wide opacity-60">Claim Workflow</div>
+          <p class="mt-2 opacity-75">
+            {{ formClaimWorkflowMessage }}
+          </p>
+        </div>
       </div>
 
       <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3">
@@ -374,7 +415,39 @@
             <label>Billing Status</label>
           </IftaLabel>
 
+          <IftaLabel>
+            <DatePicker
+              v-model="tableFilterDateFrom"
+              fluid
+              showIcon
+              iconDisplay="input"
+              :manualInput="false"
+              dateFormat="yy-mm-dd"
+            />
+            <label>Created From</label>
+          </IftaLabel>
 
+          <IftaLabel>
+            <DatePicker
+              v-model="tableFilterDateTo"
+              fluid
+              showIcon
+              iconDisplay="input"
+              :manualInput="false"
+              dateFormat="yy-mm-dd"
+            />
+            <label>Created To</label>
+          </IftaLabel>
+
+          <IftaLabel>
+            <InputNumber v-model="tableFilterMinDue" :min="0" fluid />
+            <label>Min Due</label>
+          </IftaLabel>
+
+          <IftaLabel>
+            <InputNumber v-model="tableFilterMaxDue" :min="0" fluid />
+            <label>Max Due</label>
+          </IftaLabel>
         </div>
 
         <label class="inline-flex items-center gap-2 text-sm">
@@ -382,10 +455,31 @@
           <span>Outstanding balances only</span>
         </label>
 
-        <div class="text-xs opacity-60">Showing {{ filteredBillings.length }} of {{ billings.length }} billing record{{ billings.length === 1 ? '' : 's' }}</div>
+      <div class="text-xs opacity-60">Showing {{ filteredBillings.length }} of {{ billings.length }} billing record{{ billings.length === 1 ? '' : 's' }}</div>
+
+      <div class="flex flex-wrap gap-2">
+        <Button
+          label="Export Selected Tickets PDF"
+          icon="pi pi-file-pdf"
+          severity="secondary"
+          outlined
+          :loading="exportingEncounterTicketsPdf"
+          :disabled="selectedBillingRows.length === 0"
+          @click="exportSelectedEncounterTicketsPdf"
+        />
+        <Button
+          label="Export Filtered Tickets PDF"
+          icon="pi pi-print"
+          outlined
+          :loading="exportingEncounterTicketsPdf"
+          :disabled="filteredBillings.length === 0"
+          @click="exportFilteredEncounterTicketsPdf"
+        />
+      </div>
       </div>
 
-      <DataTable :value="filteredBillings" dataKey="id" paginator :rows="10" :loading="isLoading">
+      <DataTable v-model:selection="selectedBillingRows" :value="filteredBillings" dataKey="id" paginator :rows="10" :loading="isLoading">
+        <Column selectionMode="multiple" headerStyle="width: 3rem" />
         <Column field="created_at" header="Created" style="width: 160px" />
         <Column field="patient_name" header="Patient" style="width: 150px" />
         <Column field="billing_type" header="Billing Type" style="width: 160px" />
@@ -409,32 +503,236 @@
       </DataTable>
     </section>
 
-    <Dialog v-model:visible="billingDetailsVisible" header="Full Billing Information" modal :style="{width: '760px'}">
+    <Dialog
+      v-model:visible="billingDetailsVisible"
+      header="Billing Detail"
+      modal
+      :style="{width: '920px'}"
+      :breakpoints="{'1280px':'95vw','768px':'98vw'}"
+    >
       <div v-if="selectedBillingDetail" class="space-y-4">
-        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3 text-sm">
-          <div><span class="opacity-60">Patient:</span> <strong>{{ selectedBillingDetail.patient_name || selectedBillingDetail.patient_id }}</strong></div>
-          <div><span class="opacity-60">Appointment ID:</span> <strong>{{ selectedBillingDetail.appointment_id || '—' }}</strong></div>
-          <div><span class="opacity-60">Billing Type:</span> <strong>{{ selectedBillingDetail.billing_type }}</strong></div>
-          <div><span class="opacity-60">Payment Type:</span> <strong>{{ selectedBillingDetail.payment_reference || '—' }}</strong></div>
-          <div><span class="opacity-60">Created:</span> <strong>{{ selectedBillingDetail.created_at }}</strong></div>
-          <div><span class="opacity-60">Label:</span> <strong>{{ selectedBillingDetail.service_name || '—' }}</strong></div>
+        <div class="rounded-2xl border border-[#A91D8B]/20 bg-[linear-gradient(120deg,rgba(36,39,87,0.08),rgba(94,24,105,0.06),rgba(169,29,139,0.10))] p-4">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h3 class="text-lg font-semibold text-[rgb(var(--app-fg))]">Billing Detail</h3>
+              <p class="mt-1 text-sm opacity-70">
+                Linked billing summary for the selected appointment route.
+              </p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <Tag :value="displayBillingType(selectedBillingDetail.billing_type)" severity="info" />
+              <Tag :value="displayBillingStatus(selectedBillingDetail.billing_status)" :severity="billingStatusSeverity(selectedBillingDetail.billing_status)" />
+              <Tag v-if="derivePaymentType(selectedBillingDetail)" :value="derivePaymentType(selectedBillingDetail)" severity="contrast" />
+            </div>
+          </div>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <Button
+              label="Print Receipt Copy"
+              icon="pi pi-print"
+              outlined
+              @click="printSelectedBillingReceipt"
+            />
+            <Button
+              v-if="canEditReceipt"
+              label="Edit Receipt"
+              icon="pi pi-pencil"
+              severity="secondary"
+              outlined
+              @click="openReceiptEditor"
+            />
+          </div>
         </div>
 
-        <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3 space-y-3">
-          <h4 class="text-sm font-semibold">Line Items</h4>
-          <div v-if="selectedBillingLines.length === 0" class="text-sm opacity-60">No line items found.</div>
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-2 text-sm">
+          <div :class="billingDetailCardClass">
+            <div class="text-xs uppercase tracking-wide opacity-70">Patient</div>
+            <div class="font-medium">{{ selectedBillingDetail.patient_name || selectedBillingDetail.patient_id }}</div>
+          </div>
+          <div :class="billingDetailCardClass">
+            <div class="text-xs uppercase tracking-wide opacity-70">Appointment ID</div>
+            <div class="font-medium">{{ selectedBillingDetail.appointment_id || "N/A" }}</div>
+          </div>
+          <div :class="billingDetailCardClass">
+            <div class="text-xs uppercase tracking-wide opacity-70">Created</div>
+            <div class="font-medium">{{ formatDateTime(selectedBillingDetail.created_at) }}</div>
+          </div>
+          <div :class="billingDetailCardClass">
+            <div class="text-xs uppercase tracking-wide opacity-70">Payment Type</div>
+            <div class="font-medium">{{ derivePaymentType(selectedBillingDetail) || "N/A" }}</div>
+          </div>
+          <div :class="billingDetailCardClass">
+            <div class="text-xs uppercase tracking-wide opacity-70">Billing Label</div>
+            <div class="font-medium">{{ selectedBillingDetail.service_name || "N/A" }}</div>
+          </div>
+          <div :class="billingDetailCardClass">
+            <div class="text-xs uppercase tracking-wide opacity-70">Receipt Number</div>
+            <div class="font-medium">{{ selectedBillingDetail.receipt_number || "N/A" }}</div>
+          </div>
+        </div>
+
+        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 space-y-3">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <h4 class="text-sm font-semibold text-[rgb(var(--app-fg))]">Locked Encounter Tickets</h4>
+              <p class="mt-1 text-xs opacity-60">
+                Patient-signed attendance slips linked to this billing record are permanently locked after sign-off.
+              </p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <Tag
+                :value="selectedBillingEncounterTickets.length ? `${selectedBillingEncounterTickets.length} linked` : 'No tickets yet'"
+                :severity="selectedBillingEncounterTickets.length ? 'success' : 'secondary'"
+              />
+              <Button
+                v-if="selectedBillingEncounterTickets.length"
+                size="small"
+                icon="pi pi-file-pdf"
+                label="Export All"
+                outlined
+                @click="exportSelectedBillingEncounterTicketsPdf"
+              />
+            </div>
+          </div>
+
+          <div v-if="selectedBillingEncounterTickets.length === 0" class="rounded-2xl border border-dashed border-[rgb(var(--app-border))] px-5 py-8 text-center text-sm opacity-60">
+            No signed encounter tickets are linked to this billing yet.
+          </div>
+
           <div v-else class="space-y-3">
-            <div v-for="line in selectedBillingLines" :key="line.key" class="rounded-lg border border-[rgb(var(--app-border))] p-3 text-sm">
+            <article
+              v-for="ticket in selectedBillingEncounterTickets"
+              :key="ticket.id"
+              class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4"
+            >
+              <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div class="space-y-1">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <div class="font-semibold">{{ ticket.slip_number || `Ticket #${ticket.id}` }}</div>
+                    <Tag :value="ticket.record_locked ? 'Locked' : 'Unlocked'" :severity="ticket.record_locked ? 'contrast' : 'warn'" class="text-xs" />
+                  </div>
+                  <div class="text-xs opacity-60">
+                    Signed {{ formatDateTime(ticket.signed_off_at) }}
+                    <span v-if="ticket.locked_at"> · Locked {{ formatDateTime(ticket.locked_at) }}</span>
+                  </div>
+                </div>
+                <div class="text-sm">
+                  <div class="text-xs uppercase tracking-wide opacity-55">Authorized By</div>
+                  <div class="font-medium">{{ ticket.patient_acknowledged_by }}</div>
+                </div>
+              </div>
+
+              <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 text-sm">
+                <div :class="billingDetailCardClass">
+                  <div class="text-xs uppercase tracking-wide opacity-70">Appointment</div>
+                  <div class="font-medium">{{ ticket.billing_snapshot?.appointment_id || ticket.appointment_id }}</div>
+                </div>
+                <div :class="billingDetailCardClass">
+                  <div class="text-xs uppercase tracking-wide opacity-70">Attendance</div>
+                  <div class="font-medium">{{ ticket.attendance_status }}</div>
+                </div>
+                <div :class="billingDetailCardClass">
+                  <div class="text-xs uppercase tracking-wide opacity-70">Service Snapshot</div>
+                  <div class="font-medium">{{ ticket.billing_snapshot?.service_name || selectedBillingDetail.service_name || "N/A" }}</div>
+                </div>
+                <div :class="billingDetailCardClass">
+                  <div class="text-xs uppercase tracking-wide opacity-70">Specialty Snapshot</div>
+                  <div class="font-medium">{{ ticket.billing_snapshot?.specialty_tag_name || "N/A" }}</div>
+                  <div
+                    v-if="ticket.billing_snapshot?.specialty_tag_name && ticket.billing_snapshot?.specialty_tag_is_active === false"
+                    class="mt-1 text-xs text-slate-500"
+                  >
+                    Inactive now, kept for audit history.
+                  </div>
+                </div>
+                <div :class="billingDetailCardClass">
+                  <div class="text-xs uppercase tracking-wide opacity-70">Treatment Area Snapshot</div>
+                  <div class="font-medium">{{ ticket.billing_snapshot?.treatment_area_name || "N/A" }}</div>
+                  <div
+                    v-if="ticket.billing_snapshot?.treatment_area_name && ticket.billing_snapshot?.treatment_area_is_active === false"
+                    class="mt-1 text-xs text-slate-500"
+                  >
+                    Inactive now, kept for audit history.
+                  </div>
+                </div>
+                <div :class="billingDetailCardClass">
+                  <div class="text-xs uppercase tracking-wide opacity-70">Amount Snapshot</div>
+                  <div class="font-medium">{{ asCurrency(ticket.billing_snapshot?.total_amount ?? selectedBillingTotalDue) }}</div>
+                </div>
+                <div :class="billingDetailCardClass">
+                  <div class="text-xs uppercase tracking-wide opacity-70">Encounter Ticket ID</div>
+                  <div class="font-medium">ET-{{ ticket.id }}</div>
+                  <div class="mt-1 text-xs text-slate-500">
+                    Locked attendance ledger record linked to this billing.
+                  </div>
+                </div>
+                <div :class="billingDetailCardClass">
+                  <div class="text-xs uppercase tracking-wide opacity-70">Active Billing Package</div>
+                  <div class="font-medium">{{ describeEncounterTicketPackage(ticket) }}</div>
+                  <div
+                    v-if="describeEncounterTicketPackageSource(ticket)"
+                    class="mt-1 text-xs text-slate-500"
+                  >
+                    {{ describeEncounterTicketPackageSource(ticket) }}
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="ticket.patient_signature_data_url" class="mt-3">
+                <div class="text-xs uppercase tracking-wide opacity-55">Patient Signature</div>
+                <img
+                  :src="ticket.patient_signature_data_url"
+                  alt="Patient signature"
+                  class="mt-2 max-h-40 rounded-xl border border-[rgb(var(--app-border))] bg-white p-2"
+                />
+              </div>
+
+              <div class="mt-3 flex justify-end">
+                <Button
+                  size="small"
+                  icon="pi pi-file-pdf"
+                  label="Export PDF"
+                  outlined
+                  @click="exportSingleEncounterTicketPdf(ticket, selectedBillingDetail)"
+                />
+              </div>
+            </article>
+          </div>
+        </div>
+
+        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 space-y-3">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <h4 class="text-sm font-semibold text-[rgb(var(--app-fg))]">Line Items</h4>
+              <p class="mt-1 text-xs opacity-60">
+                {{ selectedBillingLines.length }} item{{ selectedBillingLines.length === 1 ? "" : "s" }} saved on this billing.
+              </p>
+            </div>
+            <div class="text-right">
+              <div class="text-xs uppercase tracking-wide opacity-55">Total Due</div>
+              <div class="mt-1 text-lg font-semibold">{{ asCurrency(selectedBillingTotalDue) }}</div>
+            </div>
+          </div>
+
+          <div v-if="selectedBillingLines.length === 0" class="rounded-2xl border border-dashed border-[rgb(var(--app-border))] px-5 py-8 text-center text-sm opacity-60">
+            No line items found for this billing.
+          </div>
+          <div v-else class="space-y-3">
+            <div
+              v-for="line in selectedBillingLines"
+              :key="line.key"
+              class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-3 text-sm"
+            >
               <div class="flex items-start justify-between gap-3">
-                <div class="space-y-1 min-w-0">
-                  <div class="flex items-center gap-1">
+                <div class="min-w-0 space-y-1">
+                  <div class="flex flex-wrap items-center gap-2">
                     <Tag v-if="line.type === 'bundle'" value="Bundle" severity="contrast" class="text-xs" />
                     <Tag v-else-if="line.type === 'package'" value="Package" severity="info" class="text-xs" />
+                    <Tag v-else :value="formatType(line.type)" severity="secondary" class="text-xs" />
                     <span class="font-medium">{{ line.name }}</span>
                   </div>
                   <div class="text-xs opacity-60">Qty: {{ line.quantity }}</div>
                 </div>
-                <div class="text-right shrink-0">
+                <div class="shrink-0 text-right">
                   <div class="font-medium">{{ asCurrency(line.price * line.quantity) }}</div>
                   <div v-if="line.originalPrice && line.originalPrice > line.price" class="text-xs opacity-50 line-through">
                     {{ asCurrency(line.originalPrice * line.quantity) }}
@@ -445,7 +743,7 @@
               <div v-if="line.type === 'bundle'" class="mt-2 pl-2 space-y-1">
                 <template v-for="cat in getBundleCategoryGroups(line.id, line.name)" :key="cat.label">
                   <div v-if="cat.items.length" class="text-xs">
-                    <div class="font-semibold opacity-70 mb-1">{{ cat.label }}</div>
+                    <div class="mb-1 font-semibold opacity-70">{{ cat.label }}</div>
                     <div v-for="comp in cat.items" :key="comp.id" class="flex items-center gap-2 pl-2 opacity-60">
                       <i class="pi pi-circle-fill" style="font-size: 0.35rem"></i>
                       <span>{{ comp.name }}</span>
@@ -454,25 +752,222 @@
                   </div>
                 </template>
               </div>
+              <div v-else-if="line.type === 'package'" class="mt-2 pl-2 space-y-1">
+                <template v-for="group in getSelectedBillingLineBreakdownGroups(line)" :key="group.label">
+                  <div v-if="group.items.length" class="text-xs">
+                    <div class="mb-1 font-semibold opacity-70">{{ group.label }}</div>
+                    <div v-for="item in group.items" :key="`${group.label}-${item.name}`" class="flex items-center gap-2 pl-2 opacity-60">
+                      <i class="pi pi-circle-fill" style="font-size: 0.35rem"></i>
+                      <span>{{ item.name }}</span>
+                      <span>x{{ item.quantity }}</span>
+                      <span class="ml-auto">{{ asCurrency(item.totalPrice) }}</span>
+                    </div>
+                  </div>
+                </template>
+              </div>
             </div>
           </div>
         </div>
 
-        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-5 text-sm">
-          <div><span class="opacity-60">Original Total:</span> <strong>{{ asCurrency(selectedBillingOriginalTotal) }}</strong></div>
-          <div><span class="opacity-60">Subtotal:</span> <strong>{{ asCurrency(selectedBillingDetail.subtotal_amount ?? selectedBillingDetail.amount_due) }}</strong></div>
-          <div><span class="opacity-60">Discount:</span> <strong>{{ asCurrency(selectedBillingDetail.discount_amount ?? 0) }}</strong></div>
-          <!-- VAT breakdown from saved record -->
-          <template v-if="selectedBillingDetail.vat_enabled">
-            <div><span class="opacity-60">Vatable Amount:</span> <strong>{{ asCurrency(selectedBillingDetail.vatable_amount ?? 0) }}</strong></div>
-            <div><span class="opacity-60">VAT ({{ ((selectedBillingDetail.vat_rate ?? 0) * 100).toFixed(0) }}%):</span> <strong>{{ asCurrency(selectedBillingDetail.vat_amount ?? 0) }}</strong></div>
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 text-sm">
+          <div :class="billingDetailCardClass">
+            <div class="text-xs uppercase tracking-wide opacity-70">Original Total</div>
+            <div class="font-medium">{{ asCurrency(selectedBillingOriginalTotal) }}</div>
+          </div>
+          <div :class="billingDetailCardClass">
+            <div class="text-xs uppercase tracking-wide opacity-70">Subtotal</div>
+            <div class="font-medium">{{ asCurrency(selectedBillingDetail.subtotal_amount ?? selectedBillingDetail.amount_due) }}</div>
+          </div>
+          <div :class="billingDetailCardClass">
+            <div class="text-xs uppercase tracking-wide opacity-70">Discount</div>
+            <div class="font-medium">{{ asCurrency(selectedBillingDetail.discount_amount ?? 0) }}</div>
+          </div>
+          <div v-if="selectedBillingDetail.vat_enabled" :class="billingDetailCardClass">
+            <div class="text-xs uppercase tracking-wide opacity-70">Vatable Amount</div>
+            <div class="font-medium">{{ asCurrency(selectedBillingDetail.vatable_amount ?? 0) }}</div>
+          </div>
+          <div v-if="selectedBillingDetail.vat_enabled" :class="billingDetailCardClass">
+            <div class="text-xs uppercase tracking-wide opacity-70">VAT</div>
+            <div class="font-medium">{{ asCurrency(selectedBillingDetail.vat_amount ?? 0) }}</div>
+          </div>
+          <div :class="billingDetailCardClass">
+            <div class="text-xs uppercase tracking-wide opacity-70">Total Due</div>
+            <div class="font-medium">{{ asCurrency(selectedBillingTotalDue) }}</div>
+          </div>
+          <div :class="billingDetailCardClass">
+            <div class="text-xs uppercase tracking-wide opacity-70">Paid</div>
+            <div class="font-medium">{{ asCurrency(selectedBillingAmountPaid) }}</div>
+          </div>
+          <div :class="billingDetailCardClass">
+            <div class="text-xs uppercase tracking-wide opacity-70">Outstanding</div>
+            <div class="font-medium">{{ asCurrency(selectedBillingOutstanding) }}</div>
+          </div>
+          <div :class="billingDetailCardClass">
+            <div class="text-xs uppercase tracking-wide opacity-70">Change</div>
+            <div class="font-medium">{{ asCurrency(selectedBillingDetail.change_amount ?? 0) }}</div>
+          </div>
+        </div>
+
+        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 space-y-3">
+          <template v-if="isSelectedBillingSelfPay">
+            <div class="flex flex-col gap-1">
+              <h4 class="text-sm font-semibold text-[rgb(var(--app-fg))]">Tender Payment</h4>
+              <p class="text-xs opacity-60">
+                Receive payment for this billing directly from the detail modal.
+              </p>
+            </div>
+
+            <Message v-if="selectedBillingOutstanding <= 0" severity="success" :closable="false">
+              This billing is already fully paid.
+            </Message>
+
+            <template v-else>
+              <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <IftaLabel>
+                  <Select
+                    v-model="billingDetailPaymentType"
+                    :options="selfPayPaymentOptions"
+                    optionLabel="label"
+                    optionValue="value"
+                    fluid
+                  />
+                  <label>Payment Type</label>
+                </IftaLabel>
+
+                <IftaLabel>
+                  <InputNumber
+                    v-model="billingTenderAmount"
+                    mode="currency"
+                    currency="PHP"
+                    locale="en-PH"
+                    fluid
+                    :min="0"
+                  />
+                  <label>Additional Tender</label>
+                </IftaLabel>
+
+                <div :class="billingDetailCardClass">
+                  <div class="text-xs uppercase tracking-wide opacity-70">Payment Applied</div>
+                  <div class="font-medium">{{ asCurrency(billingTenderApplied) }}</div>
+                </div>
+
+                <div :class="billingDetailCardClass">
+                  <div class="text-xs uppercase tracking-wide opacity-70">Resulting Change</div>
+                  <div class="font-medium">{{ asCurrency(billingResultingChange) }}</div>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 gap-3 md:grid-cols-3 text-sm">
+                <div :class="billingDetailCardClass">
+                  <div class="text-xs uppercase tracking-wide opacity-70">Outstanding Before</div>
+                  <div class="font-medium">{{ asCurrency(selectedBillingOutstanding) }}</div>
+                </div>
+                <div :class="billingDetailCardClass">
+                  <div class="text-xs uppercase tracking-wide opacity-70">Paid After Tender</div>
+                  <div class="font-medium">{{ asCurrency(billingResultingPaid) }}</div>
+                </div>
+                <div :class="billingDetailCardClass">
+                  <div class="text-xs uppercase tracking-wide opacity-70">Outstanding After</div>
+                  <div class="font-medium">{{ asCurrency(Math.max(0, selectedBillingTotalDue - billingResultingPaid)) }}</div>
+                </div>
+              </div>
+
+              <div class="flex justify-end">
+                <Button
+                  label="Save Payment"
+                  icon="pi pi-wallet"
+                  :loading="savingBillingTender"
+                  :disabled="!canSaveBillingTender"
+                  @click="saveBillingTender"
+                />
+              </div>
+            </template>
           </template>
-          <div><span class="opacity-60">Total Due:</span> <strong>{{ asCurrency(selectedBillingDetail.total_amount ?? selectedBillingDetail.amount_due) }}</strong></div>
-          <div><span class="opacity-60">Paid:</span> <strong>{{ asCurrency(selectedBillingDetail.amount_paid ?? 0) }}</strong></div>
+
+          <template v-else>
+            <div class="flex flex-col gap-1">
+              <h4 class="text-sm font-semibold text-[rgb(var(--app-fg))]">Claim Workflow</h4>
+              <p class="text-xs opacity-60">
+                Claim-based billings are tracked here, but they are not tendered like self-pay.
+              </p>
+            </div>
+
+            <Message :severity="isSelectedBillingMarkedBilled ? 'success' : 'info'" :closable="false">
+              {{ selectedBillingClaimWorkflowMessage }}
+            </Message>
+
+            <div v-if="canShowMarkBillingAsBilledAction" class="flex justify-end">
+              <Button
+                :label="isSelectedBillingMarkedBilled ? 'Marked as Billed' : 'Mark as Billed'"
+                icon="pi pi-check-circle"
+                outlined
+                :loading="markingBillingAsBilled"
+                :disabled="!canMarkSelectedBillingAsBilled"
+                @click="markSelectedBillingAsBilled"
+              />
+            </div>
+
+            <div class="grid grid-cols-1 gap-3 md:grid-cols-3 text-sm">
+              <div :class="billingDetailCardClass">
+                <div class="text-xs uppercase tracking-wide opacity-70">Billing Route</div>
+                <div class="font-medium">{{ displayBillingType(selectedBillingDetail.billing_type) }}</div>
+              </div>
+              <div :class="billingDetailCardClass">
+                <div class="text-xs uppercase tracking-wide opacity-70">Current Paid</div>
+                <div class="font-medium">{{ asCurrency(selectedBillingAmountPaid) }}</div>
+              </div>
+              <div :class="billingDetailCardClass">
+                <div class="text-xs uppercase tracking-wide opacity-70">Claim Balance</div>
+                <div class="font-medium">{{ asCurrency(selectedBillingOutstanding) }}</div>
+              </div>
+            </div>
+          </template>
         </div>
       </div>
       <template #footer>
+        <Button
+          v-if="selectedBillingDetail"
+          label="Print Receipt Copy"
+          icon="pi pi-print"
+          outlined
+          @click="printSelectedBillingReceipt"
+        />
+        <Button
+          v-if="selectedBillingDetail && canEditReceipt"
+          label="Edit Receipt"
+          icon="pi pi-pencil"
+          severity="secondary"
+          outlined
+          @click="openReceiptEditor"
+        />
         <Button label="Close" text @click="billingDetailsVisible = false" />
+      </template>
+    </Dialog>
+
+    <Dialog v-model:visible="receiptEditorVisible" header="Edit Receipt" modal :style="{width: '520px'}">
+      <div class="space-y-3">
+        <p class="text-sm opacity-70">
+          Update the printed receipt number or billing label. Product lines and totals stay based on the saved billing record.
+        </p>
+
+        <IftaLabel>
+          <InputText v-model="receiptEditorNumber" fluid placeholder="Optional receipt number" />
+          <label>Receipt Number</label>
+        </IftaLabel>
+
+        <IftaLabel>
+          <InputText v-model="receiptEditorLabel" fluid placeholder="Optional billing label" />
+          <label>Billing Label</label>
+        </IftaLabel>
+      </div>
+      <template #footer>
+        <Button label="Cancel" text @click="receiptEditorVisible = false" />
+        <Button
+          label="Save Receipt"
+          icon="pi pi-check"
+          :loading="receiptEditorSaving"
+          @click="saveReceiptEdits"
+        />
       </template>
     </Dialog>
 
@@ -518,6 +1013,8 @@
 
 <script setup lang="ts">
 import {computed, onMounted, ref, watch} from "vue"
+import {useRoute} from "vue-router"
+import axios from "axios"
 import Button from "primevue/button"
 import Column from "primevue/column"
 import DataTable from "primevue/datatable"
@@ -533,7 +1030,9 @@ import {useToast} from "primevue/usetoast"
 import {patientService} from "@/features/patients/api/patient.service"
 import {
   billingPhase1Service,
+  type BillingEncounterTicket,
   type BillingLineItem,
+  type LguBudgetSummary,
   type BillingListItem,
   type BillingRequest,
   type BillingType,
@@ -555,14 +1054,29 @@ import {hmoTechniqueRateService} from "@/services/hmo-technique-rate.service"
 import {hmoEvaluationRateService} from "@/services/hmo-evaluation-rate.service"
 import {hmoAddOnRateService} from "@/services/hmo-add-on-rate.service"
 import type {PatientHMOInformation} from "@/models/hmo-information"
+import {
+  openEncounterTicketPdfWindow,
+  renderEncounterTicketPdfWindow,
+  type EncounterTicketPdfCard
+} from "@/utils/encounter-ticket-pdf.util"
+import {
+  openBillingReceiptWindow,
+  renderBillingReceiptWindow,
+  type BillingReceiptPrintBreakdownGroup,
+  type BillingReceiptPrintSubItem
+} from "@/utils/billing-receipt-print.util"
 
+const route = useRoute()
 const toast = useToast()
 const isLoading = ref(false)
 const copyingFromLastSession = ref(false)
 const billings = ref<BillingListItem[]>([])
+const selectedBillingRows = ref<BillingListItem[]>([])
 const editingBillingId = ref<number>()
 const billingDetailsVisible = ref(false)
 const selectedBillingDetail = ref<BillingListItem>()
+const billingDetailCardClass = "rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3"
+const exportingEncounterTicketsPdf = ref(false)
 
 // ── VAT ──────────────────────────────────────────────────────────────────────
 // Philippines standard VAT rate. Currently Non-VAT; logic is prepared for
@@ -582,14 +1096,138 @@ const tableFilterDateTo = ref<Date>()
 const tableFilterMinDue = ref<number | null>(null)
 const tableFilterMaxDue = ref<number | null>(null)
 const tableFilterOutstandingOnly = ref(false)
+const activeLguBudgetSummary = ref<LguBudgetSummary | null>(null)
+const loadingLguBudgetSummary = ref(false)
+const lguBudgetSummaryError = ref("")
+const roleName = ref("")
+const receiptEditorVisible = ref(false)
+const receiptEditorSaving = ref(false)
+const receiptEditorNumber = ref("")
+const receiptEditorLabel = ref("")
+
+const extractApiErrorMessage = (error: unknown, fallback: string): string => {
+  if (!axios.isAxiosError(error)) return fallback
+  const status = error.response?.status
+  const detail = error.response?.data?.message || error.response?.data?.detail || error.message
+  return detail ? `${fallback}${status ? ` (${status})` : ""}: ${detail}` : fallback
+}
 
 type LocalService = { id: string; type: string; name: string; price: number; status: string }
 type LocalBundle = { id: string; name: string; machineIds: string[]; techniqueIds: string[]; evaluationIds: string[]; addOnIds: string[]; bundledPrice: number; status: string }
-type LocalPackageOffer = { id: string; name: string; packagePrice: number; status: string }
+type LocalPackageOffer = {
+  id: string
+  name: string
+  bundleId?: string
+  bundleQty: number
+  machineIds?: string[]
+  machineQty?: number
+  machineItems?: Array<{id: string; qty: number}>
+  techniqueIds?: string[]
+  techniqueQty?: number
+  techniqueItems?: Array<{id: string; qty: number}>
+  evaluationIds: string[]
+  evaluationQty: number
+  evaluationItems?: Array<{id: string; qty: number}>
+  addOnIds?: string[]
+  addOnQty?: number
+  addOnItems?: Array<{id: string; qty: number}>
+  sessionIds?: string[]
+  sessionQty?: number
+  sessionItems?: Array<{id: string; qty: number}>
+  packagePrice: number
+  status: string
+}
 const localServices = ref<LocalService[]>([])
 const localBundles = ref<LocalBundle[]>([])
 const localPackageOffers = ref<LocalPackageOffer[]>([])
+const sessionServices = ref<BillingPickerLookup[]>([])
 const patientOptions = ref<Lookup[]>([])
+const canEditReceipt = computed(() => roleName.value === "Owner")
+
+const toOptionalStringId = (value: unknown): string | undefined => {
+  const normalized = String(value ?? "").trim()
+  return normalized || undefined
+}
+
+const normalizePositiveInt = (value: unknown, fallback = 1): number => {
+  const normalized = Math.trunc(Number(value))
+  return Number.isFinite(normalized) && normalized > 0 ? normalized : fallback
+}
+
+const normalizeNonNegativeNumber = (value: unknown): number => {
+  const normalized = Number(value)
+  return Number.isFinite(normalized) && normalized >= 0 ? normalized : 0
+}
+
+const parseMaybeJsonArray = (value: unknown): unknown[] => {
+  if (Array.isArray(value)) return value
+  if (typeof value !== "string") return []
+
+  const trimmed = value.trim()
+  if (!trimmed) return []
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+const normalizeStringIdArray = (value: unknown): string[] =>
+  parseMaybeJsonArray(value)
+    .map(entry => toOptionalStringId(entry))
+    .filter((entry): entry is string => !!entry)
+
+const normalizeQtyItems = (value: unknown): Array<{id: string; qty: number}> =>
+  parseMaybeJsonArray(value).flatMap(entry => {
+    if (!entry || typeof entry !== "object") return []
+    const raw = entry as Record<string, unknown>
+    const id = toOptionalStringId(raw.id ?? raw.item_id ?? raw.service_id ?? raw.session_id)
+    if (!id) return []
+    return [{ id, qty: normalizePositiveInt(raw.qty ?? raw.quantity, 1) }]
+  })
+
+const normalizePackageStatus = (raw: Record<string, unknown>): string => {
+  if (typeof raw.status === "string" && raw.status.trim()) return raw.status.trim()
+  if (typeof raw.is_active === "boolean") return raw.is_active ? "Active" : "Inactive"
+  if (typeof raw.is_active === "number") return raw.is_active > 0 ? "Active" : "Inactive"
+  return "Active"
+}
+
+const normalizePackageServiceOffer = (value: unknown): LocalPackageOffer | null => {
+  if (!value || typeof value !== "object") return null
+
+  const raw = value as Record<string, unknown>
+  const id = toOptionalStringId(raw.id)
+  const name = typeof raw.name === "string" ? raw.name.trim() : ""
+
+  if (!id || !name) return null
+
+  return {
+    id,
+    name,
+    bundleId: toOptionalStringId(raw.bundleId ?? raw.bundle_template_id),
+    bundleQty: normalizePositiveInt(raw.bundleQty ?? raw.bundle_qty, 1),
+    machineIds: normalizeStringIdArray(raw.machineIds ?? raw.machine_ids ?? raw.machine_ids_json),
+    machineQty: normalizePositiveInt(raw.machineQty ?? raw.machine_qty, 1),
+    machineItems: normalizeQtyItems(raw.machineItems ?? raw.machine_items ?? raw.machine_items_json),
+    techniqueIds: normalizeStringIdArray(raw.techniqueIds ?? raw.technique_ids ?? raw.technique_ids_json),
+    techniqueQty: normalizePositiveInt(raw.techniqueQty ?? raw.technique_qty, 1),
+    techniqueItems: normalizeQtyItems(raw.techniqueItems ?? raw.technique_items ?? raw.technique_items_json),
+    evaluationIds: normalizeStringIdArray(raw.evaluationIds ?? raw.evaluation_ids ?? raw.evaluation_ids_json),
+    evaluationQty: normalizePositiveInt(raw.evaluationQty ?? raw.evaluation_qty, 1),
+    evaluationItems: normalizeQtyItems(raw.evaluationItems ?? raw.evaluation_items ?? raw.evaluation_items_json),
+    addOnIds: normalizeStringIdArray(raw.addOnIds ?? raw.add_on_ids ?? raw.add_on_ids_json),
+    addOnQty: normalizePositiveInt(raw.addOnQty ?? raw.add_on_qty, 1),
+    addOnItems: normalizeQtyItems(raw.addOnItems ?? raw.add_on_items ?? raw.add_on_items_json),
+    sessionIds: normalizeStringIdArray(raw.sessionIds ?? raw.session_ids ?? raw.session_ids_json),
+    sessionQty: normalizePositiveInt(raw.sessionQty ?? raw.session_qty, 1),
+    sessionItems: normalizeQtyItems(raw.sessionItems ?? raw.session_items ?? raw.session_items_json),
+    packagePrice: normalizeNonNegativeNumber(raw.packagePrice ?? raw.package_price),
+    status: normalizePackageStatus(raw)
+  }
+}
 
 const formatPatientName = (patient: Partial<Patient>): string => {
   const fallback = (patient as {full_name?: string}).full_name
@@ -631,10 +1269,36 @@ const loadPatientOptions = async (): Promise<void> => {
   }))
 }
 
+const syncRoleFromStorage = (): void => {
+  const candidateKeys = ["auth_user", "currentUser", "user", "profile", "loggedInUser"]
+  for (const key of candidateKeys) {
+    const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key)
+    if (!raw) continue
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>
+      const role = parsed.role_name ?? parsed.role ?? parsed.userRole ?? parsed.primaryRole
+      if (typeof role === "string" && role.trim()) {
+        roleName.value = role.trim()
+        return
+      }
+    } catch {
+      // ignore malformed value
+    }
+  }
+  roleName.value = ""
+}
+
 const loadLocalData = (): void => {
   try { localServices.value = JSON.parse(localStorage.getItem("singlePayServices") || "[]") } catch { localServices.value = [] }
   try { localBundles.value = JSON.parse(localStorage.getItem("bundledServices") || "[]") } catch { localBundles.value = [] }
-  try { localPackageOffers.value = JSON.parse(localStorage.getItem("packageServiceOffers") || "[]") } catch { localPackageOffers.value = [] }
+  try {
+    const parsed = JSON.parse(localStorage.getItem("packageServiceOffers") || "[]")
+    localPackageOffers.value = Array.isArray(parsed)
+      ? parsed.map(normalizePackageServiceOffer).filter((item): item is LocalPackageOffer => item !== null)
+      : []
+  } catch {
+    localPackageOffers.value = []
+  }
 }
 
 const findBundle = (bundleId?: string | number, bundleName?: string): LocalBundle | undefined => {
@@ -646,6 +1310,17 @@ const findBundle = (bundleId?: string | number, bundleName?: string): LocalBundl
   const normalizedName = (bundleName ?? "").trim().toLowerCase()
   if (!normalizedName) return undefined
   return localBundles.value.find(b => b.name.trim().toLowerCase() === normalizedName)
+}
+
+const findPackageOffer = (packageId?: string | number, packageName?: string): LocalPackageOffer | undefined => {
+  const normalizedId = String(packageId ?? "").trim()
+  if (normalizedId) {
+    const matchedById = localPackageOffers.value.find(item => item.id === normalizedId)
+    if (matchedById) return matchedById
+  }
+  const normalizedName = (packageName ?? "").trim().toLowerCase()
+  if (!normalizedName) return undefined
+  return localPackageOffers.value.find(item => item.name.trim().toLowerCase() === normalizedName)
 }
 
 const getBundleComponents = (bundleId?: string | number, bundleName?: string): LocalService[] => {
@@ -665,6 +1340,114 @@ const getBundleCategoryGroups = (bundleId?: string | number, bundleName?: string
     { label: "Evaluations", items: resolve(bundle.evaluationIds) },
     { label: "Add-ons", items: resolve(bundle.addOnIds) },
   ]
+}
+
+const expandQtyItems = (
+  items: Array<{id: string; qty: number}> | undefined,
+  ids: string[] | undefined,
+  fallbackQty: number | undefined
+): Array<{id?: string; qty: number}> =>
+  items?.length
+    ? items.map(entry => ({id: entry.id, qty: Number(entry.qty ?? 1)}))
+    : (ids ?? []).map(id => ({id, qty: Number(fallbackQty ?? 1)}))
+
+const buildBreakdownItems = (
+  entries: Array<{id?: string; qty: number}>,
+  resolveItem: (id: string) => {name: string; price: number} | undefined,
+  multiplier = 1
+): BillingReceiptPrintSubItem[] =>
+  entries.flatMap(entry => {
+    if (!entry.id) return []
+    const resolved = resolveItem(entry.id)
+    if (!resolved) return []
+    const quantity = Math.max(1, Number(entry.qty ?? 1) * multiplier)
+    const unitPrice = Number(resolved.price ?? 0)
+    return [{
+      name: resolved.name,
+      quantity,
+      unitPrice,
+      totalPrice: unitPrice * quantity
+    }]
+  })
+
+const getBundleReceiptGroups = (
+  bundleId?: string | number,
+  bundleName?: string,
+  multiplier = 1
+): BillingReceiptPrintBreakdownGroup[] =>
+  getBundleCategoryGroups(bundleId, bundleName)
+    .filter(group => group.items.length > 0)
+    .map(group => ({
+      label: group.label,
+      items: group.items.map(item => ({
+        name: item.name,
+        quantity: Math.max(1, multiplier),
+        unitPrice: Number(item.price ?? 0),
+        totalPrice: Number(item.price ?? 0) * Math.max(1, multiplier)
+      }))
+    }))
+
+const resolveLocalServiceSummary = (id: string): {name: string; price: number} | undefined => {
+  const found = localServices.value.find(item => item.id === id)
+  if (!found) return undefined
+  return {name: found.name, price: Number(found.price ?? 0)}
+}
+
+const resolveSessionServiceSummary = (id: string): {name: string; price: number} | undefined => {
+  const found = sessionServices.value.find(item => String(item.id) === String(id))
+  if (!found) return undefined
+  return {name: found.name, price: Number(found.price ?? 0)}
+}
+
+const getPackageReceiptGroups = (
+  packageId?: string | number,
+  packageName?: string,
+  multiplier = 1
+): BillingReceiptPrintBreakdownGroup[] => {
+  const pkg = findPackageOffer(packageId, packageName)
+  if (!pkg) return []
+
+  const groups: BillingReceiptPrintBreakdownGroup[] = []
+
+  if (pkg.bundleId) {
+    const bundle = findBundle(pkg.bundleId)
+    const bundleGroups = getBundleReceiptGroups(pkg.bundleId, bundle?.name, Math.max(1, Number(pkg.bundleQty ?? 1) * multiplier))
+    bundleGroups.forEach(group => {
+      groups.push({
+        label: bundle ? `Bundle · ${group.label} (${bundle.name})` : `Bundle · ${group.label}`,
+        items: group.items
+      })
+    })
+  }
+
+  const itemGroups: Array<{label: string; items: BillingReceiptPrintSubItem[]}> = [
+    {
+      label: "Machines",
+      items: buildBreakdownItems(expandQtyItems(pkg.machineItems, pkg.machineIds, pkg.machineQty), resolveLocalServiceSummary, multiplier)
+    },
+    {
+      label: "Techniques",
+      items: buildBreakdownItems(expandQtyItems(pkg.techniqueItems, pkg.techniqueIds, pkg.techniqueQty), resolveLocalServiceSummary, multiplier)
+    },
+    {
+      label: "Evaluations",
+      items: buildBreakdownItems(expandQtyItems(pkg.evaluationItems, pkg.evaluationIds, pkg.evaluationQty), resolveLocalServiceSummary, multiplier)
+    },
+    {
+      label: "Add-ons",
+      items: buildBreakdownItems(expandQtyItems(pkg.addOnItems, pkg.addOnIds, pkg.addOnQty), resolveLocalServiceSummary, multiplier)
+    },
+    {
+      label: "Sessions",
+      items: buildBreakdownItems(expandQtyItems(pkg.sessionItems, pkg.sessionIds, pkg.sessionQty), resolveSessionServiceSummary, multiplier)
+    }
+  ]
+
+  itemGroups.forEach(group => {
+    if (group.items.length) groups.push(group)
+  })
+
+  return groups
 }
 
 type ParsedLine = { key: string; id: string; type: string; name: string; price: number; quantity: number; originalPrice?: number }
@@ -689,17 +1472,364 @@ const parsedLineItems = (raw?: string): ParsedLine[] => {
 }
 
 const selectedBillingLines = computed(() => parsedLineItems(selectedBillingDetail.value?.line_items_json))
+const selectedBillingEncounterTickets = computed(() => selectedBillingDetail.value?.encounter_tickets ?? [])
+const formatEncounterTicketPackageSource = (value?: string): string => {
+  const normalized = String(value ?? "").trim().toUpperCase()
+  if (normalized === "PATIENT_PACKAGE_SERVICE_PURCHASE") return "Linked from patient package service purchase"
+  if (normalized === "PATIENT_PACKAGE_PURCHASE") return "Linked from patient package purchase"
+  if (normalized === "PHASE1_BILLING_PACKAGE") return "Linked from the billing package record"
+  if (normalized === "BILLING_LINE_ITEM_PACKAGE") return "Linked from the saved billing package line item"
+  return value?.trim() || "Linked billing package"
+}
+const describeEncounterTicketPackage = (ticket: BillingEncounterTicket): string => {
+  const packageName = ticket.active_billing_package_name?.trim()
+    || ticket.billing_snapshot?.active_billing_package_name?.trim()
+    || ""
+  const packageId = ticket.active_billing_package_id?.trim()
+    || ticket.billing_snapshot?.active_billing_package_id?.trim()
+    || ""
+  if (packageName && packageId && packageName !== packageId) return `${packageName} (${packageId})`
+  if (packageName) return packageName
+  if (packageId) return packageId
+  return "No active billing package linked"
+}
+const describeEncounterTicketPackageSource = (ticket: BillingEncounterTicket): string | undefined => {
+  const source = ticket.active_billing_package_source?.trim()
+    || ticket.billing_snapshot?.active_billing_package_source?.trim()
+    || ""
+  if (!source) return undefined
+  const packageId = ticket.active_billing_package_id?.trim()
+    || ticket.billing_snapshot?.active_billing_package_id?.trim()
+    || ""
+  return packageId
+    ? `${formatEncounterTicketPackageSource(source)} · Linked ID ${packageId}`
+    : formatEncounterTicketPackageSource(source)
+}
+
+const getSelectedBillingLineBreakdownGroups = (line: {type: string; id: string | number; name: string; quantity: number}): BillingReceiptPrintBreakdownGroup[] => {
+  if (line.type === "bundle") return getBundleReceiptGroups(line.id, line.name, line.quantity)
+  if (line.type === "package") return getPackageReceiptGroups(line.id, line.name, line.quantity)
+  return []
+}
 
 const selectedBillingOriginalTotal = computed(() =>
   selectedBillingLines.value.reduce((sum, line) => sum + Number(line.originalPrice ?? line.price ?? 0) * Number(line.quantity ?? 1), 0)
 )
 
-const derivePaymentType = (billing: BillingListItem): string => {
-  if (billing.payment_reference?.trim()) return billing.payment_reference.trim()
-  const normalized = billing.billing_type?.trim().toUpperCase()
+const selectedBillingTotalDue = computed(() =>
+  Number(selectedBillingDetail.value?.total_amount ?? selectedBillingDetail.value?.amount_due ?? 0)
+)
+
+const selectedBillingAmountPaid = computed(() =>
+  Number(selectedBillingDetail.value?.amount_paid ?? 0)
+)
+
+const selectedBillingOutstanding = computed(() =>
+  Math.max(0, selectedBillingTotalDue.value - selectedBillingAmountPaid.value)
+)
+
+const selectedBillingReceiptLines = computed(() =>
+  selectedBillingLines.value.map(line => ({
+    typeLabel: line.type === "bundle" ? "Bundle" : line.type === "package" ? "Package" : formatType(line.type),
+    name: line.name,
+    quantity: Number(line.quantity ?? 1),
+    unitPrice: Number(line.price ?? 0),
+    lineTotal: Number(line.price ?? 0) * Number(line.quantity ?? 1),
+    originalLineTotal: line.originalPrice && line.originalPrice > line.price
+      ? Number(line.originalPrice) * Number(line.quantity ?? 1)
+      : undefined,
+    breakdownGroups: getSelectedBillingLineBreakdownGroups(line)
+  }))
+)
+
+const billingDetailPaymentType = ref("")
+const billingTenderAmount = ref<number>(0)
+const savingBillingTender = ref(false)
+const markingBillingAsBilled = ref(false)
+
+const selectedBillingAmountTendered = computed(() =>
+  Number(selectedBillingDetail.value?.amount_tendered ?? 0)
+)
+
+const isClaimBillingType = (billingType?: string): boolean => {
+  const normalized = String(billingType ?? "").trim().toUpperCase()
+  return normalized === "HMO_BILLING" || normalized === "HMO" || normalized === "LGU_BILLING" || normalized === "LGU"
+}
+
+const isSelectedBillingSelfPay = computed(() => {
+  if (!selectedBillingDetail.value) return false
+  return !isClaimBillingType(selectedBillingDetail.value.billing_type)
+})
+
+const selectedBillingNormalizedStatus = computed(() =>
+  displayBillingStatus(selectedBillingDetail.value?.billing_status)
+)
+
+const isSelectedBillingMarkedBilled = computed(() =>
+  selectedBillingNormalizedStatus.value === "BILLED"
+)
+
+const canShowMarkBillingAsBilledAction = computed(() =>
+  !!selectedBillingDetail.value &&
+  isClaimBillingType(selectedBillingDetail.value.billing_type) &&
+  selectedBillingNormalizedStatus.value !== "PAID" &&
+  selectedBillingNormalizedStatus.value !== "VOID" &&
+  selectedBillingNormalizedStatus.value !== "CANCELLED"
+)
+
+const canMarkSelectedBillingAsBilled = computed(() =>
+  canShowMarkBillingAsBilledAction.value && !isSelectedBillingMarkedBilled.value
+)
+
+const billingTenderInputAmount = computed(() =>
+  Math.max(0, Number(billingTenderAmount.value ?? 0))
+)
+
+const billingTenderApplied = computed(() =>
+  Math.min(selectedBillingOutstanding.value, billingTenderInputAmount.value)
+)
+
+const billingResultingPaid = computed(() =>
+  selectedBillingAmountPaid.value + billingTenderApplied.value
+)
+
+const billingResultingAmountTendered = computed(() =>
+  selectedBillingAmountTendered.value + billingTenderInputAmount.value
+)
+
+const billingResultingChange = computed(() =>
+  Math.max(0, billingResultingAmountTendered.value - selectedBillingTotalDue.value)
+)
+
+const canSaveBillingTender = computed(() =>
+  !!selectedBillingDetail.value &&
+  isSelectedBillingSelfPay.value &&
+  selectedBillingOutstanding.value > 0 &&
+  billingTenderInputAmount.value > 0 &&
+  !!billingDetailPaymentType.value.trim()
+)
+
+const getClaimWorkflowMessage = (billingType?: string, billingStatus?: string): string => {
+  const normalized = String(billingType ?? "").trim().toUpperCase()
+  const normalizedStatus = displayBillingStatus(billingStatus)
+  if (normalized === "HMO_BILLING" || normalized === "HMO") {
+    if (normalizedStatus === "BILLED") {
+      return "This HMO transaction is already marked as billed. It is ready for downstream claim follow-through and reconciliation."
+    }
+    return "HMO flow: patient enlistment, LOA signature, scheduling, then billing. Payment tendering is handled outside the POS modal."
+  }
+  if (normalized === "LGU_BILLING" || normalized === "LGU") {
+    if (normalizedStatus === "BILLED") {
+      return "This LGU transaction is already marked as billed. It is ready for downstream guarantee tracking and reconciliation."
+    }
+    return "LGU billing follows a guarantee or sponsorship workflow. Payment tendering is handled outside the POS modal."
+  }
+  return ""
+}
+
+const formClaimWorkflowMessage = computed(() =>
+  getClaimWorkflowMessage(form.value.billing_type)
+)
+
+const selectedBillingClaimWorkflowMessage = computed(() =>
+  getClaimWorkflowMessage(selectedBillingDetail.value?.billing_type, selectedBillingDetail.value?.billing_status)
+)
+
+const formatDateTime = (value?: string | number | Date): string => {
+  if (!value) return "N/A"
+  return new Date(value).toLocaleString("en-PH")
+}
+
+const displayBillingType = (value?: string): string => {
+  const normalized = String(value ?? "").trim().toUpperCase()
+  if (normalized === "SELF_PAY_SINGLE") return "Self Pay: Single Service"
+  if (normalized === "SELF_PAY_PACKAGE") return "Self Pay: Package Service"
   if (normalized === "HMO_BILLING" || normalized === "HMO") return "HMO"
   if (normalized === "LGU_BILLING" || normalized === "LGU") return "LGU"
+  if (normalized === "INDIVIDUAL_PRICING") return "Individual Pricing"
+  if (normalized === "PACKAGE_BILLING") return "Package Billing"
+  if (normalized === "ALA_CARTE") return "A La Carte"
+  return value?.trim() || "N/A"
+}
+
+const buildEncounterTicketDeductionSummary = (billingType?: string): string => {
+  const normalized = String(billingType ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/:/g, "")
+    .replace(/-/g, "_")
+    .replace(/ /g, "_")
+
+  if (normalized === "HMO" || normalized === "HMO_BILLING") {
+    return "Deducting 1 Session from HMO Allocation"
+  }
+  if (normalized === "LGU" || normalized === "LGU_BILLING") {
+    return "Deducting 1 Session from LGU Authorization"
+  }
+  if (normalized === "SELF_PAY_PACKAGE") {
+    return "Recording 1 Attended Package Session"
+  }
+  return "Attendance record only"
+}
+
+const buildEncounterTicketPdfCards = (detail?: BillingListItem): EncounterTicketPdfCard[] => {
+  if (!detail) return []
+
+  return (detail.encounter_tickets ?? [])
+    .filter(ticket => ticket.record_locked)
+    .map(ticket => {
+      const snapshot = ticket.billing_snapshot
+      const resolvedBillingType = snapshot?.billing_type ?? detail.billing_type
+      const resolvedServiceName = snapshot?.service_name || detail.service_name || "Therapy Session"
+
+      return {
+        slipNumber: ticket.slip_number || `ETS-${ticket.id}`,
+        patientName: snapshot?.patient_name || detail.patient_name || "Patient",
+        providerName: snapshot?.provider_name || "Unassigned",
+        serviceName: resolvedServiceName,
+        specialtyName: snapshot?.specialty_tag_name,
+        specialtyIsActive: snapshot?.specialty_tag_is_active,
+        treatmentAreaName: snapshot?.treatment_area_name,
+        treatmentAreaColor: snapshot?.treatment_area_color,
+        treatmentAreaIsActive: snapshot?.treatment_area_is_active,
+        billingRoute: displayBillingType(resolvedBillingType),
+        attendanceStatus: ticket.attendance_status === "ATTENDED" ? "Attended" : "No Show",
+        attendedAt: ticket.attended_at,
+        signedOffAt: ticket.signed_off_at,
+        lockedAt: ticket.locked_at,
+        encounterTicketId: ticket.id,
+        appointmentId: snapshot?.appointment_id ?? detail.appointment_id,
+        billingId: ticket.phase1_billing_id ?? detail.id,
+        activeBillingPackageLabel: describeEncounterTicketPackage(ticket),
+        activeBillingPackageSource: describeEncounterTicketPackageSource(ticket),
+        deductionSummary: buildEncounterTicketDeductionSummary(resolvedBillingType),
+        signatureDataUrl: ticket.patient_signature_data_url
+      }
+    })
+}
+
+const exportEncounterTicketCards = (
+  cards: EncounterTicketPdfCard[],
+  options: {title: string; subtitle: string; fileName: string}
+): void => {
+  const popup = openEncounterTicketPdfWindow(options.title)
+  try {
+    renderEncounterTicketPdfWindow(popup, cards, options)
+  } catch (error: unknown) {
+    popup.close()
+    throw error
+  }
+}
+
+const exportSingleEncounterTicketPdf = (ticket: BillingEncounterTicket, detail?: BillingListItem): void => {
+  const cards = buildEncounterTicketPdfCards(detail).filter(card => card.slipNumber === (ticket.slip_number || `ETS-${ticket.id}`))
+  if (!cards.length) {
+    errorToast(toast, "No locked encounter ticket is available to export")
+    return
+  }
+
+  try {
+    exportEncounterTicketCards(cards, {
+      title: "Encounter Ticket PDF",
+      subtitle: "Single locked encounter ticket export",
+      fileName: cards[0].slipNumber
+    })
+  } catch (error: unknown) {
+    errorToast(toast, extractApiErrorMessage(error, "Failed to export encounter ticket PDF"))
+  }
+}
+
+const exportSelectedBillingEncounterTicketsPdf = (): void => {
+  const cards = buildEncounterTicketPdfCards(selectedBillingDetail.value)
+  if (!cards.length) {
+    errorToast(toast, "No locked encounter tickets are linked to this billing")
+    return
+  }
+
+  try {
+    exportEncounterTicketCards(cards, {
+      title: "Billing Encounter Ticket Pack",
+      subtitle: `Locked encounter tickets for Billing #${selectedBillingDetail.value?.id ?? ""}`,
+      fileName: `billing-${selectedBillingDetail.value?.id ?? "encounter"}-tickets`
+    })
+  } catch (error: unknown) {
+    errorToast(toast, extractApiErrorMessage(error, "Failed to export billing encounter tickets"))
+  }
+}
+
+const displayBillingStatus = (value?: string): string =>
+  (value?.trim() || "UNBILLED").toUpperCase()
+
+const billingStatusSeverity = (value?: string): "success" | "warn" | "danger" | "info" => {
+  const normalized = displayBillingStatus(value)
+  if (normalized === "PAID") return "success"
+  if (normalized === "PARTIAL" || normalized === "PENDING" || normalized === "UNBILLED") return "warn"
+  if (normalized === "VOID" || normalized === "CANCELLED") return "danger"
+  return "info"
+}
+
+const getRouteQueryValue = (value: unknown): string | undefined => {
+  if (Array.isArray(value)) return typeof value[0] === "string" ? value[0] : undefined
+  return typeof value === "string" ? value : undefined
+}
+
+const normalizeBillingTypeValue = (value?: string): BillingType | undefined => {
+  const normalized = String(value ?? "").trim().toLowerCase()
+  if (!normalized) return undefined
+  if (normalized === "self pay: single service" || normalized === "self_pay_single") return "SELF_PAY_SINGLE"
+  if (normalized === "self pay: package service" || normalized === "self_pay_package") return "SELF_PAY_PACKAGE"
+  if (normalized === "hmo" || normalized === "hmo_billing") return "HMO_BILLING"
+  if (normalized === "lgu" || normalized === "lgu_billing") return "LGU_BILLING"
+  if (normalized === "individual pricing" || normalized === "individual_pricing") return "INDIVIDUAL_PRICING"
+  if (normalized === "package billing" || normalized === "package_billing") return "PACKAGE_BILLING"
+  if (normalized === "ala carte" || normalized === "a la carte" || normalized === "ala_carte") return "ALA_CARTE"
+  return undefined
+}
+
+const normalizePaymentType = (value?: string): string => {
+  const normalized = String(value ?? "").trim().toLowerCase()
+  if (!normalized) return ""
+  if (normalized === "cash") return "Cash"
+  if (normalized === "gcash") return "GCash"
+  if (normalized === "e-wallet" || normalized === "ewallet" || normalized === "e wallet") return "E-wallet"
+  if (normalized === "hmo") return "HMO"
+  if (normalized === "lgu") return "LGU"
+  if (normalized === "other") return "Other"
+  return String(value ?? "").trim()
+}
+
+const parseRouteQueryId = (value: unknown): number | undefined => {
+  const normalized = getRouteQueryValue(value)
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+}
+
+const routeBillingContextKey = computed(() =>
+  [
+    getRouteQueryValue(route.query.patientId) ?? "",
+    getRouteQueryValue(route.query.appointmentId) ?? "",
+    getRouteQueryValue(route.query.billingId) ?? ""
+  ].join("|")
+)
+
+const derivePaymentType = (billing: BillingListItem): string => {
+  const paymentReference = normalizePaymentType(billing.payment_reference)
+  if (paymentReference) return paymentReference
+
+  const normalizedBillingType = normalizeBillingTypeValue(billing.billing_type)
+  if (normalizedBillingType === "HMO_BILLING") return "HMO"
+  if (normalizedBillingType === "LGU_BILLING") return "LGU"
   return ""
+}
+
+const getDefaultBillingPaymentType = (billing: BillingListItem): string => {
+  const existing = derivePaymentType(billing)
+  if (existing) return existing
+
+  const normalizedBillingType = normalizeBillingTypeValue(billing.billing_type)
+  if (normalizedBillingType === "HMO_BILLING") return "HMO"
+  if (normalizedBillingType === "LGU_BILLING") return "LGU"
+  return "Cash"
 }
 
 const tablePaymentTypeOptions = computed(() => {
@@ -716,7 +1846,7 @@ const tablePaymentTypeOptions = computed(() => {
 const tableStatusOptions = computed(() => {
   const values = new Set<string>()
   billings.value.forEach(billing => {
-    const status = billing.billing_status?.trim()
+    const status = displayBillingStatus(billing.billing_status)
     if (status) values.add(status)
   })
   return Array.from(values).sort().map(value => ({label: value, value}))
@@ -741,11 +1871,11 @@ const filteredBillings = computed(() => {
       if (!haystack.includes(query)) return false
     }
 
-    if (tableFilterBillingType.value && billing.billing_type !== tableFilterBillingType.value) return false
+    if (tableFilterBillingType.value && normalizeBillingTypeValue(billing.billing_type) !== tableFilterBillingType.value) return false
 
     if (tableFilterPaymentType.value && derivePaymentType(billing) !== tableFilterPaymentType.value) return false
 
-    if (tableFilterStatus.value && (billing.billing_status ?? "") !== tableFilterStatus.value) return false
+    if (tableFilterStatus.value && displayBillingStatus(billing.billing_status) !== tableFilterStatus.value) return false
 
     const createdAt = billing.created_at ? new Date(billing.created_at) : undefined
     if (fromDate && (!createdAt || createdAt < fromDate)) return false
@@ -760,6 +1890,75 @@ const filteredBillings = computed(() => {
     return true
   })
 })
+
+const getBillingDetailForEncounterTicketExport = async (billingId: number): Promise<BillingListItem | undefined> => {
+  if (selectedBillingDetail.value?.id === billingId && selectedBillingDetail.value.encounter_tickets) {
+    return selectedBillingDetail.value
+  }
+  return await billingPhase1Service.getById(billingId)
+}
+
+const exportBillingEncounterTicketPack = async (billingIds: number[], sourceLabel: string): Promise<void> => {
+  const uniqueIds = Array.from(new Set(
+    billingIds
+      .map(id => Number(id))
+      .filter(id => Number.isFinite(id) && id > 0)
+  ))
+
+  if (!uniqueIds.length) {
+    errorToast(toast, "Select at least one billing record first")
+    return
+  }
+
+  let popup: Window
+  try {
+    popup = openEncounterTicketPdfWindow("Encounter Ticket PDF Pack")
+  } catch (error: unknown) {
+    errorToast(toast, error instanceof Error ? error.message : "Unable to open the PDF export window")
+    return
+  }
+  exportingEncounterTicketsPdf.value = true
+
+  try {
+    const details = (await Promise.all(uniqueIds.map(id => getBillingDetailForEncounterTicketExport(id))))
+      .filter((detail): detail is BillingListItem => !!detail)
+
+    const cards = details
+      .flatMap(detail => buildEncounterTicketPdfCards(detail))
+      .sort((left, right) => new Date(left.signedOffAt).getTime() - new Date(right.signedOffAt).getTime())
+
+    if (!cards.length) {
+      popup.close()
+      errorToast(toast, "No locked encounter tickets were found in the selected billing records")
+      return
+    }
+
+    renderEncounterTicketPdfWindow(popup, cards, {
+      title: "Encounter Ticket PDF Pack",
+      subtitle: sourceLabel,
+      fileName: `encounter-ticket-pack-${new Date().toISOString().slice(0, 10)}`
+    })
+  } catch (error: unknown) {
+    popup.close()
+    errorToast(toast, extractApiErrorMessage(error, "Failed to export encounter ticket pack"))
+  } finally {
+    exportingEncounterTicketsPdf.value = false
+  }
+}
+
+const exportSelectedEncounterTicketsPdf = async (): Promise<void> => {
+  await exportBillingEncounterTicketPack(
+    selectedBillingRows.value.map(item => item.id),
+    `Selected billing records · ${selectedBillingRows.value.length} chosen`
+  )
+}
+
+const exportFilteredEncounterTicketsPdf = async (): Promise<void> => {
+  await exportBillingEncounterTicketPack(
+    filteredBillings.value.map(item => item.id),
+    `Filtered billing records · ${filteredBillings.value.length} shown`
+  )
+}
 
 const resetTableFilters = (): void => {
   tableFilterQuery.value = ""
@@ -842,8 +2041,7 @@ const lineTypeOptions: Array<{label: string; value: SelectedLine["type"]}> = [
   {label: "Machine", value: "machine"},
   {label: "Technique", value: "technique"},
   {label: "Evaluation", value: "evaluation"},
-  {label: "Add-on (Machine)", value: "add-on-machine"},
-  {label: "Add-on (Technique)", value: "add-on-technique"},
+  {label: "Add-ons", value: "add-on-machine"},
   {label: "Add-on (Home Service)", value: "add-on-home-service"},
 ]
 
@@ -857,8 +2055,12 @@ const currentLineTypeOptions = computed(() => {
   if (type === "machine")             return filterByHmoIds(machines.value,        billingHmoMachineIds.value)
   if (type === "technique")           return filterByHmoIds(techniques.value,       billingHmoTechniqueIds.value)
   if (type === "evaluation")          return filterByHmoIds(evaluations.value,      billingHmoEvaluationIds.value)
-  if (type === "add-on-machine")      return filterByHmoIds(addOnMachines.value,    billingHmoAddOnMachineIds.value)
-  if (type === "add-on-technique")    return filterByHmoIds(addOnTechniques.value,  billingHmoAddOnTechniqueIds.value)
+  if (type === "add-on-machine") {
+    return [
+      ...filterByHmoIds(addOnMachines.value, billingHmoAddOnMachineIds.value).map(item => ({...item, type: "add-on-machine" as const})),
+      ...filterByHmoIds(addOnTechniques.value, billingHmoAddOnTechniqueIds.value).map(item => ({...item, type: "add-on-technique" as const}))
+    ]
+  }
   return filterByHmoIds(addOnHomeServices.value, billingHmoAddOnHomeServiceIds.value)
 })
 
@@ -952,6 +2154,17 @@ const fetchLookup = async (path: string): Promise<BillingPickerLookup[]> => {
   }))
 }
 
+const fetchSessionLookup = async (): Promise<BillingPickerLookup[]> => {
+  const {data} = await pamsAPI.get<Pageable<BillingPickerLookup>>("/sessions/lookup", {
+    params: {
+      page: 1,
+      size: 500,
+      status: Status.ACTIVE
+    }
+  })
+  return data?.content ?? []
+}
+
 const form = ref<{
   patient_id?: number
   appointment_id?: number
@@ -979,8 +2192,8 @@ const formatType = (type: string): string => {
     machine: "Machine",
     technique: "Technique",
     evaluation: "Evaluation",
-    "add-on-machine": "Add-on (Machine)",
-    "add-on-technique": "Add-on (Technique)",
+    "add-on-machine": "Add-ons",
+    "add-on-technique": "Add-ons",
     "add-on-home-service": "Add-on (Home Service)"
   }
   return typeMap[type] || type
@@ -1030,7 +2243,7 @@ const addSelectedLine = (): void => {
   selectedLines.value.push({
     key: crypto.randomUUID(),
     id: found.id,
-    type: selectedLineType.value,
+    type: found.type ?? selectedLineType.value,
     name: found.name,
     price: Number(found.price ?? 0),
     quantity: Math.max(1, Number(selectedLineQty.value ?? 1))
@@ -1252,14 +2465,39 @@ const posSummary = computed(() => {
   }
 })
 
+const editingLguReservedAmount = computed(() => {
+  if (!editingBillingId.value || form.value.billing_type !== "LGU_BILLING") return 0
+  const billingFromTable = billings.value.find(item => item.id === editingBillingId.value)
+  const billingSource = selectedBillingDetail.value?.id === editingBillingId.value
+    ? selectedBillingDetail.value
+    : billingFromTable
+  if (!billingSource || normalizeBillingTypeValue(billingSource.billing_type) !== "LGU_BILLING") return 0
+  return Number(billingSource.total_amount ?? billingSource.amount_due ?? 0)
+})
+
+const lguAvailableBeforeSave = computed(() => {
+  if (!activeLguBudgetSummary.value) return null
+  return Number((activeLguBudgetSummary.value.remaining_amount + editingLguReservedAmount.value).toFixed(2))
+})
+
+const lguProjectedRemainingAfterSave = computed(() => {
+  if (lguAvailableBeforeSave.value == null) return null
+  return Number((lguAvailableBeforeSave.value - posSummary.value.totalDue).toFixed(2))
+})
+
+const lguWillExceedRemainingFund = computed(() =>
+  lguProjectedRemainingAfterSave.value != null && lguProjectedRemainingAfterSave.value < 0
+)
+
 const loadLookups = async (): Promise<void> => {
-  const [machinesRes, techniquesRes, evaluationsRes, addOnMachinesRes, addOnTechniquesRes, addOnHomeRes] = await Promise.all([
+  const [machinesRes, techniquesRes, evaluationsRes, addOnMachinesRes, addOnTechniquesRes, addOnHomeRes, sessionsRes] = await Promise.all([
     fetchLookup("/machines/lookup"),
     fetchLookup("/techniques/lookup"),
     fetchLookup("/evaluations/lookup"),
     fetchLookup("/add-on-machines/lookup"),
     fetchLookup("/add-on-techniques/lookup"),
-    fetchLookup("/add-on-home-services/lookup")
+    fetchLookup("/add-on-home-services/lookup"),
+    fetchSessionLookup()
   ])
 
   await loadPatientOptions()
@@ -1269,6 +2507,7 @@ const loadLookups = async (): Promise<void> => {
   addOnMachines.value = addOnMachinesRes
   addOnTechniques.value = addOnTechniquesRes
   addOnHomeServices.value = addOnHomeRes
+  sessionServices.value = sessionsRes
   loadLocalData()
 }
 
@@ -1277,10 +2516,33 @@ const fetchBillings = async (): Promise<void> => {
     isLoading.value = true
     const response = await billingPhase1Service.getAll({page: 1, size: 20})
     billings.value = response?.content ?? []
+    selectedBillingRows.value = []
   } catch {
     errorToast(toast, "Failed to load billings")
   } finally {
     isLoading.value = false
+  }
+}
+
+const refreshLguBudgetSummary = async (): Promise<void> => {
+  if (form.value.billing_type !== "LGU_BILLING" || !form.value.patient_id) {
+    activeLguBudgetSummary.value = null
+    lguBudgetSummaryError.value = ""
+    return
+  }
+
+  const patientId = form.value.patient_id
+  const appointmentId = form.value.appointment_id
+
+  loadingLguBudgetSummary.value = true
+  try {
+    activeLguBudgetSummary.value = await billingPhase1Service.getLguBudgetSummary(patientId, appointmentId) ?? null
+    lguBudgetSummaryError.value = ""
+  } catch (error: unknown) {
+    activeLguBudgetSummary.value = null
+    lguBudgetSummaryError.value = extractApiErrorMessage(error, "Failed to load LGU fund summary")
+  } finally {
+    loadingLguBudgetSummary.value = false
   }
 }
 
@@ -1291,6 +2553,9 @@ const resetBillingForm = (): void => {
   selectedLineId.value = undefined
   selectedLineQty.value = 1
   selectedPackageOfferId.value = undefined
+  activeLguBudgetSummary.value = null
+  loadingLguBudgetSummary.value = false
+  lguBudgetSummaryError.value = ""
   manualDiscountEnabled.value = false
   manualDiscountType.value = "PERCENTAGE"
   manualDiscountValue.value = 0
@@ -1464,8 +2729,9 @@ const createBilling = async (): Promise<void> => {
     }
     await fetchBillings()
     resetBillingForm()
-  } catch {
-    errorToast(toast, "Failed to save billing")
+    await refreshLguBudgetSummary()
+  } catch (error: unknown) {
+    errorToast(toast, extractApiErrorMessage(error, "Failed to save billing"))
   }
 }
 
@@ -1496,6 +2762,40 @@ const loadBillingForEdit = async (billingId: number): Promise<void> => {
   selectedLines.value = parseBillingLines(detail.line_items_json)
 }
 
+const buildBillingUpdatePayload = (detail: BillingListItem, overrides?: Partial<BillingRequest>): BillingRequest => ({
+  patient_id: detail.patient_id,
+  appointment_id: detail.appointment_id,
+  package_id: detail.package_id,
+  billing_type: normalizeBillingType(detail.billing_type),
+  service_type: normalizeServiceType(detail.service_type),
+  service_name: detail.service_name || undefined,
+  line_items_json: detail.line_items_json,
+  amount_due: Number(detail.amount_due ?? detail.total_amount ?? 0),
+  amount_paid: Number(detail.amount_paid ?? 0),
+  payment_method_id: detail.payment_method_id,
+  payment_reference: detail.payment_reference || undefined,
+  discount_type: detail.discount_type,
+  discount_value: detail.discount_value,
+  discount_amount: detail.discount_amount,
+  subtotal_amount: detail.subtotal_amount,
+  total_amount: detail.total_amount ?? detail.amount_due,
+  amount_tendered: detail.amount_tendered,
+  change_amount: detail.change_amount,
+  pricing_tier: detail.pricing_tier,
+  pricing_source: detail.pricing_source,
+  receipt_number: detail.receipt_number,
+  senior_pwd_id_presented: detail.senior_pwd_id_presented,
+  senior_pwd_id_reference: detail.senior_pwd_id_reference,
+  vat_enabled: detail.vat_enabled,
+  vat_rate: detail.vat_rate,
+  vatable_amount: detail.vatable_amount,
+  vat_amount: detail.vat_amount,
+  ...overrides
+})
+
+const getReceiptDisplayNumber = (detail: BillingListItem): string =>
+  detail.receipt_number?.trim() || `BILL-${detail.id}`
+
 const openBillingDetails = async (billingId: number): Promise<void> => {
   const detail = await billingPhase1Service.getById(billingId)
   if (!detail) {
@@ -1504,18 +2804,165 @@ const openBillingDetails = async (billingId: number): Promise<void> => {
   }
 
   selectedBillingDetail.value = detail
+  billingDetailPaymentType.value = getDefaultBillingPaymentType(detail)
+  billingTenderAmount.value = 0
   billingDetailsVisible.value = true
 }
 
+const printSelectedBillingReceipt = (): void => {
+  if (!selectedBillingDetail.value) return
+
+  const detail = selectedBillingDetail.value
+  const popup = openBillingReceiptWindow(getReceiptDisplayNumber(detail))
+
+  try {
+    renderBillingReceiptWindow(popup, {
+      receiptNumber: getReceiptDisplayNumber(detail),
+      billingId: detail.id,
+      patientName: detail.patient_name || `Patient #${detail.patient_id}`,
+      appointmentId: detail.appointment_id,
+      createdAt: detail.created_at,
+      billingType: displayBillingType(detail.billing_type),
+      paymentType: derivePaymentType(detail) || detail.payment_reference,
+      serviceLabel: detail.service_name,
+      subtotal: Number(detail.subtotal_amount ?? detail.amount_due ?? detail.total_amount ?? 0),
+      discount: Number(detail.discount_amount ?? 0),
+      totalDue: selectedBillingTotalDue.value,
+      amountPaid: selectedBillingAmountPaid.value,
+      outstanding: selectedBillingOutstanding.value,
+      changeAmount: Number(detail.change_amount ?? 0),
+      lines: selectedBillingReceiptLines.value
+    }, {
+      title: "Billing Receipt Copy",
+      fileName: getReceiptDisplayNumber(detail)
+    })
+  } catch (error: unknown) {
+    popup.close()
+    errorToast(toast, extractApiErrorMessage(error, "Failed to print receipt copy"))
+  }
+}
+
+const openReceiptEditor = (): void => {
+  if (!selectedBillingDetail.value || !canEditReceipt.value) return
+  receiptEditorNumber.value = selectedBillingDetail.value.receipt_number || ""
+  receiptEditorLabel.value = selectedBillingDetail.value.service_name || ""
+  receiptEditorVisible.value = true
+}
+
+const saveReceiptEdits = async (): Promise<void> => {
+  if (!selectedBillingDetail.value || !canEditReceipt.value) return
+
+  const detail = selectedBillingDetail.value
+  receiptEditorSaving.value = true
+  try {
+    await billingPhase1Service.update(detail.id, buildBillingUpdatePayload(detail, {
+      receipt_number: receiptEditorNumber.value.trim() || undefined,
+      service_name: receiptEditorLabel.value.trim() || undefined
+    }))
+
+    const refreshedDetail = await billingPhase1Service.getById(detail.id)
+    if (!refreshedDetail) {
+      errorToast(toast, "Receipt details were saved, but the billing could not be reloaded")
+      return
+    }
+
+    selectedBillingDetail.value = refreshedDetail
+    receiptEditorVisible.value = false
+    await fetchBillings()
+    successToast(toast, "Receipt details updated")
+  } catch (error: unknown) {
+    errorToast(toast, extractApiErrorMessage(error, "Failed to update receipt details"))
+  } finally {
+    receiptEditorSaving.value = false
+  }
+}
+
+const saveBillingTender = async (): Promise<void> => {
+  if (!selectedBillingDetail.value || !canSaveBillingTender.value) return
+
+  const detail = selectedBillingDetail.value
+  const paymentReference = billingDetailPaymentType.value.trim()
+  const nextAmountPaid = billingResultingPaid.value
+  const nextAmountTendered = billingResultingAmountTendered.value
+  const nextChangeAmount = billingResultingChange.value
+
+  savingBillingTender.value = true
+  try {
+    await billingPhase1Service.update(detail.id, buildBillingUpdatePayload(detail, {
+      amount_paid: nextAmountPaid,
+      amount_tendered: nextAmountTendered,
+      change_amount: nextChangeAmount,
+      payment_reference: paymentReference
+    }))
+
+    const refreshedDetail = await billingPhase1Service.getById(detail.id)
+    if (!refreshedDetail) {
+      errorToast(toast, "Payment saved, but the latest billing detail could not be reloaded")
+      return
+    }
+
+    selectedBillingDetail.value = refreshedDetail
+    billingDetailPaymentType.value = getDefaultBillingPaymentType(refreshedDetail)
+    billingTenderAmount.value = 0
+    await fetchBillings()
+    successToast(toast, "Billing payment tendered")
+  } catch (error: unknown) {
+    errorToast(toast, extractApiErrorMessage(error, "Failed to tender billing payment"))
+  } finally {
+    savingBillingTender.value = false
+  }
+}
+
+const markSelectedBillingAsBilled = async (): Promise<void> => {
+  if (!selectedBillingDetail.value || !canMarkSelectedBillingAsBilled.value) return
+
+  const detail = selectedBillingDetail.value
+
+  markingBillingAsBilled.value = true
+  try {
+    await billingPhase1Service.update(detail.id, buildBillingUpdatePayload(detail, {
+      billing_status: "BILLED"
+    }))
+
+    const refreshedDetail = await billingPhase1Service.getById(detail.id)
+    if (!refreshedDetail) {
+      errorToast(toast, "Transaction was marked as billed, but the latest billing detail could not be reloaded")
+      return
+    }
+
+    selectedBillingDetail.value = refreshedDetail
+    billingDetailPaymentType.value = getDefaultBillingPaymentType(refreshedDetail)
+    billingTenderAmount.value = 0
+    await fetchBillings()
+    successToast(toast, "Transaction marked as billed")
+  } catch (error: unknown) {
+    errorToast(toast, extractApiErrorMessage(error, "Failed to mark transaction as billed"))
+  } finally {
+    markingBillingAsBilled.value = false
+  }
+}
+
+const applyRouteBillingContext = async (): Promise<void> => {
+  const patientId = parseRouteQueryId(route.query.patientId)
+  const appointmentId = parseRouteQueryId(route.query.appointmentId)
+  const billingId = parseRouteQueryId(route.query.billingId)
+
+  if (!patientId && !appointmentId && !billingId) return
+
+  resetBillingForm()
+  selectedBillingDetail.value = undefined
+  billingDetailsVisible.value = false
+
+  if (patientId) form.value.patient_id = patientId
+  if (appointmentId) form.value.appointment_id = appointmentId
+
+  if (billingId) {
+    await openBillingDetails(billingId)
+  }
+}
+
 const normalizeBillingType = (value: string): BillingType => {
-  const normalized = value.trim().toLowerCase()
-  if (normalized === "self pay: single service") return "SELF_PAY_SINGLE"
-  if (normalized === "self pay: package service") return "SELF_PAY_PACKAGE"
-  if (normalized === "hmo") return "HMO_BILLING"
-  if (normalized === "lgu") return "LGU_BILLING"
-  if (normalized === "individual pricing") return "INDIVIDUAL_PRICING"
-  if (normalized === "package billing") return "PACKAGE_BILLING"
-  return "ALA_CARTE"
+  return normalizeBillingTypeValue(value) ?? "ALA_CARTE"
 }
 
 const normalizeServiceType = (value: string): ServiceType => {
@@ -1575,8 +3022,25 @@ watch(
   }
 )
 
+watch(
+  [() => form.value.patient_id, () => form.value.appointment_id, () => form.value.billing_type],
+  async () => {
+    await refreshLguBudgetSummary()
+  }
+)
+
+watch(
+  routeBillingContextKey,
+  async (value, previousValue) => {
+    if (!value || value === previousValue) return
+    await applyRouteBillingContext()
+  }
+)
+
 onMounted(async () => {
+  syncRoleFromStorage()
   await loadLookups()
   await fetchBillings()
+  await applyRouteBillingContext()
 })
 </script>

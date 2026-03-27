@@ -1,7 +1,7 @@
 import type {FormSubmitEvent} from "@primevue/forms";
 import type {ButtonProps} from "primevue";
 import type {Staff} from "@/features/staff/types/staff";
-import type {Role} from "@/models/reference.ts";
+import type {Role, SpecialtyTag} from "@/models/reference.ts";
 import type {Lookup} from "@/models/global.model.ts";
 import type {DraftService} from "@/services/draft.service.ts";
 import type {StaffFormState} from "@/features/staff/schema/staff.schema";
@@ -17,7 +17,9 @@ export interface StaffFormProps {
   isLoading: boolean
   buttonProps: ButtonProps
   draftService: DraftService<StaffFormState>
+  canManageHighestRole?: boolean
 
   roles: Role[]
   clinics: Lookup[]
+  specialties: SpecialtyTag[]
 }

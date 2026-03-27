@@ -4,7 +4,11 @@ export interface Reference {
   is_active: boolean
 }
 
+export type AppointmentProviderType = "NONE" | "DOCTOR_CONSULTANT" | "PHYSICAL_THERAPIST"
+
 export interface Role extends Reference {
+  appointment_provider_type: AppointmentProviderType
+  requires_specialty_tag: boolean
 }
 
 export interface Permission extends Reference {
@@ -54,3 +58,10 @@ export interface MedicalDiagnose extends Reference {
 export interface MedicalImaging extends Reference {
 }
 
+export interface TreatmentArea extends Reference {
+  clinic_id: number
+  color: string
+}
+
+export interface SpecialtyTag extends Reference {
+}

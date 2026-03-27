@@ -23,8 +23,12 @@
             :clinics="clinics"
             :isLoading="isUiLoading"
             :isExportLoading="isExportLoading"
+            :canCreateStaff="canCreateStaff"
+            :canManageRoles="canManageRoles"
             @reset="resetFilters"
             @save="openCreate"
+            @manageSpecialties="openSpecialtyManager"
+            @manageRoles="openRoleManager"
             @export="onExportToExcelThrottleFn"
           />
         </template>
@@ -42,7 +46,16 @@
         </template>
       </StaffsTable>
 
-      <StaffEditorDialog ref="editor" :roles="roles" :clinics="clinics" :isLoading="isUiLoading" />
+      <StaffEditorDialog
+        ref="editor"
+        :roles="roles"
+        :clinics="clinics"
+        :specialties="specialties"
+        :isLoading="isUiLoading"
+        :canManageHighestRole="canManageHighestRole"
+      />
+      <SpecialtyManagerDialog ref="specialtyManager" @specialtiesUpdated="handleSpecialtiesUpdated" />
+      <RoleAccessManagerDialog ref="roleManager" @rolesUpdated="handleRolesUpdated" />
     </section>
   </main>
 </template>
@@ -59,6 +72,8 @@ import StaffsTable from "@/features/staff/components/StaffsTable.vue"
 import StaffsTableHeader from "@/features/staff/components/StaffsTableHeader.vue"
 import StaffRowActionsMenu from "@/features/staff/components/StaffRowActionsMenu.vue"
 import StaffEditorDialog from "@/features/staff/components/StaffEditorDialog.vue"
+import RoleAccessManagerDialog from "@/features/staff/components/RoleAccessManagerDialog.vue"
+import SpecialtyManagerDialog from "@/features/staff/components/SpecialtyManagerDialog.vue"
 
 import { staffTanstackService } from "@/features/staff/queries/staff.tanstack.service"
 import { clinicTanstackService } from "@/features/clinics/queries/clinic.tanstack.service"
@@ -67,7 +82,7 @@ import { useIsLoading } from "@/composables/tanstack-loader.composable"
 import { useRefreshToken } from "@/composables/refresh-token.composable"
 import { usePaginationDebounce } from "@/composables/pagination-debounce.composable"
 import { exportToExcel } from "@/utils/export-excel.util"
-import { errorToast, infoToast, successToast, warningToast } from "@/utils/toast.util"
+import { errorToast, successToast, warningToast } from "@/utils/toast.util"
 import type { APIError } from "@/utils/error-handler"
 
 import {
@@ -83,7 +98,7 @@ import {
   type PageRequestWithStatus,
 } from "@/models/paging"
 import type { Staff, StaffExportRequestParams, StaffRequestParams } from "@/features/staff/types/staff"
-import type { Role } from "@/models/reference"
+import type { Role, SpecialtyTag } from "@/models/reference"
 import type { Lookup } from "@/models/global.model"
 
 import { createReferenceQueryService } from "@/services/reference.tanstack.service"
@@ -96,19 +111,28 @@ const queryClient = useQueryClient()
 const useClinicStore = clinicStore()
 
 const editor = ref<InstanceType<typeof StaffEditorDialog> | null>(null)
+const specialtyManager = ref<InstanceType<typeof SpecialtyManagerDialog> | null>(null)
+const roleManager = ref<InstanceType<typeof RoleAccessManagerDialog> | null>(null)
 const roleName = ref<string>("")
+const canCreateStaff = computed(() => roleName.value === "Owner")
+const canManageRoles = computed(() => false)
 const canUpdateStaff = computed(() => roleName.value === "Owner")
 const canDeleteStaff = computed(() => roleName.value === "Owner")
+const canManageHighestRole = computed(() => roleName.value === "Owner")
 
 const isExportLoading = useIsLoading(StaffTanstackKey.STAFFS_EXPORT)
 const isClinicLoading = useIsLoading(ClinicTanstackKey.CLINICS_LOOKUP)
 const isRoleLoading = useIsLoading(ReferenceTanstackKey.ROLES)
+const isSpecialtyLoading = useIsLoading(ReferenceTanstackKey.SPECIALTY_TAGS)
 const isStaffLoading = useIsLoading(StaffTanstackKey.STAFFS)
 const isTableLoading = computed(() => isStaffLoading.value)
-const isUiLoading = computed(() => isClinicLoading.value || isRoleLoading.value || isStaffLoading.value)
+const isUiLoading = computed(() =>
+  isClinicLoading.value || isRoleLoading.value || isSpecialtyLoading.value || isStaffLoading.value
+)
 
 const roles = ref<Role[]>([])
 const clinics = ref<Lookup[]>([])
+const specialties = ref<SpecialtyTag[]>([])
 
 const selectedClinic = ref<Lookup | undefined>()
 const selectedSearch = ref<string | undefined>()
@@ -147,8 +171,19 @@ const resetFilters = () => {
   selectedClinic.value = undefined
 }
 
-const openCreate = () => editor.value?.openCreate()
+const openCreate = () => {
+  if (!canCreateStaff.value) return
+  editor.value?.openCreate()
+}
 const openEdit = (staff: Staff) => editor.value?.openEdit(staff)
+const openSpecialtyManager = () => {
+  if (!canManageRoles.value) return
+  void specialtyManager.value?.open()
+}
+const openRoleManager = () => {
+  if (!canManageRoles.value) return
+  void roleManager.value?.open()
+}
 
 const statusLabel = (isActive: boolean) => (isActive ? "Active" : "Inactive")
 
@@ -267,13 +302,23 @@ const initializeDropdowns = async () => {
     status: Status.ACTIVE,
   }
 
-  const [fetchedClinics, fetchedRoles] = await Promise.all([
+  const [fetchedClinics, fetchedRoles, fetchedSpecialties] = await Promise.all([
     clinicTanstackService.getAllLookup(queryClient, defaultPage, undefined),
     createReferenceQueryService<Role>(queryClient, ReferenceTanstackKey.ROLES, roleRequest),
+    createReferenceQueryService<SpecialtyTag>(queryClient, ReferenceTanstackKey.SPECIALTY_TAGS, roleRequest),
   ])
 
   roles.value = fetchedRoles?.content ?? []
   clinics.value = fetchedClinics?.content ?? []
+  specialties.value = fetchedSpecialties?.content ?? []
+}
+
+const handleRolesUpdated = async () => {
+  await initializeDropdowns()
+}
+
+const handleSpecialtiesUpdated = async () => {
+  await initializeDropdowns()
 }
 
 const applyClinicRedirect = async () => {

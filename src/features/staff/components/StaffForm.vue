@@ -82,7 +82,7 @@
             :filter="true"
             :filter-fields="['name']"
             :loading="isRolesLoading"
-            placeholder="Select Role">
+            placeholder="Select job title">
             <template v-slot:value="slotProps">
               <div v-if="slotProps.value" class="flex items-center">
                 <div>{{ slotProps.value?.name }}</div>
@@ -97,11 +97,46 @@
               </div>
             </template>
           </Select>
-          <label for="role_id">Role</label>
+          <label for="role_id">Job Title</label>
           <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
             {{ $field.error.message }}
           </Message>
         </IftaLabel>
+      </FormField>
+
+      <FormField v-if="selectedRoleAllowsSpecialty" v-slot="$field" name="specialty">
+        <IftaLabel>
+          <Select
+            v-model="$field.value"
+            :options="specialties"
+            :fluid="true"
+            :filter="true"
+            :filter-fields="['name']"
+            placeholder="Select Specialty">
+            <template v-slot:value="slotProps">
+              <div v-if="slotProps.value" class="flex items-center">
+                <div>{{ slotProps.value?.name }}</div>
+              </div>
+              <span v-else>
+                {{ slotProps.placeholder }}
+              </span>
+            </template>
+            <template v-slot:option="slotProps">
+              <div class="flex items-center">
+                <div>{{ slotProps.option?.name }}</div>
+              </div>
+            </template>
+          </Select>
+          <label for="specialty_tag_id">Specialty</label>
+          <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
+            {{ $field.error.message }}
+          </Message>
+        </IftaLabel>
+        <p class="px-1 text-xs text-[rgb(var(--app-fg))]/60">
+          {{ selectedRoleRequiresSpecialty
+            ? "This job title requires a specialty."
+            : "Specialty is optional for this provider job title." }}
+        </p>
       </FormField>
 
       <div class="flex justify-end gap-2 mt-4">
@@ -143,17 +178,7 @@ const form = useTemplateRef<FormInstance>('form')
 
 const emit = defineEmits<StaffFormEmits>()
 const props = defineProps<StaffFormProps>()
-const {selectedStaff, isLoading: isParentLoading, roles, clinics} = toRefs(props)
-
-const assignableRoleNames = new Set<string>([
-  "Chief Operations Officer - COO (Admin 1 Account)",
-  "Operations Manager (Admin 2 Account)",
-  "Doctor Consultant (Rehabilitation Medicine)",
-  "Admin/Receptionist",
-  "Senior Physical Therapist (Neurologic Specialization)",
-  "Junior Physical Therapist (Musculoskeletal Specialization)",
-  "Junior Physical Therapist (Pediatric Specialization)",
-])
+const {selectedStaff, isLoading: isParentLoading, roles, clinics, specialties} = toRefs(props)
 
 const isClinicsLoading = useIsLoading(ClinicTanstackKey.CLINICS)
 const isRolesLoading = useIsLoading(ReferenceTanstackKey.ROLES)
@@ -163,7 +188,9 @@ const [visible, toggle] = useToggle()
 const isEditing = computed<boolean>(() => !!selectedStaff.value)
 const isLoading = computed<boolean>(() => isParentLoading.value || isClinicsLoading.value || isRolesLoading.value)
 const filteredRoles = computed(() => {
-  const allowedRoles = roles.value?.filter(role => assignableRoleNames.has(role.name)) ?? []
+  const allowedRoles = props.canManageHighestRole
+    ? (roles.value ?? [])
+    : (roles.value?.filter(role => role.name !== "Owner") ?? [])
   const selectedRole = roles.value?.find(role => role.id === selectedStaff.value?.role_id)
 
   if (!selectedRole || allowedRoles.some(role => role.id === selectedRole.id)) {
@@ -172,6 +199,13 @@ const filteredRoles = computed(() => {
 
   return [selectedRole, ...allowedRoles]
 })
+const selectedRoleAllowsSpecialty = computed(() => {
+  const providerType = (form.value?.states?.role?.value as {appointment_provider_type?: string} | undefined)?.appointment_provider_type
+  return Boolean(providerType && providerType !== "NONE")
+})
+const selectedRoleRequiresSpecialty = computed(() =>
+  Boolean((form.value?.states?.role?.value as {requires_specialty_tag?: boolean} | undefined)?.requires_specialty_tag)
+)
 
 const resolver = ref(zodResolver(staffSchema))
 
@@ -189,7 +223,8 @@ const onShow = async (): Promise<void> => {
     name: selectedStaff.value?.name,
     email: selectedStaff.value?.email,
     clinic: clinics.value?.find(c => c.id === selectedStaff.value?.clinic_id),
-    role: filteredRoles.value?.find(r => r.id === selectedStaff.value?.role_id)
+    role: filteredRoles.value?.find(r => r.id === selectedStaff.value?.role_id),
+    specialty: specialties.value?.find(specialty => specialty.id === selectedStaff.value?.specialty_tag_id)
   }
   form.value?.setValues(initialValues)
 }

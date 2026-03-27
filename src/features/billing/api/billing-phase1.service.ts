@@ -58,6 +58,58 @@ export interface BillingListItem {
   vat_rate?: number
   vatable_amount?: number
   vat_amount?: number
+  encounter_tickets?: BillingEncounterTicket[]
+}
+
+export interface BillingEncounterTicket {
+  id: number
+  appointment_id: number
+  patient_id: number
+  phase1_billing_id?: number
+  active_billing_package_id?: string
+  active_billing_package_name?: string
+  active_billing_package_source?: string
+  attendance_status: "ATTENDED" | "NO_SHOW"
+  attended_at: string
+  patient_acknowledged_by: string
+  deduction_authorized: boolean
+  patient_signature_data_url?: string
+  slip_number?: string
+  signed_off_at: string
+  record_locked: boolean
+  locked_at?: string
+  billing_snapshot?: {
+    appointment_id: number
+    phase1_billing_id: number
+    patient_id: number
+    patient_name: string
+    provider_name?: string
+    active_billing_package_id?: string
+    active_billing_package_name?: string
+    active_billing_package_source?: string
+    specialty_tag_name?: string
+    specialty_tag_is_active?: boolean
+    treatment_area_name?: string
+    treatment_area_color?: string
+    treatment_area_is_active?: boolean
+    starts_at: string
+    ends_at: string
+    billing_type?: string
+    service_type?: string
+    billing_status?: string
+    service_name?: string
+    amount_due: number
+    amount_paid: number
+    total_amount: number
+    line_items: Array<{
+      id?: number | string
+      type: string
+      name: string
+      quantity: number
+      price: number
+      originalPrice?: number
+    }>
+  }
 }
 
 export interface BillingRequest {
@@ -66,6 +118,7 @@ export interface BillingRequest {
   package_id?: number
   billing_type: BillingType
   service_type: ServiceType
+  billing_status?: string
   service_name?: string
   line_items_json?: string
   amount_due: number
@@ -104,6 +157,62 @@ export interface PaymentMethodLookup {
   name: string
 }
 
+export interface LguBudgetSummary {
+  period_id: number
+  program_id: number
+  clinic_id?: number | null
+  program_name: string
+  period_year: number
+  period_month: number
+  period_status: string
+  total_budget: number
+  used_amount: number
+  remaining_amount: number
+  reference_date: string
+}
+
+export interface LguDashboardBudget {
+  period_id: number
+  program_id: number
+  clinic_id?: number | null
+  program_name: string
+  period_year: number
+  period_month: number
+  base_budget: number
+  rollover_amount: number
+  total_budget: number
+  used_amount: number
+  remaining_amount: number
+  period_status: string
+}
+
+export interface LguDashboardBudgetSaveRequest {
+  base_budget: number
+  rollover_amount: number
+  program_name?: string
+}
+
+export interface LguDashboardHistoryItem {
+  id: number
+  created_at: string
+  program_name: string
+  period_year: number
+  period_month: number
+  patient_id?: number | null
+  patient_name?: string | null
+  phase1_billing_id?: number | null
+  billing_status?: string | null
+  service_name?: string | null
+  receipt_number?: string | null
+  entry_type: string
+  usage_status: string
+  amount_in: number
+  amount_out: number
+  balance_after?: number | null
+  reference_label?: string | null
+  notes?: string | null
+}
+
 export const billingPhase1Service = {
   async getAll(params: Record<string, unknown>): Promise<Pageable<BillingListItem> | undefined> {
     const {data} = await pamsAPI.get<Pageable<BillingListItem>>("/billings", {params})
@@ -129,6 +238,30 @@ export const billingPhase1Service = {
   },
   async getPaymentMethods(): Promise<PaymentMethodLookup[] | undefined> {
     const {data} = await pamsAPI.get<PaymentMethodLookup[]>("/billings/payment-methods")
+    return data
+  },
+  async getLguBudgetSummary(patientId?: number, appointmentId?: number): Promise<LguBudgetSummary | null | undefined> {
+    if (!patientId) return null
+    const {data} = await pamsAPI.get<LguBudgetSummary | null>("/billings/lgu-budget-summary", {
+      params: {
+        patient_id: patientId,
+        appointment_id: appointmentId
+      }
+    })
+    return data
+  },
+  async getLguDashboardBudget(): Promise<LguDashboardBudget | null | undefined> {
+    const {data} = await pamsAPI.get<LguDashboardBudget | null>("/billings/lgu-dashboard-budget")
+    return data
+  },
+  async saveLguDashboardBudget(payload: LguDashboardBudgetSaveRequest): Promise<LguDashboardBudget | null | undefined> {
+    const {data} = await pamsAPI.post<LguDashboardBudget | null>("/billings/lgu-dashboard-budget", payload)
+    return data
+  },
+  async getLguDashboardHistory(limit = 100): Promise<LguDashboardHistoryItem[] | undefined> {
+    const {data} = await pamsAPI.get<LguDashboardHistoryItem[]>("/billings/lgu-dashboard-history", {
+      params: {limit}
+    })
     return data
   },
   async exportCsv(params: Record<string, unknown>): Promise<AxiosResponse<Blob> | undefined> {

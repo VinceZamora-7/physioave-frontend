@@ -24,6 +24,8 @@ export enum ReferenceTanstackKey {
   MEDICAL_HISTORIES = 'medical-histories',
   MEDICAL_IMAGINGS = 'medical-imagings',
   HMO_TYPES = 'hmo-types',
+  SPECIALTY_TAGS = 'specialty-tags',
+  TREATMENT_AREAS = 'treatment-areas',
 }
 
 export enum ClinicTanstackKey {

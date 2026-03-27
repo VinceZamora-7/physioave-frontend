@@ -333,6 +333,19 @@
             <li>
               <button
                 type="button"
+                @click="goToAndClose('settings')"
+                :class="itemClass('settings')"
+                aria-label="Settings"
+                title="Settings"
+              >
+                <span :class="iconWrapClass('settings')"><i class="pi pi-sliders-h text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">Settings</span>
+              </button>
+            </li>
+
+            <li>
+              <button
+                type="button"
                 @click="goToAndClose('clinics')"
                 :class="itemClass('clinics')"
                 aria-label="Clinic"

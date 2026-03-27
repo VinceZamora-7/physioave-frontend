@@ -75,6 +75,7 @@ const route = useRoute()
 const pageTitle = computed(() => {
   const name = String(route.name ?? "")
   const map: Record<string, string> = {
+    settings: "Settings",
     clinics: "Clinics",
     staffs: "Staff",
     patients: "Patients",

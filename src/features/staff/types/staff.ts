@@ -1,16 +1,21 @@
 import type {PageableRequest, PageRequestWithNameAndStatus} from "@/models/paging.ts";
+import type {AppointmentProviderType} from "@/models/reference.ts";
 
 export interface BaseStaff {
   name: string
   email: string
   clinic_id: number
   role_id: number
+  specialty_tag_id?: number
 }
 
 export interface Staff extends BaseStaff {
   id: number
   clinic_name: string
   role_name: string
+  appointment_provider_type: AppointmentProviderType
+  requires_specialty_tag: boolean
+  specialty_tag_name?: string
   is_active: boolean
 }
 
@@ -24,9 +29,11 @@ export interface StaffEditRequestPayload extends StaffRequestBody {
 export interface StaffRequestParams {
   pageable_request: PageableRequest
   clinic_id: number | undefined
+  highest_only?: boolean
 }
 
 export interface StaffExportRequestParams {
   clinic_id: number | undefined,
   page_request: PageRequestWithNameAndStatus
+  highest_only?: boolean
 }

@@ -3,7 +3,7 @@
     <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
       <div class="space-y-1">
         <h3 class="text-sm font-semibold">Manager LGU Dashboard</h3>
-        <p class="text-xs opacity-70">Set Base Monthly Budget and manually add Rollover Amount to track the total available LGU fund.</p>
+        <p class="text-xs opacity-70">Set the monthly LGU budget that appointments and LGU billing will use for the current month.</p>
       </div>
       <Tag :value="canManageLguDashboard ? 'Manager Access' : 'Read-only'" :severity="canManageLguDashboard ? 'success' : 'secondary'" />
     </div>
@@ -12,11 +12,27 @@
       Budget controls are available to Manager/Operations leadership roles. Totals remain visible.
     </Message>
 
+    <Message v-if="budgetSyncError" severity="warn" :closable="false" size="small">
+      {{ budgetSyncError }}
+    </Message>
+    <Message v-else-if="loadingDashboardBudget" severity="secondary" :closable="false" size="small">
+      Loading live LGU budget for {{ budgetMonthLabel }}...
+    </Message>
+    <Message v-else-if="hasLocalOnlyBudgetDraft" severity="warn" :closable="false" size="small">
+      This budget was only saved in this browser before. Click <strong>Save Budget</strong> to publish it to appointments and LGU billing for {{ budgetMonthLabel }}.
+    </Message>
+    <Message v-else-if="lguDashboardBudget" severity="info" :closable="false" size="small">
+      Live LGU budget is open for {{ budgetMonthLabel }}. Used so far: <strong>{{ asCurrency(usedLguFund) }}</strong>.
+    </Message>
+    <Message v-else severity="secondary" :closable="false" size="small">
+      No live LGU budget is open for {{ budgetMonthLabel }} yet. Save this month’s budget here to make LGU appointments billable.
+    </Message>
+
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
       <IftaLabel>
         <InputNumber
           v-model="baseMonthlyBudget"
-          :disabled="!canManageLguDashboard"
+          :disabled="!canManageLguDashboard || savingDashboardBudget"
           :min="0"
           mode="currency"
           currency="PHP"
@@ -29,7 +45,7 @@
       <IftaLabel>
         <InputNumber
           v-model="rolloverInput"
-          :disabled="!canManageLguDashboard"
+          :disabled="!canManageLguDashboard || savingDashboardBudget"
           :min="0"
           mode="currency"
           currency="PHP"
@@ -44,13 +60,14 @@
           label="Add Rollover"
           icon="pi pi-plus"
           outlined
-          :disabled="!canManageLguDashboard"
+          :disabled="!canManageLguDashboard || savingDashboardBudget"
           @click="addRolloverAmount"
         />
         <Button
           label="Save Budget"
           icon="pi pi-save"
-          :disabled="!canManageLguDashboard"
+          :disabled="!canManageLguDashboard || loadingDashboardBudget || savingDashboardBudget"
+          :loading="savingDashboardBudget"
           @click="saveDashboardBudget"
         />
       </div>
@@ -67,30 +84,128 @@
         <p class="text-lg font-semibold">{{ asCurrency(totalAvailableFund) }}</p>
       </div>
       <div class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3">
-        <p class="text-xs opacity-70">LGU Package Commitment</p>
-        <p class="text-lg font-semibold">{{ asCurrency(totalLguPackageCommitment) }}</p>
+        <p class="text-xs opacity-70">Used LGU Fund</p>
+        <p class="text-lg font-semibold">{{ asCurrency(usedLguFund) }}</p>
       </div>
       <div class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3">
         <p class="text-xs opacity-70">Remaining Available Fund</p>
         <p class="text-lg font-semibold" :class="remainingAvailableFund < 0 ? 'text-red-600' : ''">{{ asCurrency(remainingAvailableFund) }}</p>
       </div>
     </div>
+
+    <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-4 space-y-3">
+      <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div class="space-y-1">
+          <h4 class="text-sm font-semibold">Recent LGU Transactions</h4>
+          <p class="text-xs opacity-70">Shows the actual LGU ledger activity created by LGU billings, including deductions, reversals, and the running balance after each entry.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <Tag :value="`${lguTransactionHistory.length} record${lguTransactionHistory.length === 1 ? '' : 's'}`" severity="contrast" />
+          <Button
+            label="Refresh History"
+            icon="pi pi-refresh"
+            outlined
+            size="small"
+            :loading="loadingTransactionHistory"
+            @click="loadTransactionHistory"
+          />
+        </div>
+      </div>
+
+      <Message v-if="transactionHistoryError" severity="warn" :closable="false" size="small">
+        {{ transactionHistoryError }}
+      </Message>
+
+      <DataTable
+        :value="lguTransactionHistory"
+        :loading="loadingTransactionHistory"
+        size="small"
+        scrollable
+        scrollHeight="320px"
+        dataKey="id"
+      >
+        <template #empty>
+          <div class="px-4 py-10 text-center text-sm opacity-60">
+            No LGU ledger transactions have been recorded yet.
+          </div>
+        </template>
+
+        <Column field="created_at" header="Created" style="width: 170px">
+          <template #body="{ data }">
+            <div class="text-sm">{{ formatDateTime(data.created_at) }}</div>
+          </template>
+        </Column>
+
+        <Column header="Patient / Billing" style="min-width: 240px">
+          <template #body="{ data }">
+            <div class="space-y-1">
+              <div class="font-medium">{{ data.patient_name || "No patient linked" }}</div>
+              <div class="text-xs opacity-60">
+                Billing #{{ data.phase1_billing_id || "N/A" }}
+                <span v-if="data.receipt_number"> · Receipt {{ data.receipt_number }}</span>
+              </div>
+              <div class="text-xs opacity-60">{{ data.service_name || data.reference_label || "LGU transaction" }}</div>
+            </div>
+          </template>
+        </Column>
+
+        <Column header="Period" style="width: 120px">
+          <template #body="{ data }">
+            <div class="text-sm">{{ formatBudgetPeriod(data.period_year, data.period_month) }}</div>
+            <div class="text-xs opacity-60">{{ data.program_name }}</div>
+          </template>
+        </Column>
+
+        <Column header="Type / Status" style="width: 150px">
+          <template #body="{ data }">
+            <div class="flex flex-col gap-1">
+              <Tag :value="formatEntryType(data.entry_type)" :severity="entryTypeSeverity(data.entry_type)" class="text-xs" />
+              <Tag :value="data.usage_status" :severity="usageStatusSeverity(data.usage_status)" class="text-xs" />
+            </div>
+          </template>
+        </Column>
+
+        <Column header="Movement" style="width: 150px">
+          <template #body="{ data }">
+            <div class="space-y-1 text-right">
+              <div v-if="Number(data.amount_out ?? 0) > 0" class="font-medium text-red-700">- {{ asCurrency(data.amount_out) }}</div>
+              <div v-if="Number(data.amount_in ?? 0) > 0" class="font-medium text-emerald-700">+ {{ asCurrency(data.amount_in) }}</div>
+              <div v-if="Number(data.amount_out ?? 0) <= 0 && Number(data.amount_in ?? 0) <= 0" class="font-medium">{{ asCurrency(0) }}</div>
+            </div>
+          </template>
+        </Column>
+
+        <Column header="Balance After" style="width: 150px">
+          <template #body="{ data }">
+            {{ asCurrency(data.balance_after ?? 0) }}
+          </template>
+        </Column>
+      </DataTable>
+    </div>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue"
+import axios from "axios"
 import Button from "primevue/button"
+import Column from "primevue/column"
+import DataTable from "primevue/datatable"
 import IftaLabel from "primevue/iftalabel"
 import InputNumber from "primevue/inputnumber"
 import Message from "primevue/message"
 import Tag from "primevue/tag"
 import { useToast } from "primevue/usetoast"
+import {
+  billingPhase1Service,
+  type LguDashboardBudget,
+  type LguDashboardHistoryItem
+} from "@/features/billing/api/billing-phase1.service"
 import { errorToast, successToast } from "@/utils/toast.util"
 
-type LguPackage = {
-  packagePrice?: number
-  status?: string
+type LocalLguBudgetDraft = {
+  baseMonthlyBudget?: number
+  rolloverAmount?: number
 }
 
 const toast = useToast()
@@ -98,7 +213,14 @@ const currentRoleName = ref<string>("")
 const baseMonthlyBudget = ref<number>(0)
 const rolloverAmount = ref<number>(0)
 const rolloverInput = ref<number>(0)
-const totalLguPackageCommitment = ref<number>(0)
+const lguDashboardBudget = ref<LguDashboardBudget | null>(null)
+const loadingDashboardBudget = ref(false)
+const savingDashboardBudget = ref(false)
+const hasLocalOnlyBudgetDraft = ref(false)
+const budgetSyncError = ref("")
+const lguTransactionHistory = ref<LguDashboardHistoryItem[]>([])
+const loadingTransactionHistory = ref(false)
+const transactionHistoryError = ref("")
 
 const MANAGER_ROLE_KEYWORDS = [
   "manager",
@@ -111,12 +233,60 @@ const MANAGER_ROLE_KEYWORDS = [
 const asCurrency = (value: number): string =>
   Number(value ?? 0).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
 
+const formatDateTime = (value?: string): string => {
+  if (!value) return "N/A"
+  return new Date(value).toLocaleString("en-PH")
+}
+
+const formatBudgetPeriod = (year: number, month: number): string =>
+  new Date(year, month - 1, 1).toLocaleDateString("en-PH", {
+    month: "short",
+    year: "numeric"
+  })
+
+const formatEntryType = (value?: string): string =>
+  String(value ?? "")
+    .toLowerCase()
+    .split("_")
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ")
+
+const entryTypeSeverity = (value?: string): "success" | "info" | "warn" | "danger" | "secondary" => {
+  const normalized = String(value ?? "").trim().toUpperCase()
+  if (normalized === "SESSION_CHARGE") return "warn"
+  if (normalized === "REVERSAL") return "danger"
+  if (normalized === "ROLLOVER") return "success"
+  if (normalized === "MANUAL_ADJUSTMENT") return "info"
+  return "secondary"
+}
+
+const usageStatusSeverity = (value?: string): "success" | "warn" | "danger" | "secondary" => {
+  const normalized = String(value ?? "").trim().toUpperCase()
+  if (normalized === "APPLIED") return "success"
+  if (normalized === "ADJUSTED") return "warn"
+  if (normalized === "REVERSED" || normalized === "VOID") return "danger"
+  return "secondary"
+}
+
+const usedLguFund = computed(() =>
+  Number(lguDashboardBudget.value?.used_amount ?? 0)
+)
+
 const totalAvailableFund = computed(() =>
   Math.max(0, Number(baseMonthlyBudget.value ?? 0) + Number(rolloverAmount.value ?? 0))
 )
 
+const budgetMonthLabel = computed(() => {
+  const referenceYear = Number(lguDashboardBudget.value?.period_year ?? new Date().getFullYear())
+  const referenceMonth = Number(lguDashboardBudget.value?.period_month ?? (new Date().getMonth() + 1))
+  return new Date(referenceYear, referenceMonth - 1, 1).toLocaleDateString("en-PH", {
+    month: "long",
+    year: "numeric"
+  })
+})
+
 const remainingAvailableFund = computed(() =>
-  totalAvailableFund.value - Number(totalLguPackageCommitment.value ?? 0)
+  Number((totalAvailableFund.value - usedLguFund.value).toFixed(2))
 )
 
 const canManageLguDashboard = computed(() => {
@@ -150,31 +320,30 @@ const resolveRoleFromStorage = (): string => {
   return ""
 }
 
-const loadDashboardBudget = (): void => {
+const extractApiErrorMessage = (error: unknown, fallback: string): string => {
+  if (!axios.isAxiosError(error)) return fallback
+  const detail = error.response?.data?.message || error.response?.data?.detail || error.message
+  return detail ? `${fallback}: ${detail}` : fallback
+}
+
+const hasAnyBudgetDraft = (draft: LocalLguBudgetDraft | null): boolean =>
+  Number(draft?.baseMonthlyBudget ?? 0) > 0 || Number(draft?.rolloverAmount ?? 0) > 0
+
+const readLocalDashboardBudget = (): LocalLguBudgetDraft | null => {
   try {
     const raw = localStorage.getItem("lgu_dashboard_budget")
-    if (!raw) return
-    const parsed = JSON.parse(raw) as { baseMonthlyBudget?: number; rolloverAmount?: number }
-    baseMonthlyBudget.value = Math.max(0, Number(parsed.baseMonthlyBudget ?? 0))
-    rolloverAmount.value = Math.max(0, Number(parsed.rolloverAmount ?? 0))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as LocalLguBudgetDraft
+    return {
+      baseMonthlyBudget: Math.max(0, Number(parsed.baseMonthlyBudget ?? 0)),
+      rolloverAmount: Math.max(0, Number(parsed.rolloverAmount ?? 0))
+    }
   } catch {
-    // Ignore malformed storage entries.
+    return null
   }
 }
 
-const loadLguCommitment = (): void => {
-  try {
-    const stored = localStorage.getItem("lguPackageServiceOffers")
-    const parsed = stored ? (JSON.parse(stored) as LguPackage[]) : []
-    totalLguPackageCommitment.value = (parsed ?? [])
-      .filter(item => String(item.status ?? "Active") !== "Inactive")
-      .reduce((sum, item) => sum + Number(item.packagePrice ?? 0), 0)
-  } catch {
-    totalLguPackageCommitment.value = 0
-  }
-}
-
-const saveDashboardBudget = (): void => {
+const persistLocalDashboardBudget = (): void => {
   localStorage.setItem(
     "lgu_dashboard_budget",
     JSON.stringify({
@@ -183,7 +352,78 @@ const saveDashboardBudget = (): void => {
       updatedAt: new Date().toISOString()
     })
   )
-  successToast(toast, "LGU dashboard budget saved")
+}
+
+const applyBudgetValues = (payload: { base_budget?: number; rollover_amount?: number; baseMonthlyBudget?: number; rolloverAmount?: number }): void => {
+  baseMonthlyBudget.value = Math.max(0, Number(payload.base_budget ?? payload.baseMonthlyBudget ?? 0))
+  rolloverAmount.value = Math.max(0, Number(payload.rollover_amount ?? payload.rolloverAmount ?? 0))
+}
+
+const loadDashboardBudget = async (): Promise<void> => {
+  const localDraft = readLocalDashboardBudget()
+  loadingDashboardBudget.value = true
+  budgetSyncError.value = ""
+  try {
+    const serverBudget = await billingPhase1Service.getLguDashboardBudget()
+    if (serverBudget) {
+      lguDashboardBudget.value = serverBudget
+      applyBudgetValues(serverBudget)
+      hasLocalOnlyBudgetDraft.value = false
+      persistLocalDashboardBudget()
+      return
+    }
+
+    lguDashboardBudget.value = null
+    applyBudgetValues(localDraft ?? {})
+    hasLocalOnlyBudgetDraft.value = hasAnyBudgetDraft(localDraft)
+  } catch (error: unknown) {
+    lguDashboardBudget.value = null
+    applyBudgetValues(localDraft ?? {})
+    hasLocalOnlyBudgetDraft.value = hasAnyBudgetDraft(localDraft)
+    budgetSyncError.value = extractApiErrorMessage(error, "Failed to load the live LGU budget")
+  } finally {
+    loadingDashboardBudget.value = false
+  }
+}
+
+const loadTransactionHistory = async (): Promise<void> => {
+  loadingTransactionHistory.value = true
+  transactionHistoryError.value = ""
+  try {
+    lguTransactionHistory.value = await billingPhase1Service.getLguDashboardHistory(100) ?? []
+  } catch (error: unknown) {
+    lguTransactionHistory.value = []
+    transactionHistoryError.value = extractApiErrorMessage(error, "Failed to load LGU transaction history")
+  } finally {
+    loadingTransactionHistory.value = false
+  }
+}
+
+const saveDashboardBudget = async (): Promise<void> => {
+  persistLocalDashboardBudget()
+  savingDashboardBudget.value = true
+  budgetSyncError.value = ""
+  try {
+    const savedBudget = await billingPhase1Service.saveLguDashboardBudget({
+      base_budget: Number(baseMonthlyBudget.value ?? 0),
+      rollover_amount: Number(rolloverAmount.value ?? 0)
+    })
+
+    lguDashboardBudget.value = savedBudget ?? null
+    if (savedBudget) {
+      applyBudgetValues(savedBudget)
+    }
+    hasLocalOnlyBudgetDraft.value = false
+    persistLocalDashboardBudget()
+    successToast(toast, "LGU budget is now live for appointments and billing")
+  } catch (error: unknown) {
+    hasLocalOnlyBudgetDraft.value = true
+    const message = extractApiErrorMessage(error, "Failed to save the live LGU budget")
+    budgetSyncError.value = message
+    errorToast(toast, message)
+  } finally {
+    savingDashboardBudget.value = false
+  }
 }
 
 const addRolloverAmount = (): void => {
@@ -198,7 +438,9 @@ const addRolloverAmount = (): void => {
 
 onMounted(() => {
   currentRoleName.value = resolveRoleFromStorage()
-  loadDashboardBudget()
-  loadLguCommitment()
+  void Promise.all([
+    loadDashboardBudget(),
+    loadTransactionHistory()
+  ])
 })
 </script>

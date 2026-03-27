@@ -2,11 +2,15 @@
 <template>
   <DataTable
     :value="clinics?.content"
+    :selection="selectedClinic"
     :show-gridlines="true"
     :removable-sort="true"
     :scrollable="true"
+    dataKey="id"
+    selectionMode="single"
     class="h-full"
     :pt="pt"
+    @update:selection="$emit('selectClinic', $event ?? undefined)"
   >
     <template #header>
       <slot name="header" />
@@ -115,11 +119,13 @@ defineProps<{
   isLoading: boolean
   page: number
   pageSize: number
+  selectedClinic?: Clinic
   rowPerPageOptions: number[]
 }>()
 
 defineEmits<{
   (e: "pageChange", ev: any): void
+  (e: "selectClinic", clinic: Clinic | undefined): void
 }>()
 
 const pt = {

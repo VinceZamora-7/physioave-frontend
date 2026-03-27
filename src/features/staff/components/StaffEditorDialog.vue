@@ -10,7 +10,7 @@ import type { FormSubmitEvent } from "@primevue/forms"
 
 import StaffForm from "@/features/staff/components/StaffForm.vue"
 import type { Lookup } from "@/models/global.model"
-import type { Role } from "@/models/reference"
+import type { Role, SpecialtyTag } from "@/models/reference"
 import type { APIError } from "@/utils/error-handler"
 import type { Staff, StaffEditRequestPayload, StaffRequestBody } from "@/features/staff/types/staff"
 import type { StaffFormProps } from "@/features/staff/types/staff.type"
@@ -25,7 +25,12 @@ import { errorToast, successToast } from "@/utils/toast.util"
 const props = defineProps<{
   roles: Role[]
   clinics: Lookup[]
+  specialties: SpecialtyTag[]
   isLoading: boolean
+  canManageHighestRole?: boolean
+}>()
+const emit = defineEmits<{
+  (e: "saved"): void
 }>()
 
 const toast = useToast()
@@ -52,8 +57,10 @@ const staffFormProps = computed(
         severity: selectedStaff.value ? "success" : "info",
       },
       draftService,
+      canManageHighestRole: props.canManageHighestRole,
       roles: props.roles,
       clinics: props.clinics,
+      specialties: props.specialties,
     }) satisfies StaffFormProps
 )
 
@@ -100,6 +107,7 @@ const onSubmit = (event: FormSubmitEvent) => {
         email: event.values.email,
         clinic_id: event.values.clinic?.id,
         role_id: event.values.role?.id,
+        specialty_tag_id: event.values.role?.appointment_provider_type !== "NONE" ? event.values.specialty?.id : undefined,
       }
 
       if (selectedStaff.value?.id) {
@@ -110,6 +118,7 @@ const onSubmit = (event: FormSubmitEvent) => {
             successToast(toast, "Edit success")
             event.reset()
             await resetQueries()
+            emit("saved")
           },
           async onError(err: APIError) {
             errorToast(toast, `Edit failed ${err.message}`)
@@ -125,6 +134,7 @@ const onSubmit = (event: FormSubmitEvent) => {
           successToast(toast, "Save success")
           event.reset()
           await Promise.all([resetQueries(), draftService.delete()])
+          emit("saved")
         },
         async onError(err: APIError) {
           errorToast(toast, `Save failed ${err.message}`)
