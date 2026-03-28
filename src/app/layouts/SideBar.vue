@@ -65,7 +65,57 @@
 
     <!-- NAV (scrolls) -->
     <nav class="mt-4 flex-1 min-h-0 overflow-y-auto px-2 pb-4 app-scrollbar">
-      <div class="space-y-6">
+      <div v-if="isPhysicalTherapistUser" class="space-y-6">
+        <div>
+          <button
+            type="button"
+            class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
+          >
+            <span v-if="!collapsed">MY WORK</span>
+          </button>
+
+          <ul class="mt-2 space-y-1">
+            <li>
+              <button
+                type="button"
+                @click="goToAndClose('pt-schedule')"
+                :class="itemClass('pt-schedule')"
+                aria-label="My Schedule"
+                title="My Schedule"
+              >
+                <span :class="iconWrapClass('pt-schedule')"><i class="pi pi-directions text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">My Schedule</span>
+              </button>
+            </li>
+          </ul>
+        </div>
+
+        <div>
+          <button
+            type="button"
+            class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
+          >
+            <span v-if="!collapsed">MY TOOLS</span>
+          </button>
+
+          <ul class="mt-2 space-y-1">
+            <li>
+              <button
+                type="button"
+                @click="goToAndClose('settings')"
+                :class="itemClass('settings')"
+                aria-label="Mobile Calendar"
+                title="Mobile Calendar"
+              >
+                <span :class="iconWrapClass('settings')"><i class="pi pi-mobile text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">Mobile Calendar</span>
+              </button>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div v-else class="space-y-6">
         <div>
           <button
             type="button"
@@ -645,6 +695,20 @@ const displayRole = computed(() => {
 
   return "User"
 })
+
+const normalizedUserProviderType = computed(() => {
+  const providerType = toStringValue(userSnapshot.value?.appointment_provider_type).toUpperCase()
+  if (providerType === "PHYSICAL_THERAPIST" || providerType === "DOCTOR_CONSULTANT") {
+    return providerType
+  }
+
+  const normalizedRole = displayRole.value.trim().toLowerCase()
+  if (normalizedRole.includes("physical therapist")) return "PHYSICAL_THERAPIST"
+  if (normalizedRole.includes("doctor consultant")) return "DOCTOR_CONSULTANT"
+  return "NONE"
+})
+
+const isPhysicalTherapistUser = computed(() => normalizedUserProviderType.value === "PHYSICAL_THERAPIST")
 
 const userInitials = computed(() => {
   const words = displayName.value

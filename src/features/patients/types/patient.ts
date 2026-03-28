@@ -35,6 +35,7 @@ export interface BasePatient {
 
 export interface Patient extends BasePatient {
   id: number
+  public_id?: string
 
   gender_name: string
   civil_status_name: string

@@ -68,6 +68,9 @@
                   {{ selectedPatientDetails.gender_name }} • {{ selectedPatientDetails.age }} years old
                 </div>
                 <div class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Patient record: {{ selectedPatientDetails.public_id || "Pending patient record code" }}
+                </div>
+                <div class="mt-1 text-xs text-slate-500 dark:text-slate-400">
                   Assigned clinic: {{ selectedPatientDetails.clinic_name }}
                 </div>
               </div>
@@ -636,6 +639,7 @@ const onSubmit = async (event: FormSubmitEvent): Promise<void> => {
             selectedPatient.value = {
               ...body,
               id: newPatientId,
+              public_id: result?.public_id,
               full_name: fullName,
               gender_name: '',
               civil_status_name: '',

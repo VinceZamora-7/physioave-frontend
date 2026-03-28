@@ -253,32 +253,13 @@ const allAppointments = computed(() =>
     .slice()
     .sort((left, right) => new Date(left.start).getTime() - new Date(right.start).getTime())
 )
-const earliestStartTime = computed(() => allAppointments.value[0]?.start)
-const isEarliestAppointment = (appointment: DailyPtDeckBlock): boolean =>
-  !!earliestStartTime.value && appointment.start === earliestStartTime.value
 const isStartingWithinOneHour = (appointment: DailyPtDeckBlock): boolean => {
   const now = Date.now()
   const startsAt = new Date(appointment.start).getTime()
   const remainingMs = startsAt - now
   return remainingMs >= 0 && remainingMs <= 60 * 60 * 1000
 }
-const displayedAppointments = computed(() => {
-  const highlighted = new Map<number, DailyPtDeckBlock>()
-
-  for (const appointment of allAppointments.value) {
-    if (isEarliestAppointment(appointment)) {
-      highlighted.set(appointment.id, appointment)
-    }
-  }
-
-  for (const appointment of allAppointments.value) {
-    if (isStartingWithinOneHour(appointment)) {
-      highlighted.set(appointment.id, appointment)
-    }
-  }
-
-  return [...highlighted.values()].sort((left, right) => new Date(left.start).getTime() - new Date(right.start).getTime())
-})
+const displayedAppointments = computed(() => allAppointments.value)
 const pendingAppointmentsCount = computed(() =>
   allAppointments.value.filter(appointment => normalizeAppointmentStatus(appointment.status) === "PENDING").length
 )
@@ -347,7 +328,7 @@ const isVisuallyMutedAppointment = (status?: string): boolean => {
   return normalized === "COMPLETED" || normalized === "CANCELLED"
 }
 const displayProviderAssignment = (appointment: DailyPtDeckBlock): string =>
-  appointment.pt?.name?.trim() || appointment.doctor_name?.trim() || "Needs Doctor Consultant assignment"
+  appointment.pt?.name?.trim() || appointment.doctor_name?.trim() || "Needs provider assignment"
 const formatTime = (value: string): string =>
   new Date(value).toLocaleTimeString("en-PH", {
     hour: "numeric",

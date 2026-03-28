@@ -25,10 +25,13 @@ export interface BillingLineItem {
 
 export interface BillingListItem {
   id: number
+  public_id?: string
   created_at: string
   patient_id: number
+  patient_public_id?: string
   patient_name: string
   appointment_id?: number
+  appointment_public_id?: string
   billing_type: string
   service_type: string
   service_name?: string
@@ -64,8 +67,11 @@ export interface BillingListItem {
 export interface BillingEncounterTicket {
   id: number
   appointment_id: number
+  appointment_public_id?: string
   patient_id: number
+  patient_public_id?: string
   phase1_billing_id?: number
+  phase1_billing_public_id?: string
   active_billing_package_id?: string
   active_billing_package_name?: string
   active_billing_package_source?: string
@@ -80,8 +86,11 @@ export interface BillingEncounterTicket {
   locked_at?: string
   billing_snapshot?: {
     appointment_id: number
+    appointment_public_id?: string
     phase1_billing_id: number
+    phase1_billing_public_id?: string
     patient_id: number
+    patient_public_id?: string
     patient_name: string
     provider_name?: string
     active_billing_package_id?: string
@@ -189,6 +198,8 @@ export interface LguDashboardBudget {
 export interface LguDashboardBudgetSaveRequest {
   base_budget: number
   rollover_amount: number
+  period_year?: number
+  period_month?: number
   program_name?: string
 }
 
@@ -199,8 +210,10 @@ export interface LguDashboardHistoryItem {
   period_year: number
   period_month: number
   patient_id?: number | null
+  patient_public_id?: string | null
   patient_name?: string | null
   phase1_billing_id?: number | null
+  phase1_billing_public_id?: string | null
   billing_status?: string | null
   service_name?: string | null
   receipt_number?: string | null
@@ -250,17 +263,26 @@ export const billingPhase1Service = {
     })
     return data
   },
-  async getLguDashboardBudget(): Promise<LguDashboardBudget | null | undefined> {
-    const {data} = await pamsAPI.get<LguDashboardBudget | null>("/billings/lgu-dashboard-budget")
+  async getLguDashboardBudget(periodYear?: number, periodMonth?: number): Promise<LguDashboardBudget | null | undefined> {
+    const {data} = await pamsAPI.get<LguDashboardBudget | null>("/billings/lgu-dashboard-budget", {
+      params: {
+        period_year: periodYear,
+        period_month: periodMonth
+      }
+    })
     return data
   },
   async saveLguDashboardBudget(payload: LguDashboardBudgetSaveRequest): Promise<LguDashboardBudget | null | undefined> {
     const {data} = await pamsAPI.post<LguDashboardBudget | null>("/billings/lgu-dashboard-budget", payload)
     return data
   },
-  async getLguDashboardHistory(limit = 100): Promise<LguDashboardHistoryItem[] | undefined> {
+  async getLguDashboardHistory(limit = 100, periodYear?: number, periodMonth?: number): Promise<LguDashboardHistoryItem[] | undefined> {
     const {data} = await pamsAPI.get<LguDashboardHistoryItem[]>("/billings/lgu-dashboard-history", {
-      params: {limit}
+      params: {
+        limit,
+        period_year: periodYear,
+        period_month: periodMonth
+      }
     })
     return data
   },

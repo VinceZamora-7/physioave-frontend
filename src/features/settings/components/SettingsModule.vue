@@ -1,6 +1,9 @@
 <template>
   <main class="app-page-shell space-y-5">
-    <section class="rounded-3xl border border-[#A91D8B]/20 bg-[linear-gradient(120deg,rgba(36,39,87,0.12),rgba(94,24,105,0.08),rgba(169,29,139,0.12))] p-5 shadow-[0_18px_40px_rgba(36,39,87,0.08)]">
+    <section
+      v-if="canSeeOperationsSetup"
+      class="rounded-3xl border border-[#A91D8B]/20 bg-[linear-gradient(120deg,rgba(36,39,87,0.12),rgba(94,24,105,0.08),rgba(169,29,139,0.12))] p-5 shadow-[0_18px_40px_rgba(36,39,87,0.08)]"
+    >
       <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div class="space-y-2">
           <div class="text-lg font-semibold tracking-tight">Clinic Setup Center</div>
@@ -139,12 +142,8 @@
       {{ loadError }}
     </Message>
 
-    <Message v-else-if="!canViewSettings" severity="warn" :closable="false">
-      Your account can sign in, but it does not yet have the permissions needed to manage operations settings.
-    </Message>
-
-    <template v-else>
-      <section class="app-section-card-comfy space-y-4">
+    <template v-if="canSeeOperationsSetup">
+      <section v-if="canSeeSetupGuide" class="app-section-card-comfy space-y-4">
         <div>
           <h3 class="app-section-title">Start Here</h3>
           <p class="text-sm opacity-70">
@@ -191,7 +190,7 @@
         </Message>
       </section>
 
-      <section class="app-section-card-comfy space-y-4">
+      <section v-if="canSeeBranchScopeSection" class="app-section-card-comfy space-y-4">
         <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h3 class="app-section-title">Branch Scope</h3>
@@ -222,7 +221,7 @@
 
       <div class="grid gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.9fr)]">
         <section class="space-y-5">
-          <section class="app-section-card-comfy space-y-4">
+          <section v-if="canSeePtDirectorySection" class="app-section-card-comfy space-y-4">
             <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <h3 class="app-section-title">PT Directory</h3>
@@ -319,13 +318,14 @@
           </section>
 
           <ClinicTreatmentAreasCard
+            v-if="canSeeTreatmentAreasSection"
             :selectedClinic="selectedClinic"
             :canManage="canManageTreatmentAreas"
           />
         </section>
 
-        <aside class="space-y-5">
-          <section class="app-section-card-comfy space-y-4">
+        <aside v-if="canSeeSpecialtiesSection || canSeeRoleAccessSection" class="space-y-5">
+          <section v-if="canSeeSpecialtiesSection" class="app-section-card-comfy space-y-4">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h3 class="app-section-title">Specialty Directory</h3>
@@ -371,7 +371,7 @@
             </Message>
           </section>
 
-          <section class="app-section-card-comfy space-y-4">
+          <section v-if="canSeeRoleAccessSection" class="app-section-card-comfy space-y-4">
             <div>
               <h3 class="app-section-title">Job Titles and Access</h3>
               <p class="text-sm opacity-70">
@@ -516,6 +516,20 @@ const canManageRoleAccess = computed(() =>
 )
 const canViewSettings = computed(() =>
   canReadClinics.value || canReadStaff.value || canReadReferences.value || canManageTreatmentAreas.value || canManageStaff.value
+)
+const canSeePtDirectorySection = computed(() => canReadStaff.value || canManageStaff.value)
+const canSeeTreatmentAreasSection = computed(() => canReadClinics.value || canManageTreatmentAreas.value)
+const canSeeSpecialtiesSection = computed(() => canReadReferences.value || canManageSpecialties.value)
+const canSeeRoleAccessSection = computed(() => canReadReferences.value || canManageRoleAccess.value)
+const canSeeOperationsSetup = computed(() =>
+  canSeePtDirectorySection.value
+  || canSeeTreatmentAreasSection.value
+  || canSeeSpecialtiesSection.value
+  || canSeeRoleAccessSection.value
+)
+const canSeeSetupGuide = computed(() => canSeeOperationsSetup.value)
+const canSeeBranchScopeSection = computed(() =>
+  canSeePtDirectorySection.value || canSeeTreatmentAreasSection.value
 )
 const canConnectGoogleCalendar = computed(() =>
   Boolean(calendarSyncStatus.value?.google_oauth_configured)

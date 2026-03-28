@@ -99,68 +99,153 @@
     </section>
 
     <section class="app-section-card-comfy space-y-3">
-      <div class="space-y-2">
-        <h3 class="text-sm font-semibold">All Available HMO Services</h3>
-        <DataTable
-          :value="allServices"
-          dataKey="id"
-          paginator
-          :rows="25"
-          :loading="isLoading"
-          class="rounded-lg border border-[rgb(var(--app-border))]"
-        >
-          <Column field="type" header="Type" style="width: 120px">
-            <template #body="{data}">
-              <Tag :value="formatType(data.type)" :severity="getTypeSeverity(data.type)" />
-            </template>
-          </Column>
-          <Column field="name" header="Service Name" />
-          <Column v-if="canViewConfidentialRates" field="price" header="Base Price" style="width: 130px">
-            <template #body="{data}">{{ asCurrency(data.price) }}</template>
-          </Column>
-          <Column v-if="canViewConfidentialRates" header="Custom HMO Rate" style="width: 140px">
-            <template #body="{data}">
-              {{ getCustomRateLabel(data) }}
-            </template>
-          </Column>
-          <Column v-if="canViewConfidentialRates" header="Effective Rate" style="width: 140px">
-            <template #body="{data}">
-              <strong>{{ asCurrency(getEffectivePrice(data)) }}</strong>
-            </template>
-          </Column>
-          <Column v-else header="Rate" style="width: 140px">
-            <template #body>
-              Hidden
-            </template>
-          </Column>
-          <Column field="status" header="Status" style="width: 100px">
-            <template #body="{data}">
-              <Tag :value="data.status || 'Active'" :severity="data.status === 'Inactive' ? 'danger' : 'success'" />
-            </template>
-          </Column>
-          <Column v-if="canViewConfidentialRates" header="Actions" style="width: 100px">
-            <template #body="{data}">
-              <div class="flex gap-1">
-                <Button
-                  size="small"
-                  text
-                  icon="pi pi-pencil"
-                  @click="openEditDialog(data)"
-                  v-tooltip="'Edit'"
-                />
-                <Button
-                  size="small"
-                  text
-                  severity="danger"
-                  icon="pi pi-trash"
-                  @click="confirmDelete(data)"
-                  v-tooltip="'Delete'"
-                />
-              </div>
-            </template>
-          </Column>
-        </DataTable>
+      <div class="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+        <div class="space-y-1">
+          <h3 class="text-sm font-semibold">All Available HMO Services</h3>
+          <p class="text-xs opacity-70">
+            With no filter selected, the catalog stays in a four-column service table. Choose a filter to switch back to the detailed management list for just that service family.
+          </p>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <Button
+            v-for="option in serviceCatalogFilterOptions"
+            :key="option.value"
+            :label="option.label"
+            size="small"
+            :severity="selectedServiceCatalogFilters.includes(option.value) ? 'primary' : 'secondary'"
+            :outlined="!selectedServiceCatalogFilters.includes(option.value)"
+            @click="toggleServiceCatalogFilter(option.value)"
+          />
+          <Button
+            v-if="hasServiceCatalogFilters"
+            label="Show All"
+            size="small"
+            text
+            @click="clearServiceCatalogFilters"
+          />
+        </div>
       </div>
+
+      <DataTable
+        v-if="hasServiceCatalogFilters"
+        :value="filteredServiceCatalogItems"
+        dataKey="id"
+        paginator
+        :rows="25"
+        :loading="isLoading"
+        class="rounded-lg border border-[rgb(var(--app-border))]"
+      >
+        <Column field="type" header="Type" style="width: 120px">
+          <template #body="{data}">
+            <Tag :value="formatType(data.type)" :severity="getTypeSeverity(data.type)" />
+          </template>
+        </Column>
+        <Column field="name" header="Service Name" />
+        <Column v-if="canViewConfidentialRates" field="price" header="Base Price" style="width: 130px">
+          <template #body="{data}">{{ asCurrency(data.price) }}</template>
+        </Column>
+        <Column v-if="canViewConfidentialRates" header="Custom HMO Rate" style="width: 140px">
+          <template #body="{data}">
+            {{ getCustomRateLabel(data) }}
+          </template>
+        </Column>
+        <Column v-if="canViewConfidentialRates" header="Effective Rate" style="width: 140px">
+          <template #body="{data}">
+            <strong>{{ asCurrency(getEffectivePrice(data)) }}</strong>
+          </template>
+        </Column>
+        <Column v-else header="Rate" style="width: 140px">
+          <template #body>
+            Hidden
+          </template>
+        </Column>
+        <Column field="status" header="Status" style="width: 100px">
+          <template #body="{data}">
+            <Tag :value="data.status || 'Active'" :severity="data.status === 'Inactive' ? 'danger' : 'success'" />
+          </template>
+        </Column>
+        <Column v-if="canViewConfidentialRates" header="Actions" style="width: 100px">
+          <template #body="{data}">
+            <div class="flex gap-1">
+              <Button
+                size="small"
+                text
+                icon="pi pi-pencil"
+                @click="openEditDialog(data)"
+                v-tooltip="'Edit'"
+              />
+              <Button
+                size="small"
+                text
+                severity="danger"
+                icon="pi pi-trash"
+                @click="confirmDelete(data)"
+                v-tooltip="'Delete'"
+              />
+            </div>
+          </template>
+        </Column>
+      </DataTable>
+
+      <DataTable
+        v-else
+        :value="serviceCatalogMatrixRows"
+        dataKey="key"
+        paginator
+        :rows="15"
+        :loading="isLoading"
+        class="rounded-lg border border-[rgb(var(--app-border))]"
+      >
+        <Column header="Machine">
+          <template #body="{data}">
+            <div v-if="data.machine" class="space-y-1 rounded-xl border border-sky-200/70 bg-sky-50/60 p-3">
+              <div class="font-medium">{{ data.machine.name }}</div>
+              <div v-if="canViewConfidentialRates" class="text-xs opacity-70">Base: {{ asCurrency(data.machine.price) }}</div>
+              <div v-if="canViewConfidentialRates" class="text-xs font-medium">Effective: {{ asCurrency(getEffectivePrice(data.machine)) }}</div>
+              <div v-else class="text-xs opacity-70">Rates hidden</div>
+              <Tag :value="data.machine.status || 'Active'" :severity="data.machine.status === 'Inactive' ? 'danger' : 'success'" class="text-xs" />
+            </div>
+            <span v-else class="text-xs opacity-40">—</span>
+          </template>
+        </Column>
+        <Column header="Technique">
+          <template #body="{data}">
+            <div v-if="data.technique" class="space-y-1 rounded-xl border border-emerald-200/70 bg-emerald-50/60 p-3">
+              <div class="font-medium">{{ data.technique.name }}</div>
+              <div v-if="canViewConfidentialRates" class="text-xs opacity-70">Base: {{ asCurrency(data.technique.price) }}</div>
+              <div v-if="canViewConfidentialRates" class="text-xs font-medium">Effective: {{ asCurrency(getEffectivePrice(data.technique)) }}</div>
+              <div v-else class="text-xs opacity-70">Rates hidden</div>
+              <Tag :value="data.technique.status || 'Active'" :severity="data.technique.status === 'Inactive' ? 'danger' : 'success'" class="text-xs" />
+            </div>
+            <span v-else class="text-xs opacity-40">—</span>
+          </template>
+        </Column>
+        <Column header="Evaluation">
+          <template #body="{data}">
+            <div v-if="data.evaluation" class="space-y-1 rounded-xl border border-amber-200/70 bg-amber-50/60 p-3">
+              <div class="font-medium">{{ data.evaluation.name }}</div>
+              <div v-if="canViewConfidentialRates" class="text-xs opacity-70">Base: {{ asCurrency(data.evaluation.price) }}</div>
+              <div v-if="canViewConfidentialRates" class="text-xs font-medium">Effective: {{ asCurrency(getEffectivePrice(data.evaluation)) }}</div>
+              <div v-else class="text-xs opacity-70">Rates hidden</div>
+              <Tag :value="data.evaluation.status || 'Active'" :severity="data.evaluation.status === 'Inactive' ? 'danger' : 'success'" class="text-xs" />
+            </div>
+            <span v-else class="text-xs opacity-40">—</span>
+          </template>
+        </Column>
+        <Column header="Add-Ons">
+          <template #body="{data}">
+            <div v-if="data.addOns" class="space-y-1 rounded-xl border border-violet-200/70 bg-violet-50/60 p-3">
+              <div class="font-medium">{{ data.addOns.name }}</div>
+              <div v-if="canViewConfidentialRates" class="text-xs opacity-70">Base: {{ asCurrency(data.addOns.price) }}</div>
+              <div v-if="canViewConfidentialRates" class="text-xs font-medium">Effective: {{ asCurrency(getEffectivePrice(data.addOns)) }}</div>
+              <div v-else class="text-xs opacity-70">Rates hidden</div>
+              <Tag :value="data.addOns.status || 'Active'" :severity="data.addOns.status === 'Inactive' ? 'danger' : 'success'" class="text-xs" />
+            </div>
+            <span v-else class="text-xs opacity-40">—</span>
+          </template>
+        </Column>
+      </DataTable>
     </section>
 
     <Dialog v-model:visible="dialogVisible" :header="editingId ? 'Edit HMO Service' : 'Add New HMO Service'" modal :style="{width: '480px'}">
@@ -324,6 +409,16 @@ interface HmoPriceListRate {
   rate: number
 }
 
+type ServiceCatalogFilter = "machine" | "technique" | "evaluation" | "add-ons"
+
+type ServiceCatalogMatrixRow = {
+  key: number
+  machine?: HmoService
+  technique?: HmoService
+  evaluation?: HmoService
+  addOns?: HmoService
+}
+
 const toast = useToast()
 const confirm = useConfirm()
 const isLoading = ref(false)
@@ -347,6 +442,7 @@ const machineCatalog = ref<Array<{ id: number; name: string; price: number }>>([
 const hmoProfiles = ref<HmoProfile[]>([])
 const selectedProfileId = ref<string>()
 const selectedProfileRates = ref<HmoPriceListRate[]>([])
+const selectedServiceCatalogFilters = ref<ServiceCatalogFilter[]>([])
 
 const profileForm = reactive<{
   name: string
@@ -436,6 +532,62 @@ const typeOptions = [
   { label: "Evaluations", value: "evaluation" },
   { label: "Add-Ons", value: "add-on-machine" }
 ]
+
+const serviceCatalogFilterOptions: Array<{label: string; value: ServiceCatalogFilter}> = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluation", value: "evaluation" },
+  { label: "Add-Ons", value: "add-ons" }
+]
+
+const normalizeServiceCatalogFilter = (type: ServiceType): ServiceCatalogFilter => {
+  if (type === "machine") return "machine"
+  if (type === "technique") return "technique"
+  if (type === "evaluation") return "evaluation"
+  return "add-ons"
+}
+
+const serviceCatalogBuckets = computed(() => ({
+  machine: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "machine"),
+  technique: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "technique"),
+  evaluation: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "evaluation"),
+  "add-ons": allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "add-ons")
+}))
+
+const hasServiceCatalogFilters = computed(() => selectedServiceCatalogFilters.value.length > 0)
+
+const filteredServiceCatalogItems = computed(() =>
+  allServices.value.filter(service => selectedServiceCatalogFilters.value.includes(normalizeServiceCatalogFilter(service.type)))
+)
+
+const serviceCatalogMatrixRows = computed<ServiceCatalogMatrixRow[]>(() => {
+  const buckets = serviceCatalogBuckets.value
+  const maxRows = Math.max(
+    buckets.machine.length,
+    buckets.technique.length,
+    buckets.evaluation.length,
+    buckets["add-ons"].length,
+    0
+  )
+
+  return Array.from({ length: maxRows }, (_, index) => ({
+    key: index + 1,
+    machine: buckets.machine[index],
+    technique: buckets.technique[index],
+    evaluation: buckets.evaluation[index],
+    addOns: buckets["add-ons"][index]
+  }))
+})
+
+const toggleServiceCatalogFilter = (filter: ServiceCatalogFilter): void => {
+  selectedServiceCatalogFilters.value = selectedServiceCatalogFilters.value.includes(filter)
+    ? selectedServiceCatalogFilters.value.filter(entry => entry !== filter)
+    : [...selectedServiceCatalogFilters.value, filter]
+}
+
+const clearServiceCatalogFilters = (): void => {
+  selectedServiceCatalogFilters.value = []
+}
 
 const formData = reactive<{
   type: ServiceType

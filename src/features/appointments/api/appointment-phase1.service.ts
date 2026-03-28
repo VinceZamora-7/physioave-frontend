@@ -8,7 +8,9 @@ export type AppointmentLocationContext = "IN_CLINIC" | "HOME_CARE"
 
 export interface AppointmentListItem {
   id: number
+  public_id?: string
   patient_id: number
+  patient_public_id?: string
   patient_name: string
   clinic_id: number
   clinic_name: string
@@ -26,8 +28,11 @@ export interface AppointmentListItem {
   ends_at: string
   appointment_phase: AppointmentPhase
   appointment_status: string
+  billing_type?: string
+  service_type?: string
   billing_status: string
   billing_id?: number
+  billing_public_id?: string
   reschedule_flag: boolean
   reschedule_count: number
 }
@@ -48,12 +53,20 @@ export interface AppointmentCheckoutSummary {
 
 export interface AppointmentEncounterTicket {
   id: number
+  appointment_public_id?: string
+  patient_public_id?: string
   attendance_status: "ATTENDED" | "NO_SHOW"
   attended_at: string
   phase1_billing_id?: number
+  phase1_billing_public_id?: string
   active_billing_package_id?: string
   active_billing_package_name?: string
   active_billing_package_source?: string
+  pt_confirmed_by_staff_id?: number
+  pt_confirmed_by_name?: string
+  pt_confirmed_at?: string
+  pt_signature_data_url?: string
+  pt_completion_tag?: string
   patient_acknowledged_by: string
   deduction_authorized: boolean
   patient_signature_data_url?: string
@@ -63,8 +76,11 @@ export interface AppointmentEncounterTicket {
   locked_at?: string
   billing_snapshot?: {
     appointment_id: number
+    appointment_public_id?: string
     phase1_billing_id: number
+    phase1_billing_public_id?: string
     patient_id: number
+    patient_public_id?: string
     patient_name: string
     provider_name?: string
     active_billing_package_id?: string
@@ -178,8 +194,11 @@ export interface AppointmentCreatePayload {
 
 export interface AppointmentCreateResult {
   appointment_id?: number
+  appointment_public_id?: string
   appointment_ids: number[]
+  appointment_public_ids?: string[]
   billing_id?: number
+  billing_public_id?: string
 }
 
 export interface AppointmentUpdatePayload {
@@ -199,6 +218,12 @@ export interface AppointmentUpdatePayload {
 export interface AppointmentEncounterTicketPayload {
   attended_at?: string
   patient_signature_data_url: string
+}
+
+export interface AppointmentPtCompletionPayload {
+  completed_at?: string
+  pt_signature_data_url: string
+  pt_completion_tag?: string
 }
 
 export const appointmentPhase1Service = {
@@ -254,6 +279,12 @@ export const appointmentPhase1Service = {
       return data
     })
   },
+  async getMyUpcoming(options?: { clinic_id?: number; phase?: AppointmentPhase; limit?: number }): Promise<AppointmentListItem[] | undefined> {
+    return await this.withRefreshRetry(async () => {
+      const {data} = await pamsAPI.get<AppointmentListItem[]>("/appointments/my-upcoming", {params: options})
+      return data
+    })
+  },
   async getById(id: number): Promise<AppointmentDetail | undefined> {
     return await this.withRefreshRetry(async () => {
       const {data} = await pamsAPI.get<AppointmentDetail>(`/appointments/${id}`)
@@ -284,6 +315,12 @@ export const appointmentPhase1Service = {
   async processEncounterTicket(id: number, payload: AppointmentEncounterTicketPayload): Promise<AppointmentEncounterTicket | undefined> {
     return await this.withRefreshRetry(async () => {
       const {data} = await pamsAPI.post<AppointmentEncounterTicket>(`/appointments/${id}/encounter-ticket`, payload)
+      return data
+    })
+  },
+  async processPtCompletion(id: number, payload: AppointmentPtCompletionPayload): Promise<AppointmentEncounterTicket | undefined> {
+    return await this.withRefreshRetry(async () => {
+      const {data} = await pamsAPI.post<AppointmentEncounterTicket>(`/appointments/${id}/pt-completion`, payload)
       return data
     })
   },

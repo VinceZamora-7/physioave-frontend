@@ -42,7 +42,7 @@
       <div class="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h3 :class="sectionTitleClass">Clinic Calendar</h3>
-          <p class="text-sm opacity-70">Pick a clinic schedule first to see valid booking days and booking dots for the month.</p>
+          <p class="text-sm opacity-70">Pick a clinic schedule first to see valid booking days and the day status colors for the month.</p>
           <span class="text-sm opacity-70">Selected: {{ selectedDateLabel }}</span>
         </div>
         <IftaLabel class="min-w-[260px]">
@@ -60,21 +60,44 @@
         </IftaLabel>
       </div>
       <small v-if="selectedClinicScheduleLabel" class="opacity-70">{{ selectedClinicScheduleLabel }}</small>
+      <div class="flex flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-300">
+        <span class="inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-1 dark:border-red-500/20 dark:bg-red-500/10">
+          <span class="h-2.5 w-2.5 rounded-full bg-red-500 dark:bg-red-300" />
+          Red: Unfinished and unbilled
+        </span>
+        <span class="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 dark:border-blue-500/20 dark:bg-blue-500/10">
+          <span class="h-2.5 w-2.5 rounded-full bg-blue-500 dark:bg-blue-300" />
+          Blue: Scheduled but not fully paid
+        </span>
+        <span class="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 dark:border-orange-500/20 dark:bg-orange-500/10">
+          <span class="h-2.5 w-2.5 rounded-full bg-orange-500 dark:bg-orange-300" />
+          Orange: Unfinished but billed
+        </span>
+        <span class="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 dark:border-amber-500/20 dark:bg-amber-500/10">
+          <span class="h-2.5 w-2.5 rounded-full bg-amber-500 dark:bg-amber-300" />
+          Yellow: Multi-session already billed
+        </span>
+        <span class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 dark:border-emerald-500/20 dark:bg-emerald-500/10">
+          <span class="h-2.5 w-2.5 rounded-full bg-emerald-500 dark:bg-emerald-300" />
+          Green: Finished and billed
+        </span>
+      </div>
       <DatePicker
         v-model="calendarDate"
         inline
         fluid
         :manualInput="false"
-        showWeek
         :disabledDays="calendarDisabledDays"
         @month-change="onCalendarMonthChange"
       >
         <template #date="slotProps">
-          <div class="relative h-8 w-8 grid place-items-center">
+          <div
+            :class="calendarDayCellClass(slotProps.date)"
+          >
             <span>{{ slotProps.date.day }}</span>
             <span
-              v-if="hasBookingDot(slotProps.date)"
-              class="absolute bottom-[2px] h-1.5 w-1.5 rounded-full bg-red-500"
+              v-if="getCalendarDayStatus(slotProps.date)"
+              :class="calendarDayDotClass(slotProps.date)"
             />
           </div>
         </template>
@@ -103,7 +126,16 @@
           <p class="text-sm opacity-70">Secondary list and report view for filtering, paging, and CSV export for the selected date.</p>
         </div>
       </div>
-      <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+        <IftaLabel>
+          <InputText
+            v-model="recordFilter"
+            fluid
+            placeholder="Search patient or record ID"
+            :pt="ptInputText"
+          />
+          <label>Record search</label>
+        </IftaLabel>
         <IftaLabel>
           <Select
             v-model="statusFilter"
@@ -146,6 +178,9 @@
           <Button label="Refresh Table" icon="pi pi-refresh" outlined :pt="ptOutlinedBtn" @click="refreshAll" />
           <Button label="Export CSV" icon="pi pi-download" severity="secondary" outlined :pt="ptOutlinedBtn" @click="onExportCsv" />
         </div>
+        <p v-if="recordFilter.trim()" class="text-xs opacity-60 md:col-span-2 xl:col-span-6">
+          Record searches look across clinics, providers, statuses, and dates. Clear the search to return to the selected table filters.
+        </p>
       </div>
 
       <div class="overflow-x-auto">
@@ -303,6 +338,11 @@
             value="Inactive room"
             severity="secondary"
           />
+          <Tag
+            v-if="selectedEncounterTicketHasPtSignature"
+            value="PT Signed-Off"
+            severity="success"
+          />
           <Tag :value="displayAppointmentPhase(selectedDetail.appointment_phase)" :severity="appointmentPhaseSeverity(selectedDetail.appointment_phase)" />
           <Tag :value="displayLocationContext(selectedDetail.location_context)" :severity="appointmentLocationContextSeverity(selectedDetail.location_context)" />
           <Tag :value="displayAppointmentStatus(selectedDetail.appointment_status)" :severity="appointmentSeverity(selectedDetail.appointment_status)" />
@@ -314,6 +354,18 @@
           <div :class="detailCardClass">
             <div class="text-xs uppercase tracking-wide opacity-70">Clinic</div>
             <div class="font-medium">{{ selectedDetail.clinic_name }}</div>
+          </div>
+          <div :class="detailCardClass">
+            <div class="text-xs uppercase tracking-wide opacity-70">Patient Record ID</div>
+            <div class="font-medium">{{ selectedDetail.patient_public_id || "Pending patient record code" }}</div>
+          </div>
+          <div :class="detailCardClass">
+            <div class="text-xs uppercase tracking-wide opacity-70">Appointment Record ID</div>
+            <div class="font-medium">{{ selectedDetail.public_id || "Pending appointment record code" }}</div>
+          </div>
+          <div :class="detailCardClass">
+            <div class="text-xs uppercase tracking-wide opacity-70">Billing Record ID</div>
+            <div class="font-medium">{{ selectedDetail.billing_public_id || "No billing linked yet" }}</div>
           </div>
           <div :class="detailCardClass">
             <div class="text-xs uppercase tracking-wide opacity-70">Assigned Provider</div>
@@ -357,16 +409,16 @@
               {{ selectedEncounterTicket?.slip_number || "Not generated yet" }}
             </div>
             <div class="mt-1 text-xs opacity-70">
-              {{ selectedEncounterTicket
-                ? `Patient signed on ${formatDateTime(selectedEncounterTicket.signed_off_at)}`
-                : "Attendance and sign-off still need to be processed." }}
+              {{ selectedEncounterTicketSummaryLabel }}
             </div>
           </div>
           <div :class="detailCardClass">
             <div class="text-xs uppercase tracking-wide opacity-70">Encounter Ticket ID</div>
             <div class="font-medium">{{ encounterTicketRecordLabel }}</div>
             <div class="mt-1 text-xs opacity-70">
-              Locked as the independent attendance ledger record for this appointment.
+              {{ isSelectedEncounterTicketLocked
+                ? "Locked as the independent attendance ledger record for this appointment."
+                : "This attendance ledger record stays open until patient sign-off locks it." }}
             </div>
           </div>
           <div :class="detailCardClass">
@@ -374,6 +426,35 @@
             <div class="font-medium">{{ selectedEncounterTicketPackageLabel }}</div>
             <div v-if="selectedEncounterTicketPackageSourceLabel" class="mt-1 text-xs opacity-70">
               {{ selectedEncounterTicketPackageSourceLabel }}
+            </div>
+          </div>
+          <div :class="detailCardClass">
+            <div class="text-xs uppercase tracking-wide opacity-70">PT Session Confirmation</div>
+            <div class="font-medium">
+              {{ selectedEncounterTicketHasPtSignature
+                ? `Signed by ${selectedEncounterTicketPtConfirmedByLabel}`
+                : "PT has not signed this session yet" }}
+            </div>
+            <div class="mt-1 text-xs opacity-70">
+              {{ selectedEncounterTicket?.pt_confirmed_at
+                ? `Captured ${formatDateTime(selectedEncounterTicket.pt_confirmed_at)}`
+                : "Higher-ups can review the PT signature here before final patient sign-off." }}
+            </div>
+            <div
+              v-if="selectedEncounterTicketPtCompletionTag"
+              class="mt-2 rounded-xl border border-white/50 bg-white/70 px-3 py-2 text-xs opacity-80 dark:border-white/10 dark:bg-white/10"
+            >
+              {{ selectedEncounterTicketPtCompletionTag }}
+            </div>
+            <div
+              v-if="selectedEncounterTicket?.pt_signature_data_url"
+              class="mt-3 overflow-hidden rounded-xl border border-[rgb(var(--app-border))] bg-white p-2"
+            >
+              <img
+                :src="selectedEncounterTicket.pt_signature_data_url"
+                alt="PT signature"
+                class="h-24 w-full object-contain"
+              />
             </div>
           </div>
         </div>
@@ -458,10 +539,36 @@
           <div v-if="selectedEncounterTicket" class="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
             Existing slip: <strong>{{ selectedEncounterTicket.slip_number || `#${selectedEncounterTicket.id}` }}</strong>
             <span class="mx-1 opacity-50">|</span>
-            Signed {{ formatDateTime(selectedEncounterTicket.signed_off_at) }}
+            {{ isSelectedEncounterTicketLocked
+              ? `Patient signed ${formatDateTime(selectedEncounterTicket.signed_off_at)}`
+              : "Waiting for patient sign-off to lock this record" }}
           </div>
           <div v-if="isSelectedEncounterTicketLocked" class="mt-3 rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
             This signed ticket is locked as a permanent billing record and can no longer be changed.
+          </div>
+        </div>
+
+        <div v-if="selectedEncounterTicketHasPtSignature" class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
+          <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">PT Confirmation</div>
+          <div class="mt-2 text-sm text-[rgb(var(--app-fg))]/75">
+            {{ selectedEncounterTicketPtConfirmedByLabel }}
+            <span v-if="selectedEncounterTicket?.pt_confirmed_at">
+              signed on {{ formatDateTime(selectedEncounterTicket.pt_confirmed_at) }}
+            </span>
+            to confirm the session was completed.
+          </div>
+          <div
+            v-if="selectedEncounterTicketPtCompletionTag"
+            class="mt-3 rounded-xl border border-white/50 bg-white/70 px-3 py-2 text-sm text-[rgb(var(--app-fg))]/75 dark:border-white/10 dark:bg-white/10"
+          >
+            {{ selectedEncounterTicketPtCompletionTag }}
+          </div>
+          <div class="mt-4 overflow-hidden rounded-xl border border-[rgb(var(--app-border))] bg-white p-2">
+            <img
+              :src="selectedEncounterTicket?.pt_signature_data_url"
+              alt="PT signature"
+              class="h-28 w-full object-contain"
+            />
           </div>
         </div>
 
@@ -1215,6 +1322,7 @@ const slotDurationOptions: Array<{label: string; value: SlotDurationMinutes}> = 
 const page = ref(1)
 const pageSize = ref(10)
 const totalElements = ref(0)
+const recordFilter = ref("")
 const statusFilter = ref<string>()
 const phaseFilter = ref<AppointmentPhase>()
 const ptFilter = ref<DoctorConsultantFilterValue>()
@@ -1373,8 +1481,14 @@ const createHmoEvaluationIds = ref<Set<number> | null>(null)
 const createHmoAddOnMachineIds = ref<Set<number> | null>(null)
 const createHmoAddOnTechniqueIds = ref<Set<number> | null>(null)
 const createHmoAddOnHomeServiceIds = ref<Set<number> | null>(null)
-const bookedDateKeys = ref<Set<string>>(new Set())
-const bookedMonthCache = ref<Map<string, Set<string>>>(new Map())
+type CalendarDayStatus =
+  | "unfinished_unbilled"
+  | "scheduled_partially_paid"
+  | "unfinished_billed"
+  | "multi_session_billed"
+  | "finished_billed"
+const calendarDayStatusMap = ref<Map<string, CalendarDayStatus>>(new Map())
+const bookedMonthCache = ref<Map<string, Map<string, CalendarDayStatus>>>(new Map())
 const visibleMonth = ref<number>(new Date().getMonth())
 const visibleYear = ref<number>(new Date().getFullYear())
 
@@ -1952,13 +2066,40 @@ const patientWalletAmountToCollect = computed(() =>
 const hasPatientWalletAmountToCollect = computed(() => patientWalletAmountToCollect.value > 0)
 const sponsorWalletSummary = computed(() => selectedCheckoutSummary.value?.sponsor_wallet)
 const selectedEncounterTicket = computed(() => selectedDetail.value?.encounter_ticket)
+const selectedEncounterTicketHasPatientSignature = computed(() =>
+  Boolean(selectedEncounterTicket.value?.patient_signature_data_url?.trim())
+)
+const selectedEncounterTicketHasPtSignature = computed(() =>
+  Boolean(selectedEncounterTicket.value?.pt_signature_data_url?.trim())
+)
 const isSelectedEncounterTicketLocked = computed(() => Boolean(selectedEncounterTicket.value?.record_locked))
 const encounterAttendanceLabel = computed(() =>
-  selectedEncounterTicket.value ? "Attendance Confirmed" : "Attendance Pending"
+  selectedEncounterTicketHasPatientSignature.value
+    ? "Patient Attendance Confirmed"
+    : selectedEncounterTicketHasPtSignature.value
+      ? "PT Attendance Confirmed"
+      : "Attendance Pending"
 )
 const canProcessEncounterTicket = computed(() =>
   Boolean(selectedDetail.value?.billing_id || selectedEncounterTicket.value?.phase1_billing_id)
 )
+const selectedEncounterTicketPtConfirmedByLabel = computed(() =>
+  selectedEncounterTicket.value?.pt_confirmed_by_name?.trim()
+    || selectedDetail.value?.doctor_name?.trim()
+    || "Assigned Physical Therapist"
+)
+const selectedEncounterTicketPtCompletionTag = computed(() =>
+  selectedEncounterTicket.value?.pt_completion_tag?.trim() || ""
+)
+const selectedEncounterTicketSummaryLabel = computed(() => {
+  if (selectedEncounterTicketHasPatientSignature.value && selectedEncounterTicket.value?.signed_off_at) {
+    return `Patient signed on ${formatDateTime(selectedEncounterTicket.value.signed_off_at)}`
+  }
+  if (selectedEncounterTicketHasPtSignature.value && selectedEncounterTicket.value?.pt_confirmed_at) {
+    return `PT signed on ${formatDateTime(selectedEncounterTicket.value.pt_confirmed_at)}`
+  }
+  return "Attendance and sign-off still need to be processed."
+})
 const formatEncounterTicketPackageSource = (value?: string): string => {
   const normalized = String(value ?? "").trim().toUpperCase()
   if (normalized === "PATIENT_PACKAGE_SERVICE_PURCHASE") return "Linked from patient package service purchase"
@@ -2164,9 +2305,44 @@ const displayLocationContext = (locationContext?: AppointmentLocationContext): s
 }
 const displayAppointmentStatus = (status?: string): string => normalizeAppointmentStatus(status).split("_").join(" ")
 const displayBillingStatus = (status?: string): string => (status?.trim() || "UNBILLED").toUpperCase()
+const normalizeBillingTypeForCalendar = (value?: string): string =>
+  String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/:/g, "")
+    .replace(/-/g, "_")
+    .replace(/ /g, "_")
+const normalizeServiceTypeForCalendar = (value?: string): string =>
+  String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/:/g, "")
+    .replace(/-/g, "_")
+    .replace(/ /g, "_")
+const isFullyBilledStatus = (status?: string): boolean => {
+  const normalized = displayBillingStatus(status)
+  return normalized === "PAID" || normalized === "BILLED"
+}
+const isPartiallyPaidStatus = (status?: string): boolean => displayBillingStatus(status) === "PARTIAL"
+const isUnbilledStatus = (status?: string): boolean => {
+  const normalized = displayBillingStatus(status)
+  return normalized === "UNBILLED" || normalized === "PENDING"
+}
 const needsBillingAttention = (status?: string): boolean => {
   const normalized = displayBillingStatus(status)
   return normalized !== "PAID" && normalized !== "BILLED"
+}
+const isFinishedAppointmentStatus = (status?: string): boolean => {
+  const normalized = normalizeAppointmentStatus(status)
+  return normalized === "COMPLETED" || normalized === "CANCELLED" || normalized === "NO_SHOW"
+}
+const isMultiSessionAppointment = (appointment: AppointmentListItem): boolean => {
+  const normalizedBillingType = normalizeBillingTypeForCalendar(appointment.billing_type)
+  const normalizedServiceType = normalizeServiceTypeForCalendar(appointment.service_type)
+
+  return normalizedServiceType === "PACKAGE"
+    || normalizedBillingType === "SELF_PAY_PACKAGE"
+    || normalizedBillingType === "PACKAGE_BILLING"
 }
 
 const formatDateTime = (value: string | Date): string => new Date(value).toLocaleString()
@@ -2407,11 +2583,126 @@ const removeServiceLine = (index: number): void => {
   }
 }
 
-const hasBookingDot = (date: {year: number; month: number; day: number}): boolean => {
-  // PrimeVue month in slot date can vary by version (0-based vs 1-based).
-  const monthAsZeroBased = toDateKey(date.year, date.month, date.day)
-  const monthAsOneBased = `${date.year}-${String(date.month).padStart(2, "0")}-${String(date.day).padStart(2, "0")}`
-  return bookedDateKeys.value.has(monthAsZeroBased) || bookedDateKeys.value.has(monthAsOneBased)
+type CalendarSlotDate = {
+  year: number
+  month: number
+  day: number
+  today?: boolean
+  selectable?: boolean
+}
+
+const calendarDayStatusStyles: Record<CalendarDayStatus, {cell: string; dot: string}> = {
+  unfinished_unbilled: {
+    cell: "bg-red-100 text-red-700 ring-1 ring-red-300 dark:bg-red-500/20 dark:text-red-100 dark:ring-red-400/40",
+    dot: "absolute bottom-[3px] h-1.5 w-1.5 rounded-full bg-red-500 dark:bg-red-300"
+  },
+  scheduled_partially_paid: {
+    cell: "bg-blue-100 text-blue-800 ring-1 ring-blue-300 dark:bg-blue-500/20 dark:text-blue-100 dark:ring-blue-400/40",
+    dot: "absolute bottom-[3px] h-1.5 w-1.5 rounded-full bg-blue-500 dark:bg-blue-300"
+  },
+  unfinished_billed: {
+    cell: "bg-orange-100 text-orange-800 ring-1 ring-orange-300 dark:bg-orange-500/20 dark:text-orange-100 dark:ring-orange-400/40",
+    dot: "absolute bottom-[3px] h-1.5 w-1.5 rounded-full bg-orange-500 dark:bg-orange-300"
+  },
+  multi_session_billed: {
+    cell: "bg-amber-100 text-amber-800 ring-1 ring-amber-300 dark:bg-amber-500/20 dark:text-amber-100 dark:ring-amber-400/40",
+    dot: "absolute bottom-[3px] h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-300"
+  },
+  finished_billed: {
+    cell: "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-100 dark:ring-emerald-400/40",
+    dot: "absolute bottom-[3px] h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-300"
+  }
+}
+
+const formatCalendarDateKey = (year: number, monthOneBased: number, day: number): string =>
+  `${year}-${String(monthOneBased).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+
+const getBookedDateCandidateKeys = (date: CalendarSlotDate): string[] => {
+  const candidateKeys = new Set<string>()
+  const year = Number(date.year)
+  const month = Number(date.month)
+  const day = Number(date.day)
+
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    return []
+  }
+
+  // PrimeVue month in slot date can vary by version (0-based vs 1-based), so keep both interpretations.
+  if (month >= 0 && month <= 11) {
+    candidateKeys.add(toDateKey(year, month, day))
+    candidateKeys.add(formatCalendarDateKey(year, month + 1, day))
+  }
+
+  if (month >= 1 && month <= 12) {
+    candidateKeys.add(formatCalendarDateKey(year, month, day))
+  }
+
+  const isVisibleMonth =
+    (month >= 0 && month <= 11 && month === visibleMonth.value)
+    || (month >= 1 && month <= 12 && (month - 1) === visibleMonth.value)
+
+  // When the slot belongs to the visible month, fall back to the rendered month as a final match key.
+  if (isVisibleMonth) {
+    candidateKeys.add(toDateKey(visibleYear.value, visibleMonth.value, day))
+  }
+
+  return [...candidateKeys]
+}
+
+const hasBookedDate = (date: CalendarSlotDate): boolean => {
+  return getBookedDateCandidateKeys(date).some(candidateKey => calendarDayStatusMap.value.has(candidateKey))
+}
+
+const getCalendarDayStatus = (date: CalendarSlotDate): CalendarDayStatus | null => {
+  const candidateKey = getBookedDateCandidateKeys(date)
+    .find(key => calendarDayStatusMap.value.has(key))
+
+  return candidateKey ? calendarDayStatusMap.value.get(candidateKey) ?? null : null
+}
+
+const calendarDayCellClass = (date: CalendarSlotDate): string[] => {
+  const dayStatus = getCalendarDayStatus(date)
+  return [
+    "relative flex h-full min-h-8 w-full items-center justify-center rounded-xl px-1 text-sm font-medium transition-colors",
+    dayStatus ? calendarDayStatusStyles[dayStatus].cell : "",
+    date.today ? "ring-2 ring-slate-400/70 dark:ring-slate-300/60" : "",
+    date.selectable === false ? "opacity-40" : ""
+  ]
+}
+
+const calendarDayDotClass = (date: CalendarSlotDate): string => {
+  const dayStatus = getCalendarDayStatus(date)
+  return dayStatus ? calendarDayStatusStyles[dayStatus].dot : ""
+}
+
+const classifyCalendarDayStatus = (rows: AppointmentListItem[]): CalendarDayStatus | null => {
+  if (!rows.length) return null
+
+  if (rows.some(row => !isFinishedAppointmentStatus(row.appointment_status) && isUnbilledStatus(row.billing_status))) {
+    return "unfinished_unbilled"
+  }
+
+  if (rows.some(row => isPartiallyPaidStatus(row.billing_status))) {
+    return "scheduled_partially_paid"
+  }
+
+  if (rows.some(row => isMultiSessionAppointment(row) && isFullyBilledStatus(row.billing_status))) {
+    return "multi_session_billed"
+  }
+
+  if (rows.some(row => !isFinishedAppointmentStatus(row.appointment_status) && isFullyBilledStatus(row.billing_status))) {
+    return "unfinished_billed"
+  }
+
+  if (rows.every(row => isFinishedAppointmentStatus(row.appointment_status) && isFullyBilledStatus(row.billing_status))) {
+    return "finished_billed"
+  }
+
+  if (rows.some(row => needsBillingAttention(row.billing_status))) {
+    return "unfinished_unbilled"
+  }
+
+  return "finished_billed"
 }
 
 const toMinutesFromTime = (value: unknown): number | undefined => {
@@ -2529,40 +2820,40 @@ const alignToClinicStart = (date: Date): Date => {
 const fetchBookedDatesForMonth = async (year: number, month: number): Promise<void> => {
   const clinicId = selectedClinicId.value
   if (!clinicId) {
-    bookedDateKeys.value = new Set()
+    calendarDayStatusMap.value = new Map()
     return
   }
 
   const monthKey = getBookedMonthCacheKey(year, month, clinicId)
   const cached = bookedMonthCache.value.get(monthKey)
   if (cached) {
-    bookedDateKeys.value = new Set(cached)
+    calendarDayStatusMap.value = new Map(cached)
     return
   }
 
   const daysInMonth = new Date(year, month + 1, 0).getDate()
-  const monthDots = new Set<string>()
+  const monthStatuses = new Map<string, CalendarDayStatus>()
 
   // Use sequential requests to avoid overloading API and missing dots from transient failures.
   for (let day = 1; day <= daysInMonth; day++) {
     const dateKey = toDateKey(year, month, day)
-    let hasBooking = false
+    let dayStatus: CalendarDayStatus | null = null
     try {
       const rows = await appointmentPhase1Service.getDay(dateKey, {clinic_id: clinicId})
-      hasBooking = (rows ?? []).length > 0
+      dayStatus = classifyCalendarDayStatus(rows ?? [])
     } catch {
       try {
         const retryRows = await appointmentPhase1Service.getDay(dateKey, {clinic_id: clinicId})
-        hasBooking = (retryRows ?? []).length > 0
+        dayStatus = classifyCalendarDayStatus(retryRows ?? [])
       } catch {
-        hasBooking = false
+        dayStatus = null
       }
     }
-    if (hasBooking) monthDots.add(dateKey)
+    if (dayStatus) monthStatuses.set(dateKey, dayStatus)
   }
 
-  bookedMonthCache.value.set(monthKey, monthDots)
-  bookedDateKeys.value = new Set(monthDots)
+  bookedMonthCache.value.set(monthKey, monthStatuses)
+  calendarDayStatusMap.value = new Map(monthStatuses)
 }
 
 const refreshBookedDotsForVisibleMonth = async (): Promise<void> => {
@@ -2572,7 +2863,7 @@ const refreshBookedDotsForVisibleMonth = async (): Promise<void> => {
 }
 
 const onCalendarMonthChange = async (event: {month: number; year: number}): Promise<void> => {
-  visibleMonth.value = event.month
+  visibleMonth.value = Math.max(0, Math.min(11, Number(event.month) - 1))
   visibleYear.value = event.year
   await fetchBookedDatesForMonth(visibleYear.value, visibleMonth.value)
 }
@@ -2580,15 +2871,18 @@ const onCalendarMonthChange = async (event: {month: number; year: number}): Prom
 const fetchAppointments = async (): Promise<void> => {
   try {
     isLoading.value = true
+    const normalizedRecordFilter = recordFilter.value.trim()
+    const isRecordSearchActive = !!normalizedRecordFilter
     const response = await appointmentPhase1Service.getAll({
       page: page.value,
       size: pageSize.value,
-      clinic_id: selectedClinicId.value,
-      doctor_id: selectedDoctorConsultantId.value,
-      unassigned: isUnassignedDoctorConsultantFilter.value || undefined,
-      status: statusFilter.value?.trim() || undefined,
-      phase: phaseFilter.value,
-      date: selectedDateIso.value
+      clinic_id: isRecordSearchActive ? undefined : selectedClinicId.value,
+      doctor_id: isRecordSearchActive ? undefined : selectedDoctorConsultantId.value,
+      unassigned: isRecordSearchActive ? undefined : (isUnassignedDoctorConsultantFilter.value || undefined),
+      search: normalizedRecordFilter || undefined,
+      status: isRecordSearchActive ? undefined : (statusFilter.value?.trim() || undefined),
+      phase: isRecordSearchActive ? undefined : phaseFilter.value,
+      date: isRecordSearchActive ? undefined : selectedDateIso.value
     })
     appointments.value = response?.content ?? []
     totalElements.value = response?.total_elements ?? 0
@@ -2913,8 +3207,8 @@ const exportSelectedEncounterTicketPdf = (): void => {
       signedOffAt: selectedEncounterTicket.value.signed_off_at,
       lockedAt: selectedEncounterTicket.value.locked_at,
       encounterTicketId: selectedEncounterTicket.value.id,
-      appointmentId: snapshot?.appointment_id || selectedDetail.value.id,
-      billingId: selectedEncounterTicket.value.phase1_billing_id || selectedDetail.value.billing_id,
+      appointmentId: snapshot?.appointment_public_id || selectedDetail.value.public_id || snapshot?.appointment_id || selectedDetail.value.id,
+      billingId: selectedEncounterTicket.value.phase1_billing_public_id || selectedDetail.value.billing_public_id || selectedEncounterTicket.value.phase1_billing_id || selectedDetail.value.billing_id,
       activeBillingPackageLabel: selectedEncounterTicketPackageLabel.value,
       activeBillingPackageSource: selectedEncounterTicketPackageSourceLabel.value,
       deductionSummary: encounterSessionDeductionLabel.value,
@@ -3018,13 +3312,16 @@ const submitReschedule = async (): Promise<void> => {
 }
 
 const onExportCsv = async (): Promise<void> => {
+  const normalizedRecordFilter = recordFilter.value.trim()
+  const isRecordSearchActive = !!normalizedRecordFilter
   const response = await appointmentPhase1Service.exportCsv({
-    clinic_id: selectedClinicId.value,
-    doctor_id: selectedDoctorConsultantId.value,
-    unassigned: isUnassignedDoctorConsultantFilter.value || undefined,
-    status: statusFilter.value?.trim() || undefined,
-    phase: phaseFilter.value,
-    date: selectedDateIso.value
+    clinic_id: isRecordSearchActive ? undefined : selectedClinicId.value,
+    doctor_id: isRecordSearchActive ? undefined : selectedDoctorConsultantId.value,
+    unassigned: isRecordSearchActive ? undefined : (isUnassignedDoctorConsultantFilter.value || undefined),
+    search: normalizedRecordFilter || undefined,
+    status: isRecordSearchActive ? undefined : (statusFilter.value?.trim() || undefined),
+    phase: isRecordSearchActive ? undefined : phaseFilter.value,
+    date: isRecordSearchActive ? undefined : selectedDateIso.value
   })
   if (!response) return
   exportToExcel(response)
@@ -3151,6 +3448,17 @@ watch([calendarDate, statusFilter, phaseFilter], async () => {
 watch(ptFilter, async () => {
   page.value = 1
   await fetchAppointments()
+})
+
+let recordFilterDebounceHandle: ReturnType<typeof setTimeout> | undefined
+watch(recordFilter, () => {
+  page.value = 1
+  if (recordFilterDebounceHandle) {
+    clearTimeout(recordFilterDebounceHandle)
+  }
+  recordFilterDebounceHandle = setTimeout(() => {
+    void fetchAppointments()
+  }, 250)
 })
 
 watch(selectedClinicId, async () => {

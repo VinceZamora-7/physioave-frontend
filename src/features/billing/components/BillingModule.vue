@@ -20,7 +20,7 @@
 
         <IftaLabel>
           <InputNumber v-model="form.appointment_id" :min="1" fluid />
-          <label>Appointment ID (optional)</label>
+          <label>Linked Appointment (optional)</label>
         </IftaLabel>
 
         <IftaLabel>
@@ -375,7 +375,7 @@
 
         <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <IftaLabel>
-            <InputText v-model="tableFilterQuery" fluid placeholder="Search patient, label, ID" />
+            <InputText v-model="tableFilterQuery" fluid placeholder="Search patient, label, or record ID" />
             <label>Search</label>
           </IftaLabel>
 
@@ -546,11 +546,12 @@
         <div class="grid grid-cols-1 gap-3 md:grid-cols-2 text-sm">
           <div :class="billingDetailCardClass">
             <div class="text-xs uppercase tracking-wide opacity-70">Patient</div>
-            <div class="font-medium">{{ selectedBillingDetail.patient_name || selectedBillingDetail.patient_id }}</div>
+            <div class="font-medium">{{ selectedBillingDetail.patient_name || selectedBillingDetail.patient_public_id || selectedBillingDetail.patient_id }}</div>
+            <div class="mt-1 text-xs opacity-60">{{ selectedBillingDetail.patient_public_id || "Patient record code pending" }}</div>
           </div>
           <div :class="billingDetailCardClass">
-            <div class="text-xs uppercase tracking-wide opacity-70">Appointment ID</div>
-            <div class="font-medium">{{ selectedBillingDetail.appointment_id || "N/A" }}</div>
+            <div class="text-xs uppercase tracking-wide opacity-70">Appointment Record ID</div>
+            <div class="font-medium">{{ selectedBillingDetail.appointment_public_id || "N/A" }}</div>
           </div>
           <div :class="billingDetailCardClass">
             <div class="text-xs uppercase tracking-wide opacity-70">Created</div>
@@ -565,8 +566,9 @@
             <div class="font-medium">{{ selectedBillingDetail.service_name || "N/A" }}</div>
           </div>
           <div :class="billingDetailCardClass">
-            <div class="text-xs uppercase tracking-wide opacity-70">Receipt Number</div>
-            <div class="font-medium">{{ selectedBillingDetail.receipt_number || "N/A" }}</div>
+            <div class="text-xs uppercase tracking-wide opacity-70">Billing Record ID</div>
+            <div class="font-medium">{{ selectedBillingDetail.public_id || "Billing record code pending" }}</div>
+            <div class="mt-1 text-xs opacity-60">Receipt {{ selectedBillingDetail.receipt_number || "N/A" }}</div>
           </div>
         </div>
 
@@ -623,8 +625,8 @@
 
               <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 text-sm">
                 <div :class="billingDetailCardClass">
-                  <div class="text-xs uppercase tracking-wide opacity-70">Appointment</div>
-                  <div class="font-medium">{{ ticket.billing_snapshot?.appointment_id || ticket.appointment_id }}</div>
+                  <div class="text-xs uppercase tracking-wide opacity-70">Appointment Record</div>
+                  <div class="font-medium">{{ ticket.billing_snapshot?.appointment_public_id || ticket.appointment_public_id || "N/A" }}</div>
                 </div>
                 <div :class="billingDetailCardClass">
                   <div class="text-xs uppercase tracking-wide opacity-70">Attendance</div>
@@ -1698,8 +1700,8 @@ const buildEncounterTicketPdfCards = (detail?: BillingListItem): EncounterTicket
         signedOffAt: ticket.signed_off_at,
         lockedAt: ticket.locked_at,
         encounterTicketId: ticket.id,
-        appointmentId: snapshot?.appointment_id ?? detail.appointment_id,
-        billingId: ticket.phase1_billing_id ?? detail.id,
+        appointmentId: snapshot?.appointment_public_id ?? ticket.appointment_public_id ?? detail.appointment_public_id ?? detail.appointment_id,
+        billingId: ticket.phase1_billing_public_id ?? detail.public_id ?? detail.id,
         activeBillingPackageLabel: describeEncounterTicketPackage(ticket),
         activeBillingPackageSource: describeEncounterTicketPackageSource(ticket),
         deductionSummary: buildEncounterTicketDeductionSummary(resolvedBillingType),
@@ -1749,8 +1751,8 @@ const exportSelectedBillingEncounterTicketsPdf = (): void => {
   try {
     exportEncounterTicketCards(cards, {
       title: "Billing Encounter Ticket Pack",
-      subtitle: `Locked encounter tickets for Billing #${selectedBillingDetail.value?.id ?? ""}`,
-      fileName: `billing-${selectedBillingDetail.value?.id ?? "encounter"}-tickets`
+      subtitle: `Locked encounter tickets for Billing ${selectedBillingDetail.value?.public_id ?? selectedBillingDetail.value?.id ?? ""}`,
+      fileName: `billing-${selectedBillingDetail.value?.public_id ?? selectedBillingDetail.value?.id ?? "encounter"}-tickets`
     })
   } catch (error: unknown) {
     errorToast(toast, extractApiErrorMessage(error, "Failed to export billing encounter tickets"))
@@ -1862,10 +1864,14 @@ const filteredBillings = computed(() => {
     if (query) {
       const haystack = [
         String(billing.id ?? ""),
+        String(billing.public_id ?? ""),
         String(billing.patient_id ?? ""),
+        String(billing.patient_public_id ?? ""),
         billing.patient_name ?? "",
         billing.service_name ?? "",
         String(billing.appointment_id ?? ""),
+        String(billing.appointment_public_id ?? ""),
+        String(billing.receipt_number ?? ""),
         billing.billing_type ?? ""
       ].join(" ").toLowerCase()
       if (!haystack.includes(query)) return false
@@ -2186,6 +2192,9 @@ const form = ref<{
 
 const asCurrency = (value: number): string =>
   Number(value ?? 0).toLocaleString("en-PH", {style: "currency", currency: "PHP"})
+
+const formatFilterDate = (value?: Date): string | undefined =>
+  value ? new Date(value).toISOString().slice(0, 10) : undefined
 
 const formatType = (type: string): string => {
   const typeMap: Record<string, string> = {
@@ -2514,7 +2523,15 @@ const loadLookups = async (): Promise<void> => {
 const fetchBillings = async (): Promise<void> => {
   try {
     isLoading.value = true
-    const response = await billingPhase1Service.getAll({page: 1, size: 20})
+    const response = await billingPhase1Service.getAll({
+      page: 1,
+      size: 500,
+      name: tableFilterQuery.value.trim() || undefined,
+      billing_type: tableFilterBillingType.value,
+      billing_status: tableFilterStatus.value,
+      from_date: formatFilterDate(tableFilterDateFrom.value),
+      to_date: formatFilterDate(tableFilterDateTo.value)
+    })
     billings.value = response?.content ?? []
     selectedBillingRows.value = []
   } catch {
@@ -2679,7 +2696,7 @@ const saveBundleFromSelection = (): void => {
 
 const createBilling = async (): Promise<void> => {
   if (!form.value.patient_id) {
-    errorToast(toast, "Patient ID is required")
+    errorToast(toast, "Patient is required")
     return
   }
 
@@ -2813,18 +2830,22 @@ const printSelectedBillingReceipt = (): void => {
   if (!selectedBillingDetail.value) return
 
   const detail = selectedBillingDetail.value
+  const normalizedBillingType = normalizeBillingTypeValue(detail.billing_type)
+  const isLguReceipt = normalizedBillingType === "LGU_BILLING"
   const popup = openBillingReceiptWindow(getReceiptDisplayNumber(detail))
 
   try {
     renderBillingReceiptWindow(popup, {
       receiptNumber: getReceiptDisplayNumber(detail),
-      billingId: detail.id,
-      patientName: detail.patient_name || `Patient #${detail.patient_id}`,
-      appointmentId: detail.appointment_id,
+      billingId: detail.public_id || detail.id,
+      patientRecordId: detail.patient_public_id,
+      patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
+      appointmentId: detail.appointment_public_id || detail.appointment_id,
       createdAt: detail.created_at,
       billingType: displayBillingType(detail.billing_type),
       paymentType: derivePaymentType(detail) || detail.payment_reference,
       serviceLabel: detail.service_name,
+      receiptMode: isLguReceipt ? "lgu_claim" : "standard",
       subtotal: Number(detail.subtotal_amount ?? detail.amount_due ?? detail.total_amount ?? 0),
       discount: Number(detail.discount_amount ?? 0),
       totalDue: selectedBillingTotalDue.value,
@@ -2833,7 +2854,7 @@ const printSelectedBillingReceipt = (): void => {
       changeAmount: Number(detail.change_amount ?? 0),
       lines: selectedBillingReceiptLines.value
     }, {
-      title: "Billing Receipt Copy",
+      title: isLguReceipt ? "LGU Billing Copy" : "Billing Receipt Copy",
       fileName: getReceiptDisplayNumber(detail)
     })
   } catch (error: unknown) {
@@ -3034,6 +3055,19 @@ watch(
   async (value, previousValue) => {
     if (!value || value === previousValue) return
     await applyRouteBillingContext()
+  }
+)
+
+let billingFilterDebounceHandle: ReturnType<typeof setTimeout> | undefined
+watch(
+  [tableFilterQuery, tableFilterBillingType, tableFilterStatus, tableFilterDateFrom, tableFilterDateTo],
+  () => {
+    if (billingFilterDebounceHandle) {
+      clearTimeout(billingFilterDebounceHandle)
+    }
+    billingFilterDebounceHandle = setTimeout(() => {
+      void fetchBillings()
+    }, 250)
   }
 )
 

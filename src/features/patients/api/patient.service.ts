@@ -20,7 +20,7 @@ interface PatientService {
 
   getAllLookup(params: PatientRequestParams): Promise<Pageable<Lookup> | undefined>
 
-  save(body: PatientRequestBody): Promise<{id: number} | undefined>
+  save(body: PatientRequestBody): Promise<{id: number; public_id?: string} | undefined>
 
   update(payload: PatientEditRequestPayload): Promise<void | undefined>
 
@@ -75,9 +75,9 @@ export const patientService: PatientService = {
     }
   },
 
-  async save(body: PatientRequestBody): Promise<{id: number} | undefined> {
+  async save(body: PatientRequestBody): Promise<{id: number; public_id?: string} | undefined> {
     try {
-      const {data: response} = await pamsAPI.post<{id: number}, AxiosResponse<{id: number}>, PatientRequestBody>(`${ResourceKey.PATIENTS}`, body)
+      const {data: response} = await pamsAPI.post<{id: number; public_id?: string}, AxiosResponse<{id: number; public_id?: string}>, PatientRequestBody>(`${ResourceKey.PATIENTS}`, body)
       return response
     } catch (error: unknown) {
       errorHandler(error)

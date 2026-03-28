@@ -23,12 +23,14 @@ export interface BillingReceiptPrintLine {
 export interface BillingReceiptPrintData {
   receiptNumber: string
   billingId: number | string
+  patientRecordId?: string
   patientName: string
   appointmentId?: number | string
   createdAt: string
   billingType: string
   paymentType?: string
   serviceLabel?: string
+  receiptMode?: "standard" | "lgu_claim"
   subtotal: number
   discount: number
   totalDue: number
@@ -107,6 +109,7 @@ export function renderBillingReceiptWindow(
 ): void {
   const title = options?.title?.trim() || "Receipt Copy"
   const fileName = options?.fileName?.trim() || receipt.receiptNumber
+  const isLguClaimReceipt = receipt.receiptMode === "lgu_claim"
 
   const lineRows = receipt.lines.map((line) => `
     <tr>
@@ -323,7 +326,11 @@ export function renderBillingReceiptWindow(
             <div>
               <div class="brand">PhysioAve</div>
               <div class="title">${escapeHtml(title)}</div>
-              <div class="subtitle">Printable billing receipt copy with full billed products and nested inclusions.</div>
+              <div class="subtitle">${
+                isLguClaimReceipt
+                  ? "Printable LGU billing copy with availed items and claim-ready details."
+                  : "Printable billing receipt copy with full billed products and nested inclusions."
+              }</div>
             </div>
             <div class="copy-pill">Receipt Copy</div>
           </div>
@@ -346,6 +353,10 @@ export function renderBillingReceiptWindow(
               <div class="meta-value">${escapeHtml(receipt.patientName)}</div>
             </div>
             <div class="meta-card">
+              <div class="meta-label">Patient Record ID</div>
+              <div class="meta-value">${escapeHtml(receipt.patientRecordId || "N/A")}</div>
+            </div>
+            <div class="meta-card">
               <div class="meta-label">Appointment ID</div>
               <div class="meta-value">${escapeHtml(receipt.appointmentId || "N/A")}</div>
             </div>
@@ -354,8 +365,8 @@ export function renderBillingReceiptWindow(
               <div class="meta-value">${escapeHtml(receipt.billingType)}</div>
             </div>
             <div class="meta-card">
-              <div class="meta-label">Payment Type</div>
-              <div class="meta-value">${escapeHtml(receipt.paymentType || "N/A")}</div>
+              <div class="meta-label">${escapeHtml(isLguClaimReceipt ? "Billing Mode" : "Payment Type")}</div>
+              <div class="meta-value">${escapeHtml((isLguClaimReceipt ? receipt.billingType : receipt.paymentType) || "N/A")}</div>
             </div>
             <div class="meta-card" style="grid-column: span 2;">
               <div class="meta-label">Billing Label</div>
@@ -378,30 +389,45 @@ export function renderBillingReceiptWindow(
           </table>
 
           <div class="totals-grid">
-            <div class="summary-card">
-              <div class="summary-label">Subtotal</div>
-              <div class="summary-value">${escapeHtml(asCurrency(receipt.subtotal))}</div>
-            </div>
-            <div class="summary-card">
-              <div class="summary-label">Discount</div>
-              <div class="summary-value">${escapeHtml(asCurrency(receipt.discount))}</div>
-            </div>
-            <div class="summary-card">
-              <div class="summary-label">Paid</div>
-              <div class="summary-value">${escapeHtml(asCurrency(receipt.amountPaid))}</div>
-            </div>
-            <div class="summary-card ${receipt.outstanding > 0 ? "alert" : ""}">
-              <div class="summary-label">Outstanding</div>
-              <div class="summary-value">${escapeHtml(asCurrency(receipt.outstanding))}</div>
-            </div>
-            <div class="summary-card">
-              <div class="summary-label">Total Due</div>
-              <div class="summary-value">${escapeHtml(asCurrency(receipt.totalDue))}</div>
-            </div>
-            <div class="summary-card">
-              <div class="summary-label">Change</div>
-              <div class="summary-value">${escapeHtml(asCurrency(receipt.changeAmount))}</div>
-            </div>
+            ${
+              isLguClaimReceipt
+                ? `
+                  <div class="summary-card" style="grid-column: span 2;">
+                    <div class="summary-label">Total Billing Amount</div>
+                    <div class="summary-value">${escapeHtml(asCurrency(receipt.totalDue))}</div>
+                  </div>
+                  <div class="summary-card" style="grid-column: span 2;">
+                    <div class="summary-label">Claim Note</div>
+                    <div class="summary-value">This LGU billing copy excludes POS settlement fields because payment is handled between the LGU and the clinic.</div>
+                  </div>
+                `
+                : `
+                  <div class="summary-card">
+                    <div class="summary-label">Subtotal</div>
+                    <div class="summary-value">${escapeHtml(asCurrency(receipt.subtotal))}</div>
+                  </div>
+                  <div class="summary-card">
+                    <div class="summary-label">Discount</div>
+                    <div class="summary-value">${escapeHtml(asCurrency(receipt.discount))}</div>
+                  </div>
+                  <div class="summary-card">
+                    <div class="summary-label">Paid</div>
+                    <div class="summary-value">${escapeHtml(asCurrency(receipt.amountPaid))}</div>
+                  </div>
+                  <div class="summary-card ${receipt.outstanding > 0 ? "alert" : ""}">
+                    <div class="summary-label">Outstanding</div>
+                    <div class="summary-value">${escapeHtml(asCurrency(receipt.outstanding))}</div>
+                  </div>
+                  <div class="summary-card">
+                    <div class="summary-label">Total Due</div>
+                    <div class="summary-value">${escapeHtml(asCurrency(receipt.totalDue))}</div>
+                  </div>
+                  <div class="summary-card">
+                    <div class="summary-label">Change</div>
+                    <div class="summary-value">${escapeHtml(asCurrency(receipt.changeAmount))}</div>
+                  </div>
+                `
+            }
           </div>
 
           <div class="footer-note">

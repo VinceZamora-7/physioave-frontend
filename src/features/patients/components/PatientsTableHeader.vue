@@ -6,7 +6,7 @@
           <InputIcon :class="isLoading ? 'pi pi-spinner pi-spin' : 'pi pi-search'" />
           <InputText
             v-model="modelSearch"
-            placeholder="Search by name"
+            placeholder="Search name or patient record ID"
             size="small"
             class="w-full"
             :pt="ptInputText"

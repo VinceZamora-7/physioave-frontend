@@ -20,7 +20,14 @@
     </template>
 
     <Column :sortable="true" header="Full name" field="full_name">
-      <template #body="slotProps"><SkeletonLoader :loading="isLoading">{{ getDisplayFullName(slotProps.data) }}</SkeletonLoader></template>
+      <template #body="slotProps">
+        <SkeletonLoader :loading="isLoading">
+          <div class="space-y-1">
+            <div>{{ getDisplayFullName(slotProps.data) }}</div>
+            <div class="text-xs opacity-60">{{ slotProps.data?.public_id || "Pending patient record code" }}</div>
+          </div>
+        </SkeletonLoader>
+      </template>
     </Column>
 
     <Column :sortable="true" header="Age" field="age">

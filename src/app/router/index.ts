@@ -135,6 +135,12 @@ const router = createRouter({
           meta: {requireAuth: true}
         },
         {
+          path: '/my-schedule',
+          name: 'pt-schedule',
+          component: () => import('@/features/pt-schedule/pages/PtScheduleView.vue'),
+          meta: {requireAuth: true}
+        },
+        {
           path: '/billing',
           name: 'billing',
           component: () => import('@/features/billing/pages/BillingView.vue'),
