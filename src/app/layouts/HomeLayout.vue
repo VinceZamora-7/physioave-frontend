@@ -85,6 +85,7 @@ const pageTitle = computed(() => {
     techniques: "Techniques",
     evaluations: "Evaluations",
     appointments: "Appointments",
+    "patient-daily-log": "Patient Daily Log",
     billing: "Billing",
     reports: "Reports",
     dashboard: "Dashboard",

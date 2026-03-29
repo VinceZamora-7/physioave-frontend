@@ -226,6 +226,57 @@ export interface LguDashboardHistoryItem {
   notes?: string | null
 }
 
+export interface DailyIncomeExpenseRow {
+  id: number
+  public_id: string
+  created_at: string
+  patient_id: number
+  patient_public_id: string
+  patient_name: string
+  pt_service: string
+  billing_route: string
+  payment_amount: number
+  collected_amount: number
+  mode_of_payment?: string
+  sponsor_reference?: string
+  balance: number
+  due_date?: string | null
+  invoice_number: string
+  billing_status: string
+}
+
+export interface DailyExpenseEntry {
+  id: number
+  expense_date: string
+  item_name: string
+  amount: number
+  notes?: string
+  created_by_name?: string
+  created_at: string
+}
+
+export interface DailyIncomeExpenseReport {
+  selected_date: string
+  summary: {
+    income_entry_count: number
+    expense_entry_count: number
+    gross_income: number
+    cash_collected: number
+    outstanding_balance: number
+    expense_total: number
+    net_cash: number
+  }
+  incomes: DailyIncomeExpenseRow[]
+  expenses: DailyExpenseEntry[]
+}
+
+export interface DailyExpenseRequest {
+  expense_date: string
+  item_name: string
+  amount: number
+  notes?: string
+}
+
 export const billingPhase1Service = {
   async getAll(params: Record<string, unknown>): Promise<Pageable<BillingListItem> | undefined> {
     const {data} = await pamsAPI.get<Pageable<BillingListItem>>("/billings", {params})
@@ -285,6 +336,19 @@ export const billingPhase1Service = {
       }
     })
     return data
+  },
+  async getDailyIncomeExpense(date?: string): Promise<DailyIncomeExpenseReport | undefined> {
+    const {data} = await pamsAPI.get<DailyIncomeExpenseReport>("/billings/daily-income-expense", {
+      params: {date}
+    })
+    return data
+  },
+  async addDailyExpense(payload: DailyExpenseRequest): Promise<DailyExpenseEntry | undefined> {
+    const {data} = await pamsAPI.post<DailyExpenseEntry>("/billings/daily-income-expense/expenses", payload)
+    return data
+  },
+  async deleteDailyExpense(id: number): Promise<void> {
+    await pamsAPI.delete(`/billings/daily-income-expense/expenses/${id}`)
   },
   async exportCsv(params: Record<string, unknown>): Promise<AxiosResponse<Blob> | undefined> {
     return await pamsAPI.get("/billings/export/csv", {

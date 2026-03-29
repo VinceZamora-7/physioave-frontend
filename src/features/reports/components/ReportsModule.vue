@@ -1,111 +1,445 @@
 <template>
-  <main class="app-page-shell">
-    <section class="app-section-card-comfy space-y-4">
-      <h2 class="app-section-title">Accomplishment Report</h2>
-      <p class="text-sm opacity-70">Summary by module and action count (from user logs)</p>
+  <main class="app-page-shell space-y-5">
+    <section class="rounded-3xl border border-[#A91D8B]/25 bg-[linear-gradient(120deg,rgba(36,39,87,0.14),rgba(94,24,105,0.10),rgba(169,29,139,0.18))] p-5 shadow-[0_18px_40px_rgba(36,39,87,0.10)]">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div class="space-y-2">
+          <div class="text-lg font-semibold tracking-tight">Daily Income &amp; Expenses</div>
+          <p class="max-w-3xl text-sm text-[rgb(var(--app-fg))]/70">
+            Digital version of the manual daily finance sheet, combining billing activity and shared clinic expense entries for one selected date.
+          </p>
+          <div class="flex flex-wrap gap-2 text-xs text-[rgb(var(--app-fg))]/65">
+            <span class="rounded-full border border-white/40 bg-white/60 px-3 py-1">
+              Date: {{ selectedDateLabel }}
+            </span>
+            <span class="rounded-full border border-white/40 bg-white/60 px-3 py-1">
+              Income Rows: {{ report?.summary.income_entry_count ?? 0 }}
+            </span>
+            <span class="rounded-full border border-white/40 bg-white/60 px-3 py-1">
+              Expense Rows: {{ report?.summary.expense_entry_count ?? 0 }}
+            </span>
+          </div>
+        </div>
 
-      <DataTable :value="accomplishments" responsiveLayout="scroll" size="small">
-        <Column field="module" header="Module" />
-        <Column field="actions" header="Actions Logged" />
-        <Column field="latest" header="Latest Activity" />
-      </DataTable>
+        <div class="flex flex-wrap gap-2">
+          <Button label="Today" icon="pi pi-calendar" outlined :pt="ptOutlinedBtn" @click="resetToToday" />
+          <Button label="Refresh" icon="pi pi-refresh" :loading="isLoading" :pt="ptPrimaryBtn" @click="refreshReport" />
+        </div>
+      </div>
     </section>
 
-    <section class="mt-5 app-section-card-comfy space-y-4">
-      <div class="flex items-center justify-between">
-        <div>
-          <h3 class="app-section-title">User Logs</h3>
-          <p class="text-sm opacity-70">Track edits and transactions for accountability</p>
+    <section class="app-section-card-comfy space-y-4">
+      <div class="grid grid-cols-1 gap-3 md:grid-cols-[minmax(240px,320px)_1fr]">
+        <div class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wide opacity-60">Report Date</label>
+          <DatePicker
+            v-model="selectedDate"
+            showIcon
+            fluid
+            :manualInput="false"
+            dateFormat="mm/dd/yy"
+          />
         </div>
-        <Button
-          label="Clear Logs"
-          icon="pi pi-trash"
-          severity="danger"
-          outlined
-          @click="clearLogs"
-        />
+        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 text-sm opacity-75">
+          The income table uses saved billings for the selected day. The expense table is manually maintained so reception, cashier, or admin can capture same-day operational spending in one shared place.
+        </div>
+      </div>
+    </section>
+
+    <section class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <article v-for="card in summaryCards" :key="card.label" class="app-section-card-comfy space-y-1">
+        <div class="text-xs uppercase tracking-wide opacity-55">{{ card.label }}</div>
+        <div class="text-2xl font-semibold">{{ card.value }}</div>
+        <div class="text-xs opacity-60">{{ card.caption }}</div>
+      </article>
+    </section>
+
+    <section class="app-section-card-comfy space-y-4">
+      <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h2 class="app-section-title">Daily Income</h2>
+          <p class="text-sm opacity-70">Matches the paper sheet columns, but uses live billing records and calculated balances.</p>
+        </div>
+        <div class="text-sm opacity-70">
+          Gross {{ asCurrency(report?.summary.gross_income ?? 0) }} · Cash {{ asCurrency(report?.summary.cash_collected ?? 0) }}
+        </div>
       </div>
 
-      <DataTable :value="logs" paginator :rows="10" responsiveLayout="scroll" size="small">
-        <Column field="timestamp" header="Time">
-          <template #body="{ data }">{{ formatDateTime(data.timestamp) }}</template>
-        </Column>
-        <Column field="user" header="User" />
-        <Column field="module" header="Module" />
-        <Column field="action" header="Action" />
-        <Column field="details" header="Details" />
-      </DataTable>
+      <div class="overflow-x-auto">
+        <DataTable :value="report?.incomes ?? []" size="small" :loading="isLoading" scrollable>
+          <template #empty>
+            <div class="py-10 text-center text-sm opacity-70">
+              No billing activity was recorded for {{ selectedDateLabel }}.
+            </div>
+          </template>
+
+          <Column header="No." style="width: 64px">
+            <template #body="{ index }">{{ index + 1 }}</template>
+          </Column>
+
+          <Column header="Patient Name" style="min-width: 220px">
+            <template #body="{ data }">
+              <div class="space-y-1">
+                <div class="font-semibold">{{ data.patient_name }}</div>
+                <div class="text-xs opacity-60">{{ data.patient_public_id }}</div>
+              </div>
+            </template>
+          </Column>
+
+          <Column header="PT Service" style="min-width: 220px">
+            <template #body="{ data }">
+              <div class="space-y-1">
+                <div class="font-medium">{{ data.pt_service }}</div>
+                <div class="text-xs opacity-60">{{ formatTime(data.created_at) }}</div>
+              </div>
+            </template>
+          </Column>
+
+          <Column header="Sponsor / Billing" style="min-width: 150px">
+            <template #body="{ data }">
+              <Tag :value="data.billing_route" :severity="billingRouteSeverity(data.billing_route)" />
+            </template>
+          </Column>
+
+          <Column header="Payment" style="min-width: 150px">
+            <template #body="{ data }">
+              <div class="space-y-1">
+                <div class="font-medium">{{ asCurrency(data.payment_amount) }}</div>
+                <div class="text-xs opacity-60">Collected {{ asCurrency(data.collected_amount) }}</div>
+              </div>
+            </template>
+          </Column>
+
+          <Column header="Mode of Payment" style="min-width: 160px">
+            <template #body="{ data }">{{ data.mode_of_payment || "--" }}</template>
+          </Column>
+
+          <Column header="Ref No. / HMO / LGU" style="min-width: 200px">
+            <template #body="{ data }">{{ data.sponsor_reference || "--" }}</template>
+          </Column>
+
+          <Column header="Balance" style="min-width: 120px">
+            <template #body="{ data }">
+              <span :class="data.balance > 0 ? 'text-amber-700 dark:text-amber-300 font-medium' : ''">
+                {{ asCurrency(data.balance) }}
+              </span>
+            </template>
+          </Column>
+
+          <Column header="Due Date" style="min-width: 120px">
+            <template #body="{ data }">{{ data.due_date || "--" }}</template>
+          </Column>
+
+          <Column header="Invoice No." style="min-width: 180px">
+            <template #body="{ data }">
+              <div class="space-y-1">
+                <div class="font-medium">{{ data.invoice_number }}</div>
+                <div class="text-xs opacity-60">{{ data.public_id }}</div>
+              </div>
+            </template>
+          </Column>
+        </DataTable>
+      </div>
     </section>
 
-    <section class="mt-5 app-section-card-comfy space-y-4">
-      <h3 class="app-section-title">Permissions Matrix</h3>
-      <p class="text-sm opacity-70">Role-based checks to reduce untracked edits and skimming risk</p>
+    <section class="app-section-card-comfy space-y-4">
+      <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <h2 class="app-section-title">Expenses</h2>
+          <p class="text-sm opacity-70">Add daily operating expenses so the net cash view stays complete.</p>
+        </div>
+        <div class="text-sm opacity-70">Total {{ asCurrency(report?.summary.expense_total ?? 0) }}</div>
+      </div>
 
-      <DataTable :value="permissions" responsiveLayout="scroll" size="small">
-        <Column field="role" header="Role" />
-        <Column field="module" header="Module" />
-        <Column field="can_view" header="View">
-          <template #body="{ data }"><Checkbox v-model="data.can_view" binary /></template>
-        </Column>
-        <Column field="can_create" header="Create">
-          <template #body="{ data }"><Checkbox v-model="data.can_create" binary /></template>
-        </Column>
-        <Column field="can_edit" header="Edit">
-          <template #body="{ data }"><Checkbox v-model="data.can_edit" binary /></template>
-        </Column>
-        <Column field="can_delete" header="Delete">
-          <template #body="{ data }"><Checkbox v-model="data.can_delete" binary /></template>
-        </Column>
-      </DataTable>
+      <div class="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.3fr)_180px_minmax(0,1fr)_auto]">
+        <div class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wide opacity-60">Item Name</label>
+          <InputText v-model="expenseForm.item_name" fluid placeholder="e.g. Supplies, transportation, snacks" />
+        </div>
+
+        <div class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wide opacity-60">Amount</label>
+          <InputNumber
+            v-model="expenseForm.amount"
+            mode="currency"
+            currency="PHP"
+            locale="en-PH"
+            fluid
+            :min="0"
+          />
+        </div>
+
+        <div class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wide opacity-60">Notes</label>
+          <InputText v-model="expenseForm.notes" fluid placeholder="Optional note or receipt detail" />
+        </div>
+
+        <div class="flex items-end">
+          <Button
+            label="Add Expense"
+            icon="pi pi-plus"
+            :loading="isSavingExpense"
+            :pt="ptPrimaryBtn"
+            @click="saveExpense"
+          />
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <DataTable :value="report?.expenses ?? []" size="small" :loading="isLoading" scrollable>
+          <template #empty>
+            <div class="py-10 text-center text-sm opacity-70">
+              No expense entries yet for {{ selectedDateLabel }}.
+            </div>
+          </template>
+
+          <Column header="No." style="width: 64px">
+            <template #body="{ index }">{{ index + 1 }}</template>
+          </Column>
+
+          <Column header="Item Name" style="min-width: 260px">
+            <template #body="{ data }">
+              <div class="space-y-1">
+                <div class="font-medium">{{ data.item_name }}</div>
+                <div v-if="data.notes" class="text-xs opacity-60">{{ data.notes }}</div>
+              </div>
+            </template>
+          </Column>
+
+          <Column header="Price" style="min-width: 140px">
+            <template #body="{ data }">{{ asCurrency(data.amount) }}</template>
+          </Column>
+
+          <Column header="Created By" style="min-width: 160px">
+            <template #body="{ data }">
+              <div class="space-y-1">
+                <div>{{ data.created_by_name || "--" }}</div>
+                <div class="text-xs opacity-60">{{ formatDateTime(data.created_at) }}</div>
+              </div>
+            </template>
+          </Column>
+
+          <Column header="Actions" style="width: 96px">
+            <template #body="{ data }">
+              <Button
+                size="small"
+                text
+                severity="danger"
+                icon="pi pi-trash"
+                @click="confirmDeleteExpense(data.id, data.item_name)"
+              />
+            </template>
+          </Column>
+        </DataTable>
+      </div>
+    </section>
+
+    <section class="app-section-card-comfy space-y-3">
+      <h2 class="app-section-title">Daily Totals</h2>
+      <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
+          <div class="text-xs uppercase tracking-wide opacity-55">Cash Collected</div>
+          <div class="mt-2 text-2xl font-semibold">{{ asCurrency(report?.summary.cash_collected ?? 0) }}</div>
+        </div>
+        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
+          <div class="text-xs uppercase tracking-wide opacity-55">Expense Total</div>
+          <div class="mt-2 text-2xl font-semibold">{{ asCurrency(report?.summary.expense_total ?? 0) }}</div>
+        </div>
+        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
+          <div class="text-xs uppercase tracking-wide opacity-55">Net Cash</div>
+          <div class="mt-2 text-2xl font-semibold">{{ asCurrency(report?.summary.net_cash ?? 0) }}</div>
+        </div>
+      </div>
     </section>
   </main>
 </template>
 
 <script setup lang="ts">
-import {computed} from "vue";
-import Button from "primevue/button";
-import Checkbox from "primevue/checkbox";
-import Column from "primevue/column";
-import DataTable from "primevue/datatable";
-import {auditStore} from "@/stores/audit.store";
+import {computed, onMounted, ref, watch} from "vue"
+import {useConfirm, useToast} from "primevue"
+import Button from "primevue/button"
+import Column from "primevue/column"
+import DataTable from "primevue/datatable"
+import DatePicker from "primevue/datepicker"
+import InputNumber from "primevue/inputnumber"
+import InputText from "primevue/inputtext"
+import Tag from "primevue/tag"
+import {
+  billingPhase1Service,
+  type DailyIncomeExpenseReport
+} from "@/features/billing/api/billing-phase1.service"
+import {ptOutlinedBtn, ptPrimaryBtn} from "@/features/shared/table-header.styles"
+import {errorToast, successToast} from "@/utils/toast.util"
 
-const useAuditStore = auditStore()
+const toast = useToast()
+const confirm = useConfirm()
 
-const logs = computed(() => useAuditStore.sortedLogs)
-const permissions = computed(() => useAuditStore.permissions)
-
-const accomplishments = computed(() => {
-  const grouped = new Map<string, {module: string; actions: number; latest: string; latest_ts: string}>()
-
-  for (const log of logs.value) {
-    const existing = grouped.get(log.module)
-    if (!existing) {
-      grouped.set(log.module, {
-        module: log.module,
-        actions: 1,
-        latest: formatDateTime(log.timestamp),
-        latest_ts: log.timestamp
-      })
-      continue
-    }
-    existing.actions += 1
-    const existingTime = new Date(existing.latest_ts).getTime()
-    const currentTime = new Date(log.timestamp).getTime()
-    if (currentTime > existingTime) {
-      existing.latest = formatDateTime(log.timestamp)
-      existing.latest_ts = log.timestamp
-    }
-  }
-
-  return [...grouped.values()]
-    .map(({latest_ts, ...rest}) => rest)
-    .sort((a, b) => b.actions - a.actions)
+const isLoading = ref(false)
+const isSavingExpense = ref(false)
+const selectedDate = ref(new Date())
+const report = ref<DailyIncomeExpenseReport>()
+const expenseForm = ref({
+  item_name: "",
+  amount: 0,
+  notes: ""
 })
 
-const formatDateTime = (value: string): string => new Date(value).toLocaleString()
+const selectedDateLabel = computed(() =>
+  selectedDate.value.toLocaleDateString("en-PH", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric"
+  })
+)
 
-const clearLogs = (): void => {
-  useAuditStore.clearLogs()
+const summaryCards = computed(() => [
+  {
+    label: "Gross Daily Charges",
+    value: asCurrency(report.value?.summary.gross_income ?? 0),
+    caption: "Total billed value for the selected day"
+  },
+  {
+    label: "Cash Collected",
+    value: asCurrency(report.value?.summary.cash_collected ?? 0),
+    caption: "Actual payments received today"
+  },
+  {
+    label: "Outstanding",
+    value: asCurrency(report.value?.summary.outstanding_balance ?? 0),
+    caption: "Remaining balance across all entries"
+  },
+  {
+    label: "Expenses",
+    value: asCurrency(report.value?.summary.expense_total ?? 0),
+    caption: "Manually entered operating expenses"
+  },
+  {
+    label: "Net Cash",
+    value: asCurrency(report.value?.summary.net_cash ?? 0),
+    caption: "Cash collected minus expenses"
+  }
+])
+
+const toDateParam = (value: Date): string => {
+  const year = value.getFullYear()
+  const month = String(value.getMonth() + 1).padStart(2, "0")
+  const day = String(value.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
 }
-</script>
 
+const asCurrency = (value: number): string =>
+  new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: "PHP",
+    maximumFractionDigits: 2
+  }).format(Number(value ?? 0))
+
+const formatTime = (value: string): string =>
+  new Date(value).toLocaleTimeString("en-PH", {
+    hour: "numeric",
+    minute: "2-digit"
+  })
+
+const formatDateTime = (value: string): string =>
+  new Date(value).toLocaleString("en-PH", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  })
+
+const billingRouteSeverity = (value: string): "success" | "info" | "warn" | "contrast" => {
+  const normalized = value.trim().toUpperCase()
+  if (normalized === "HMO") return "info"
+  if (normalized === "LGU") return "warn"
+  if (normalized === "PACKAGE") return "contrast"
+  return "success"
+}
+
+const refreshReport = async (): Promise<void> => {
+  try {
+    isLoading.value = true
+    report.value = await billingPhase1Service.getDailyIncomeExpense(toDateParam(selectedDate.value))
+  } catch {
+    errorToast(toast, "Failed to load daily income and expense report")
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const resetExpenseForm = (): void => {
+  expenseForm.value = {
+    item_name: "",
+    amount: 0,
+    notes: ""
+  }
+}
+
+const saveExpense = async (): Promise<void> => {
+  if (!expenseForm.value.item_name.trim()) {
+    errorToast(toast, "Expense item name is required")
+    return
+  }
+
+  if (!Number(expenseForm.value.amount)) {
+    errorToast(toast, "Expense amount must be greater than zero")
+    return
+  }
+
+  try {
+    isSavingExpense.value = true
+    await billingPhase1Service.addDailyExpense({
+      expense_date: toDateParam(selectedDate.value),
+      item_name: expenseForm.value.item_name.trim(),
+      amount: Number(expenseForm.value.amount ?? 0),
+      notes: expenseForm.value.notes.trim() || undefined
+    })
+    successToast(toast, "Expense added")
+    resetExpenseForm()
+    await refreshReport()
+  } catch {
+    errorToast(toast, "Failed to save expense")
+  } finally {
+    isSavingExpense.value = false
+  }
+}
+
+const confirmDeleteExpense = (id: number, itemName: string): void => {
+  confirm.require({
+    message: `Delete expense entry for ${itemName}?`,
+    header: "Delete Expense",
+    icon: "pi pi-exclamation-triangle",
+    rejectProps: {
+      label: "Cancel",
+      severity: "secondary",
+      outlined: true
+    },
+    acceptProps: {
+      label: "Delete",
+      severity: "danger",
+      icon: "pi pi-trash"
+    },
+    accept: async () => {
+      try {
+        await billingPhase1Service.deleteDailyExpense(id)
+        successToast(toast, "Expense deleted")
+        await refreshReport()
+      } catch {
+        errorToast(toast, "Failed to delete expense")
+      }
+    }
+  })
+}
+
+const resetToToday = (): void => {
+  selectedDate.value = new Date()
+}
+
+watch(selectedDate, () => {
+  void refreshReport()
+})
+
+onMounted(() => {
+  void refreshReport()
+})
+</script>

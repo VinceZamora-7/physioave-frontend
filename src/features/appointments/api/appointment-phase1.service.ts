@@ -226,6 +226,65 @@ export interface AppointmentPtCompletionPayload {
   pt_completion_tag?: string
 }
 
+export type AppointmentDailyLogSignatureState = "PENDING" | "PATIENT_SIGNED" | "PT_SIGNED" | "FULLY_SIGNED" | "NO_SHOW"
+
+export interface AppointmentDailyLogItem {
+  id: number
+  public_id: string
+  patient_id: number
+  patient_public_id: string
+  patient_name: string
+  clinic_id?: number
+  clinic_name?: string
+  location_context: AppointmentLocationContext
+  doctor_id?: number
+  doctor_name?: string
+  starts_at: string
+  ends_at: string
+  appointment_phase: AppointmentPhase
+  appointment_status: string
+  billing_status: string
+  encounter_ticket_id?: number
+  attendance_status?: "ATTENDED" | "NO_SHOW"
+  attended_at?: string
+  patient_acknowledged_by?: string
+  patient_signature_data_url?: string
+  signed_off_at?: string
+  pt_confirmed_by_name?: string
+  pt_confirmed_at?: string
+  pt_signature_data_url?: string
+  pt_completion_tag?: string
+  slip_number?: string
+  record_locked: boolean
+  has_patient_signature: boolean
+  has_pt_signature: boolean
+  is_fully_signed: boolean
+  signature_state: AppointmentDailyLogSignatureState
+}
+
+export interface AppointmentDailyLogSummary {
+  total_entries: number
+  completed_count: number
+  patient_signature_count: number
+  pt_signature_count: number
+  fully_signed_count: number
+  pending_signature_count: number
+  no_show_count: number
+}
+
+export interface AppointmentDailyLogResponse {
+  selected_date: string
+  summary: AppointmentDailyLogSummary
+  items: AppointmentDailyLogItem[]
+}
+
+export interface AppointmentDailyLogParams {
+  date?: string
+  clinic_id?: number
+  doctor_id?: number
+  search?: string
+}
+
 export const appointmentPhase1Service = {
   refreshPromise: null as Promise<unknown> | null,
 
@@ -282,6 +341,12 @@ export const appointmentPhase1Service = {
   async getMyUpcoming(options?: { clinic_id?: number; phase?: AppointmentPhase; limit?: number }): Promise<AppointmentListItem[] | undefined> {
     return await this.withRefreshRetry(async () => {
       const {data} = await pamsAPI.get<AppointmentListItem[]>("/appointments/my-upcoming", {params: options})
+      return data
+    })
+  },
+  async getDailyLog(params: AppointmentDailyLogParams): Promise<AppointmentDailyLogResponse | undefined> {
+    return await this.withRefreshRetry(async () => {
+      const {data} = await pamsAPI.get<AppointmentDailyLogResponse>("/appointments/daily-log", {params})
       return data
     })
   },

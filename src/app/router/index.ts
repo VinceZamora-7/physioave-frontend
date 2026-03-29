@@ -135,6 +135,12 @@ const router = createRouter({
           meta: {requireAuth: true}
         },
         {
+          path: '/patient-daily-log',
+          name: 'patient-daily-log',
+          component: () => import('@/features/patient-daily-log/pages/PatientDailyLogView.vue'),
+          meta: {requireAuth: true}
+        },
+        {
           path: '/my-schedule',
           name: 'pt-schedule',
           component: () => import('@/features/pt-schedule/pages/PtScheduleView.vue'),

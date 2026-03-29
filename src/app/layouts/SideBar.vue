@@ -179,6 +179,19 @@
               </button>
             </li>
 
+            <li>
+              <button
+                type="button"
+                @click="goToAndClose('patient-daily-log')"
+                :class="itemClass('patient-daily-log')"
+                aria-label="Patient Daily Log"
+                title="Patient Daily Log"
+              >
+                <span :class="iconWrapClass('patient-daily-log')"><i class="pi pi-clipboard text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">Patient Daily Log</span>
+              </button>
+            </li>
+
           </ul>
         </div>
 
