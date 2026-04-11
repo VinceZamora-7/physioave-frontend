@@ -216,6 +216,7 @@ export interface LguDashboardBudgetSaveRequest {
   rollover_amount: number
   period_year?: number
   period_month?: number
+  program_id?: number
   program_name?: string
 }
 
@@ -334,11 +335,12 @@ export const billingPhase1Service = {
     })
     return data
   },
-  async getLguDashboardBudget(periodYear?: number, periodMonth?: number): Promise<LguDashboardBudget | null | undefined> {
+  async getLguDashboardBudget(periodYear?: number, periodMonth?: number, programId?: number): Promise<LguDashboardBudget | null | undefined> {
     const {data} = await pamsAPI.get<LguDashboardBudget | null>("/billings/lgu-dashboard-budget", {
       params: {
         period_year: periodYear,
-        period_month: periodMonth
+        period_month: periodMonth,
+        program_id: programId
       }
     })
     return data
@@ -347,12 +349,13 @@ export const billingPhase1Service = {
     const {data} = await pamsAPI.post<LguDashboardBudget | null>("/billings/lgu-dashboard-budget", payload)
     return data
   },
-  async getLguDashboardHistory(limit = 100, periodYear?: number, periodMonth?: number): Promise<LguDashboardHistoryItem[] | undefined> {
+  async getLguDashboardHistory(limit = 100, periodYear?: number, periodMonth?: number, programId?: number): Promise<LguDashboardHistoryItem[] | undefined> {
     const {data} = await pamsAPI.get<LguDashboardHistoryItem[]>("/billings/lgu-dashboard-history", {
       params: {
         limit,
         period_year: periodYear,
-        period_month: periodMonth
+        period_month: periodMonth,
+        program_id: programId
       }
     })
     return data

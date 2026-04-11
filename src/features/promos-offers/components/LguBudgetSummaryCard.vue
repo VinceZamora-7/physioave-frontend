@@ -2,8 +2,8 @@
   <section class="app-section-card-comfy space-y-3">
     <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
       <div class="space-y-1">
-        <h3 class="text-sm font-semibold">Manager LGU Dashboard</h3>
-        <p class="text-xs opacity-70">Set the monthly LGU budget for the current month or any upcoming month. Each month is tracked separately so future budgets never add into the current live fund.</p>
+        <h3 class="text-sm font-semibold">Manager LGU Dashboard{{ selectedProgramName ? ` — ${selectedProgramName}` : '' }}</h3>
+        <p class="text-xs opacity-70">Select an LGU program and set the monthly budget. Each program and month is tracked independently.</p>
       </div>
       <Tag :value="canManageLguDashboard ? 'Manager Access' : 'Read-only'" :severity="canManageLguDashboard ? 'success' : 'secondary'" />
     </div>
@@ -32,7 +32,22 @@
       You are preparing the LGU budget for {{ budgetMonthLabel }} in advance. This stays separate from {{ currentMonthLabel }} and will not add into the current month fund.
     </Message>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
+      <IftaLabel>
+        <Select
+          v-model="selectedProgramId"
+          :options="lguPrograms"
+          optionLabel="name"
+          optionValue="id"
+          placeholder="Select LGU Program"
+          :loading="loadingPrograms"
+          :disabled="savingDashboardBudget"
+          fluid
+          showClear
+        />
+        <label>LGU Program</label>
+      </IftaLabel>
+
       <IftaLabel>
         <DatePicker
           v-model="selectedBudgetMonthDate"
@@ -214,12 +229,14 @@ import DatePicker from "primevue/datepicker"
 import IftaLabel from "primevue/iftalabel"
 import InputNumber from "primevue/inputnumber"
 import Message from "primevue/message"
+import Select from "primevue/select"
 import Tag from "primevue/tag"
 import { useToast } from "primevue/usetoast"
 import {
   billingPhase1Service,
   type LguDashboardBudget,
-  type LguDashboardHistoryItem
+  type LguDashboardHistoryItem,
+  type LguProgramLookup
 } from "@/features/billing/api/billing-phase1.service"
 import { errorToast, successToast } from "@/utils/toast.util"
 
@@ -230,6 +247,9 @@ type LocalLguBudgetDraft = {
 
 const toast = useToast()
 const currentRoleName = ref<string>("")
+const lguPrograms = ref<LguProgramLookup[]>([])
+const loadingPrograms = ref(false)
+const selectedProgramId = ref<number | null>(null)
 const baseMonthlyBudget = ref<number>(0)
 const rolloverAmount = ref<number>(0)
 const rolloverInput = ref<number>(0)
@@ -345,6 +365,10 @@ const canManageLguDashboard = computed(() => {
   return MANAGER_ROLE_KEYWORDS.some(keyword => normalized.includes(keyword))
 })
 
+const selectedProgramName = computed(() =>
+  lguPrograms.value.find(p => p.id === selectedProgramId.value)?.name ?? ""
+)
+
 const resolveRoleFromStorage = (): string => {
   const candidateKeys = ["auth_user", "currentUser", "user", "profile", "loggedInUser", "google_user"]
   for (const key of candidateKeys) {
@@ -380,7 +404,7 @@ const hasAnyBudgetDraft = (draft: LocalLguBudgetDraft | null): boolean =>
   Number(draft?.baseMonthlyBudget ?? 0) > 0 || Number(draft?.rolloverAmount ?? 0) > 0
 
 const localDashboardBudgetStorageKey = computed(() =>
-  `lgu_dashboard_budget:${selectedBudgetPeriodYear.value}-${String(selectedBudgetPeriodMonth.value).padStart(2, "0")}`
+  `lgu_dashboard_budget:${selectedProgramId.value ?? "all"}:${selectedBudgetPeriodYear.value}-${String(selectedBudgetPeriodMonth.value).padStart(2, "0")}`
 )
 
 const readLocalDashboardBudget = (): LocalLguBudgetDraft | null => {
@@ -422,7 +446,8 @@ const loadDashboardBudget = async (): Promise<void> => {
   try {
     const serverBudget = await billingPhase1Service.getLguDashboardBudget(
       selectedBudgetPeriodYear.value,
-      selectedBudgetPeriodMonth.value
+      selectedBudgetPeriodMonth.value,
+      selectedProgramId.value ?? undefined
     )
     if (serverBudget) {
       lguDashboardBudget.value = serverBudget
@@ -452,7 +477,8 @@ const loadTransactionHistory = async (): Promise<void> => {
     lguTransactionHistory.value = await billingPhase1Service.getLguDashboardHistory(
       100,
       selectedBudgetPeriodYear.value,
-      selectedBudgetPeriodMonth.value
+      selectedBudgetPeriodMonth.value,
+      selectedProgramId.value ?? undefined
     ) ?? []
   } catch (error: unknown) {
     lguTransactionHistory.value = []
@@ -471,7 +497,8 @@ const saveDashboardBudget = async (): Promise<void> => {
       base_budget: Number(baseMonthlyBudget.value ?? 0),
       rollover_amount: Number(rolloverAmount.value ?? 0),
       period_year: selectedBudgetPeriodYear.value,
-      period_month: selectedBudgetPeriodMonth.value
+      period_month: selectedBudgetPeriodMonth.value,
+      program_id: selectedProgramId.value ?? undefined
     })
 
     lguDashboardBudget.value = savedBudget ?? null
@@ -514,8 +541,31 @@ watch(selectedBudgetMonthDate, (value) => {
   ])
 })
 
-onMounted(() => {
+watch(selectedProgramId, () => {
+  void Promise.all([
+    loadDashboardBudget(),
+    loadTransactionHistory()
+  ])
+})
+
+const loadLguPrograms = async (): Promise<void> => {
+  loadingPrograms.value = true
+  try {
+    const programs = await billingPhase1Service.getLguPrograms()
+    lguPrograms.value = programs ?? []
+    if (lguPrograms.value.length > 0 && !selectedProgramId.value) {
+      selectedProgramId.value = lguPrograms.value[0].id
+    }
+  } catch {
+    lguPrograms.value = []
+  } finally {
+    loadingPrograms.value = false
+  }
+}
+
+onMounted(async () => {
   currentRoleName.value = resolveRoleFromStorage()
+  await loadLguPrograms()
   void Promise.all([
     loadDashboardBudget(),
     loadTransactionHistory()
