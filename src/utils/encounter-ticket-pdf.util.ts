@@ -20,6 +20,7 @@ export interface EncounterTicketPdfCard {
   activeBillingPackageSource?: string
   deductionSummary: string
   signatureDataUrl?: string
+  sessionSequenceLabel?: string
 }
 
 export interface EncounterTicketPdfOptions {
@@ -215,6 +216,10 @@ export function renderEncounterTicketPdfWindow(
             <div class="ticket-panel">
               <div class="ticket-label">Service Rendered</div>
               <div class="ticket-value">${escapeHtml(card.serviceName)}</div>
+            </div>
+            <div class="ticket-panel">
+              <div class="ticket-label">Session Sequence</div>
+              <div class="ticket-value">${escapeHtml(card.sessionSequenceLabel || "N/A")}</div>
             </div>
             <div class="ticket-panel">
               <div class="ticket-label">Specialty</div>

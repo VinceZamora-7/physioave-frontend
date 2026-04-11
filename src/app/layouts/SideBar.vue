@@ -208,7 +208,6 @@
           </button>
 
           <ul v-show="billingOpen" class="mt-2 space-y-1">
-
             <li>
               <button
                 type="button"
@@ -232,24 +231,10 @@
               >
                 <span :class="iconWrapClass('reports')"><i class="pi pi-chart-bar text-[16px]" /></span>
                 <span v-if="!collapsed" class="truncate">Reports</span>
-                          <li>
-                            <button
-                              type="button"
-                              @click="goToAndClose('ops-dashboard')"
-                              :class="itemClass('ops-dashboard')"
-                              aria-label="Operations Dashboard"
-                              title="Operations Dashboard"
-                            >
-                              <span :class="iconWrapClass('ops-dashboard')"><i class="pi pi-gauge text-[16px]" /></span>
-                              <span v-if="!collapsed" class="truncate">Ops Dashboard</span>
-                            </button>
-                          </li>
               </button>
             </li>
           </ul>
         </div>
-
-
 
         <div>
           <button
@@ -273,33 +258,32 @@
                 <span :class="iconWrapClass('promos-offers-single-service')"><i class="pi pi-bolt text-[16px]" /></span>
                 <span v-if="!collapsed" class="truncate">Single Pay: Single Service</span>
               </button>
+            </li>
+
             <li>
               <button
                 type="button"
-                @click="goToAndClose('reports')"
-                :class="itemClass('reports')"
-                aria-label="Reports"
-                title="Reports"
+                @click="goToAndClose('promos-offers-package-service')"
+                :class="itemClass('promos-offers-package-service')"
+                aria-label="Self-Pay: Package Service"
+                title="Self-Pay: Package Service"
               >
-                <span :class="iconWrapClass('reports')"><i class="pi pi-chart-bar text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">Reports</span>
+                <span :class="iconWrapClass('promos-offers-package-service')"><i class="pi pi-box text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">Self-Pay: Package Service</span>
               </button>
             </li>
 
             <li>
               <button
                 type="button"
-                @click="goToAndClose('ops-dashboard')"
-                :class="itemClass('ops-dashboard')"
-                aria-label="Operations Dashboard"
-                title="Operations Dashboard"
+                @click="goToAndClose('promos-offers-hmo')"
+                :class="itemClass('promos-offers-hmo')"
+                aria-label="HMO"
+                title="HMO"
               >
-                <span :class="iconWrapClass('ops-dashboard')"><i class="pi pi-gauge text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">Ops Dashboard</span>
+                <span :class="iconWrapClass('promos-offers-hmo')"><i class="pi pi-briefcase text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">HMO</span>
               </button>
-            </li>
-          </ul>
-        </div>
             </li>
 
             <li>
@@ -317,7 +301,7 @@
           </ul>
         </div>
 
-                        <div>
+        <div>
           <button
             type="button"
             class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
@@ -328,6 +312,19 @@
           </button>
 
           <ul v-show="operationsOpen" class="mt-2 space-y-1">
+            <li>
+              <button
+                type="button"
+                @click="goToAndClose('ops-dashboard')"
+                :class="itemClass('ops-dashboard')"
+                aria-label="Operations Dashboard"
+                title="Operations Dashboard"
+              >
+                <span :class="iconWrapClass('ops-dashboard')"><i class="pi pi-gauge text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">Ops Dashboard</span>
+              </button>
+            </li>
+
             <li>
               <button
                 type="button"

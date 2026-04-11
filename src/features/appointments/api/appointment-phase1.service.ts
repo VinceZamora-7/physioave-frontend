@@ -104,6 +104,9 @@ export interface AppointmentEncounterTicket {
     amount_due: number
     amount_paid: number
     total_amount: number
+    session_sequence?: number
+    total_sessions?: number
+    session_sequence_label?: string
     line_items: Array<{
       id?: number | string
       type: string
@@ -121,6 +124,7 @@ export interface AppointmentDetail extends AppointmentListItem {
   billing_type?: string
   service_name?: string
   override_reason?: string
+  dropout_status?: string
   checkout_summary: AppointmentCheckoutSummary
   encounter_ticket?: AppointmentEncounterTicket
 }
@@ -200,6 +204,7 @@ export interface AppointmentCreatePayload {
   service_type?: "SINGLE" | "PACKAGE" | "HMO" | "LGU"
   shared_phase1_billing_id?: number
   package_id?: number
+  lgu_program_id?: number
   service_name?: string
   amount_due?: number
   line_items_json?: string
@@ -451,6 +456,12 @@ export const appointmentPhase1Service = {
   async processPtCompletion(id: number, payload: AppointmentPtCompletionPayload): Promise<AppointmentEncounterTicket | undefined> {
     return await this.withRefreshRetry(async () => {
       const {data} = await pamsAPI.post<AppointmentEncounterTicket>(`/appointments/${id}/pt-completion`, payload)
+      return data
+    })
+  },
+  async updateDropoutStatus(id: number, dropoutStatus: string): Promise<{ dropout_status: string } | undefined> {
+    return await this.withRefreshRetry(async () => {
+      const {data} = await pamsAPI.patch<{ dropout_status: string }>(`/appointments/${id}/dropout-status`, { dropout_status: dropoutStatus })
       return data
     })
   },

@@ -872,6 +872,15 @@
                 </IftaLabel>
 
                 <IftaLabel>
+                  <InputText
+                    v-model="billingTenderReferenceNo"
+                    fluid
+                    placeholder="e.g. GCash Ref #, Bank Ref #"
+                  />
+                  <label>Reference Number</label>
+                </IftaLabel>
+
+                <IftaLabel>
                   <InputNumber
                     v-model="billingTenderAmount"
                     mode="currency"
@@ -1331,6 +1340,9 @@ import {
   type BillingReceiptPrintSubItem
 } from "@/utils/billing-receipt-print.util"
 import {renderSingleServiceInvoiceWindow} from "@/features/billing/invoices/single-service-invoice.util"
+import {renderPackageServiceInvoiceWindow} from "@/features/billing/invoices/package-service-invoice.util"
+import {renderHmoInvoiceWindow} from "@/features/billing/invoices/hmo-invoice.util"
+import {renderLguInvoiceWindow} from "@/features/billing/invoices/lgu-invoice.util"
 
 const route = useRoute()
 const toast = useToast()
@@ -1807,6 +1819,7 @@ const selectedBillingReceiptLines = computed(() =>
 )
 
 const billingDetailPaymentType = ref("")
+const billingTenderReferenceNo = ref("")
 const billingTenderAmount = ref<number>(0)
 const savingBillingTender = ref(false)
 const markingBillingAsBilled = ref(false)
@@ -1967,7 +1980,8 @@ const buildEncounterTicketPdfCards = (detail?: BillingListItem): EncounterTicket
         activeBillingPackageLabel: describeEncounterTicketPackage(ticket),
         activeBillingPackageSource: describeEncounterTicketPackageSource(ticket),
         deductionSummary: buildEncounterTicketDeductionSummary(resolvedBillingType),
-        signatureDataUrl: ticket.patient_signature_data_url
+        signatureDataUrl: ticket.patient_signature_data_url,
+        sessionSequenceLabel: snapshot?.session_sequence_label
       }
     })
 }
@@ -3142,6 +3156,7 @@ const openBillingDetails = async (billingId: number): Promise<void> => {
 
   selectedBillingDetail.value = detail
   billingDetailPaymentType.value = getDefaultBillingPaymentType(detail)
+  billingTenderReferenceNo.value = ""
   billingTenderAmount.value = 0
   billingDetailsVisible.value = true
 }
@@ -3152,7 +3167,9 @@ const printSelectedBillingReceipt = (): void => {
   const detail = selectedBillingDetail.value
   const normalizedBillingType = normalizeBillingTypeValue(detail.billing_type)
   const isLguReceipt = normalizedBillingType === "LGU_BILLING"
+  const isHmoReceipt = normalizedBillingType === "HMO_BILLING"
   const isSingleServiceInvoice = normalizedBillingType === "SELF_PAY_SINGLE"
+  const isPackageServiceInvoice = normalizedBillingType === "SELF_PAY_PACKAGE"
   const popup = openBillingReceiptWindow(getReceiptDisplayNumber(detail))
 
   try {
@@ -3174,6 +3191,105 @@ const printSelectedBillingReceipt = (): void => {
         }))
       }, {
         title: "Single Service Invoice",
+        fileName: getReceiptDisplayNumber(detail)
+      })
+      return
+    }
+
+    if (isPackageServiceInvoice) {
+      renderPackageServiceInvoiceWindow(popup, {
+        billingDate: detail.created_at,
+        referenceNumber: getReceiptDisplayNumber(detail),
+        patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
+        paymentMethod: derivePaymentType(detail) || "Cash/Card/Online Transfer",
+        paymentReferenceNo: detail.payment_reference || detail.receipt_number,
+        subtotal: Number(detail.subtotal_amount ?? detail.amount_due ?? detail.total_amount ?? 0),
+        discount: Number(detail.discount_amount ?? 0),
+        grandTotal: selectedBillingTotalDue.value,
+        lines: selectedBillingReceiptLines.value.map(line => {
+          const subItems = (line.breakdownGroups ?? []).flatMap(group =>
+            group.items.map(item => ({ name: item.name, quantity: item.quantity }))
+          )
+          return {
+            name: line.name,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            lineTotal: line.lineTotal,
+            subItems
+          }
+        })
+      }, {
+        title: "Package Service Invoice",
+        fileName: getReceiptDisplayNumber(detail)
+      })
+      return
+    }
+
+    if (isHmoReceipt) {
+      const rawLines = (() => {
+        try { return JSON.parse(detail.line_items_json || "[]") as Array<Record<string, unknown>> }
+        catch { return [] }
+      })()
+      renderHmoInvoiceWindow(popup, {
+        billingDate: detail.created_at,
+        referenceNumber: getReceiptDisplayNumber(detail),
+        patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
+        hmoName: detail.hmo_name,
+        hmoTypeName: detail.hmo_type_name,
+        hmoCompanyName: detail.hmo_company_name,
+        hmoApprovalCode: detail.hmo_approval_code,
+        hmoValidityStart: detail.hmo_validity_start,
+        hmoValidityEnd: detail.hmo_validity_end,
+        subtotal: Number(detail.subtotal_amount ?? detail.amount_due ?? detail.total_amount ?? 0),
+        discount: Number(detail.discount_amount ?? 0),
+        grandTotal: selectedBillingTotalDue.value,
+        lines: selectedBillingReceiptLines.value.map((line, idx) => ({
+          name: line.name,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          lineTotal: line.lineTotal,
+          treatmentDate: detail.created_at,
+          laterality: String(rawLines[idx]?.laterality ?? ""),
+          bodyArea: String(rawLines[idx]?.body_area ?? "")
+        }))
+      }, {
+        title: "HMO Invoice",
+        fileName: getReceiptDisplayNumber(detail)
+      })
+      return
+    }
+
+    if (isLguReceipt) {
+      const lockedTickets = (detail.encounter_tickets ?? []).filter(t => t.record_locked)
+      const firstSnapshot = lockedTickets[0]?.billing_snapshot
+      const sessionSeqLabel = firstSnapshot?.session_sequence_label ?? undefined
+
+      renderLguInvoiceWindow(popup, {
+        billingDate: detail.created_at,
+        referenceNumber: getReceiptDisplayNumber(detail),
+        patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
+        lguProgramName: detail.lgu_program_name,
+        lguReferenceLabel: detail.lgu_reference_label,
+        lguDateIssued: detail.lgu_date_issued,
+        subtotal: Number(detail.subtotal_amount ?? detail.amount_due ?? detail.total_amount ?? 0),
+        discount: Number(detail.discount_amount ?? 0),
+        grandTotal: selectedBillingTotalDue.value,
+        lines: selectedBillingReceiptLines.value.map(line => {
+          const subItems = (line.breakdownGroups ?? []).flatMap(group =>
+            group.items.map(item => ({ name: item.name, quantity: item.quantity }))
+          )
+          return {
+            name: line.name,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            lineTotal: line.lineTotal,
+            treatmentDate: detail.created_at,
+            sessionSequence: sessionSeqLabel,
+            subItems
+          }
+        })
+      }, {
+        title: "LGU Invoice",
         fileName: getReceiptDisplayNumber(detail)
       })
       return
@@ -3222,7 +3338,9 @@ const saveBillingTender = async (): Promise<void> => {
   if (!selectedBillingDetail.value || !canSaveBillingTender.value) return
 
   const detail = selectedBillingDetail.value
-  const paymentReference = billingDetailPaymentType.value.trim()
+  const paymentType = billingDetailPaymentType.value.trim()
+  const refNo = billingTenderReferenceNo.value.trim()
+  const paymentReference = refNo ? `${paymentType} - ${refNo}` : paymentType
   const nextAmountPaid = billingResultingPaid.value
   const nextAmountTendered = billingResultingAmountTendered.value
   const nextChangeAmount = billingResultingChange.value
@@ -3244,6 +3362,7 @@ const saveBillingTender = async (): Promise<void> => {
 
     selectedBillingDetail.value = refreshedDetail
     billingDetailPaymentType.value = getDefaultBillingPaymentType(refreshedDetail)
+    billingTenderReferenceNo.value = ""
     billingTenderAmount.value = 0
     await fetchBillings()
     successToast(toast, "Billing payment tendered")

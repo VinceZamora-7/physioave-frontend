@@ -87,8 +87,9 @@
               <div class="space-y-2 text-sm">
                 <div><span class="font-medium">Civil Status:</span> {{ selectedPatientDetails.civil_status_name }}</div>
                 <div><span class="font-medium">Religion:</span> {{ selectedPatientDetails.religion_name ?? "N/A" }}</div>
-                <div><span class="font-medium">Mode of Referral:</span> {{ selectedPatientDetails.mode_of_referral_name ?? "N/A" }}</div>
-                <div><span class="font-medium">Doctor Referral:</span> {{ selectedPatientDetails.referred_by ?? "N/A" }}</div>
+                <div><span class="font-medium">Referral Category:</span> {{ formatReferralChannel(selectedPatientDetails.mode_of_referral_channel) }}</div>
+                <div><span class="font-medium">Referral Source:</span> {{ selectedPatientDetails.mode_of_referral_name ?? "N/A" }}</div>
+                <div><span class="font-medium">Referring Doctor:</span> {{ selectedPatientDetails.referred_by_staff_name ?? selectedPatientDetails.referred_by ?? "N/A" }}</div>
               </div>
             </div>
 
@@ -230,6 +231,7 @@ import type {
   MedicalHistory,
   MedicalImaging,
   ModeOfReferral,
+  ReferralChannel,
   Religion
 } from "@/models/reference.ts";
 import type {Lookup} from "@/models/global.model.ts";
@@ -265,7 +267,7 @@ import {fileServerTanstackService} from "@/services/file-server.tanstack.service
 import PatientAttachmentDialog from "@/components/PatientAttachmentDialog.vue";
 import PatientHMOInformationForm from "@/components/PatientHMOInformationForm.vue";
 import {hmoTanstackService} from "@/features/hmos/queries/hmo.tanstack.service";
-import {staffTanstackService} from "@/features/staff/queries/staff.tanstack.service";
+import {staffService} from "@/features/staff/api/staff.service";
 import {pamsAPI} from "@/utils/axios-interceptor.ts";
 
 const patientMedicalCategoryDialog = useTemplateRef<InstanceType<typeof PatientMedicalCategoryDialog>>('patientMedicalCategoryDialog')
@@ -402,6 +404,12 @@ const formatPatientAddress = (patient: Patient): string => {
   ].filter(Boolean)
 
   return addressParts.length ? addressParts.join(", ") : "N/A"
+}
+
+const formatReferralChannel = (channel?: ReferralChannel): string => {
+  if (channel === "ONLINE") return "Online"
+  if (channel === "OFFLINE") return "Offline"
+  return "N/A"
 }
 
 const selectedClinic = ref<Lookup | undefined>()
@@ -573,6 +581,8 @@ const onSubmit = async (event: FormSubmitEvent): Promise<void> => {
     },
     accept: async (): Promise<void> => {
       const folder: UUID = folderSaveMutation()
+      const selectedReferringDoctor = event.values?.referred_by_staff
+      const referredByDoctorName = selectedReferringDoctor?.name ?? event.values?.referred_by
 
       const body: PatientRequestBody = {
         first_name: event.values?.first_name,
@@ -584,7 +594,8 @@ const onSubmit = async (event: FormSubmitEvent): Promise<void> => {
         occupation: event.values?.occupation,
         religion_id: event.values?.religion?.id,
         mode_of_referral_id: event.values?.mode_of_referral?.id,
-        referred_by: event.values?.referred_by,
+        referred_by: referredByDoctorName,
+        referred_by_staff_id: selectedReferringDoctor?.id,
         clinic_id: event.values?.clinic?.id,
         phone_number: event.values?.phone_number,
         email: event.values?.email,
@@ -908,7 +919,15 @@ const initializeDropdowns = async (): Promise<void> => {
     createReferenceQueryService<Religion>(queryClient, ReferenceTanstackKey.RELIGIONS, requestParams),
     createReferenceQueryService<ModeOfReferral>(queryClient, ReferenceTanstackKey.MODE_OF_REFERRALS, requestParams),
     clinicTanstackService.getAllLookup(queryClient, defaultPage, undefined),
-    staffTanstackService.getAllLookup(queryClient, undefined, defaultPage, undefined),
+    staffService.getAll({
+      pageable_request: {
+        page: defaultPage,
+        size: 1000,
+        status: Status.ALL,
+        name: undefined
+      },
+      clinic_id: undefined
+    }),
     philippineLocationTanstackService.getAllRegions(queryClient, regionRequestParams),
     createReferenceQueryService<MedicalCategory>(queryClient, ReferenceTanstackKey.MEDICAL_CATEGORIES, requestParams),
     createReferenceQueryService<MedicalDiagnose>(queryClient, ReferenceTanstackKey.MEDICAL_DIAGNOSES, requestParams),
@@ -926,7 +945,14 @@ const initializeDropdowns = async (): Promise<void> => {
   religions.value = contentOrEmpty(fetchedReligions)
   modeOfReferrals.value = contentOrEmpty(fetchedModeOfReferrals)
   clinics.value = contentOrEmpty(fetchedClinics)
-  doctors.value = contentOrEmpty(fetchedDoctors)
+  doctors.value = fetchedDoctors.status === "fulfilled"
+    ? (fetchedDoctors.value?.content ?? [])
+        .filter(staff => staff.appointment_provider_type === "DOCTOR_CONSULTANT")
+        .map(staff => ({
+          id: staff.id,
+          name: staff.name
+        }))
+    : []
   regions.value = contentOrEmpty(fetchedRegions)
 
   medicalCategories.value = contentOrEmpty(fetchedMedicalCategories)

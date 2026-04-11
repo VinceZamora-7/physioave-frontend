@@ -174,6 +174,22 @@
             </IftaLabel>
           </FormField>
 
+          <FormField v-slot="$field" name="referral_channel">
+            <IftaLabel>
+              <Select
+                id="referral_channel"
+                v-model="$field.value"
+                :fluid="true"
+                :options="referralChannelOptions"
+                optionLabel="label"
+                optionValue="value"
+                placeholder="Select referral category"
+              />
+              <label for="referral_channel">Referral Category (Optional)</label>
+              <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
+            </IftaLabel>
+          </FormField>
+
           <FormField v-slot="$field" name="mode_of_referral">
             <IftaLabel>
               <Select
@@ -181,50 +197,46 @@
                 v-model="$field.value"
                 :fluid="true"
                 :loading="isLoading"
-                :options="modeOfReferrals"
+                :options="filteredModeOfReferrals"
                 optionLabel="name"
-                placeholder="Select mode of referral"
+                placeholder="Select referral source"
                 :filter="true"
                 :filter-fields="['name']"
+                :disabled="!selectedReferralChannel"
               />
-              <label for="mode_of_referral">Mode of Referral (Optional)</label>
+              <label for="mode_of_referral">Referral Source (Optional)</label>
               <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
             </IftaLabel>
           </FormField>
 
-          <FormField v-slot="$field" name="referred_by">
+          <FormField v-slot="$hiddenField" name="referred_by">
+            <input v-model="$hiddenField.value" type="hidden">
+          </FormField>
+
+          <FormField v-if="isDoctorReferral" v-slot="$field" name="referred_by_staff">
             <IftaLabel>
               <Select
-                id="referred_by"
+                id="referred_by_staff"
                 v-model="$field.value"
                 :fluid="true"
                 :loading="isLoading"
                 :options="doctorReferralOptions"
                 optionLabel="name"
-                optionValue="name"
-                placeholder="Select doctor referral"
+                placeholder="Select referring doctor from database"
                 :filter="true"
                 :filter-fields="['name']"
               />
-              <label for="referred_by">Doctor Referral (Optional)</label>
-
-              <div class="mt-2 flex gap-2">
-                <InputText
-                  v-model="newDoctorReferral"
-                  class="w-full"
-                  placeholder="Add doctor not on list"
-                  @keyup.enter="addDoctorReferral($field)"
-                />
-                <Button
-                  type="button"
-                  label="Add"
-                  icon="pi pi-plus"
-                  :pt="ptModalPrimaryBtn"
-                  @click="addDoctorReferral($field)"
-                />
-              </div>
+              <label for="referred_by_staff">Referring Doctor <span class="text-rose-600">*</span></label>
               <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
             </IftaLabel>
+
+            <div
+              v-if="legacyDoctorReferralName && !$field.value"
+              class="mt-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+            >
+              Legacy doctor referral on this record: <span class="font-semibold">{{ legacyDoctorReferralName }}</span>.
+              Select a doctor from the database to link this referral for future ROI and commission tracking.
+            </div>
           </FormField>
 
           <FormField v-slot="$field" name="clinic">
@@ -419,7 +431,7 @@
 
 <script setup lang="ts">
 import type { PatientFormEmits, PatientFormProps } from "@/components/patient.type.ts";
-import { computed, ref, toRefs, useTemplateRef } from "vue";
+import { computed, ref, toRefs, useTemplateRef, watch } from "vue";
 import { useToggle, watchDebounced } from "@vueuse/core";
 import { Form, FormField, type FormInstance, type FormSubmitEvent } from "@primevue/forms";
 import { zodResolver } from "@primevue/forms/resolvers/zod";
@@ -448,6 +460,7 @@ import type {
 import type { Lookup } from "@/models/global.model.ts";
 import { defaultPage, defaultPageSize, type Pageable } from "@/models/paging.ts";
 import { type PatientFormState, patientSchema } from "@/schema/patient.schema.ts";
+import type { ModeOfReferral, ReferralChannel } from "@/models/reference.ts";
 import {
   defaultDraftDebounce,
   defaultDraftMaxWaitDebounce,
@@ -460,8 +473,6 @@ import { clinicTanstackService } from "@/features/clinics/queries/clinic.tanstac
 import { clinicService } from "@/features/clinics/api/clinic.service";
 import { Status } from "@/utils/global.type.ts";
 
-type SelectFieldState = { value: unknown }
-
 const form = useTemplateRef<FormInstance>("form")
 
 const provinces = ref<Province[]>([])
@@ -469,8 +480,6 @@ const cities = ref<City[]>([])
 const baranggays = ref<Baranggay[]>([])
 const fallbackRegions = ref<Region[]>([])
 const fallbackClinics = ref<Lookup[]>([])
-const customDoctors = ref<Array<{ id: number; name: string }>>([])
-const newDoctorReferral = ref<string>("")
 const googleAddressInput = ref<string>("")
 
 const emit = defineEmits<PatientFormEmits>()
@@ -490,10 +499,38 @@ const [visible, toggle] = useToggle()
 const isEditing = computed<boolean>(() => !!selectedPatient.value)
 
 const resolver = ref(zodResolver(patientSchema))
-const doctorReferralOptions = computed(() => [...(doctors.value ?? []), ...customDoctors.value])
 const noMiddleNameChecked = computed<boolean>(() => Boolean((form.value?.states as any)?.has_no_middle_name?.value))
 const availableRegions = computed<Region[]>(() => regions.value?.length ? regions.value : fallbackRegions.value)
 const availableClinics = computed<Lookup[]>(() => clinics.value?.length ? clinics.value : fallbackClinics.value)
+const referralChannelOptions: Array<{ label: string; value: ReferralChannel }> = [
+  { label: "Online", value: "ONLINE" },
+  { label: "Offline", value: "OFFLINE" }
+]
+const doctorReferralOptions = computed<Lookup[]>(() =>
+  [...(doctors.value ?? [])].sort((left, right) => left.name.localeCompare(right.name))
+)
+const selectedReferralChannel = computed<ReferralChannel | undefined>(() => {
+  const value = form.value?.states?.referral_channel?.value
+  return value === "ONLINE" || value === "OFFLINE" ? value : undefined
+})
+const selectedModeOfReferral = computed<ModeOfReferral | undefined>(() => {
+  return form.value?.states?.mode_of_referral?.value as ModeOfReferral | undefined
+})
+const selectedReferringDoctor = computed<Lookup | undefined>(() => {
+  return form.value?.states?.referred_by_staff?.value as Lookup | undefined
+})
+const filteredModeOfReferrals = computed<ModeOfReferral[]>(() => {
+  const channel = selectedReferralChannel.value
+  if (!channel) return []
+  return (modeOfReferrals.value ?? []).filter((mode) => mode.referral_channel === channel)
+})
+const isDoctorReferral = computed<boolean>(() => {
+  return String(selectedModeOfReferral.value?.name ?? "").trim().toLowerCase() === "doctor referral"
+})
+const legacyDoctorReferralName = computed<string>(() => {
+  if (selectedPatient.value?.referred_by_staff_id) return ""
+  return String(selectedPatient.value?.referred_by ?? "").trim()
+})
 
 const toNameCase = (input: string | undefined | null): string => {
   if (!input) return ""
@@ -503,21 +540,6 @@ const toNameCase = (input: string | undefined | null): string => {
     .split(" ")
     .map(part => part ? `${part.charAt(0).toUpperCase()}${part.slice(1).toLowerCase()}` : "")
     .join(" ")
-}
-
-const addDoctorReferral = (field: SelectFieldState): void => {
-  const normalized = toNameCase(newDoctorReferral.value)
-  if (!normalized) return
-
-  const exists = doctorReferralOptions.value.some(option => option.name.toLowerCase() === normalized.toLowerCase())
-  if (!exists) {
-    customDoctors.value = [
-      ...customDoctors.value,
-      { id: Date.now(), name: normalized }
-    ]
-  }
-  field.value = normalized
-  newDoctorReferral.value = ""
 }
 
 const onNoMiddleNameToggle = (checked: boolean): void => {
@@ -530,6 +552,38 @@ const onGooglePlaceChanged = (place: GooglePlaceAddress): void => {
   if (!formatted) return
   form.value?.setFieldValue("details", formatted)
 }
+
+watch(selectedReferralChannel, (nextChannel) => {
+  const currentMode = selectedModeOfReferral.value
+  if (currentMode && currentMode.referral_channel !== nextChannel) {
+    form.value?.setFieldValue("mode_of_referral", null)
+  }
+})
+
+watch(selectedModeOfReferral, (nextMode) => {
+  if (nextMode?.referral_channel && selectedReferralChannel.value !== nextMode.referral_channel) {
+    form.value?.setFieldValue("referral_channel", nextMode.referral_channel)
+  }
+
+  if (String(nextMode?.name ?? "").trim().toLowerCase() !== "doctor referral") {
+    form.value?.setFieldValue("referred_by_staff", null)
+    form.value?.setFieldValue("referred_by", undefined)
+  }
+})
+
+watch(selectedReferringDoctor, (nextDoctor) => {
+  if (nextDoctor?.name) {
+    form.value?.setFieldValue("referred_by", nextDoctor.name)
+    return
+  }
+
+  if (isDoctorReferral.value && legacyDoctorReferralName.value) {
+    form.value?.setFieldValue("referred_by", legacyDoctorReferralName.value)
+    return
+  }
+
+  form.value?.setFieldValue("referred_by", undefined)
+})
 
 const onRegionChange = async (region: Region): Promise<void> => {
   if (!region?.id) {
@@ -691,13 +745,15 @@ const populateOnEdit = async (): Promise<void> => {
     civil_status: civilStatuses.value?.find(cs => cs.id === selectedPatient.value?.civil_status_id),
     occupation: selectedPatient.value?.occupation,
     religion: religions.value?.find(r => r.id === selectedPatient.value?.religion_id),
+    referral_channel: selectedPatient.value?.mode_of_referral_channel,
     mode_of_referral: modeOfReferrals.value?.find(mor => mor.id === selectedPatient.value?.mode_of_referral_id),
     referred_by: selectedPatient.value?.referred_by,
-    clinic: clinics.value?.find(c => c.id === selectedPatient.value?.clinic_id),
+    referred_by_staff: doctorReferralOptions.value.find(doctor => doctor.id === selectedPatient.value?.referred_by_staff_id),
+    clinic: availableClinics.value?.find(c => c.id === selectedPatient.value?.clinic_id),
     phone_number: selectedPatient.value?.phone_number,
     email: selectedPatient.value?.email,
     fb_link: selectedPatient.value?.fb_link,
-    region: regions.value?.find(r => r.id === selectedPatient.value?.region_id),
+    region: availableRegions.value?.find(r => r.id === selectedPatient.value?.region_id),
     province: provinces.value?.find(p => p.id === selectedPatient.value?.province_id),
     city: cities.value?.find(c => c.id === selectedPatient.value?.city_id),
     baranggay: baranggays.value?.find(b => b.id === selectedPatient.value?.baranggay_id),
@@ -717,6 +773,7 @@ const populateOnDraft = async (): Promise<void> => {
 
   form.value?.setValues({
     ...draft,
+    referral_channel: draft.referral_channel ?? (draft.mode_of_referral as ModeOfReferral | undefined)?.referral_channel,
     has_no_middle_name: draft.has_no_middle_name ?? !draft.middle_name
   })
 }

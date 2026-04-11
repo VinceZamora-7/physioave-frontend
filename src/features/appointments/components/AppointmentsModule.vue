@@ -436,6 +436,25 @@
               {{ selectedEncounterTicketPackageSourceLabel }}
             </div>
           </div>
+          <div v-if="isLguBilling" :class="detailCardClass">
+            <div class="text-xs uppercase tracking-wide opacity-70">LGU Program Status</div>
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+              <Tag :value="dropoutStatusLabel" :severity="dropoutStatusSeverity" />
+              <Button
+                v-if="!isSelectedEncounterTicketLocked || dropoutStatusValue !== 'DROPPED_OUT'"
+                :label="dropoutToggleLabel"
+                :icon="dropoutToggleIcon"
+                :severity="dropoutToggleSeverity"
+                size="small"
+                outlined
+                :loading="dropoutLoading"
+                @click="toggleDropoutStatus"
+              />
+            </div>
+            <div class="mt-1 text-xs opacity-70">
+              {{ dropoutStatusDescription }}
+            </div>
+          </div>
           <div :class="detailCardClass">
             <div class="text-xs uppercase tracking-wide opacity-70">PT Session Confirmation</div>
             <div class="font-medium">
@@ -542,6 +561,10 @@
             <div>
               <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Session Deduction</div>
               <div class="mt-1 font-medium text-[rgb(var(--app-fg))]">{{ encounterSessionDeductionLabel }}</div>
+            </div>
+            <div>
+              <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Session Sequence</div>
+              <div class="mt-1 font-medium text-[rgb(var(--app-fg))]">{{ selectedEncounterTicket?.billing_snapshot?.session_sequence_label || "N/A" }}</div>
             </div>
             <div>
               <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Encounter Ticket ID</div>
@@ -779,6 +802,20 @@
     <span>No HMO information on file for this patient. Please register HMO via the Patients module first.</span>
   </div>
 </template>
+
+        <!-- LGU Program picker -->
+        <div v-if="createBillingType === 'LGU_BILLING'" class="mt-4 flex flex-col gap-1.5">
+          <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">LGU Program</label>
+          <Select
+            v-model="createLguProgramId"
+            :options="lguProgramOptions"
+            optionLabel="name"
+            optionValue="id"
+            fluid
+            placeholder="Select LGU program…"
+            :pt="ptSelect"
+          />
+        </div>
 
         <!-- Care team and session setup (collapsible) -->
         <details class="mt-4 group rounded-2xl border border-dashed border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))]">
@@ -1302,6 +1339,7 @@ import AppointmentPtDeck from "@/features/appointments/components/AppointmentPtD
 import PatientSignaturePad from "@/features/appointments/components/PatientSignaturePad.vue";
 import TreatmentAreaChip from "@/features/appointments/components/TreatmentAreaChip.vue";
 import BillingModule from "@/features/billing/components/BillingModule.vue";
+import {billingPhase1Service} from "@/features/billing/api/billing-phase1.service";
 import {
   appointmentPhase1Service,
   type AppointmentEncounterTicket,
@@ -1494,6 +1532,8 @@ const createSpecialtyTag = ref<number>()
 const createTreatmentArea = ref<number>()
 const createBillingType = ref<BillingType>("SELF_PAY_SINGLE")
 const createBillingNotes = ref("")
+const createLguProgramId = ref<number>()
+const lguProgramOptions = ref<Array<{id: number; name: string}>>([])
 const createStart = ref<Date>(new Date())
 const createEnd = ref<Date>(new Date(Date.now() + 60 * 60 * 1000))
 const createSlotDuration = ref<SlotDurationMinutes>(60)
@@ -2241,6 +2281,58 @@ const encounterSessionDeductionLabel = computed(() => {
   }
   return "Attendance will be recorded. No session deduction applies."
 })
+
+const isLguBilling = computed(() => {
+  const bt = String(selectedDetail.value?.billing_type ?? "").trim().toUpperCase().replace(/[:\- ]/g, "_")
+  return bt === "LGU" || bt === "LGU_BILLING"
+})
+const dropoutLoading = ref(false)
+const dropoutStatusValue = computed(() => {
+  return (selectedDetail.value as Record<string, unknown> | undefined)?.dropout_status as string ?? "ACTIVE"
+})
+const dropoutStatusLabel = computed(() => {
+  const status = dropoutStatusValue.value
+  if (status === "DROPPED_OUT") return "Dropped Out"
+  if (status === "RETURNED") return "Returned"
+  return "Active"
+})
+const dropoutStatusSeverity = computed(() => {
+  const status = dropoutStatusValue.value
+  if (status === "DROPPED_OUT") return "danger"
+  if (status === "RETURNED") return "warn"
+  return "success"
+})
+const dropoutToggleLabel = computed(() =>
+  dropoutStatusValue.value === "DROPPED_OUT" ? "Mark as Returned" : "Mark as Drop-out"
+)
+const dropoutToggleIcon = computed(() =>
+  dropoutStatusValue.value === "DROPPED_OUT" ? "pi pi-undo" : "pi pi-times-circle"
+)
+const dropoutToggleSeverity = computed(() =>
+  dropoutStatusValue.value === "DROPPED_OUT" ? "success" : "danger"
+)
+const dropoutStatusDescription = computed(() => {
+  const status = dropoutStatusValue.value
+  if (status === "DROPPED_OUT") return "Patient has dropped out. A 10% dropout surcharge was applied to previous sessions."
+  if (status === "RETURNED") return "Patient returned after previously dropping out."
+  return "Patient is actively participating in the LGU program."
+})
+const toggleDropoutStatus = async () => {
+  if (!selectedDetail.value?.id) return
+  const nextStatus = dropoutStatusValue.value === "DROPPED_OUT" ? "RETURNED" : "DROPPED_OUT"
+  dropoutLoading.value = true
+  try {
+    await appointmentPhase1Service.updateDropoutStatus(selectedDetail.value.id, nextStatus)
+    successToast(toast, `Status updated to ${nextStatus === "DROPPED_OUT" ? "Dropped Out" : "Returned"}`)
+    // Refresh detail
+    selectedDetail.value = await appointmentPhase1Service.getById(selectedDetail.value.id)
+  } catch (error: unknown) {
+    errorToast(toast, extractApiErrorMessage(error, "Failed to update dropout status"))
+  } finally {
+    dropoutLoading.value = false
+  }
+}
+
 const visiblePtDeckGroups = computed<DailyPtDeckGroup[]>(() => {
   const groups: DailyPtDeckGroup[] = []
 
@@ -3086,6 +3178,7 @@ const openCreateDialog = async (): Promise<void> => {
   createTreatmentArea.value = undefined
   createBillingType.value = "SELF_PAY_SINGLE"
   createBillingNotes.value = ""
+  createLguProgramId.value = undefined
   selectedMachineId.value = undefined
   selectedTechniqueId.value = undefined
   selectedEvaluationId.value = undefined
@@ -3211,6 +3304,7 @@ const submitCreateAppointment = async (): Promise<void> => {
       originalPrice: getCreateLineOriginalPrice(line)
     }))),
     notes: createBillingNotes.value.trim() || undefined,
+    lgu_program_id: createBillingType.value === "LGU_BILLING" ? createLguProgramId.value : undefined,
   }
 
   try {
@@ -3295,7 +3389,8 @@ const exportSelectedEncounterTicketPdf = (): void => {
       activeBillingPackageLabel: selectedEncounterTicketPackageLabel.value,
       activeBillingPackageSource: selectedEncounterTicketPackageSourceLabel.value,
       deductionSummary: encounterSessionDeductionLabel.value,
-      signatureDataUrl: selectedEncounterTicket.value.patient_signature_data_url
+      signatureDataUrl: selectedEncounterTicket.value.patient_signature_data_url,
+      sessionSequenceLabel: snapshot?.session_sequence_label
     }], {
       title: "Encounter Ticket PDF",
       subtitle: "Single locked encounter ticket export",
@@ -3641,6 +3736,15 @@ watch(createBillingType, (billingType) => {
     selectedPackageOfferDetail.value = null
     packageSessionSchedules.value = []
     selectedServiceLines.value = selectedServiceLines.value.filter(line => line.type !== "package")
+  }
+
+  if (billingType === "LGU_BILLING" && lguProgramOptions.value.length === 0) {
+    billingPhase1Service.getLguPrograms().then(programs => {
+      lguProgramOptions.value = programs ?? []
+    }).catch(() => { /* silently ignore */ })
+  }
+  if (billingType !== "LGU_BILLING") {
+    createLguProgramId.value = undefined
   }
 })
 

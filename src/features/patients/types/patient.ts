@@ -1,5 +1,6 @@
 import type {PageableRequest, PageRequestWithNameAndStatus} from "@/models/paging.ts";
 import type {UUID} from "@/utils/global.type.ts";
+import type {ReferralChannel} from "@/models/reference.ts";
 
 export interface BasePatient {
   first_name: string
@@ -12,6 +13,7 @@ export interface BasePatient {
   religion_id?: number
   mode_of_referral_id?: number
   referred_by?: string
+  referred_by_staff_id?: number
   clinic_id: number
 
   // Contact information
@@ -41,6 +43,9 @@ export interface Patient extends BasePatient {
   civil_status_name: string
   religion_name?: string
   mode_of_referral_name?: string
+  mode_of_referral_channel?: ReferralChannel
+  referred_by_staff_id?: number
+  referred_by_staff_name?: string
   clinic_name: string
 
   is_active: boolean

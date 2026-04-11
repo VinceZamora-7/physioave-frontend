@@ -5,6 +5,7 @@ export interface Reference {
 }
 
 export type AppointmentProviderType = "NONE" | "DOCTOR_CONSULTANT" | "PHYSICAL_THERAPIST" | "PT_ASSISTANT"
+export type ReferralChannel = "ONLINE" | "OFFLINE"
 
 export interface Role extends Reference {
   appointment_provider_type: AppointmentProviderType
@@ -41,6 +42,7 @@ export interface Gender extends Reference {
 }
 
 export interface ModeOfReferral extends Reference {
+  referral_channel: ReferralChannel
 }
 
 export interface Religion extends Reference {

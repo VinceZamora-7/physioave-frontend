@@ -61,6 +61,17 @@ export interface BillingListItem {
   vat_rate?: number
   vatable_amount?: number
   vat_amount?: number
+  // HMO enrichment (populated on detail fetch for HMO billings)
+  hmo_name?: string
+  hmo_type_name?: string
+  hmo_company_name?: string
+  hmo_approval_code?: string
+  hmo_validity_start?: string
+  hmo_validity_end?: string
+  // LGU enrichment (populated on detail fetch for LGU billings)
+  lgu_program_name?: string
+  lgu_reference_label?: string
+  lgu_date_issued?: string
   encounter_tickets?: BillingEncounterTicket[]
 }
 
@@ -162,6 +173,11 @@ export interface PackageLookup {
 }
 
 export interface PaymentMethodLookup {
+  id: number
+  name: string
+}
+
+export interface LguProgramLookup {
   id: number
   name: string
 }
@@ -302,6 +318,10 @@ export const billingPhase1Service = {
   },
   async getPaymentMethods(): Promise<PaymentMethodLookup[] | undefined> {
     const {data} = await pamsAPI.get<PaymentMethodLookup[]>("/billings/payment-methods")
+    return data
+  },
+  async getLguPrograms(): Promise<LguProgramLookup[] | undefined> {
+    const {data} = await pamsAPI.get<LguProgramLookup[]>("/billings/lgu-programs")
     return data
   },
   async getLguBudgetSummary(patientId?: number, appointmentId?: number): Promise<LguBudgetSummary | null | undefined> {
