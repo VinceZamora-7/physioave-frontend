@@ -4,7 +4,7 @@ export interface Reference {
   is_active: boolean
 }
 
-export type AppointmentProviderType = "NONE" | "DOCTOR_CONSULTANT" | "PHYSICAL_THERAPIST"
+export type AppointmentProviderType = "NONE" | "DOCTOR_CONSULTANT" | "PHYSICAL_THERAPIST" | "PT_ASSISTANT"
 
 export interface Role extends Reference {
   appointment_provider_type: AppointmentProviderType

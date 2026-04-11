@@ -317,18 +317,6 @@
           <label>Evaluations</label>
         </IftaLabel>
 
-        <IftaLabel>
-          <MultiSelect
-            v-model="bundleFormData.addOnIds"
-            :options="allServices.filter(s => s.type.startsWith('add-on'))"
-            optionLabel="name"
-            optionValue="id"
-            filter
-            placeholder="Select add-ons (optional)"
-            fluid
-          />
-          <label>Add-ons (optional)</label>
-        </IftaLabel>
 
         <div v-if="bundlePreviewOriginalPrice > 0" class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3 space-y-1 text-sm">
           <div class="flex justify-between text-xs opacity-60">
@@ -415,7 +403,7 @@ interface BundledService {
   machineIds: string[]
   techniqueIds: string[]
   evaluationIds: string[]
-  addOnIds: string[]
+  addOnIds?: string[]
   bundledPrice: number
   status: string
 }
@@ -465,12 +453,12 @@ const getServiceName = (id: string): string =>
   allServices.value.find(s => s.id === id)?.name ?? id
 
 const calcOriginalPrice = (bundle: BundledService): number => {
-  const ids = [...bundle.machineIds, ...bundle.techniqueIds, ...bundle.evaluationIds, ...bundle.addOnIds]
+  const ids = [...bundle.machineIds, ...bundle.techniqueIds, ...bundle.evaluationIds]
   return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
 }
 
 const bundlePreviewOriginalPrice = computed(() => {
-  const ids = [...bundleFormData.machineIds, ...bundleFormData.techniqueIds, ...bundleFormData.evaluationIds, ...bundleFormData.addOnIds]
+  const ids = [...bundleFormData.machineIds, ...bundleFormData.techniqueIds, ...bundleFormData.evaluationIds]
   return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
 })
 
@@ -702,7 +690,7 @@ const openEditBundleDialog = (bundle: BundledService): void => {
   bundleFormData.machineIds = [...bundle.machineIds]
   bundleFormData.techniqueIds = [...bundle.techniqueIds]
   bundleFormData.evaluationIds = [...bundle.evaluationIds]
-  bundleFormData.addOnIds = [...bundle.addOnIds]
+  bundleFormData.addOnIds = []
   bundleFormData.bundledPrice = bundle.bundledPrice
   bundleFormData.status = bundle.status
   bundleDialogVisible.value = true
@@ -732,7 +720,7 @@ const saveBundle = (): void => {
         machineIds: [...bundleFormData.machineIds],
         techniqueIds: [...bundleFormData.techniqueIds],
         evaluationIds: [...bundleFormData.evaluationIds],
-        addOnIds: [...bundleFormData.addOnIds],
+        addOnIds: [],
         bundledPrice: bundleFormData.bundledPrice,
         status: bundleFormData.status
       }
@@ -744,7 +732,7 @@ const saveBundle = (): void => {
       machineIds: [...bundleFormData.machineIds],
       techniqueIds: [...bundleFormData.techniqueIds],
       evaluationIds: [...bundleFormData.evaluationIds],
-      addOnIds: [...bundleFormData.addOnIds],
+      addOnIds: [],
       bundledPrice: bundleFormData.bundledPrice,
       status: bundleFormData.status
     })

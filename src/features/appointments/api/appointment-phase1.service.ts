@@ -24,6 +24,10 @@ export interface AppointmentListItem {
   location_context: AppointmentLocationContext
   doctor_id?: number
   doctor_name?: string
+  referring_doctor_id?: number
+  referring_doctor_name?: string
+  support_staff_id?: number
+  support_staff_name?: string
   starts_at: string
   ends_at: string
   appointment_phase: AppointmentPhase
@@ -131,6 +135,14 @@ export interface DailyPtDeckBlock extends AppointmentListItem {
     name?: string
     role_name?: string
   }
+  referring_doctor?: {
+    id?: number
+    name?: string
+  }
+  support_staff?: {
+    id?: number
+    name?: string
+  }
   start: string
   end: string
   treatment_area?: {
@@ -171,7 +183,9 @@ export interface AppointmentCreatePayload {
   specialty_tag_id?: number
   treatment_area_id?: number
   location_context?: AppointmentLocationContext
-  doctor_id?: number
+  doctor_id: number
+  referring_doctor_id?: number
+  support_staff_id?: number
   starts_at: string
   ends_at: string
   session_schedules?: Array<{
@@ -208,6 +222,8 @@ export interface AppointmentUpdatePayload {
   treatment_area_id?: number | null
   location_context?: AppointmentLocationContext | null
   doctor_id?: number | null
+  referring_doctor_id?: number | null
+  support_staff_id?: number | null
   starts_at?: string
   ends_at?: string
   appointment_phase?: AppointmentPhase | null
@@ -285,6 +301,32 @@ export interface AppointmentDailyLogParams {
   search?: string
 }
 
+export interface ReferringDoctorCompletedSessionsItem {
+  referring_doctor_id: number
+  referring_doctor_name: string
+  completed_sessions_count: number
+}
+
+export interface ReferringDoctorCompletedSessionsReport {
+  from_date: string
+  to_date: string
+  total_completed_sessions: number
+  doctors: ReferringDoctorCompletedSessionsItem[]
+}
+
+export interface PtCompletedSessionsItem {
+  pt_id: number
+  pt_name: string
+  completed_sessions_count: number
+}
+
+export interface PtCompletedSessionsReport {
+  from_date: string
+  to_date: string
+  total_completed_sessions: number
+  physical_therapists: PtCompletedSessionsItem[]
+}
+
 export const appointmentPhase1Service = {
   refreshPromise: null as Promise<unknown> | null,
 
@@ -341,6 +383,29 @@ export const appointmentPhase1Service = {
   async getMyUpcoming(options?: { clinic_id?: number; phase?: AppointmentPhase; limit?: number }): Promise<AppointmentListItem[] | undefined> {
     return await this.withRefreshRetry(async () => {
       const {data} = await pamsAPI.get<AppointmentListItem[]>("/appointments/my-upcoming", {params: options})
+      return data
+    })
+  },
+  async getCompletedSessionsByReferringDoctor(from_date: string, to_date: string): Promise<ReferringDoctorCompletedSessionsReport | undefined> {
+    return await this.withRefreshRetry(async () => {
+      const {data} = await pamsAPI.get<ReferringDoctorCompletedSessionsReport>(
+        "/appointments/reports/referring-doctor-completed-sessions",
+        {
+          params: {
+            from_date,
+            to_date
+          }
+        }
+      )
+      return data
+    })
+  },
+  async getCompletedSessionsByPt(from_date: string, to_date: string): Promise<PtCompletedSessionsReport | undefined> {
+    return await this.withRefreshRetry(async () => {
+      const {data} = await pamsAPI.get<PtCompletedSessionsReport>(
+        "/appointments/reports/pt-completed-sessions",
+        {params: {from_date, to_date}}
+      )
       return data
     })
   },

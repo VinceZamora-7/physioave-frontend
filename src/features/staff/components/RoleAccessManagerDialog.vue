@@ -336,7 +336,8 @@ const roleForm = ref<RoleFormState>({
 const providerTypeOptions: Array<{ label: string; value: AppointmentProviderType }> = [
   { label: "Not used in appointments", value: "NONE" },
   { label: "Doctor Consultant", value: "DOCTOR_CONSULTANT" },
-  { label: "Physical Therapist", value: "PHYSICAL_THERAPIST" }
+  { label: "Physical Therapist", value: "PHYSICAL_THERAPIST" },
+  { label: "PT Assistant / Intern", value: "PT_ASSISTANT" }
 ]
 const statusFilterOptions = [
   { label: "All", value: Status.ALL },
@@ -387,6 +388,7 @@ function filterPermissions(permissions: Permission[], query: string): Permission
 function formatProviderType(providerType: AppointmentProviderType): string {
   if (providerType === "DOCTOR_CONSULTANT") return "Doctor Consultant"
   if (providerType === "PHYSICAL_THERAPIST") return "Physical Therapist"
+  if (providerType === "PT_ASSISTANT") return "PT Assistant / Intern"
   return "Not used in appointments"
 }
 

@@ -3,6 +3,7 @@ import { pamsAPI, pamsBaseURL } from "@/utils/axios-interceptor"
 export interface GoogleCalendarSyncStatus {
   google_oauth_configured: boolean
   is_physical_therapist: boolean
+  is_mobile_calendar_eligible: boolean
   is_staff_active: boolean
   connected: boolean
   sync_enabled: boolean

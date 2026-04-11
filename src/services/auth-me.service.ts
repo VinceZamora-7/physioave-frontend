@@ -8,7 +8,7 @@ export interface AuthMe {
   email: string
   role_id: number
   role_name: string
-  appointment_provider_type: "NONE" | "DOCTOR_CONSULTANT" | "PHYSICAL_THERAPIST"
+  appointment_provider_type: "NONE" | "DOCTOR_CONSULTANT" | "PHYSICAL_THERAPIST" | "PT_ASSISTANT"
   is_active: boolean
   permissions: string[]
 }

@@ -371,6 +371,14 @@
             <div class="text-xs uppercase tracking-wide opacity-70">Assigned Provider</div>
             <div class="font-medium">{{ selectedDetail.doctor_name || "N/A" }}</div>
           </div>
+            <div :class="detailCardClass">
+              <div class="text-xs uppercase tracking-wide opacity-70">Referring Doctor</div>
+              <div class="font-medium">{{ selectedDetail.referring_doctor_name || "N/A" }}</div>
+            </div>
+            <div :class="detailCardClass">
+              <div class="text-xs uppercase tracking-wide opacity-70">Supporting PT / Intern</div>
+              <div class="font-medium">{{ selectedDetail.support_staff_name || "N/A" }}</div>
+            </div>
           <div :class="detailCardClass">
             <div class="text-xs uppercase tracking-wide opacity-70">Schedule</div>
             <div class="font-medium">{{ formatDateTime(selectedDetail.starts_at) }} - {{ formatDateTime(selectedDetail.ends_at) }}</div>
@@ -462,8 +470,19 @@
         <div class="flex flex-wrap gap-2 pt-1">
           <Button label="Open Patient Record" icon="pi pi-user" outlined :pt="ptOutlinedBtn" class="min-w-[180px]" @click="goToPatients" />
           <Button
-            :label="selectedDetail.billing_id ? 'Open Billing Record' : 'Create Billing'"
+            v-if="selectedDetail.billing_id"
+            label="Open Billing Record"
             icon="pi pi-receipt"
+            severity="secondary"
+            outlined
+            :pt="ptOutlinedBtn"
+            class="min-w-[180px]"
+            @click="openBillingViewDrawer"
+          />
+          <Button
+            v-if="!selectedDetail.billing_id"
+            label="Create Billing"
+            icon="pi pi-plus"
             severity="secondary"
             outlined
             :pt="ptOutlinedBtn"
@@ -618,7 +637,7 @@
             v-model="rescheduleStart"
             showTime
             fluid
-            :manualInput="false"
+            :manualInput="true"
             :stepMinute="slotMinuteStep"
             :disabledDays="calendarDisabledDays"
             hourFormat="24"
@@ -633,7 +652,7 @@
           <InputText v-model="overrideReason" fluid :disabled="!needsOverrideReason" />
           <label>Owner override reason (required after 3)</label>
         </IftaLabel>
-        <small class="opacity-70">Slots start every 15 minutes and must be 15, 30, or 60 minutes long.</small>
+        <small class="opacity-70">Slots start every 15 minutes and must be 30, 60, or 75 minutes long.</small>
         <small class="opacity-70">If max reschedule reached, only Owner override is accepted.</small>
       </div>
       <template #footer>
@@ -761,10 +780,10 @@
   </div>
 </template>
 
-        <!-- Additional details (collapsible) -->
+        <!-- Care team and session setup (collapsible) -->
         <details class="mt-4 group rounded-2xl border border-dashed border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))]">
           <summary class="flex cursor-pointer select-none items-center justify-between px-4 py-3 text-sm font-medium text-[rgb(var(--app-fg))]">
-            <span>Additional details</span>
+            <span>Care Team and Session Setup</span>
             <svg
               class="h-4 w-4 text-[rgb(var(--app-fg))]/40 transition-transform duration-200 group-open:rotate-180"
               fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
@@ -774,16 +793,44 @@
           </summary>
 
           <div class="px-4 pb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-            <!-- Assigned Provider -->
+            <!-- Referring Doctor -->
             <div class="md:col-span-2 flex flex-col gap-1.5">
-              <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Assigned Provider</label>
+              <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Referring Doctor</label>
+              <Select
+                v-model="createReferringDoctor"
+                :options="referringDoctorOptions"
+                optionLabel="label"
+                optionValue="id"
+                filter showClear fluid
+                placeholder="Select referring doctor (optional)"
+                :pt="ptSelect"
+              />
+            </div>
+
+            <!-- Assigned PT -->
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Assigned PT (Required)</label>
               <Select
                 v-model="createDoctor"
                 :options="doctorOptions"
                 optionLabel="label"
                 optionValue="id"
                 filter showClear fluid
-                placeholder="Select provider (optional)"
+                placeholder="Select assigned PT"
+                :pt="ptSelect"
+              />
+            </div>
+
+            <!-- Supporting PT / Intern -->
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">PT Assistant / Intern</label>
+              <Select
+                v-model="createSupportStaff"
+                :options="supportStaffOptions"
+                optionLabel="label"
+                optionValue="id"
+                filter showClear fluid
+                placeholder="Select PT assistant or intern (optional)"
                 :pt="ptSelect"
               />
             </div>
@@ -1154,7 +1201,7 @@
                 :modelValue="schedule.startsAt"
                 showTime
                 fluid
-                :manualInput="false"
+                :manualInput="true"
                 :stepMinute="slotMinuteStep"
                 :disabledDays="calendarDisabledDays"
                 hourFormat="24"
@@ -1183,7 +1230,7 @@
         <DatePicker
           v-model="createStart"
           showTime fluid
-          :manualInput="false"
+          :manualInput="true"
           :stepMinute="slotMinuteStep"
           :disabledDays="calendarDisabledDays"
           hourFormat="24"
@@ -1204,7 +1251,7 @@
     <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] px-4 py-3 space-y-1">
       <div class="flex items-center justify-between gap-2">
         <span class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Clinic Schedule</span>
-        <span class="text-xs text-[rgb(var(--app-fg))]/40">15 · 30 · 60 min slots</span>
+        <span class="text-xs text-[rgb(var(--app-fg))]/40">30 · 60 · 75 min slots</span>
       </div>
       <div class="text-sm font-medium text-[rgb(var(--app-fg))]">
         {{ selectedClinicScheduleLabel || "No clinic resolved yet" }}
@@ -1213,10 +1260,6 @@
 
   </div>
 
-<div v-if="isOvernightClinicSchedule" class="mt-4 flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
-  <i class="pi pi-exclamation-triangle mt-0.5 shrink-0 text-amber-500 dark:text-amber-400" />
-  <span>This clinic schedule is overnight. If this is unintended, verify clinic end time (AM/PM).</span>
-</div>
 </section>
 
   </div>
@@ -1226,6 +1269,14 @@
         <Button label="Create Appointment" icon="pi pi-check" :pt="ptPrimaryBtn" @click="submitCreateAppointment" />
       </template>
     </Dialog>
+
+    <BillingModule
+      v-if="billingOverlayVisible"
+      :embedded="true"
+      :overlay-only="true"
+      :initial-view="billingOverlayMode"
+      @close-overlay="onBillingOverlayClose"
+    />
 
   </main>
 </template>
@@ -1250,6 +1301,7 @@ import Tag from "primevue/tag";
 import AppointmentPtDeck from "@/features/appointments/components/AppointmentPtDeck.vue";
 import PatientSignaturePad from "@/features/appointments/components/PatientSignaturePad.vue";
 import TreatmentAreaChip from "@/features/appointments/components/TreatmentAreaChip.vue";
+import BillingModule from "@/features/billing/components/BillingModule.vue";
 import {
   appointmentPhase1Service,
   type AppointmentEncounterTicket,
@@ -1304,6 +1356,8 @@ const appointments = ref<AppointmentListItem[]>([])
 const dailyPtDeckGroups = ref<DailyPtDeckGroup[]>([])
 const selectedDetail = ref<AppointmentDetail>()
 const detailPanelVisible = ref(false)
+const billingOverlayVisible = ref(false)
+const billingOverlayMode = ref<'detail' | 'edit'>('detail')
 const encounterTicketVisible = ref(false)
 const isEncounterTicketSaving = ref(false)
 const encounterTicketAttendedAt = ref<Date>(new Date())
@@ -1311,12 +1365,12 @@ const encounterTicketSignatureDataUrl = ref("")
 const isLoading = ref(false)
 const isPtDeckLoading = ref(false)
 const slotMinuteStep = 15
-type SlotDurationMinutes = 15 | 30 | 60
+type SlotDurationMinutes = 30 | 60 | 75
 type DoctorConsultantFilterValue = number | "UNASSIGNED"
 const slotDurationOptions: Array<{label: string; value: SlotDurationMinutes}> = [
-  {label: "15 min", value: 15},
   {label: "30 min", value: 30},
   {label: "60 min", value: 60},
+  {label: "75 min", value: 75},
 ]
 
 const page = ref(1)
@@ -1406,6 +1460,8 @@ type PackageSessionSchedule = {
 type PackageSessionTemplate = Omit<PackageSessionSchedule, "startsAt">
 const patientOptions = ref<AppointmentPersonOption[]>([])
 const doctorOptions = ref<AppointmentPersonOption[]>([])
+const referringDoctorOptions = ref<AppointmentPersonOption[]>([])
+const supportStaffOptions = ref<AppointmentPersonOption[]>([])
 const clinicOptions = ref<Clinic[]>([])
 const specialtyTagOptions = ref<SpecialtyTag[]>([])
 const treatmentAreaOptions = ref<TreatmentArea[]>([])
@@ -1429,6 +1485,8 @@ const appointmentStatusOptions = ["Pending", "Rescheduled", "No show", "Cancelle
 const selectedClinicId = ref<number>()
 const createPatient = ref<number>()
 const createDoctor = ref<number>()
+const createReferringDoctor = ref<number>()
+const createSupportStaff = ref<number>()
 const createPhase = ref<AppointmentPhase>("SESSION")
 const createLocationContext = ref<AppointmentLocationContext>("IN_CLINIC")
 const isCreateLocationContextAuto = ref(false)
@@ -1510,9 +1568,9 @@ const snapToSlotBoundary = (date: Date): Date => {
 }
 
 const normalizeSlotDuration = (minutes: number): SlotDurationMinutes => {
-  if (minutes <= 15) return 15
   if (minutes <= 30) return 30
-  return 60
+  if (minutes <= 60) return 60
+  return 75
 }
 
 const inferSlotDuration = (start: Date, end: Date): SlotDurationMinutes => {
@@ -1530,13 +1588,17 @@ const addOnTypeOptions = [
 const normalizeAppointmentProviderType = (
   providerType?: AppointmentProviderType | null
 ): AppointmentProviderType => {
-  if (providerType === "DOCTOR_CONSULTANT" || providerType === "PHYSICAL_THERAPIST") return providerType
+  if (providerType === "DOCTOR_CONSULTANT" || providerType === "PHYSICAL_THERAPIST" || providerType === "PT_ASSISTANT") return providerType
   return "NONE"
 }
 const isClinicalProviderType = (providerType?: AppointmentProviderType | null): boolean =>
   normalizeAppointmentProviderType(providerType) !== "NONE"
+const isPhysicalTherapistProviderType = (providerType?: AppointmentProviderType | null): boolean =>
+  normalizeAppointmentProviderType(providerType) === "PHYSICAL_THERAPIST"
 const isDoctorConsultantProviderType = (providerType?: AppointmentProviderType | null): boolean =>
   normalizeAppointmentProviderType(providerType) === "DOCTOR_CONSULTANT"
+const isSupportStaffProviderType = (providerType?: AppointmentProviderType | null): boolean =>
+  normalizeAppointmentProviderType(providerType) === "PT_ASSISTANT"
 const formatAppointmentProviderLabel = (staff: {
   name: string
   role_name?: string
@@ -2789,7 +2851,7 @@ const validateClinicSchedule = (start: Date, end: Date): boolean => {
   }
 
   if (!hasAllowedSlotDuration(start, end)) {
-    errorToast(toast, "Appointment length must be 15, 30, or 60 minutes")
+    errorToast(toast, "Appointment length must be 30, 60, or 75 minutes")
     return false
   }
   return true
@@ -2979,7 +3041,20 @@ const loadCreateLookups = async (): Promise<void> => {
     specialty_tag_id: doctor.specialty_tag_id,
     specialty_tag_name: doctor.specialty_tag_name
   }))
-    .filter((doctor) => isClinicalProviderType(doctor.appointment_provider_type))
+    .filter((doctor) => isPhysicalTherapistProviderType(doctor.appointment_provider_type))
+    const allStaffMapped = (doctorsPage?.content ?? []).map((doctor: Staff) => ({
+      id: doctor.id,
+      name: doctor.name,
+      label: formatAppointmentProviderLabel(doctor),
+      clinic_id: doctor.clinic_id,
+      role_name: doctor.role_name,
+      appointment_provider_type: normalizeAppointmentProviderType(doctor.appointment_provider_type),
+      requires_specialty_tag: doctor.requires_specialty_tag,
+      specialty_tag_id: doctor.specialty_tag_id,
+      specialty_tag_name: doctor.specialty_tag_name
+    }))
+    referringDoctorOptions.value = allStaffMapped.filter((s) => isDoctorConsultantProviderType(s.appointment_provider_type))
+    supportStaffOptions.value = allStaffMapped.filter((s) => isSupportStaffProviderType(s.appointment_provider_type))
   clinicOptions.value = clinics?.content ?? []
   specialtyTagOptions.value = specialtyTags?.content ?? []
   sessionServices.value = sessionLookupPage.data?.content ?? []
@@ -3002,6 +3077,8 @@ const openCreateDialog = async (): Promise<void> => {
   }
   createPatient.value = undefined
   createDoctor.value = undefined
+    createReferringDoctor.value = undefined
+    createSupportStaff.value = undefined
   createPhase.value = "SESSION"
   createLocationContext.value = "IN_CLINIC"
   isCreateLocationContextAuto.value = false
@@ -3050,6 +3127,10 @@ const submitCreateAppointment = async (): Promise<void> => {
   }
   if (!selectedClinicId.value) {
     errorToast(toast, "Clinic schedule is required")
+    return
+  }
+  if (!createDoctor.value) {
+    errorToast(toast, "Assigned PT is required")
     return
   }
   if (selectedServiceLines.value.length === 0) {
@@ -3106,6 +3187,8 @@ const submitCreateAppointment = async (): Promise<void> => {
     treatment_area_id: createTreatmentArea.value,
     doctor_id: createDoctor.value,
     starts_at: primarySchedule.startsAt.toISOString(),
+      referring_doctor_id: createReferringDoctor.value,
+      support_staff_id: createSupportStaff.value,
     ends_at: primarySchedule.endsAt.toISOString(),
     session_schedules: selectedPackageHasSessionSchedules.value
       ? appointmentSchedules.map(schedule => ({
@@ -3401,14 +3484,44 @@ const goToBilling = async (): Promise<void> => {
 }
 
 const goToBillingForAppointment = async (appointment: AppointmentListItem): Promise<void> => {
+  if (appointment.billing_id) {
+    billingOverlayMode.value = 'detail'
+    await router.replace({
+      query: {
+        patientId: String(appointment.patient_id),
+        appointmentId: String(appointment.id),
+        billingId: String(appointment.billing_id)
+      }
+    })
+    billingOverlayVisible.value = true
+    return
+  }
+
   await router.push({
     path: "/billing",
     query: {
       patientId: String(appointment.patient_id),
-      appointmentId: String(appointment.id),
-      ...(appointment.billing_id ? {billingId: String(appointment.billing_id)} : {})
+      appointmentId: String(appointment.id)
     }
   })
+}
+
+const openBillingViewDrawer = async (): Promise<void> => {
+  if (!selectedDetail.value) return
+  billingOverlayMode.value = 'detail'
+  await router.replace({
+    query: {
+      patientId: String(selectedDetail.value.patient_id),
+      appointmentId: String(selectedDetail.value.id),
+      ...(selectedDetail.value.billing_id ? {billingId: String(selectedDetail.value.billing_id)} : {})
+    }
+  })
+  billingOverlayVisible.value = true
+}
+
+const onBillingOverlayClose = (): void => {
+  billingOverlayVisible.value = false
+  void router.replace({query: {}})
 }
 
 watch(createStart, (value) => {

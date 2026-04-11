@@ -1,3 +1,252 @@
+<script setup lang="ts">
+import {computed, onMounted, ref, watch} from "vue"
+import {useConfirm, useToast} from "primevue"
+import Button from "primevue/button"
+import Column from "primevue/column"
+import DataTable from "primevue/datatable"
+import DatePicker from "primevue/datepicker"
+import InputNumber from "primevue/inputnumber"
+import InputText from "primevue/inputtext"
+import Tag from "primevue/tag"
+import {
+  appointmentPhase1Service,
+  type ReferringDoctorCompletedSessionsReport
+} from "@/features/appointments/api/appointment-phase1.service"
+import {
+  billingPhase1Service,
+  type DailyIncomeExpenseReport
+} from "@/features/billing/api/billing-phase1.service"
+import {ptOutlinedBtn, ptPrimaryBtn} from "@/features/shared/table-header.styles"
+import {errorToast, successToast} from "@/utils/toast.util"
+
+const toast = useToast()
+const confirm = useConfirm()
+
+const isLoading = ref(false)
+const isSavingExpense = ref(false)
+const selectedDate = ref(new Date())
+const report = ref<DailyIncomeExpenseReport>()
+const isDoctorSessionsLoading = ref(false)
+const doctorSessionsDateRange = ref<Date[] | null>(null)
+const doctorSessionsReport = ref<ReferringDoctorCompletedSessionsReport>()
+const expenseForm = ref({
+  item_name: "",
+  amount: 0,
+  notes: ""
+})
+
+const selectedDateLabel = computed(() =>
+  selectedDate.value.toLocaleDateString("en-PH", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric"
+  })
+)
+
+const summaryCards = computed(() => [
+  {
+    label: "Gross Daily Charges",
+    value: asCurrency(report.value?.summary.gross_income ?? 0),
+    caption: "Total billed value for the selected day"
+  },
+  {
+    label: "Cash Collected",
+    value: asCurrency(report.value?.summary.cash_collected ?? 0),
+    caption: "Actual payments received today"
+  },
+  {
+    label: "Outstanding",
+    value: asCurrency(report.value?.summary.outstanding_balance ?? 0),
+    caption: "Remaining balance across all entries"
+  },
+  {
+    label: "Expenses",
+    value: asCurrency(report.value?.summary.expense_total ?? 0),
+    caption: "Manually entered operating expenses"
+  },
+  {
+    label: "Net Cash",
+    value: asCurrency(report.value?.summary.net_cash ?? 0),
+    caption: "Cash collected minus expenses"
+  }
+])
+
+const toDateParam = (value: Date): string => {
+  const year = value.getFullYear()
+  const month = String(value.getMonth() + 1).padStart(2, "0")
+  const day = String(value.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+const formatDate = (value: Date): string =>
+  value.toLocaleDateString("en-PH", {
+    year: "numeric",
+    month: "short",
+    day: "numeric"
+  })
+
+const initializeDoctorSessionsDateRange = (): void => {
+  if (doctorSessionsDateRange.value && doctorSessionsDateRange.value.length === 2) return
+  const today = new Date()
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
+  doctorSessionsDateRange.value = [monthStart, today]
+}
+
+const selectedDoctorSessionsRangeLabel = computed(() => {
+  const range = doctorSessionsDateRange.value ?? []
+  if (range.length < 2 || !range[0] || !range[1]) {
+    return "Select a complete date range"
+  }
+  return `${formatDate(range[0])} to ${formatDate(range[1])}`
+})
+
+const asCurrency = (value: number): string =>
+  new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: "PHP",
+    maximumFractionDigits: 2
+  }).format(Number(value ?? 0))
+
+const formatTime = (value: string): string =>
+  new Date(value).toLocaleTimeString("en-PH", {
+    hour: "numeric",
+    minute: "2-digit"
+  })
+
+const formatDateTime = (value: string): string =>
+  new Date(value).toLocaleString("en-PH", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  })
+
+const billingRouteSeverity = (value: string): "success" | "info" | "warn" | "contrast" => {
+  const normalized = value.trim().toUpperCase()
+  if (normalized === "HMO") return "info"
+  if (normalized === "LGU") return "warn"
+  if (normalized === "PACKAGE") return "contrast"
+  return "success"
+}
+
+const refreshReport = async (): Promise<void> => {
+  try {
+    isLoading.value = true
+    report.value = await billingPhase1Service.getDailyIncomeExpense(toDateParam(selectedDate.value))
+  } catch {
+    errorToast(toast, "Failed to load daily income and expense report")
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const refreshDoctorSessionsReport = async (): Promise<void> => {
+  const range = doctorSessionsDateRange.value ?? []
+  if (range.length < 2 || !range[0] || !range[1]) {
+    errorToast(toast, "Please select a start and end date")
+    return
+  }
+
+  const fromDate = range[0]
+  const toDate = range[1]
+  if (fromDate.getTime() > toDate.getTime()) {
+    errorToast(toast, "Start date must be on or before end date")
+    return
+  }
+
+  try {
+    isDoctorSessionsLoading.value = true
+    doctorSessionsReport.value = await appointmentPhase1Service.getCompletedSessionsByReferringDoctor(
+      toDateParam(fromDate),
+      toDateParam(toDate)
+    )
+  } catch {
+    errorToast(toast, "Failed to load completed sessions by referring doctor")
+  } finally {
+    isDoctorSessionsLoading.value = false
+  }
+}
+
+const resetExpenseForm = (): void => {
+  expenseForm.value = {
+    item_name: "",
+    amount: 0,
+    notes: ""
+  }
+}
+
+const saveExpense = async (): Promise<void> => {
+  if (!expenseForm.value.item_name.trim()) {
+    errorToast(toast, "Expense item name is required")
+    return
+  }
+
+  if (!Number(expenseForm.value.amount)) {
+    errorToast(toast, "Expense amount must be greater than zero")
+    return
+  }
+
+  try {
+    isSavingExpense.value = true
+    await billingPhase1Service.addDailyExpense({
+      expense_date: toDateParam(selectedDate.value),
+      item_name: expenseForm.value.item_name.trim(),
+      amount: Number(expenseForm.value.amount ?? 0),
+      notes: expenseForm.value.notes.trim() || undefined
+    })
+    successToast(toast, "Expense added")
+    resetExpenseForm()
+    await refreshReport()
+  } catch {
+    errorToast(toast, "Failed to save expense")
+  } finally {
+    isSavingExpense.value = false
+  }
+}
+
+const confirmDeleteExpense = (id: number, itemName: string): void => {
+  confirm.require({
+    message: `Delete expense entry for ${itemName}?`,
+    header: "Delete Expense",
+    icon: "pi pi-exclamation-triangle",
+    rejectProps: {
+      label: "Cancel",
+      severity: "secondary",
+      outlined: true
+    },
+    acceptProps: {
+      label: "Delete",
+      severity: "danger",
+      icon: "pi pi-trash"
+    },
+    accept: async () => {
+      try {
+        await billingPhase1Service.deleteDailyExpense(id)
+        successToast(toast, "Expense deleted")
+        await refreshReport()
+      } catch {
+        errorToast(toast, "Failed to delete expense")
+      }
+    }
+  })
+}
+
+const resetToToday = (): void => {
+  selectedDate.value = new Date()
+}
+
+watch(selectedDate, () => {
+  void refreshReport()
+})
+
+onMounted(() => {
+  initializeDoctorSessionsDateRange()
+  void refreshReport()
+  void refreshDoctorSessionsReport()
+})
+</script>
+
 <template>
   <main class="app-page-shell space-y-5">
     <section class="rounded-3xl border border-[#A91D8B]/25 bg-[linear-gradient(120deg,rgba(36,39,87,0.14),rgba(94,24,105,0.10),rgba(169,29,139,0.18))] p-5 shadow-[0_18px_40px_rgba(36,39,87,0.10)]">
@@ -250,196 +499,72 @@
         </div>
       </div>
     </section>
+
+    <section class="app-section-card-comfy space-y-4">
+      <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <h2 class="app-section-title">Completed Sessions by Referring Doctor</h2>
+          <p class="text-sm opacity-70">Operations view for completed treatment sessions grouped by referring doctor over a selected date range.</p>
+        </div>
+        <div class="text-sm opacity-70">
+          Total Completed Sessions: {{ doctorSessionsReport?.total_completed_sessions ?? 0 }}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 gap-3 md:grid-cols-[minmax(280px,360px)_auto_1fr] md:items-end">
+        <div class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wide opacity-60">Date Range</label>
+          <DatePicker
+            v-model="doctorSessionsDateRange"
+            selectionMode="range"
+            showIcon
+            fluid
+            :manualInput="false"
+            dateFormat="mm/dd/yy"
+          />
+        </div>
+        <div>
+          <Button
+            label="Generate"
+            icon="pi pi-chart-bar"
+            :loading="isDoctorSessionsLoading"
+            :pt="ptPrimaryBtn"
+            @click="refreshDoctorSessionsReport"
+          />
+        </div>
+        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 text-sm opacity-75">
+          {{ selectedDoctorSessionsRangeLabel }}
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <DataTable :value="doctorSessionsReport?.doctors ?? []" size="small" :loading="isDoctorSessionsLoading" scrollable>
+          <template #empty>
+            <div class="py-10 text-center text-sm opacity-70">
+              No completed sessions found for the selected range.
+            </div>
+          </template>
+
+          <Column header="Rank" style="width: 80px">
+            <template #body="{ index }">{{ index + 1 }}</template>
+          </Column>
+
+          <Column header="Referring Doctor" style="min-width: 320px">
+            <template #body="{ data }">
+              <div class="space-y-1">
+                <div class="font-medium">{{ data.referring_doctor_name }}</div>
+                <div class="text-xs opacity-60">ID: {{ data.referring_doctor_id }}</div>
+              </div>
+            </template>
+          </Column>
+
+          <Column header="Completed Sessions" style="min-width: 180px">
+            <template #body="{ data }">
+              <span class="font-semibold">{{ data.completed_sessions_count }}</span>
+            </template>
+          </Column>
+        </DataTable>
+      </div>
+    </section>
   </main>
 </template>
-
-<script setup lang="ts">
-import {computed, onMounted, ref, watch} from "vue"
-import {useConfirm, useToast} from "primevue"
-import Button from "primevue/button"
-import Column from "primevue/column"
-import DataTable from "primevue/datatable"
-import DatePicker from "primevue/datepicker"
-import InputNumber from "primevue/inputnumber"
-import InputText from "primevue/inputtext"
-import Tag from "primevue/tag"
-import {
-  billingPhase1Service,
-  type DailyIncomeExpenseReport
-} from "@/features/billing/api/billing-phase1.service"
-import {ptOutlinedBtn, ptPrimaryBtn} from "@/features/shared/table-header.styles"
-import {errorToast, successToast} from "@/utils/toast.util"
-
-const toast = useToast()
-const confirm = useConfirm()
-
-const isLoading = ref(false)
-const isSavingExpense = ref(false)
-const selectedDate = ref(new Date())
-const report = ref<DailyIncomeExpenseReport>()
-const expenseForm = ref({
-  item_name: "",
-  amount: 0,
-  notes: ""
-})
-
-const selectedDateLabel = computed(() =>
-  selectedDate.value.toLocaleDateString("en-PH", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric"
-  })
-)
-
-const summaryCards = computed(() => [
-  {
-    label: "Gross Daily Charges",
-    value: asCurrency(report.value?.summary.gross_income ?? 0),
-    caption: "Total billed value for the selected day"
-  },
-  {
-    label: "Cash Collected",
-    value: asCurrency(report.value?.summary.cash_collected ?? 0),
-    caption: "Actual payments received today"
-  },
-  {
-    label: "Outstanding",
-    value: asCurrency(report.value?.summary.outstanding_balance ?? 0),
-    caption: "Remaining balance across all entries"
-  },
-  {
-    label: "Expenses",
-    value: asCurrency(report.value?.summary.expense_total ?? 0),
-    caption: "Manually entered operating expenses"
-  },
-  {
-    label: "Net Cash",
-    value: asCurrency(report.value?.summary.net_cash ?? 0),
-    caption: "Cash collected minus expenses"
-  }
-])
-
-const toDateParam = (value: Date): string => {
-  const year = value.getFullYear()
-  const month = String(value.getMonth() + 1).padStart(2, "0")
-  const day = String(value.getDate()).padStart(2, "0")
-  return `${year}-${month}-${day}`
-}
-
-const asCurrency = (value: number): string =>
-  new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    maximumFractionDigits: 2
-  }).format(Number(value ?? 0))
-
-const formatTime = (value: string): string =>
-  new Date(value).toLocaleTimeString("en-PH", {
-    hour: "numeric",
-    minute: "2-digit"
-  })
-
-const formatDateTime = (value: string): string =>
-  new Date(value).toLocaleString("en-PH", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit"
-  })
-
-const billingRouteSeverity = (value: string): "success" | "info" | "warn" | "contrast" => {
-  const normalized = value.trim().toUpperCase()
-  if (normalized === "HMO") return "info"
-  if (normalized === "LGU") return "warn"
-  if (normalized === "PACKAGE") return "contrast"
-  return "success"
-}
-
-const refreshReport = async (): Promise<void> => {
-  try {
-    isLoading.value = true
-    report.value = await billingPhase1Service.getDailyIncomeExpense(toDateParam(selectedDate.value))
-  } catch {
-    errorToast(toast, "Failed to load daily income and expense report")
-  } finally {
-    isLoading.value = false
-  }
-}
-
-const resetExpenseForm = (): void => {
-  expenseForm.value = {
-    item_name: "",
-    amount: 0,
-    notes: ""
-  }
-}
-
-const saveExpense = async (): Promise<void> => {
-  if (!expenseForm.value.item_name.trim()) {
-    errorToast(toast, "Expense item name is required")
-    return
-  }
-
-  if (!Number(expenseForm.value.amount)) {
-    errorToast(toast, "Expense amount must be greater than zero")
-    return
-  }
-
-  try {
-    isSavingExpense.value = true
-    await billingPhase1Service.addDailyExpense({
-      expense_date: toDateParam(selectedDate.value),
-      item_name: expenseForm.value.item_name.trim(),
-      amount: Number(expenseForm.value.amount ?? 0),
-      notes: expenseForm.value.notes.trim() || undefined
-    })
-    successToast(toast, "Expense added")
-    resetExpenseForm()
-    await refreshReport()
-  } catch {
-    errorToast(toast, "Failed to save expense")
-  } finally {
-    isSavingExpense.value = false
-  }
-}
-
-const confirmDeleteExpense = (id: number, itemName: string): void => {
-  confirm.require({
-    message: `Delete expense entry for ${itemName}?`,
-    header: "Delete Expense",
-    icon: "pi pi-exclamation-triangle",
-    rejectProps: {
-      label: "Cancel",
-      severity: "secondary",
-      outlined: true
-    },
-    acceptProps: {
-      label: "Delete",
-      severity: "danger",
-      icon: "pi pi-trash"
-    },
-    accept: async () => {
-      try {
-        await billingPhase1Service.deleteDailyExpense(id)
-        successToast(toast, "Expense deleted")
-        await refreshReport()
-      } catch {
-        errorToast(toast, "Failed to delete expense")
-      }
-    }
-  })
-}
-
-const resetToToday = (): void => {
-  selectedDate.value = new Date()
-}
-
-watch(selectedDate, () => {
-  void refreshReport()
-})
-
-onMounted(() => {
-  void refreshReport()
-})
-</script>

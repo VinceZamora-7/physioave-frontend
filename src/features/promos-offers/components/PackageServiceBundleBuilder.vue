@@ -80,19 +80,6 @@
             {{ getCategoryTotalQty(data.evaluationItems, data.evaluationIds, data.evaluationQty) }}
           </template>
         </Column>
-        <Column header="Add-ons">
-          <template #body="{data}">
-            <div class="flex flex-wrap gap-1">
-              <Tag v-for="id in (data.addOnIds ?? [])" :key="id" :value="getServiceName(id)" severity="secondary" class="text-xs" />
-              <span v-if="!(data.addOnIds ?? []).length" class="text-xs opacity-40">—</span>
-            </div>
-          </template>
-        </Column>
-        <Column header="Qty" style="width: 80px">
-          <template #body="{data}">
-            {{ getCategoryTotalQty(data.addOnItems, data.addOnIds, data.addOnQty) }}
-          </template>
-        </Column>
         <Column header="Recurring PT Sessions">
           <template #body="{data}">
             <div class="flex flex-wrap gap-1">
@@ -283,14 +270,6 @@
             </div>
           </template>
         </Column>
-        <Column header="Add-ons">
-          <template #body="{data}">
-            <div class="flex flex-wrap gap-1">
-              <Tag v-for="id in data.addOnIds" :key="id" :value="getServiceName(id)" severity="secondary" class="text-xs" />
-              <span v-if="!data.addOnIds.length" class="text-xs opacity-40">—</span>
-            </div>
-          </template>
-        </Column>
         <Column header="Original Price" style="width: 140px">
           <template #body="{data}">
             <span class="line-through opacity-50 text-xs">{{ asCurrency(calcOriginalPrice(data)) }}</span>
@@ -374,10 +353,6 @@
           <label>Evaluations</label>
         </IftaLabel>
 
-        <IftaLabel>
-          <MultiSelect v-model="bundleFormData.addOnIds" :options="addOnServices" optionLabel="name" optionValue="id" filter placeholder="Select add-ons (optional)" fluid />
-          <label>Add-ons (optional)</label>
-        </IftaLabel>
 
         <div v-if="bundlePreviewOriginalPrice > 0" class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3 space-y-1 text-sm">
           <div class="flex justify-between text-xs opacity-60">
@@ -468,18 +443,6 @@
           </div>
         </div>
 
-        <IftaLabel>
-          <MultiSelect v-model="packageFormData.addOnIds" :options="addOnServices" optionLabel="name" optionValue="id" filter placeholder="Select Add-ons" fluid />
-          <label>Add-ons</label>
-        </IftaLabel>
-
-        <div v-if="packageFormData.addOnItems.length" class="space-y-2 rounded-lg border border-[rgb(var(--app-border))] p-3">
-          <div class="text-xs font-semibold opacity-70">Add-on Session Quantities</div>
-          <div v-for="item in packageFormData.addOnItems" :key="`addon-${item.id}`" class="flex items-center justify-between gap-3">
-            <span class="text-sm">{{ getServiceName(item.id) }}</span>
-            <InputNumber v-model="item.qty" :min="1" inputClass="w-20" />
-          </div>
-        </div>
 
         <IftaLabel>
           <MultiSelect v-model="packageFormData.sessionIds" :options="sessionServices" optionLabel="name" optionValue="id" filter placeholder="Select Recurring PT Sessions" fluid />
@@ -842,14 +805,6 @@ watch(
 )
 
 watch(
-  () => packageFormData.addOnIds,
-  (ids) => {
-    packageFormData.addOnItems = syncItemsFromSelection(ids, packageFormData.addOnItems)
-  },
-  {deep: true}
-)
-
-watch(
   () => packageFormData.sessionIds,
   (ids) => {
     packageFormData.sessionItems = syncItemsFromSelection(ids, packageFormData.sessionItems)
@@ -860,7 +815,6 @@ watch(
 const machineServices = computed(() => allServices.value.filter(service => service.type === "machine"))
 const techniqueServices = computed(() => allServices.value.filter(service => service.type === "technique"))
 const evaluationServices = computed(() => allServices.value.filter(service => service.type === "evaluation"))
-const addOnServices = computed(() => allServices.value.filter(service => service.type.startsWith("add-on")))
 const sessionServices = computed(() => sessionLookupServices.value)
 const activeBundles = computed(() => allBundles.value.filter(bundle => bundle.status !== "Inactive"))
 
@@ -898,7 +852,7 @@ const getServicePrice = (id: string): number => {
 const getBundleName = (id: string): string => allBundles.value.find(bundle => bundle.id === id)?.name ?? id
 
 const calcOriginalPrice = (bundle: BundledService): number => {
-  const ids = [...bundle.machineIds, ...bundle.techniqueIds, ...bundle.evaluationIds, ...bundle.addOnIds]
+  const ids = [...bundle.machineIds, ...bundle.techniqueIds, ...bundle.evaluationIds]
   return ids.reduce((sum, id) => sum + getServicePrice(id), 0)
 }
 
@@ -918,15 +872,11 @@ const calcPackageRegularTotal = (item: PackageService | {bundleId?: string; bund
     ? typed.evaluationItems
     : (typed.evaluationIds ?? []).map(id => ({id, qty: Number(typed.evaluationQty ?? 1)}))
   ).reduce((sum, itemEntry) => sum + (getServicePrice(itemEntry.id) * Number(itemEntry.qty ?? 1)), 0)
-  const addOnRegularTotal = (typed.addOnItems?.length
-    ? typed.addOnItems
-    : (typed.addOnIds ?? []).map(id => ({id, qty: Number(typed.addOnQty ?? 1)}))
-  ).reduce((sum, itemEntry) => sum + (getServicePrice(itemEntry.id) * Number(itemEntry.qty ?? 1)), 0)
   const sessionRegularTotal = (typed.sessionItems?.length
     ? typed.sessionItems
     : (typed.sessionIds ?? []).map(id => ({id, qty: Number(typed.sessionQty ?? 1)}))
   ).reduce((sum, itemEntry) => sum + (getServicePrice(itemEntry.id) * Number(itemEntry.qty ?? 1)), 0)
-  return bundleRegularTotal + machineRegularTotal + techniqueRegularTotal + evaluationRegularTotal + addOnRegularTotal + sessionRegularTotal
+  return bundleRegularTotal + machineRegularTotal + techniqueRegularTotal + evaluationRegularTotal + sessionRegularTotal
 }
 
 const getCategoryTotalQty = (
@@ -1086,7 +1036,7 @@ const openEditBundleDialog = (bundle: BundledService): void => {
   bundleFormData.machineIds = [...bundle.machineIds]
   bundleFormData.techniqueIds = [...bundle.techniqueIds]
   bundleFormData.evaluationIds = [...bundle.evaluationIds]
-  bundleFormData.addOnIds = [...bundle.addOnIds]
+  bundleFormData.addOnIds = []
   bundleFormData.bundledPrice = bundle.bundledPrice
   bundleFormData.status = bundle.status
   bundleDialogVisible.value = true
@@ -1116,7 +1066,7 @@ const saveBundle = (): void => {
         machineIds: [...bundleFormData.machineIds],
         techniqueIds: [...bundleFormData.techniqueIds],
         evaluationIds: [...bundleFormData.evaluationIds],
-        addOnIds: [...bundleFormData.addOnIds],
+        addOnIds: [],
         bundledPrice: bundleFormData.bundledPrice,
         status: bundleFormData.status
       }
@@ -1128,7 +1078,7 @@ const saveBundle = (): void => {
       machineIds: [...bundleFormData.machineIds],
       techniqueIds: [...bundleFormData.techniqueIds],
       evaluationIds: [...bundleFormData.evaluationIds],
-      addOnIds: [...bundleFormData.addOnIds],
+      addOnIds: [],
       bundledPrice: bundleFormData.bundledPrice,
       status: bundleFormData.status
     })
@@ -1192,11 +1142,8 @@ const openEditPackageDialog = (item: PackageService): void => {
     ? item.evaluationItems.map(entry => ({id: entry.id, qty: Number(entry.qty ?? 1)}))
     : (item.evaluationIds ?? []).map(id => ({id, qty: Number(item.evaluationQty ?? 1)}))
   )
-  packageFormData.addOnIds = [...(item.addOnIds ?? [])]
-  packageFormData.addOnItems = (item.addOnItems?.length
-    ? item.addOnItems.map(entry => ({id: entry.id, qty: Number(entry.qty ?? 1)}))
-    : (item.addOnIds ?? []).map(id => ({id, qty: Number(item.addOnQty ?? 1)}))
-  )
+  packageFormData.addOnIds = []
+  packageFormData.addOnItems = []
   packageFormData.sessionIds = [...(item.sessionIds ?? [])]
   packageFormData.sessionItems = (item.sessionItems?.length
     ? item.sessionItems.map(entry => ({id: entry.id, qty: Number(entry.qty ?? 1)}))
@@ -1216,10 +1163,9 @@ const savePackage = (): void => {
   const hasMachine = packageFormData.machineIds.length > 0
   const hasTechnique = packageFormData.techniqueIds.length > 0
   const hasEvaluation = packageFormData.evaluationIds.length > 0
-  const hasAddOn = packageFormData.addOnIds.length > 0
   const hasSession = packageFormData.sessionIds.length > 0
-  if (!hasBundle && !hasMachine && !hasTechnique && !hasEvaluation && !hasAddOn && !hasSession) {
-    errorToast(toast, "Add at least one item from Machine & Modalities, Technique, Evaluations, Add-ons, or Recurring PT Sessions")
+  if (!hasBundle && !hasMachine && !hasTechnique && !hasEvaluation && !hasSession) {
+    errorToast(toast, "Add at least one item from Machine & Modalities, Technique, Evaluations, or Recurring PT Sessions")
     return
   }
   const hasInvalidQty = [
@@ -1227,7 +1173,6 @@ const savePackage = (): void => {
     ...packageFormData.machineItems.map(entry => entry.qty),
     ...packageFormData.techniqueItems.map(entry => entry.qty),
     ...packageFormData.evaluationItems.map(entry => entry.qty),
-    ...packageFormData.addOnItems.map(entry => entry.qty),
     ...packageFormData.sessionItems.map(entry => entry.qty)
   ].some(value => Number(value) < 1)
 
@@ -1254,9 +1199,9 @@ const savePackage = (): void => {
     evaluationIds: [...packageFormData.evaluationIds],
     evaluationQty: 1,
     evaluationItems: packageFormData.evaluationItems.map(entry => ({id: entry.id, qty: Number(entry.qty ?? 1)})),
-    addOnIds: [...packageFormData.addOnIds],
+    addOnIds: [],
     addOnQty: 1,
-    addOnItems: packageFormData.addOnItems.map(entry => ({id: entry.id, qty: Number(entry.qty ?? 1)})),
+    addOnItems: [],
     sessionIds: [...packageFormData.sessionIds],
     sessionQty: 1,
     sessionItems: packageFormData.sessionItems.map(entry => ({id: entry.id, qty: Number(entry.qty ?? 1)})),

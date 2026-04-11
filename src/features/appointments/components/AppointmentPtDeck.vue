@@ -1,236 +1,163 @@
 <template>
-  <!-- Header -->
-  <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-    <div>
-      <h3 class="app-section-title">Daily PT Deck</h3>
-      <p class="text-sm opacity-70">
-        Scheduled patients for the selected clinic day. Use Deck Snapshot, Deck Focus, and the table below for deeper list view.
-      </p>
-    </div>
-    <div class="flex flex-wrap gap-2">
-      <Button label="Create Appointment" icon="pi pi-plus" :pt="ptPrimaryBtn" @click="$emit('create')" />
-      <Button label="Refresh" icon="pi pi-refresh" outlined :pt="ptOutlinedBtn" @click="$emit('refresh')" />
-    </div>
-  </div>
-
-  <!-- Main content -->
-  <div v-if="displayedAppointments.length" class="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.8fr)_minmax(280px,0.9fr)]">
-
-    <!-- ── Appointment Cards ── -->
-    <div class="grid grid-cols-1 gap-3 xl:grid-cols-2">
-      <article
-        v-for="booking in displayedAppointments"
-        :key="booking.id"
-        :class="[
-          'group relative rounded-2xl border transition-all duration-200 overflow-hidden',
-          appointmentBlockBorderStyleClass(booking.location_context),
-          isVisuallyMutedAppointment(booking.status) ? 'opacity-60 saturate-0' : '',
-          isSelectedAppointment(booking.id)
-            ? 'border-[#A91D8B]/45 bg-[linear-gradient(135deg,rgba(169,29,139,0.08),rgba(36,39,87,0.06))] shadow-lg shadow-[#A91D8B]/10'
-            : 'border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] hover:border-[#A91D8B]/30 hover:shadow-md'
-        ]"
-      >
-        <!-- Clickable body -->
-        <button type="button" class="w-full text-left p-4" @click="$emit('select', booking)">
-
-          <!-- Time + Urgent badges row -->
-          <div class="flex items-center justify-between gap-2 mb-3">
-            <span class="text-xs font-semibold uppercase tracking-widest text-[rgb(var(--app-fg))]/50">
-              {{ formatTimeRange(booking.start, booking.end) }}
-            </span>
-            <div class="flex gap-1.5">
-              <span
-                v-if="isStartingWithinOneHour(booking)"
-                class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"
-              >
-                <span class="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-                Soon
-              </span>
-              <span
-                v-if="!booking.pt"
-                class="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-700 dark:bg-rose-500/15 dark:text-rose-400"
-              >
-                Unassigned
-              </span>
-            </div>
-          </div>
-
-          <!-- Patient name + provider -->
-          <div class="mb-3">
-            <div class="text-base font-semibold text-[rgb(var(--app-fg))] leading-tight">
-              {{ booking.patient.name }}
-            </div>
-            <div class="mt-0.5 text-sm text-[rgb(var(--app-fg))]/55">
-              {{ displayProviderAssignment(booking) }}
-            </div>
-            <div v-if="booking.treatment_area?.name" class="mt-2">
-              <TreatmentAreaChip :name="booking.treatment_area.name" :color="booking.treatment_area.color" />
-            </div>
-          </div>
-
-          <!-- Tags — grouped by type, smaller -->
-          <div class="flex flex-wrap gap-1.5">
-            <Tag v-if="booking.specialty?.name" :value="booking.specialty.name" severity="info" class="text-[11px]" />
-            <Tag :value="displayAppointmentPhase(booking.phase)" :severity="appointmentPhaseSeverity(booking.phase)" class="text-[11px]" />
-            <Tag :value="displayLocationContext(booking.location_context)" :severity="appointmentLocationContextSeverity(booking.location_context)" class="text-[11px]" />
-            <Tag :value="displayAppointmentStatus(booking.status)" :severity="appointmentSeverity(booking.status)" class="text-[11px]" />
-            <Tag :value="displayBillingStatus(booking.billing_status)" :severity="billingSeverity(booking.billing_status)" class="text-[11px]" />
-          </div>
-
-          <!-- Stats row -->
-          <div class="mt-3 grid grid-cols-2 gap-2">
-            <div class="rounded-lg bg-[rgb(var(--app-fg))]/[0.04] px-3 py-2">
-              <div class="text-[10px] uppercase tracking-wide text-[rgb(var(--app-fg))]/45">Reschedules</div>
-              <div class="mt-0.5 text-sm font-semibold text-[rgb(var(--app-fg))]">{{ booking.reschedule_count }}</div>
-            </div>
-            <div class="rounded-lg bg-[rgb(var(--app-fg))]/[0.04] px-3 py-2">
-              <div class="text-[10px] uppercase tracking-wide text-[rgb(var(--app-fg))]/45">Billing</div>
-              <div class="mt-0.5 text-sm font-semibold text-[rgb(var(--app-fg))]">{{ displayBillingStatus(booking.billing_status) }}</div>
-            </div>
-          </div>
-        </button>
-
-        <!-- Action bar — revealed on hover -->
-        <div class="flex items-center gap-1 border-t border-[rgb(var(--app-border))] bg-[rgb(var(--app-fg))]/[0.02] px-3 py-2">
-          <Button label="Detail" size="small" text icon="pi pi-eye" class="!text-xs" @click="$emit('select', booking)" />
-          <Button label="Billing" size="small" text severity="secondary" icon="pi pi-receipt" class="!text-xs" @click="$emit('billing', booking)" />
-          <Button label="Reschedule" size="small" text icon="pi pi-calendar-plus" class="!text-xs" @click="$emit('reschedule', booking)" />
-          <div class="ml-auto">
-            <Button
-              v-if="canDeleteAppointments"
-              size="small"
-              text
-              severity="danger"
-              icon="pi pi-trash"
-              @click="$emit('delete', booking)"
-            />
-          </div>
-        </div>
-      </article>
-    </div>
-
-    <!-- ── Sidebar ── -->
-    <div class="space-y-3">
-
-      <!-- Deck Snapshot -->
-      <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
-        <div class="mb-3 flex items-center justify-between">
-          <span class="text-xs font-semibold uppercase tracking-widest text-[rgb(var(--app-fg))]/50">Deck Snapshot</span>
-          <span class="text-xs text-[rgb(var(--app-fg))]/40">{{ displayedAppointments.length }} total</span>
-        </div>
-        <div class="grid grid-cols-2 gap-2">
-          <!-- Pending -->
-          <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3">
-            <div class="flex items-center justify-between">
-              <div class="text-[10px] uppercase tracking-wide text-[rgb(var(--app-fg))]/50">Pending</div>
-              <div class="h-1.5 w-1.5 rounded-full bg-amber-400" />
-            </div>
-            <div class="mt-1.5 text-2xl font-bold text-[rgb(var(--app-fg))]">{{ pendingAppointmentsCount }}</div>
-          </div>
-          <!-- Completed -->
-          <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3">
-            <div class="flex items-center justify-between">
-              <div class="text-[10px] uppercase tracking-wide text-[rgb(var(--app-fg))]/50">Completed</div>
-              <div class="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            </div>
-            <div class="mt-1.5 text-2xl font-bold text-[rgb(var(--app-fg))]">{{ completedAppointmentsCount }}</div>
-          </div>
-          <!-- Needs Billing -->
-          <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3">
-            <div class="flex items-center justify-between">
-              <div class="text-[10px] uppercase tracking-wide text-[rgb(var(--app-fg))]/50">Needs Billing</div>
-              <div class="h-1.5 w-1.5 rounded-full bg-rose-400" />
-            </div>
-            <div class="mt-1.5 text-2xl font-bold text-[rgb(var(--app-fg))]">{{ billingAttentionCount }}</div>
-          </div>
-          <!-- Rescheduled -->
-          <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3">
-            <div class="flex items-center justify-between">
-              <div class="text-[10px] uppercase tracking-wide text-[rgb(var(--app-fg))]/50">Rescheduled</div>
-              <div class="h-1.5 w-1.5 rounded-full bg-sky-400" />
-            </div>
-            <div class="mt-1.5 text-2xl font-bold text-[rgb(var(--app-fg))]">{{ rescheduledAppointmentsCount }}</div>
-          </div>
-        </div>
+  <section class="rounded-2xl border border-slate-200/90 bg-[linear-gradient(180deg,#edf3fb_0%,#eff4fb_100%)] p-4 shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div>
+        <h3 class="text-xl font-black tracking-tight text-slate-800">EMR Decking Dashboard</h3>
+        <p class="mt-1 text-xs font-medium text-slate-600">
+          {{ deckModeDescription }}
+        </p>
       </div>
 
-      <!-- Deck Focus -->
-      <div
-        :class="[
-          'rounded-2xl border bg-[rgb(var(--app-bg))] p-4 transition-all duration-200',
-          deckFocus ? appointmentBlockBorderStyleClass(deckFocus.location_context) : 'border-[rgb(var(--app-border))]',
-          deckFocus && isVisuallyMutedAppointment(deckFocus.status) ? 'opacity-60 saturate-0' : ''
-        ]"
-      >
-        <div class="mb-3 text-xs font-semibold uppercase tracking-widest text-[rgb(var(--app-fg))]/50">
-          Deck Focus
+      <div class="grid grid-cols-3 gap-3 text-right text-slate-700">
+        <div>
+          <div class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Booked</div>
+          <div class="mt-1 text-lg font-black">{{ displayedAppointments.length }}</div>
+        </div>
+        <div>
+          <div class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Mode</div>
+          <div class="mt-1 text-lg font-black">{{ deckModeShortLabel }}</div>
+        </div>
+        <div>
+          <div class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Provider</div>
+          <div class="mt-1 text-lg font-black">{{ deckProviderName }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-4 rounded-2xl bg-white/84 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]">
+      <h4 class="text-2xl font-black uppercase tracking-tight text-slate-800">Today's Decking Log</h4>
+
+      <div class="mt-4 min-h-[220px] rounded-2xl bg-slate-50/85 p-3">
+        <div v-if="displayedAppointments.length" class="space-y-3">
+          <article
+            v-for="booking in displayedAppointments"
+            :key="booking.id"
+            :class="[
+              'rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-[0_6px_16px_rgba(15,23,42,0.06)] transition-all duration-200',
+              isSelectedAppointment(booking.id) ? 'ring-2 ring-[#3b82f6]/45' : 'hover:-translate-y-0.5 hover:shadow-[0_14px_28px_rgba(15,23,42,0.08)]',
+              isVisuallyMutedAppointment(booking.status) ? 'opacity-60 saturate-0' : ''
+            ]"
+          >
+            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <button type="button" class="flex min-w-0 flex-1 items-center gap-4 text-left" @click="handleSelect(booking)">
+                <div class="h-14 w-1 rounded-full" :class="bookingStatusBarClass(booking)" />
+                <div class="min-w-0">
+                  <div class="text-xl font-black tracking-tight text-slate-800">{{ formatSingleTime(booking.start) }}</div>
+                  <div class="mt-1 flex min-w-0 items-center gap-2 text-slate-700">
+                    <i class="pi pi-user text-sm text-slate-500" />
+                    <span class="truncate text-lg font-medium">{{ booking.patient.name }}</span>
+                  </div>
+                  <div v-if="booking.referring_doctor?.name" class="mt-1 text-sm text-slate-400">
+                    Ref: {{ booking.referring_doctor.name }}
+                  </div>
+                </div>
+              </button>
+
+              <div class="flex flex-col items-start gap-2 md:items-end">
+                <span class="inline-flex items-center rounded-full border-2 border-green-600 bg-white px-4 py-1 text-xs font-black uppercase tracking-wide text-slate-700">
+                  {{ careTeamBadge(booking) }}
+                </span>
+                <div class="text-sm text-slate-400">{{ modeForBooking(booking) }}</div>
+                <div class="flex flex-wrap items-center gap-1">
+                  <Button size="small" text icon="pi pi-eye" class="!text-xs" @click="emit('select', booking)" />
+                  <Button size="small" text severity="secondary" icon="pi pi-receipt" class="!text-xs" @click="emit('billing', booking)" />
+                  <Button size="small" text icon="pi pi-calendar-plus" class="!text-xs" @click="emit('reschedule', booking)" />
+                  <Button
+                    v-if="canDeleteAppointments"
+                    size="small"
+                    text
+                    severity="danger"
+                    icon="pi pi-trash"
+                    class="!text-xs"
+                    @click="emit('delete', booking)"
+                  />
+                </div>
+              </div>
+            </div>
+          </article>
         </div>
 
-        <template v-if="deckFocus">
-          <!-- Time badge -->
-          <div class="mb-2 text-xs font-semibold uppercase tracking-widest text-[rgb(var(--app-fg))]/50">
-            {{ formatTimeRange(deckFocus.start, deckFocus.end) }}
+        <div v-else class="flex min-h-[260px] flex-col items-center justify-center rounded-[18px] border border-dashed border-slate-200 bg-white/60 px-6 text-center">
+          <div class="text-4xl opacity-25">🗓️</div>
+          <div class="mt-3 text-lg font-semibold text-slate-700">
+            {{ isLoading ? 'Loading deck log...' : 'No bookings in today\'s PT deck.' }}
           </div>
-
-          <!-- Name -->
-          <div class="text-xl font-bold text-[rgb(var(--app-fg))] leading-tight">
-            {{ deckFocus.patient.name }}
-          </div>
-          <div class="mt-0.5 text-sm text-[rgb(var(--app-fg))]/55">
-            {{ displayProviderAssignment(deckFocus) }}
-          </div>
-
-          <!-- Treatment area -->
-          <div v-if="deckFocus.treatment_area?.name" class="mt-3">
-            <TreatmentAreaChip :name="deckFocus.treatment_area.name" :color="deckFocus.treatment_area.color" />
-          </div>
-
-          <!-- Tags -->
-          <div class="mt-3 flex flex-wrap gap-1.5">
-            <Tag v-if="!deckFocus.pt" value="UNASSIGNED" severity="warn" class="text-[11px]" />
-            <Tag v-if="deckFocus.specialty?.name" :value="deckFocus.specialty.name" severity="info" class="text-[11px]" />
-            <Tag :value="displayAppointmentPhase(deckFocus.phase)" :severity="appointmentPhaseSeverity(deckFocus.phase)" class="text-[11px]" />
-            <Tag :value="displayLocationContext(deckFocus.location_context)" :severity="appointmentLocationContextSeverity(deckFocus.location_context)" class="text-[11px]" />
-            <Tag :value="displayAppointmentStatus(deckFocus.status)" :severity="appointmentSeverity(deckFocus.status)" class="text-[11px]" />
-            <Tag :value="displayBillingStatus(deckFocus.billing_status)" :severity="billingSeverity(deckFocus.billing_status)" class="text-[11px]" />
-          </div>
-        </template>
-
-        <!-- Empty state -->
-        <div v-else class="flex flex-col items-center justify-center py-6 text-center">
-          <div class="mb-2 text-3xl opacity-20">📋</div>
-          <p class="text-sm text-[rgb(var(--app-fg))]/50">
-            Select an appointment card to focus it here.
+          <p class="mt-1 text-sm text-slate-500">
+            {{ isLoading ? 'Please wait a moment.' : 'Try another clinic date or book a new appointment.' }}
           </p>
         </div>
       </div>
-    </div>
-  </div>
 
-  <!-- Empty state -->
-  <div v-else class="mt-5 rounded-2xl border border-dashed border-[rgb(var(--app-border))] px-5 py-14 text-center">
-    <div class="mb-2 text-4xl opacity-20">🗓️</div>
-    <div class="font-medium text-[rgb(var(--app-fg))]">
-      {{ isLoading ? "Loading daily PT deck…" : "No bookings for this clinic day." }}
+      <div class="mt-4 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-center text-emerald-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]">
+        <div class="inline-flex items-center gap-2 text-sm font-black uppercase tracking-wide">
+          <i class="pi pi-bolt" />
+          <span>{{ deckConfigurationLabel }}</span>
+        </div>
+      </div>
     </div>
-    <p class="mt-1 text-sm text-[rgb(var(--app-fg))]/50">
-      {{ isLoading ? "Please wait a moment." : "Try selecting a different date or creating a new appointment." }}
-    </p>
-  </div>
+
+    <div class="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+      <div :class="summaryFieldClass">
+        <div class="text-sm text-slate-500">Time Slot</div>
+        <div class="mt-1.5 flex items-center justify-between rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+          <span>{{ focusTimeSlot }}</span>
+          <i class="pi pi-chevron-down text-xs text-slate-400" />
+        </div>
+      </div>
+
+      <div :class="summaryFieldClass">
+        <div class="text-sm text-slate-500">Referring Doctor</div>
+        <div class="mt-1.5 flex items-center justify-between rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+          <span class="truncate">{{ focusReferringDoctor }}</span>
+          <i class="pi pi-chevron-down text-xs text-slate-400" />
+        </div>
+      </div>
+
+      <div :class="summaryFieldClass">
+        <div class="text-sm text-slate-500">Primary PT</div>
+        <div class="mt-1.5 rounded-xl border border-sky-300 bg-sky-50 p-1.5">
+          <div class="flex flex-wrap gap-1">
+            <button
+              v-for="provider in providerOptions"
+              :key="provider"
+              type="button"
+              class="rounded-lg px-2.5 py-1 text-xs font-semibold transition"
+              :class="selectedProviderName === provider
+                ? 'bg-sky-600 text-white'
+                : 'bg-white text-slate-700 hover:bg-sky-100'"
+              @click="selectedProviderName = provider"
+            >
+              {{ provider }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div :class="summaryFieldClass">
+        <div class="text-sm text-slate-500">Assistant/Intern</div>
+        <div class="mt-1.5 flex items-center justify-between rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+          <span class="truncate">{{ focusSupportStaff }}</span>
+          <i class="pi pi-chevron-down text-xs text-slate-400" />
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-3 grid gap-2 md:grid-cols-2">
+      <Button label="Book Appointment" class="!rounded-full !border-0 !bg-slate-200 !px-4 !py-2 !font-medium !text-slate-700 hover:!bg-slate-300" @click="emit('create')" />
+      <Button label="Clear Log" class="!rounded-full !border-0 !bg-slate-200 !px-4 !py-2 !font-medium !text-slate-700 hover:!bg-slate-300" @click="clearDeckFocus" />
+    </div>
+  </section>
 </template>
 
 <script setup lang="ts">
-import {computed} from "vue";
+import {computed, ref, watch} from "vue";
 import Button from "primevue/button";
-import Tag from "primevue/tag";
-import TreatmentAreaChip from "@/features/appointments/components/TreatmentAreaChip.vue";
 import type {
   AppointmentLocationContext,
   AppointmentPhase,
   DailyPtDeckBlock,
   DailyPtDeckGroup
 } from "@/features/appointments/api/appointment-phase1.service";
-import {ptOutlinedBtn, ptPrimaryBtn} from "@/features/shared/table-header.styles";
 
 const props = defineProps<{
   groups: DailyPtDeckGroup[]
@@ -239,7 +166,7 @@ const props = defineProps<{
   isLoading?: boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   create: []
   refresh: []
   select: [appointment: DailyPtDeckBlock]
@@ -253,31 +180,95 @@ const allAppointments = computed(() =>
     .slice()
     .sort((left, right) => new Date(left.start).getTime() - new Date(right.start).getTime())
 )
+const clearedFocus = ref(false)
+const selectedProviderName = ref<string>("ALL")
+
+const providerOptions = computed(() => {
+  const names = new Set<string>()
+  allAppointments.value.forEach(appointment => {
+    const providerName = appointment.pt?.name?.trim() || appointment.doctor_name?.trim()
+    if (providerName) names.add(providerName)
+  })
+  return ["ALL", ...Array.from(names)]
+})
+
+watch(
+  providerOptions,
+  (options) => {
+    if (!options.includes(selectedProviderName.value)) {
+      selectedProviderName.value = "ALL"
+    }
+  },
+  {immediate: true}
+)
+
+watch(
+  () => props.selectedAppointmentId,
+  (value) => {
+    if (value != null) clearedFocus.value = false
+  }
+)
+
 const isStartingWithinOneHour = (appointment: DailyPtDeckBlock): boolean => {
   const now = Date.now()
   const startsAt = new Date(appointment.start).getTime()
   const remainingMs = startsAt - now
   return remainingMs >= 0 && remainingMs <= 60 * 60 * 1000
 }
-const displayedAppointments = computed(() => allAppointments.value)
+const displayedAppointments = computed(() =>
+  selectedProviderName.value === "ALL"
+    ? allAppointments.value
+    : allAppointments.value.filter(appointment => {
+      const providerName = appointment.pt?.name?.trim() || appointment.doctor_name?.trim() || ""
+      return providerName === selectedProviderName.value
+    })
+)
 const pendingAppointmentsCount = computed(() =>
-  allAppointments.value.filter(appointment => normalizeAppointmentStatus(appointment.status) === "PENDING").length
+  displayedAppointments.value.filter(appointment => normalizeAppointmentStatus(appointment.status) === "PENDING").length
 )
 const completedAppointmentsCount = computed(() =>
-  allAppointments.value.filter(appointment => normalizeAppointmentStatus(appointment.status) === "COMPLETED").length
+  displayedAppointments.value.filter(appointment => normalizeAppointmentStatus(appointment.status) === "COMPLETED").length
 )
 const billingAttentionCount = computed(() =>
-  allAppointments.value.filter(appointment => needsBillingAttention(appointment.billing_status)).length
+  displayedAppointments.value.filter(appointment => needsBillingAttention(appointment.billing_status)).length
 )
 const rescheduledAppointmentsCount = computed(() =>
-  allAppointments.value.filter(appointment => Number(appointment.reschedule_count ?? 0) > 0).length
+  displayedAppointments.value.filter(appointment => Number(appointment.reschedule_count ?? 0) > 0).length
 )
 const deckFocus = computed(() => {
+  if (clearedFocus.value) return undefined
   const selected = props.selectedAppointmentId == null
     ? undefined
     : allAppointments.value.find(appointment => appointment.id === props.selectedAppointmentId)
   return selected ?? displayedAppointments.value[0] ?? allAppointments.value[0]
 })
+const summaryFieldClass = "rounded-2xl"
+const deckModeShortLabel = computed(() =>
+  displayedAppointments.value.some(appointment => appointment.support_staff?.name) ? "Efficient" : "Standard"
+)
+const deckModeDescription = computed(() =>
+  deckModeShortLabel.value === "Efficient"
+    ? "High-Efficiency Mode: 30-minute overlap booking enabled"
+    : "Standard Mode: one patient per primary PT time slot"
+)
+const deckConfigurationLabel = computed(() =>
+  deckModeShortLabel.value === "Efficient"
+    ? "Current Configuration: High-Efficiency (30m)"
+    : "Current Configuration: Standard Deck"
+)
+const deckProviderName = computed(() =>
+  (selectedProviderName.value !== "ALL" ? selectedProviderName.value : undefined)
+  || deckFocus.value?.pt?.name?.trim()
+  || props.groups.find(group => group.doctor_name?.trim())?.doctor_name?.trim()
+  || "Unassigned"
+)
+const focusTimeSlot = computed(() => deckFocus.value ? formatSingleTime(deckFocus.value.start) : "Select slot")
+const focusReferringDoctor = computed(() => deckFocus.value?.referring_doctor?.name?.trim() || "No referring doctor")
+const focusPrimaryPt = computed(() => selectedProviderName.value === "ALL"
+  ? (deckFocus.value?.pt?.name?.trim() || "Needs PT")
+  : selectedProviderName.value
+)
+const focusSupportStaff = computed(() => deckFocus.value?.support_staff?.name?.trim() || "No assistant")
 
 const normalizeAppointmentStatus = (status?: string): string =>
   (status || "PENDING").trim().toUpperCase().split(" ").join("_")
@@ -286,13 +277,6 @@ const appointmentSeverity = (status?: string): "success" | "warn" | "danger" | "
   if (normalized === "COMPLETED") return "success"
   if (normalized === "RESCHEDULED") return "warn"
   if (normalized === "CANCELLED" || normalized === "NO_SHOW") return "danger"
-  return "info"
-}
-const billingSeverity = (status?: string): "success" | "warn" | "danger" | "info" => {
-  const normalized = displayBillingStatus(status)
-  if (normalized === "PAID") return "success"
-  if (normalized === "PARTIAL" || normalized === "PENDING") return "warn"
-  if (normalized === "VOID") return "danger"
   return "info"
 }
 const appointmentPhaseSeverity = (phase?: AppointmentPhase): "info" | "contrast" | "warn" => {
@@ -304,19 +288,10 @@ const appointmentLocationContextSeverity = (locationContext?: AppointmentLocatio
   if (locationContext === "HOME_CARE") return "warn"
   return "success"
 }
-const appointmentBlockBorderStyleClass = (locationContext?: AppointmentLocationContext): "border-dashed" | "border-solid" => {
-  if (locationContext === "HOME_CARE") return "border-dashed"
-  return "border-solid"
-}
 const displayAppointmentPhase = (phase?: AppointmentPhase): string => {
   if (phase === "RE_EVAL") return "RE-EVAL"
   return phase ?? "SESSION"
 }
-const displayLocationContext = (locationContext?: AppointmentLocationContext): string => {
-  if (locationContext === "HOME_CARE") return "HOME CARE"
-  return "IN-CLINIC"
-}
-const displayAppointmentStatus = (status?: string): string => normalizeAppointmentStatus(status).split("_").join(" ")
 const displayBillingStatus = (status?: string): string => (status?.trim() || "UNBILLED").toUpperCase()
 const needsBillingAttention = (status?: string): boolean => {
   const normalized = displayBillingStatus(status)
@@ -327,12 +302,31 @@ const isVisuallyMutedAppointment = (status?: string): boolean => {
   const normalized = normalizeAppointmentStatus(status)
   return normalized === "COMPLETED" || normalized === "CANCELLED"
 }
-const displayProviderAssignment = (appointment: DailyPtDeckBlock): string =>
-  appointment.pt?.name?.trim() || appointment.doctor_name?.trim() || "Needs provider assignment"
 const formatTime = (value: string): string =>
   new Date(value).toLocaleTimeString("en-PH", {
     hour: "numeric",
     minute: "2-digit"
   })
-const formatTimeRange = (start: string, end: string): string => `${formatTime(start)} - ${formatTime(end)}`
+const formatSingleTime = (value: string): string => formatTime(value)
+const bookingStatusBarClass = (booking: DailyPtDeckBlock): string => {
+  const normalized = normalizeAppointmentStatus(booking.status)
+  if (normalized === "COMPLETED") return "bg-emerald-500"
+  if (normalized === "RESCHEDULED") return "bg-amber-500"
+  if (needsBillingAttention(booking.billing_status)) return "bg-red-500"
+  return "bg-green-600"
+}
+const careTeamBadge = (booking: DailyPtDeckBlock): string => {
+  const names = [booking.pt?.name, booking.support_staff?.name].filter(Boolean)
+  if (!names.length) return "PT Pending"
+  return names.join(" + ").toUpperCase()
+}
+const modeForBooking = (booking: DailyPtDeckBlock): string => booking.support_staff?.name ? "High-Efficiency" : "Standard"
+const handleSelect = (booking: DailyPtDeckBlock): void => {
+  clearedFocus.value = false
+  emit("select", booking)
+}
+const clearDeckFocus = (): void => {
+  clearedFocus.value = true
+  selectedProviderName.value = "ALL"
+}
 </script>

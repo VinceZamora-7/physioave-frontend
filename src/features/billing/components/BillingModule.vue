@@ -1,5 +1,6 @@
 <template>
-  <main class="app-page-shell space-y-4">
+  <component :is="embedded ? 'div' : 'main'" :class="embedded ? 'space-y-4' : 'app-page-shell space-y-4'">
+    <template v-if="!overlayOnly">
     <section class="app-section-card-comfy space-y-3">
       <h2 class="app-section-title">Billing POS</h2>
 
@@ -296,11 +297,44 @@
       </div>
 
       <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3">
-        <div class="mb-2">
+        <div class="mb-3 space-y-2">
           <label class="flex items-center gap-2 text-sm">
             <input v-model="form.senior_pwd_id_presented" type="checkbox" />
-            <span>Senior/PWD ID presented</span>
+            <span>Senior/PWD ID presented <span class="opacity-50 text-xs">(20% discount on one item — RA 9994)</span></span>
           </label>
+
+          <!-- Auto-assigned: package billing → package item; single service → first bundle item -->
+          <div
+            v-if="form.senior_pwd_id_presented && seniorDiscountIsAutoAssigned && seniorDiscountEffectiveTargetKey"
+            class="flex items-center gap-1 text-xs text-sky-700 dark:text-sky-400"
+          >
+            <i class="pi pi-info-circle" />
+            <span>20% discount auto-applied to: <strong>{{ selectedLines.find(l => l.key === seniorDiscountEffectiveTargetKey)?.name }}</strong></span>
+          </div>
+
+          <!-- Admin-select: single service (individual), HMO, LGU -->
+          <div
+            v-if="form.senior_pwd_id_presented && !seniorDiscountIsAutoAssigned && selectedLines.length > 0"
+            class="md:w-1/2"
+          >
+            <IftaLabel>
+              <Select
+                v-model="seniorDiscountTargetKey"
+                :options="seniorDiscountSelectableLines"
+                optionLabel="label"
+                optionValue="key"
+                showClear
+                fluid
+                placeholder="Select which service gets the 20% discount"
+              />
+              <label>Senior/PWD Discount Applies To</label>
+            </IftaLabel>
+          </div>
+
+          <!-- Hint when checkbox is on but no lines added yet -->
+          <p v-if="form.senior_pwd_id_presented && !seniorDiscountIsAutoAssigned && !selectedLines.length" class="text-xs opacity-60">
+            Add services above to select the item eligible for the 20% discount.
+          </p>
         </div>
 
         <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4 mb-3">
@@ -502,6 +536,7 @@
         </Column>
       </DataTable>
     </section>
+    </template>
 
     <Dialog
       v-model:visible="billingDetailsVisible"
@@ -946,32 +981,254 @@
       </template>
     </Dialog>
 
-    <Dialog v-model:visible="receiptEditorVisible" header="Edit Receipt" modal :style="{width: '520px'}">
-      <div class="space-y-3">
+    <Drawer
+      v-model:visible="billingEditDrawerVisible"
+      position="right"
+      header="Edit Billing"
+      :style="{ width: 'min(920px, 96vw)' }"
+      :modal="true"
+    >
+      <div class="space-y-4 pb-6">
         <p class="text-sm opacity-70">
-          Update the printed receipt number or billing label. Product lines and totals stay based on the saved billing record.
+          Edit only the billing form fields here. The billing list and full billing page are intentionally hidden.
         </p>
 
-        <IftaLabel>
-          <InputText v-model="receiptEditorNumber" fluid placeholder="Optional receipt number" />
-          <label>Receipt Number</label>
-        </IftaLabel>
+        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <IftaLabel>
+            <Select
+              v-model="form.patient_id"
+              :options="patientOptions"
+              optionLabel="name"
+              optionValue="id"
+              filter
+              showClear
+              fluid
+              placeholder="Select patient"
+            />
+            <label>Patient Name</label>
+          </IftaLabel>
 
-        <IftaLabel>
-          <InputText v-model="receiptEditorLabel" fluid placeholder="Optional billing label" />
-          <label>Billing Label</label>
-        </IftaLabel>
+          <IftaLabel>
+            <InputNumber v-model="form.appointment_id" :min="1" fluid />
+            <label>Linked Appointment (optional)</label>
+          </IftaLabel>
+
+          <IftaLabel>
+            <Select v-model="form.billing_type" :options="billingTypeOptions" optionLabel="label" optionValue="value" fluid />
+            <label>Billing Type</label>
+          </IftaLabel>
+        </div>
+
+        <section class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3 space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h4 class="text-sm font-semibold">Line Items</h4>
+            <Button
+              v-if="canCreateBundleFromSelection"
+              size="small"
+              outlined
+              icon="pi pi-box"
+              label="Create Bundle From Selection"
+              @click="openCreateBundleFromSelection"
+            />
+          </div>
+
+          <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <IftaLabel v-if="form.billing_type !== 'HMO_BILLING'">
+              <Select
+                v-model="selectedPackageOfferId"
+                :options="activePackageOffers"
+                optionLabel="name"
+                optionValue="id"
+                showClear
+                filter
+                fluid
+                placeholder="Optional package offer"
+              />
+              <label>Package Offer</label>
+            </IftaLabel>
+
+            <IftaLabel>
+              <Select v-model="selectedLineType" :options="lineTypeOptions" optionLabel="label" optionValue="value" fluid />
+              <label>Service Type</label>
+            </IftaLabel>
+
+            <IftaLabel>
+              <Select
+                v-model="selectedLineId"
+                :options="currentLineTypeOptions"
+                optionLabel="name"
+                optionValue="id"
+                showClear
+                filter
+                fluid
+                placeholder="Select item"
+              />
+              <label>Service / Add-on</label>
+            </IftaLabel>
+
+            <div class="grid grid-cols-[120px_1fr] gap-2 items-end">
+              <IftaLabel>
+                <InputNumber v-model="selectedLineQty" :min="1" fluid />
+                <label>Qty</label>
+              </IftaLabel>
+              <Button label="Add Line" icon="pi pi-plus" outlined @click="addSelectedLine" />
+            </div>
+          </div>
+
+          <div v-if="form.billing_type !== 'HMO_BILLING'" class="flex flex-wrap gap-2">
+            <Button
+              label="Add Package Offer"
+              icon="pi pi-box"
+              text
+              :disabled="!selectedPackageOfferId"
+              @click="addSelectedPackageOffer"
+            />
+          </div>
+
+          <div v-if="selectedLines.length === 0" class="text-sm opacity-70 py-4 text-center">
+            No line items added yet
+          </div>
+
+          <DataTable v-else :value="selectedLines" size="small" dataKey="key" class="rounded-lg border border-[rgb(var(--app-border))]">
+            <Column field="name" header="Service">
+              <template #body="{data}">
+                <div class="flex items-center gap-1">
+                  <Tag v-if="data.type === 'bundle'" value="Bundle" severity="contrast" class="text-xs" />
+                  <Tag v-else-if="data.type === 'package'" value="Package" severity="info" class="text-xs" />
+                  <span>{{ data.name }}</span>
+                </div>
+              </template>
+            </Column>
+            <Column header="Body Area" style="width: 160px">
+              <template #body="{data}">
+                <InputText
+                  v-if="data.type !== 'bundle' && data.type !== 'package'"
+                  :modelValue="data.body_area ?? ''"
+                  placeholder="e.g. Lower Back"
+                  class="w-full text-sm"
+                  @update:modelValue="val => setLineBodyArea(data.key, val as string)"
+                />
+              </template>
+            </Column>
+            <Column header="Unit Price" style="width: 180px">
+              <template #body="{data}">
+                <InputNumber
+                  :modelValue="resolveEffectiveBillingLinePrice(data)"
+                  :min="0"
+                  :minFractionDigits="2"
+                  :maxFractionDigits="2"
+                  inputClass="w-24 text-sm"
+                  @update:modelValue="val => setLinePriceOverride(data.key, val)"
+                />
+              </template>
+            </Column>
+            <Column header="Qty" style="width: 80px">
+              <template #body="{data}">
+                <InputNumber :modelValue="data.quantity" :min="1" inputClass="w-16" @update:modelValue="setLineQuantity(data.key, $event)" />
+              </template>
+            </Column>
+            <Column header="Line Total" style="width: 130px">
+              <template #body="{data}">
+                <div>{{ asCurrency(resolveEffectiveBillingLinePrice(data) * data.quantity) }}</div>
+              </template>
+            </Column>
+            <Column header="Actions" style="width: 80px">
+              <template #body="{data}">
+                <Button size="small" text severity="danger" icon="pi pi-trash" @click="removeLine(data.key)" />
+              </template>
+            </Column>
+          </DataTable>
+        </section>
+
+        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <IftaLabel>
+            <InputText v-model="form.service_name" fluid placeholder="Optional label for this billing" />
+            <label>Service Name / Label</label>
+          </IftaLabel>
+
+          <IftaLabel>
+            <Select
+              v-if="isSelfPay"
+              v-model="form.payment_type"
+              :options="selfPayPaymentOptions"
+              optionLabel="label"
+              optionValue="value"
+              fluid
+            />
+            <InputText v-else :modelValue="form.billing_type === 'HMO_BILLING' ? 'HMO' : 'LGU'" fluid readonly />
+            <label>Payment Type</label>
+          </IftaLabel>
+
+          <IftaLabel v-if="isSelfPay">
+            <InputNumber v-model="form.amount_paid" mode="currency" currency="PHP" locale="en-PH" fluid />
+            <label>Amount Paid</label>
+          </IftaLabel>
+
+          <IftaLabel v-if="isSelfPay">
+            <InputNumber v-model="form.amount_tendered" mode="currency" currency="PHP" locale="en-PH" fluid />
+            <label>Amount Tendered</label>
+          </IftaLabel>
+        </div>
+
+        <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3 space-y-3">
+          <label class="flex items-center gap-2 text-sm">
+            <input v-model="form.senior_pwd_id_presented" type="checkbox" />
+            <span>Senior/PWD ID presented</span>
+          </label>
+
+          <div v-if="form.senior_pwd_id_presented && seniorDiscountIsAutoAssigned && seniorDiscountEffectiveTargetKey" class="text-xs text-sky-700 dark:text-sky-400">
+            20% discount auto-applied to: <strong>{{ selectedLines.find(l => l.key === seniorDiscountEffectiveTargetKey)?.name }}</strong>
+          </div>
+
+          <IftaLabel v-if="form.senior_pwd_id_presented && !seniorDiscountIsAutoAssigned && selectedLines.length > 0" class="md:w-1/2">
+            <Select
+              v-model="seniorDiscountTargetKey"
+              :options="seniorDiscountSelectableLines"
+              optionLabel="label"
+              optionValue="key"
+              showClear
+              fluid
+              placeholder="Select which service gets the 20% discount"
+            />
+            <label>Senior/PWD Discount Applies To</label>
+          </IftaLabel>
+
+          <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <label class="flex items-center gap-2 text-sm">
+              <input v-model="manualDiscountEnabled" type="checkbox" />
+              <span>Apply Custom Discount</span>
+            </label>
+
+            <IftaLabel v-if="manualDiscountEnabled">
+              <Select v-model="manualDiscountType" :options="discountTypeOptions" optionLabel="label" optionValue="value" fluid />
+              <label>Discount Type</label>
+            </IftaLabel>
+
+            <IftaLabel v-if="manualDiscountEnabled">
+              <InputNumber v-model="manualDiscountValue" :min="0" :max="manualDiscountType === 'PERCENTAGE' ? 100 : undefined" fluid />
+              <label>{{ manualDiscountType === "PERCENTAGE" ? "Discount %" : "Discount Amount" }}</label>
+            </IftaLabel>
+
+            <IftaLabel v-if="manualDiscountEnabled">
+              <InputText v-model="manualDiscountReason" fluid placeholder="Optional reason" />
+              <label>Discount Reason</label>
+            </IftaLabel>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm">
+            <div><span class="opacity-70">Subtotal:</span> <strong>{{ asCurrency(posSummary.subtotal) }}</strong></div>
+            <div><span class="opacity-70">Discount:</span> <strong>{{ asCurrency(posSummary.discountAmount) }}</strong></div>
+            <div><span class="opacity-70">Total Due:</span> <strong>{{ asCurrency(posSummary.totalDue) }}</strong></div>
+            <div><span class="opacity-70">Change:</span> <strong>{{ asCurrency(posSummary.changeAmount) }}</strong></div>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2">
+          <Button label="Cancel" text @click="billingEditDrawerVisible = false" />
+          <Button label="Update Billing" icon="pi pi-save" @click="createBilling" />
+        </div>
       </div>
-      <template #footer>
-        <Button label="Cancel" text @click="receiptEditorVisible = false" />
-        <Button
-          label="Save Receipt"
-          icon="pi pi-check"
-          :loading="receiptEditorSaving"
-          @click="saveReceiptEdits"
-        />
-      </template>
-    </Dialog>
+    </Drawer>
 
     <Dialog v-model:visible="createBundleDialogVisible" header="Create New Bundle" modal :style="{width: '520px'}">
       <div class="space-y-3">
@@ -1010,18 +1267,24 @@
         <Button label="Save As Bundle" icon="pi pi-check" @click="saveBundleFromSelection" />
       </template>
     </Dialog>
-  </main>
+  </component>
 </template>
 
 <script setup lang="ts">
 import {computed, onMounted, ref, watch} from "vue"
 import {useRoute} from "vue-router"
+
+const props = withDefaults(defineProps<{embedded?: boolean; overlayOnly?: boolean; initialView?: 'detail' | 'edit'}>(), {embedded: false, overlayOnly: false, initialView: 'edit'})
+const emit = defineEmits<{
+  (e: "close-overlay"): void
+}>()
 import axios from "axios"
 import Button from "primevue/button"
 import Column from "primevue/column"
 import DataTable from "primevue/datatable"
 import DatePicker from "primevue/datepicker"
 import Dialog from "primevue/dialog"
+import Drawer from "primevue/drawer"
 import IftaLabel from "primevue/iftalabel"
 import InputNumber from "primevue/inputnumber"
 import InputText from "primevue/inputtext"
@@ -1067,6 +1330,7 @@ import {
   type BillingReceiptPrintBreakdownGroup,
   type BillingReceiptPrintSubItem
 } from "@/utils/billing-receipt-print.util"
+import {renderSingleServiceInvoiceWindow} from "@/features/billing/invoices/single-service-invoice.util"
 
 const route = useRoute()
 const toast = useToast()
@@ -1076,6 +1340,8 @@ const billings = ref<BillingListItem[]>([])
 const selectedBillingRows = ref<BillingListItem[]>([])
 const editingBillingId = ref<number>()
 const billingDetailsVisible = ref(false)
+const billingEditDrawerVisible = ref(false)
+const overlayActivated = ref(false)
 const selectedBillingDetail = ref<BillingListItem>()
 const billingDetailCardClass = "rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3"
 const exportingEncounterTicketsPdf = ref(false)
@@ -1102,10 +1368,6 @@ const activeLguBudgetSummary = ref<LguBudgetSummary | null>(null)
 const loadingLguBudgetSummary = ref(false)
 const lguBudgetSummaryError = ref("")
 const roleName = ref("")
-const receiptEditorVisible = ref(false)
-const receiptEditorSaving = ref(false)
-const receiptEditorNumber = ref("")
-const receiptEditorLabel = ref("")
 
 const extractApiErrorMessage = (error: unknown, fallback: string): string => {
   if (!axios.isAxiosError(error)) return fallback
@@ -1810,7 +2072,8 @@ const routeBillingContextKey = computed(() =>
   [
     getRouteQueryValue(route.query.patientId) ?? "",
     getRouteQueryValue(route.query.appointmentId) ?? "",
-    getRouteQueryValue(route.query.billingId) ?? ""
+    getRouteQueryValue(route.query.billingId) ?? "",
+    getRouteQueryValue(route.query.openMode) ?? ""
   ].join("|")
 )
 
@@ -2038,6 +2301,7 @@ const manualDiscountEnabled = ref(false)
 const manualDiscountType = ref<DiscountType>("PERCENTAGE")
 const manualDiscountValue = ref<number>(0)
 const manualDiscountReason = ref("")
+const seniorDiscountTargetKey = ref<string | null>(null)
 
 const activePackageOffers = computed(() =>
   localPackageOffers.value.filter(item => item.status !== "Inactive")
@@ -2445,10 +2709,52 @@ const subtotalFromLines = computed(() =>
   lineItemsAsPayload.value.reduce((sum, line) => sum + line.price * line.quantity, 0)
 )
 
+// Whether the billing type auto-picks the senior/PWD discount target (no admin selection needed)
+const seniorDiscountIsAutoAssigned = computed((): boolean => {
+  const bt = form.value.billing_type
+  if (bt === "SELF_PAY_PACKAGE") return !!selectedLines.value.find(l => l.type === "package")
+  if (bt === "SELF_PAY_SINGLE") return !!selectedLines.value.find(l => l.type === "bundle")
+  return false
+})
+
+// The effective line key that receives the 20% senior/PWD discount
+const seniorDiscountEffectiveTargetKey = computed((): string | null => {
+  if (!form.value.senior_pwd_id_presented) return null
+  const bt = form.value.billing_type
+  // Package billing → auto first package item
+  if (bt === "SELF_PAY_PACKAGE") {
+    return selectedLines.value.find(l => l.type === "package")?.key ?? null
+  }
+  // Single service with a bundle → auto first bundle item
+  if (bt === "SELF_PAY_SINGLE") {
+    const bundle = selectedLines.value.find(l => l.type === "bundle")
+    if (bundle) return bundle.key
+  }
+  // Single service (individual), HMO, LGU → admin selects
+  return seniorDiscountTargetKey.value
+})
+
+// Selectable options for the admin dropdown
+const seniorDiscountSelectableLines = computed(() =>
+  selectedLines.value.map(l => ({
+    key: l.key,
+    label: `${l.name} — ${asCurrency(resolveEffectiveBillingLinePrice(l) * Number(l.quantity ?? 1))}`
+  }))
+)
+
 const posSummary = computed(() => {
   const originalSubtotal = Number(originalSubtotalFromLines.value)
   const subtotal = Number(subtotalFromLines.value)
-  const seniorDiscountAmount = form.value.senior_pwd_id_presented ? Math.max(0, subtotal * 0.2) : 0
+  // Per Philippine law (RA 9994), the 20% senior/PWD discount applies to only ONE item
+  const targetLine = seniorDiscountEffectiveTargetKey.value
+    ? selectedLines.value.find(l => l.key === seniorDiscountEffectiveTargetKey.value)
+    : null
+  const targetLineSubtotal = targetLine
+    ? resolveEffectiveBillingLinePrice(targetLine) * Number(targetLine.quantity ?? 1)
+    : 0
+  const seniorDiscountAmount = form.value.senior_pwd_id_presented && targetLine
+    ? Math.max(0, targetLineSubtotal * 0.2)
+    : 0
   const remainingAfterSenior = Math.max(0, subtotal - seniorDiscountAmount)
   const customDiscountAmount = manualDiscountEnabled.value
     ? manualDiscountType.value === "PERCENTAGE"
@@ -2577,6 +2883,7 @@ const resetBillingForm = (): void => {
   manualDiscountType.value = "PERCENTAGE"
   manualDiscountValue.value = 0
   manualDiscountReason.value = ""
+  seniorDiscountTargetKey.value = null
   createBundleDialogVisible.value = false
   createBundleName.value = ""
   createBundleDiscountedPrice.value = 0
@@ -2736,15 +3043,28 @@ const createBilling = async (): Promise<void> => {
     vat_amount: posSummary.value.vatAmount,
   }
 
+  const editedBillingId = editingBillingId.value
+
   try {
-    if (editingBillingId.value) {
-      await billingPhase1Service.update(editingBillingId.value, payload)
+    if (editedBillingId) {
+      await billingPhase1Service.update(editedBillingId, payload)
       successToast(toast, "Billing updated")
     } else {
       await billingPhase1Service.save(payload)
       successToast(toast, "Billing created")
     }
     await fetchBillings()
+
+    if (editedBillingId && billingEditDrawerVisible.value) {
+      const refreshedDetail = await billingPhase1Service.getById(editedBillingId)
+      if (refreshedDetail) {
+        selectedBillingDetail.value = refreshedDetail
+        billingDetailPaymentType.value = getDefaultBillingPaymentType(refreshedDetail)
+        billingTenderAmount.value = 0
+      }
+      billingEditDrawerVisible.value = false
+    }
+
     resetBillingForm()
     await refreshLguBudgetSummary()
   } catch (error: unknown) {
@@ -2832,70 +3152,70 @@ const printSelectedBillingReceipt = (): void => {
   const detail = selectedBillingDetail.value
   const normalizedBillingType = normalizeBillingTypeValue(detail.billing_type)
   const isLguReceipt = normalizedBillingType === "LGU_BILLING"
+  const isSingleServiceInvoice = normalizedBillingType === "SELF_PAY_SINGLE"
   const popup = openBillingReceiptWindow(getReceiptDisplayNumber(detail))
 
   try {
-    renderBillingReceiptWindow(popup, {
-      receiptNumber: getReceiptDisplayNumber(detail),
-      billingId: detail.public_id || detail.id,
-      patientRecordId: detail.patient_public_id,
-      patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
-      appointmentId: detail.appointment_public_id || detail.appointment_id,
-      createdAt: detail.created_at,
-      billingType: displayBillingType(detail.billing_type),
-      paymentType: derivePaymentType(detail) || detail.payment_reference,
-      serviceLabel: detail.service_name,
-      receiptMode: isLguReceipt ? "lgu_claim" : "standard",
-      subtotal: Number(detail.subtotal_amount ?? detail.amount_due ?? detail.total_amount ?? 0),
-      discount: Number(detail.discount_amount ?? 0),
-      totalDue: selectedBillingTotalDue.value,
-      amountPaid: selectedBillingAmountPaid.value,
-      outstanding: selectedBillingOutstanding.value,
-      changeAmount: Number(detail.change_amount ?? 0),
-      lines: selectedBillingReceiptLines.value
-    }, {
-      title: isLguReceipt ? "LGU Billing Copy" : "Billing Receipt Copy",
-      fileName: getReceiptDisplayNumber(detail)
-    })
+    if (isSingleServiceInvoice) {
+      renderSingleServiceInvoiceWindow(popup, {
+        billingDate: detail.created_at,
+        referenceNumber: getReceiptDisplayNumber(detail),
+        patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
+        paymentMethod: derivePaymentType(detail) || "Cash/Card/Online Transfer",
+        paymentReferenceNo: detail.payment_reference || detail.receipt_number,
+        subtotal: Number(detail.subtotal_amount ?? detail.amount_due ?? detail.total_amount ?? 0),
+        discount: Number(detail.discount_amount ?? 0),
+        grandTotal: selectedBillingTotalDue.value,
+        lines: selectedBillingReceiptLines.value.map(line => ({
+          name: line.name,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          lineTotal: line.lineTotal
+        }))
+      }, {
+        title: "Single Service Invoice",
+        fileName: getReceiptDisplayNumber(detail)
+      })
+      return
+    }
+
+    renderBillingReceiptWindow(
+      popup,
+      {
+        receiptNumber: getReceiptDisplayNumber(detail),
+        billingId: detail.public_id || detail.id,
+        patientRecordId: detail.patient_public_id,
+        patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
+        appointmentId: detail.appointment_public_id || detail.appointment_id,
+        createdAt: detail.created_at,
+        billingType: displayBillingType(detail.billing_type),
+        paymentType: derivePaymentType(detail) || detail.payment_reference,
+        serviceLabel: detail.service_name,
+        receiptMode: isLguReceipt ? "lgu_claim" : "standard",
+        subtotal: Number(detail.subtotal_amount ?? detail.amount_due ?? detail.total_amount ?? 0),
+        discount: Number(detail.discount_amount ?? 0),
+        totalDue: selectedBillingTotalDue.value,
+        amountPaid: selectedBillingAmountPaid.value,
+        outstanding: selectedBillingOutstanding.value,
+        changeAmount: Number(detail.change_amount ?? 0),
+        lines: selectedBillingReceiptLines.value
+      },
+      {
+        title: isLguReceipt ? "LGU Billing Copy" : "Billing Receipt Copy",
+        fileName: getReceiptDisplayNumber(detail)
+      }
+    )
   } catch (error: unknown) {
     popup.close()
     errorToast(toast, extractApiErrorMessage(error, "Failed to print receipt copy"))
   }
 }
 
-const openReceiptEditor = (): void => {
+const openReceiptEditor = async (): Promise<void> => {
   if (!selectedBillingDetail.value || !canEditReceipt.value) return
-  receiptEditorNumber.value = selectedBillingDetail.value.receipt_number || ""
-  receiptEditorLabel.value = selectedBillingDetail.value.service_name || ""
-  receiptEditorVisible.value = true
-}
-
-const saveReceiptEdits = async (): Promise<void> => {
-  if (!selectedBillingDetail.value || !canEditReceipt.value) return
-
-  const detail = selectedBillingDetail.value
-  receiptEditorSaving.value = true
-  try {
-    await billingPhase1Service.update(detail.id, buildBillingUpdatePayload(detail, {
-      receipt_number: receiptEditorNumber.value.trim() || undefined,
-      service_name: receiptEditorLabel.value.trim() || undefined
-    }))
-
-    const refreshedDetail = await billingPhase1Service.getById(detail.id)
-    if (!refreshedDetail) {
-      errorToast(toast, "Receipt details were saved, but the billing could not be reloaded")
-      return
-    }
-
-    selectedBillingDetail.value = refreshedDetail
-    receiptEditorVisible.value = false
-    await fetchBillings()
-    successToast(toast, "Receipt details updated")
-  } catch (error: unknown) {
-    errorToast(toast, extractApiErrorMessage(error, "Failed to update receipt details"))
-  } finally {
-    receiptEditorSaving.value = false
-  }
+  resetBillingForm()
+  await loadBillingForEdit(selectedBillingDetail.value.id)
+  billingEditDrawerVisible.value = true
 }
 
 const saveBillingTender = async (): Promise<void> => {
@@ -2967,6 +3287,7 @@ const applyRouteBillingContext = async (): Promise<void> => {
   const patientId = parseRouteQueryId(route.query.patientId)
   const appointmentId = parseRouteQueryId(route.query.appointmentId)
   const billingId = parseRouteQueryId(route.query.billingId)
+  const openMode = getRouteQueryValue(route.query.openMode)
 
   if (!patientId && !appointmentId && !billingId) return
 
@@ -2978,9 +3299,29 @@ const applyRouteBillingContext = async (): Promise<void> => {
   if (appointmentId) form.value.appointment_id = appointmentId
 
   if (billingId) {
-    await openBillingDetails(billingId)
+    if (props.initialView === 'detail' || openMode === 'detail') {
+      overlayActivated.value = props.overlayOnly
+      // Open the billing detail/view modal directly
+      await openBillingDetails(billingId)
+    } else {
+      // Pre-load the billing into the edit form so the admin can edit immediately
+      await loadBillingForEdit(billingId)
+      // Also sync HMO rates in case the billing type is HMO
+      await syncBillingPatientHmoRates()
+    }
   }
 }
+
+watch(
+  [billingDetailsVisible, billingEditDrawerVisible],
+  ([detailsVisible, editVisible]) => {
+    if (!props.overlayOnly || !overlayActivated.value) return
+    if (!detailsVisible && !editVisible) {
+      overlayActivated.value = false
+      emit("close-overlay")
+    }
+  }
+)
 
 const normalizeBillingType = (value: string): BillingType => {
   return normalizeBillingTypeValue(value) ?? "ALA_CARTE"
@@ -3033,7 +3374,20 @@ watch(
       selectedPackageOfferId.value = undefined
     } else if (value === "LGU_BILLING") form.value.payment_type = "LGU"
     else form.value.payment_type = undefined
+    // Reset target when billing type changes — auto-assignment will re-derive
+    seniorDiscountTargetKey.value = null
   }
+)
+
+// Clear the admin-selected target key if the targeted line is removed
+watch(
+  () => selectedLines.value,
+  (lines) => {
+    if (seniorDiscountTargetKey.value && !lines.find(l => l.key === seniorDiscountTargetKey.value)) {
+      seniorDiscountTargetKey.value = null
+    }
+  },
+  {deep: true}
 )
 
 watch(

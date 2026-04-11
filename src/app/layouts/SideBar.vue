@@ -232,19 +232,18 @@
               >
                 <span :class="iconWrapClass('reports')"><i class="pi pi-chart-bar text-[16px]" /></span>
                 <span v-if="!collapsed" class="truncate">Reports</span>
-              </button>
-            </li>
-
-            <li>
-              <button
-                type="button"
-                @click="goToAndClose('hmos')"
-                :class="itemClass('hmos')"
-                aria-label="HMO"
-                title="HMO"
-              >
-                <span :class="iconWrapClass('hmos')"><i class="pi pi-table text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">HMO</span>
+                          <li>
+                            <button
+                              type="button"
+                              @click="goToAndClose('ops-dashboard')"
+                              :class="itemClass('ops-dashboard')"
+                              aria-label="Operations Dashboard"
+                              title="Operations Dashboard"
+                            >
+                              <span :class="iconWrapClass('ops-dashboard')"><i class="pi pi-gauge text-[16px]" /></span>
+                              <span v-if="!collapsed" class="truncate">Ops Dashboard</span>
+                            </button>
+                          </li>
               </button>
             </li>
           </ul>
@@ -274,32 +273,33 @@
                 <span :class="iconWrapClass('promos-offers-single-service')"><i class="pi pi-bolt text-[16px]" /></span>
                 <span v-if="!collapsed" class="truncate">Single Pay: Single Service</span>
               </button>
-            </li>
-
             <li>
               <button
                 type="button"
-                @click="goToAndClose('promos-offers-package-service')"
-                :class="itemClass('promos-offers-package-service')"
-                aria-label="Self-Pay: Package Service"
-                title="Self-Pay: Package Service"
+                @click="goToAndClose('reports')"
+                :class="itemClass('reports')"
+                aria-label="Reports"
+                title="Reports"
               >
-                <span :class="iconWrapClass('promos-offers-package-service')"><i class="pi pi-box text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">Self-Pay: Package Service</span>
+                <span :class="iconWrapClass('reports')"><i class="pi pi-chart-bar text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">Reports</span>
               </button>
             </li>
 
             <li>
               <button
                 type="button"
-                @click="goToAndClose('promos-offers-hmo')"
-                :class="itemClass('promos-offers-hmo')"
-                aria-label="HMO"
-                title="HMO"
+                @click="goToAndClose('ops-dashboard')"
+                :class="itemClass('ops-dashboard')"
+                aria-label="Operations Dashboard"
+                title="Operations Dashboard"
               >
-                <span :class="iconWrapClass('promos-offers-hmo')"><i class="pi pi-briefcase text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">HMO</span>
+                <span :class="iconWrapClass('ops-dashboard')"><i class="pi pi-gauge text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">Ops Dashboard</span>
               </button>
+            </li>
+          </ul>
+        </div>
             </li>
 
             <li>
@@ -312,71 +312,6 @@
               >
                 <span :class="iconWrapClass('promos-offers-lgu')"><i class="pi pi-building-columns text-[16px]" /></span>
                 <span v-if="!collapsed" class="truncate">LGU</span>
-              </button>
-            </li>
-          </ul>
-        </div>
-
-        <div>
-          <button
-            type="button"
-            class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
-            @click="technicalOpen = !technicalOpen"
-          >
-            <span v-if="!collapsed">TECHNICAL</span>
-            <i class="pi text-[11px]" :class="technicalOpen ? 'pi-chevron-down' : 'pi-chevron-right'" />
-          </button>
-
-          <ul v-show="technicalOpen" class="mt-2 space-y-1">
-            <li>
-              <button
-                type="button"
-                @click="goToAndClose('machines')"
-                :class="itemClass('machines')"
-                aria-label="Machine"
-                title="Machine"
-              >
-                <span :class="iconWrapClass('machines')"><i class="pi pi-cog text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">Machine</span>
-              </button>
-            </li>
-
-            <li>
-              <button
-                type="button"
-                @click="goToAndClose('techniques')"
-                :class="itemClass('techniques')"
-                aria-label="Technique"
-                title="Technique"
-              >
-                <span :class="iconWrapClass('techniques')"><i class="pi pi-bars text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">Technique</span>
-              </button>
-            </li>
-
-            <li>
-              <button
-                type="button"
-                @click="goToAndClose('evaluations')"
-                :class="itemClass('evaluations')"
-                aria-label="Evaluation"
-                title="Evaluation"
-              >
-                <span :class="iconWrapClass('evaluations')"><i class="pi pi-book text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">Evaluation</span>
-              </button>
-            </li>
-
-            <li>
-              <button
-                type="button"
-                @click="goToAndClose('refresh-tokens')"
-                :class="itemClass('refresh-tokens')"
-                aria-label="Refresh Tokens"
-                title="Refresh Tokens"
-              >
-                <span :class="iconWrapClass('refresh-tokens')"><i class="pi pi-hourglass text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">Refresh Tokens</span>
               </button>
             </li>
           </ul>
@@ -533,7 +468,6 @@ const operationsOpen = ref(true)
 const patientCareOpen = ref(true)
 const billingOpen = ref(true)
 const promosOffersOpen = ref(true)
-const technicalOpen = ref(true)
 
 // v-model ready collapsed state
 const collapsed = ref<boolean>(props.collapsed ?? true)

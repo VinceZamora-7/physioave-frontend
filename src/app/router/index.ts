@@ -158,6 +158,12 @@ const router = createRouter({
           component: () => import('@/features/reports/pages/ReportView.vue'),
           meta: {requireAuth: true}
         },
+        {
+          path: '/operations-dashboard',
+          name: 'ops-dashboard',
+          component: () => import('@/features/operations-dashboard/pages/OperationsDashboardView.vue'),
+          meta: {requireAuth: true}
+        },
       ]
     },
   ],
