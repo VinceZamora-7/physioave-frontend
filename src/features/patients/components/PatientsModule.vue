@@ -111,6 +111,23 @@
           </div>
 
           <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4">
+            <div class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Attachments</div>
+            <div class="mb-3 text-sm text-slate-600 dark:text-slate-300">
+              Keep static patient attachments limited to identification files. Visit-based clinical files are now handled under Evaluation Visit Log.
+            </div>
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:max-w-xl">
+              <Button label="Valid ID" icon="pi pi-paperclip" severity="secondary" outlined @click="openPatientAttachmentDialog('valid-id', selectedPatientDetails)" />
+              <Button label="HMO ID" icon="pi pi-paperclip" severity="secondary" outlined @click="openPatientAttachmentDialog('hmo-id', selectedPatientDetails)" />
+            </div>
+          </div>
+
+          <PatientEvaluationVisitLogSection
+            :patient="selectedPatientDetails"
+            :medical-category-options="medicalCategoryOptions"
+            :medical-diagnosis-options="medicalDiagnosisOptions"
+          />
+
+          <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4">
             <div class="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Call To Actions</div>
             <Menu :model="menuButtons(selectedPatientDetails)" />
           </div>
@@ -153,17 +170,6 @@
       ref="patientHMOValidIdAttachmentDialog"
       v-bind="patientHMOValidIdAttachmentProps"/>
 
-    <PatientAttachmentDialog
-      ref="patientLaboratoryAttachmentDialog"
-      v-bind="patientLaboratoryAttachmentProps"/>
-
-    <PatientAttachmentDialog
-      ref="patientPrescriptionAttachmentDialog"
-      v-bind="patientPrescriptionAttachmentProps"/>
-
-    <PatientAttachmentDialog
-      ref="patientRehabPrescriptionAttachmentDialog"
-      v-bind="patientRehabPrescriptionAttachmentProps"/>
     </section>
   </main>
 </template>
@@ -269,6 +275,7 @@ import PatientHMOInformationForm from "@/components/PatientHMOInformationForm.vu
 import {hmoTanstackService} from "@/features/hmos/queries/hmo.tanstack.service";
 import {staffService} from "@/features/staff/api/staff.service";
 import {pamsAPI} from "@/utils/axios-interceptor.ts";
+import PatientEvaluationVisitLogSection from "@/features/patients/components/PatientEvaluationVisitLogSection.vue";
 
 const patientMedicalCategoryDialog = useTemplateRef<InstanceType<typeof PatientMedicalCategoryDialog>>('patientMedicalCategoryDialog')
 const patientMedicalDiagnoseDialog = useTemplateRef<InstanceType<typeof PatientMedicalDiagnoseDialog>>('patientMedicalDiagnoseDialog')
@@ -277,9 +284,6 @@ const patientMedicalImagingDialog = useTemplateRef<InstanceType<typeof PatientMe
 
 const patientValidIdAttachmentDialog = useTemplateRef<InstanceType<typeof PatientAttachmentDialog>>('patientValidIdAttachmentDialog')
 const patientHMOValidIdAttachmentDialog = useTemplateRef<InstanceType<typeof PatientAttachmentDialog>>('patientHMOValidIdAttachmentDialog')
-const patientLaboratoryAttachmentDialog = useTemplateRef<InstanceType<typeof PatientAttachmentDialog>>('patientLaboratoryAttachmentDialog')
-const patientPrescriptionAttachmentDialog = useTemplateRef<InstanceType<typeof PatientAttachmentDialog>>('patientPrescriptionAttachmentDialog')
-const patientRehabPrescriptionAttachmentDialog = useTemplateRef<InstanceType<typeof PatientAttachmentDialog>>('patientRehabPrescriptionAttachmentDialog')
 
 const patientForm = useTemplateRef<InstanceType<typeof PatientForm>>('patientForm')
 const patientHMOInformationForm = useTemplateRef<InstanceType<typeof PatientHMOInformationForm>>('patientHMOInformationForm')
@@ -356,6 +360,23 @@ const pendingPatientDrillDownName = ref<string>()
 const onPatientRowClick = (patient: Patient): void => {
   selectedPatientDetails.value = patient
   patientDetailsVisible.value = true
+}
+
+const openPatientAttachmentDialog = (
+  attachmentType: "valid-id" | "hmo-id",
+  patient?: Patient
+): void => {
+  if (!patient) return
+  selectedPatient.value = patient
+
+  if (attachmentType === "valid-id") {
+    patientValidIdAttachmentDialog.value?.toggleDialog()
+    return
+  }
+  if (attachmentType === "hmo-id") {
+    patientHMOValidIdAttachmentDialog.value?.toggleDialog()
+    return
+  }
 }
 
 const applyAppointmentDrillDown = async (): Promise<void> => {
@@ -449,6 +470,14 @@ const medicalDiagnoses = ref<MedicalDiagnose[]>([])
 const medicalHistories = ref<MedicalHistory[]>([])
 const medicalImagings = ref<MedicalImaging[]>([])
 
+const medicalCategoryOptions = computed<string[]>(() => {
+  return Array.from(new Set((medicalCategories.value ?? []).map((item) => item.name).filter(Boolean))).sort((a, b) => a.localeCompare(b))
+})
+
+const medicalDiagnosisOptions = computed<string[]>(() => {
+  return Array.from(new Set((medicalDiagnoses.value ?? []).map((item) => item.name).filter(Boolean))).sort((a, b) => a.localeCompare(b))
+})
+
 const hmos = ref<Lookup[]>([])
 const hmoTypes = ref<HMOType[]>([])
 
@@ -511,24 +540,6 @@ const patientValidIdAttachmentProps = computed(() => ({
 const patientHMOValidIdAttachmentProps = computed(() => ({
   header: `Add ${selectedPatient.value?.full_name} hmo valid id`,
   patientAttachmentTanstackKey: PatientAttachmentTanstackKey.HMO_ID,
-  patient: selectedPatient.value
-}) satisfies PatientAttachmentDialogFormProps)
-
-const patientLaboratoryAttachmentProps = computed(() => ({
-  header: `Add ${selectedPatient.value?.full_name} laboratory`,
-  patientAttachmentTanstackKey: PatientAttachmentTanstackKey.LABORATORY,
-  patient: selectedPatient.value
-}) satisfies PatientAttachmentDialogFormProps)
-
-const patientPrescriptionAttachmentProps = computed(() => ({
-  header: `Add ${selectedPatient.value?.full_name} prescription`,
-  patientAttachmentTanstackKey: PatientAttachmentTanstackKey.PRESCRIPTION,
-  patient: selectedPatient.value
-}) satisfies PatientAttachmentDialogFormProps)
-
-const patientRehabPrescriptionAttachmentProps = computed(() => ({
-  header: `Add ${selectedPatient.value?.full_name} rehab prescription`,
-  patientAttachmentTanstackKey: PatientAttachmentTanstackKey.REHAB_PRESCRIPTION,
   patient: selectedPatient.value
 }) satisfies PatientAttachmentDialogFormProps)
 
@@ -760,96 +771,6 @@ const menuButtons = (patient: Patient): MenuItem[] => {
     },
     {
       separator: true
-    },
-    {
-      label: 'Medical Information',
-      icon: 'pi pi-hourglass',
-      items: [
-        {
-          label: `View Medical Categories`,
-          icon: 'pi pi-hourglass',
-          command: () => {
-            selectedPatient.value = patient
-            patientMedicalCategoryDialog.value?.toggleDialog()
-          }
-        },
-        {
-          label: `View Medical Diagnosis`,
-          icon: 'pi pi-hourglass',
-          command: () => {
-            selectedPatient.value = patient
-            patientMedicalDiagnoseDialog.value?.toggleDialog()
-          }
-        },
-        {
-          label: `View Medical Histories`,
-          icon: 'pi pi-hourglass',
-          command: () => {
-            selectedPatient.value = patient
-            patientMedicalHistoryDialog.value?.toggleDialog()
-          }
-        },
-        {
-          label: `View Medical Imagings`,
-          icon: 'pi pi-hourglass',
-          command: () => {
-            selectedPatient.value = patient
-            patientMedicalImagingDialog.value?.toggleDialog()
-          },
-        }
-      ]
-    },
-    {
-      label: 'Attachments',
-      icon: 'pi pi-paperclip',
-      items: [
-        {
-          label: 'Valid ID',
-          icon: 'pi pi-paperclip',
-          command: async (): Promise<void> => {
-            selectedPatient.value = patient
-
-            patientValidIdAttachmentDialog.value?.toggleDialog()
-          },
-        },
-
-        {
-          label: 'HMO ID',
-          icon: 'pi pi-paperclip',
-          command: async (): Promise<void> => {
-            selectedPatient.value = patient
-            patientHMOValidIdAttachmentDialog.value?.toggleDialog()
-          },
-        },
-
-        {
-          label: 'Laboratory',
-          icon: 'pi pi-paperclip',
-          command: async (): Promise<void> => {
-            selectedPatient.value = patient
-            patientLaboratoryAttachmentDialog.value?.toggleDialog()
-          },
-        },
-
-        {
-          label: 'Prescription',
-          icon: 'pi pi-paperclip',
-          command: async (): Promise<void> => {
-            selectedPatient.value = patient
-            patientPrescriptionAttachmentDialog.value?.toggleDialog()
-          },
-        },
-
-        {
-          label: 'Rehab Prescription',
-          icon: 'pi pi-paperclip',
-          command: async (): Promise<void> => {
-            selectedPatient.value = patient
-            patientRehabPrescriptionAttachmentDialog.value?.toggleDialog()
-          },
-        },
-
-      ]
     }
   ]
 }

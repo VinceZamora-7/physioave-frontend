@@ -76,13 +76,6 @@ export enum LogoutTanstackKey {
   LOGOUT = 'logout',
 }
 
-export enum EvaluationTanstackKey {
-  EVALUATIONS = 'evaluations',
-  EVALUATIONS_EXPORT = 'evaluationsExport',
-  EVALUATIONS_LOOKUP = 'evaluationsLookup',
-  EVALUATIONS_INFINITE_QUERY = 'evaluationsInfiniteQuery',
-}
-
 export enum TechniqueTanstackKey {
   TECHNIQUES = 'techniques',
   TECHNIQUES_EXPORT = 'techniquesExport',

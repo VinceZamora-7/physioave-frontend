@@ -203,10 +203,8 @@ import InputNumber from "primevue/inputnumber"
 import Message from "primevue/message"
 import Tag from "primevue/tag"
 import { useToast } from "primevue/usetoast"
-import { pamsAPI } from "@/utils/axios-interceptor"
 import { errorToast, successToast } from "@/utils/toast.util"
-import { Status } from "@/utils/global.type"
-import type { Pageable } from "@/models/paging"
+import {readActivePromosServiceCatalog} from "@/features/promos-offers/composables/promos-storage.composable"
 
 interface BillingPickerLookup {
   id: string | number
@@ -352,36 +350,16 @@ const addRolloverAmount = (): void => {
   rolloverInput.value = 0
 }
 
-const fetchLookup = async (path: string): Promise<BillingPickerLookup[]> => {
-  const { data } = await pamsAPI.get<Pageable<any>>(path, {
-    params: {
-      page: 1,
-      size: 500,
-      status: Status.ACTIVE
-    }
-  })
-  return (data?.content ?? []).map(item => ({
-    id: item.id,
-    name: item.name,
-    price: Number(item.price ?? 0),
-    type: item.type || "service",
-    status: item.status
-  }))
-}
-
 const loadServices = async (): Promise<void> => {
   try {
     isLoading.value = true
-    const [machines, techniques, evaluations, addOnMachines, addOnTechniques, addOnHomeServices] = await Promise.all([
-      fetchLookup("/machines/lookup"),
-      fetchLookup("/techniques/lookup"),
-      fetchLookup("/evaluations/lookup"),
-      fetchLookup("/add-on-machines/lookup"),
-      fetchLookup("/add-on-techniques/lookup"),
-      fetchLookup("/add-on-home-services/lookup")
-    ])
-
-    allServices.value = [...machines, ...techniques, ...evaluations, ...addOnMachines, ...addOnTechniques, ...addOnHomeServices]
+    allServices.value = readActivePromosServiceCatalog().map(item => ({
+      id: item.id,
+      name: item.name,
+      price: Number(item.price ?? 0),
+      type: item.type,
+      status: item.status
+    }))
   } catch {
     errorToast(toast, "Failed to load services")
   } finally {

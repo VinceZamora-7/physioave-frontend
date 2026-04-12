@@ -33,20 +33,48 @@
     </Message>
 
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
-      <IftaLabel>
-        <Select
-          v-model="selectedProgramId"
-          :options="lguPrograms"
-          optionLabel="name"
-          optionValue="id"
-          placeholder="Select LGU Program"
-          :loading="loadingPrograms"
-          :disabled="savingDashboardBudget"
-          fluid
-          showClear
-        />
-        <label>LGU Program</label>
-      </IftaLabel>
+      <div class="flex flex-col gap-1">
+        <IftaLabel>
+          <Select
+            v-model="selectedProgramId"
+            :options="lguProgramOptions"
+            optionLabel="label"
+            optionValue="id"
+            placeholder="Select LGU Program"
+            :loading="loadingPrograms"
+            :disabled="savingDashboardBudget"
+            fluid
+          />
+          <label>LGU</label>
+        </IftaLabel>
+        <div class="flex items-center gap-2">
+          <InputText
+            v-if="showNewProgramInput"
+            v-model="newProgramName"
+            placeholder="e.g. Gapan"
+            size="small"
+            fluid
+            @keyup.enter="createNewProgram"
+          />
+          <Button
+            v-if="showNewProgramInput"
+            icon="pi pi-check"
+            size="small"
+            :loading="creatingProgram"
+            :disabled="!newProgramName.trim()"
+            @click="createNewProgram"
+          />
+          <Button
+            :label="showNewProgramInput ? 'Cancel' : 'Add LGU'"
+            :icon="showNewProgramInput ? 'pi pi-times' : 'pi pi-plus'"
+            size="small"
+            :severity="showNewProgramInput ? 'secondary' : 'info'"
+            text
+            :disabled="!canManageLguDashboard"
+            @click="showNewProgramInput = !showNewProgramInput; newProgramName = ''"
+          />
+        </div>
+      </div>
 
       <IftaLabel>
         <DatePicker
@@ -228,6 +256,7 @@ import DataTable from "primevue/datatable"
 import DatePicker from "primevue/datepicker"
 import IftaLabel from "primevue/iftalabel"
 import InputNumber from "primevue/inputnumber"
+import InputText from "primevue/inputtext"
 import Message from "primevue/message"
 import Select from "primevue/select"
 import Tag from "primevue/tag"
@@ -250,6 +279,9 @@ const currentRoleName = ref<string>("")
 const lguPrograms = ref<LguProgramLookup[]>([])
 const loadingPrograms = ref(false)
 const selectedProgramId = ref<number | null>(null)
+const showNewProgramInput = ref(false)
+const newProgramName = ref("")
+const creatingProgram = ref(false)
 const baseMonthlyBudget = ref<number>(0)
 const rolloverAmount = ref<number>(0)
 const rolloverInput = ref<number>(0)
@@ -365,8 +397,12 @@ const canManageLguDashboard = computed(() => {
   return MANAGER_ROLE_KEYWORDS.some(keyword => normalized.includes(keyword))
 })
 
+const lguProgramOptions = computed(() =>
+  lguPrograms.value.map(p => ({ ...p, label: `LGU-${p.name}` }))
+)
+
 const selectedProgramName = computed(() =>
-  lguPrograms.value.find(p => p.id === selectedProgramId.value)?.name ?? ""
+  lguProgramOptions.value.find(p => p.id === selectedProgramId.value)?.label ?? ""
 )
 
 const resolveRoleFromStorage = (): string => {
@@ -443,6 +479,12 @@ const loadDashboardBudget = async (): Promise<void> => {
   budgetSyncError.value = ""
   rolloverInput.value = 0
   lguDashboardBudget.value = null
+  if (!selectedProgramId.value) {
+    applyBudgetValues({})
+    hasLocalOnlyBudgetDraft.value = false
+    loadingDashboardBudget.value = false
+    return
+  }
   try {
     const serverBudget = await billingPhase1Service.getLguDashboardBudget(
       selectedBudgetPeriodYear.value,
@@ -473,6 +515,11 @@ const loadDashboardBudget = async (): Promise<void> => {
 const loadTransactionHistory = async (): Promise<void> => {
   loadingTransactionHistory.value = true
   transactionHistoryError.value = ""
+  if (!selectedProgramId.value) {
+    lguTransactionHistory.value = []
+    loadingTransactionHistory.value = false
+    return
+  }
   try {
     lguTransactionHistory.value = await billingPhase1Service.getLguDashboardHistory(
       100,
@@ -489,6 +536,10 @@ const loadTransactionHistory = async (): Promise<void> => {
 }
 
 const saveDashboardBudget = async (): Promise<void> => {
+  if (!selectedProgramId.value) {
+    errorToast(toast, "Select an LGU program first")
+    return
+  }
   persistLocalDashboardBudget()
   savingDashboardBudget.value = true
   budgetSyncError.value = ""
@@ -555,11 +606,34 @@ const loadLguPrograms = async (): Promise<void> => {
     lguPrograms.value = programs ?? []
     if (lguPrograms.value.length > 0 && !selectedProgramId.value) {
       selectedProgramId.value = lguPrograms.value[0].id
+    } else if (!lguPrograms.value.length) {
+      selectedProgramId.value = null
     }
   } catch {
     lguPrograms.value = []
+    selectedProgramId.value = null
   } finally {
     loadingPrograms.value = false
+  }
+}
+
+const createNewProgram = async (): Promise<void> => {
+  const name = newProgramName.value.trim()
+  if (!name) return
+  creatingProgram.value = true
+  try {
+    const created = await billingPhase1Service.createLguProgram(name)
+    if (created) {
+      await loadLguPrograms()
+      selectedProgramId.value = created.id
+      successToast(toast, `LGU program "${name}" created`)
+    }
+    showNewProgramInput.value = false
+    newProgramName.value = ""
+  } catch (error: unknown) {
+    errorToast(toast, extractApiErrorMessage(error, "Failed to create LGU program"))
+  } finally {
+    creatingProgram.value = false
   }
 }
 

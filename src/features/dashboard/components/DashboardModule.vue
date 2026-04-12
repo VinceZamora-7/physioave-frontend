@@ -94,8 +94,27 @@
         <span class="font-medium">PT Performance (Monthly Bookings)</span>
       </div>
       <DataTable :value="ptPerformance" size="small" :loading="isLoading">
-        <Column field="doctor_name" header="PT / Doctor" />
+        <Column field="pt_name" header="Physical Therapist" />
         <Column field="bookings" header="Monthly Bookings" />
+        <Column header="Documentation Reminder" style="min-width: 220px">
+          <template #body="{ data }">
+            <Tag
+              :value="data.documentationReminderCount > 0 ? `Complete ${data.documentationReminderCount} documentation` : 'Up to date'"
+              :severity="data.documentationReminderCount > 0 ? 'warn' : 'success'"
+            />
+          </template>
+        </Column>
+      </DataTable>
+    </section>
+
+    <section class="app-section-card-comfy space-y-3">
+      <div class="flex items-center gap-2 text-sm">
+        <i class="pi pi-user-md text-[rgb(var(--app-secondary))]" />
+        <span class="font-medium">Completed Sessions by Referring Doctor</span>
+      </div>
+      <DataTable :value="referringDoctorSummary" size="small" :loading="isLoading">
+        <Column field="referring_doctor_name" header="Referring Doctor" />
+        <Column field="completed_sessions_count" header="Completed Sessions" />
       </DataTable>
     </section>
   </main>
@@ -106,6 +125,7 @@ import {computed, ref} from "vue"
 import Button from "primevue/button"
 import Column from "primevue/column"
 import DataTable from "primevue/datatable"
+import Tag from "primevue/tag"
 import {errorToast} from "@/utils/toast.util"
 import {useToast} from "primevue"
 import {
@@ -115,7 +135,11 @@ import {
   type DashboardTrendItem,
 } from "@/features/dashboard/api/dashboard.service"
 import {billingPhase1Service} from "@/features/billing/api/billing-phase1.service"
-import {appointmentPhase1Service} from "@/features/appointments/api/appointment-phase1.service"
+import {
+  appointmentPhase1Service,
+  type PtCompletedSessionsItem,
+  type ReferringDoctorCompletedSessionsItem,
+} from "@/features/appointments/api/appointment-phase1.service"
 
 const toast = useToast()
 const isLoading = ref(false)
@@ -156,7 +180,8 @@ const billingDistribution = ref<Array<{
 ])
 
 const recentAppointments = ref<DashboardRecentAppointment[]>([])
-const ptPerformance = ref<Array<{doctor_name: string; bookings: number}>>([])
+const ptPerformance = ref<Array<{pt_name: string; bookings: number; documentationReminderCount: number}>>([])
+const referringDoctorSummary = ref<ReferringDoctorCompletedSessionsItem[]>([])
 
 const formatDateTime = (value: string): string => new Date(value).toLocaleString()
 const formatCurrency = (value: number): string =>
@@ -237,15 +262,31 @@ const loadMetrics = async (): Promise<void> => {
     onlineMarketingRevenue: 0,
     directMarketingRevenue: 0,
   }
+}
 
-  const performanceMap = new Map<string, number>()
-  for (const item of monthAppointmentsRows) {
-    const doctor = item.doctor_name?.trim() || "Unassigned"
-    performanceMap.set(doctor, (performanceMap.get(doctor) ?? 0) + 1)
-  }
-  ptPerformance.value = [...performanceMap.entries()]
-    .map(([doctor_name, bookings]) => ({doctor_name, bookings}))
+const loadPtPerformance = async (): Promise<void> => {
+  const monthRange = getMonthRange()
+  const report = await appointmentPhase1Service.getCompletedSessionsByPt(monthRange.from, monthRange.to)
+  const rows: PtCompletedSessionsItem[] = report?.physical_therapists ?? []
+  ptPerformance.value = rows
+    .map(item => ({
+      pt_name: item.pt_name?.trim() || "Unassigned",
+      bookings: Number(item.completed_sessions_count ?? 0),
+      documentationReminderCount: Number(item.documentation_reminder_count ?? 0),
+    }))
     .sort((a, b) => b.bookings - a.bookings)
+}
+
+const loadReferringDoctorSummary = async (): Promise<void> => {
+  const monthRange = getMonthRange()
+  const report = await appointmentPhase1Service.getCompletedSessionsByReferringDoctor(monthRange.from, monthRange.to)
+  referringDoctorSummary.value = (report?.doctors ?? [])
+    .map(item => ({
+      ...item,
+      referring_doctor_name: item.referring_doctor_name?.trim() || "Unassigned",
+      completed_sessions_count: Number(item.completed_sessions_count ?? 0),
+    }))
+    .sort((a, b) => b.completed_sessions_count - a.completed_sessions_count)
 }
 
 const loadTrend = async (): Promise<void> => {
@@ -300,6 +341,8 @@ const refreshDashboard = async (): Promise<void> => {
       loadTrend(),
       loadBillingDistribution(),
       loadRecentAppointments(),
+      loadPtPerformance(),
+      loadReferringDoctorSummary(),
     ])
   } catch {
     errorToast(toast, "Failed to load dashboard data")

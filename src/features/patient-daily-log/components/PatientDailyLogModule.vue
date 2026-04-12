@@ -15,7 +15,7 @@
               Clinic: {{ selectedClinicLabel }}
             </span>
             <span class="rounded-full border border-white/40 bg-white/60 px-3 py-1">
-              Provider: {{ selectedDoctorLabel }}
+              Primary PT: {{ selectedDoctorLabel }}
             </span>
           </div>
         </div>
@@ -55,7 +55,7 @@
         </div>
 
         <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide opacity-60">Provider</label>
+          <label class="text-xs font-semibold uppercase tracking-wide opacity-60">Primary PT</label>
           <Select
             v-model="selectedDoctorId"
             :options="doctorFilterOptions"
@@ -63,7 +63,7 @@
             optionValue="value"
             fluid
             filter
-            placeholder="All providers"
+            placeholder="All primary PT"
             :pt="ptSelect"
           />
         </div>
@@ -73,7 +73,7 @@
           <InputText
             v-model="searchText"
             fluid
-            placeholder="Patient name, record ID, provider, or slip number"
+            placeholder="Patient name, record ID, primary PT, assistant PT, intern, or slip number"
             :pt="ptInputText"
           />
         </div>
@@ -178,7 +178,7 @@
             </template>
           </Column>
 
-          <Column header="PT / Provider" style="min-width: 200px">
+          <Column header="Primary PT" style="min-width: 200px">
             <template #body="{ data }">
               <div class="space-y-2">
                 <div class="font-medium">{{ providerLabel(data) }}</div>
@@ -192,7 +192,25 @@
             </template>
           </Column>
 
-          <Column header="PT Signature" style="min-width: 180px">
+          <Column header="Assistant PT / Intern" style="min-width: 190px">
+            <template #body="{ data }">
+              <div v-if="data.support_staff_name" class="space-y-2">
+                <div class="font-medium">{{ data.support_staff_name }}</div>
+                <div class="text-xs opacity-65">{{ data.support_staff_role_name || 'Support staff' }}</div>
+                <Button
+                  label="View details"
+                  icon="pi pi-eye"
+                  text
+                  size="small"
+                  class="px-0"
+                  @click="openSupportStaffDetails(data)"
+                />
+              </div>
+              <div v-else class="text-xs opacity-60">No assistant PT or intern assigned</div>
+            </template>
+          </Column>
+
+          <Column header="Primary PT Signature" style="min-width: 180px">
             <template #body="{ data }">
               <button
                 v-if="data.pt_signature_data_url"
@@ -260,6 +278,51 @@
         </div>
       </div>
     </Dialog>
+
+    <Dialog
+      v-model:visible="supportStaffDetailsVisible"
+      modal
+      header="Assistant PT / Intern Details"
+      :style="{ width: '540px' }"
+      :breakpoints="{ '1024px': '92vw', '768px': '100vw' }"
+    >
+      <div v-if="selectedSupportStaffEntry" class="space-y-4">
+        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <div class="text-[11px] uppercase tracking-wide opacity-55">Primary PT</div>
+              <div class="mt-1 font-medium">{{ providerLabel(selectedSupportStaffEntry) }}</div>
+            </div>
+            <div>
+              <div class="text-[11px] uppercase tracking-wide opacity-55">Assistant PT / Intern</div>
+              <div class="mt-1 font-medium">{{ selectedSupportStaffEntry.support_staff_name || 'N/A' }}</div>
+              <div class="text-xs opacity-65">{{ selectedSupportStaffEntry.support_staff_role_name || 'Support staff' }}</div>
+            </div>
+            <div>
+              <div class="text-[11px] uppercase tracking-wide opacity-55">Patient</div>
+              <div class="mt-1 font-medium">{{ selectedSupportStaffEntry.patient_name }}</div>
+              <div class="text-xs opacity-65">{{ selectedSupportStaffEntry.patient_public_id }}</div>
+            </div>
+            <div>
+              <div class="text-[11px] uppercase tracking-wide opacity-55">Schedule</div>
+              <div class="mt-1 font-medium">{{ formatTimeRange(selectedSupportStaffEntry.starts_at, selectedSupportStaffEntry.ends_at) }}</div>
+              <div class="text-xs opacity-65">{{ formatFullDate(selectedSupportStaffEntry.starts_at) }}</div>
+            </div>
+            <div>
+              <div class="text-[11px] uppercase tracking-wide opacity-55">Clinic</div>
+              <div class="mt-1 font-medium">{{ selectedSupportStaffEntry.clinic_name || 'No clinic assigned' }}</div>
+            </div>
+            <div>
+              <div class="text-[11px] uppercase tracking-wide opacity-55">Visit Type</div>
+              <div class="mt-1 flex flex-wrap gap-2">
+                <Tag :value="displayAppointmentPhase(selectedSupportStaffEntry.appointment_phase)" :severity="appointmentPhaseSeverity(selectedSupportStaffEntry.appointment_phase)" />
+                <Tag :value="displayLocationContext(selectedSupportStaffEntry.location_context)" :severity="locationSeverity(selectedSupportStaffEntry.location_context)" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Dialog>
   </main>
 </template>
 
@@ -314,6 +377,8 @@ const clinics = ref<Clinic[]>([])
 const clinicalProviders = ref<Staff[]>([])
 const signaturePreviewVisible = ref(false)
 const signaturePreview = ref<SignaturePreviewState>()
+const supportStaffDetailsVisible = ref(false)
+const selectedSupportStaffEntry = ref<AppointmentDailyLogItem>()
 
 const selectedDateLabel = computed(() =>
   selectedDate.value.toLocaleDateString("en-PH", {
@@ -330,8 +395,8 @@ const selectedClinicLabel = computed(() => {
 })
 
 const selectedDoctorLabel = computed(() => {
-  if (selectedDoctorId.value == null) return "All providers"
-  return clinicalProviders.value.find((provider) => provider.id === selectedDoctorId.value)?.name || "Selected provider"
+  if (selectedDoctorId.value == null) return "All primary PT"
+  return clinicalProviders.value.find((provider) => provider.id === selectedDoctorId.value)?.name || "Selected primary PT"
 })
 
 const clinicFilterOptions = computed<SelectOption[]>(() => [
@@ -348,7 +413,7 @@ const doctorFilterOptions = computed<SelectOption[]>(() => {
     : clinicalProviders.value.filter((provider) => provider.clinic_id === selectedClinicId.value)
 
   return [
-    {label: "All providers", value: null},
+    {label: "All primary PT", value: null},
     ...filteredProviders.map((provider) => ({
       label: provider.name,
       value: provider.id
@@ -428,6 +493,11 @@ const formatOptionalDateTime = (value?: string): string =>
 
 const providerLabel = (row: AppointmentDailyLogItem): string =>
   row.pt_confirmed_by_name?.trim() || row.doctor_name?.trim() || "Unassigned provider"
+
+const openSupportStaffDetails = (row: AppointmentDailyLogItem): void => {
+  selectedSupportStaffEntry.value = row
+  supportStaffDetailsVisible.value = true
+}
 
 const displayAppointmentPhase = (phase?: AppointmentPhase): string => {
   if (phase === "RE_EVAL") return "RE-EVAL"

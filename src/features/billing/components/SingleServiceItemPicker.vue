@@ -167,7 +167,7 @@ export type BillingLineType =
   | "add-on-home-service"
 
 export interface BillingPickerLookup {
-  id: number
+  id: number | string
   name: string
   price: number
   type?: BillingLineType
@@ -175,7 +175,7 @@ export interface BillingPickerLookup {
 
 export interface BillingPickedLine {
   key: string
-  id: number
+  id: number | string
   type: BillingLineType
   name: string
   price: number

@@ -105,12 +105,6 @@ const router = createRouter({
           meta: {requireAuth: true}
         },
         {
-          path: '/hmos',
-          name: 'hmos',
-          component: () => import('@/features/hmos/pages/HMOView.vue'),
-          meta: {requireAuth: true}
-        },
-        {
           path: '/machines',
           name: 'machines',
           component: () => import('@/features/machines/pages/MachineView.vue'),
@@ -120,12 +114,6 @@ const router = createRouter({
           path: '/techniques',
           name: 'techniques',
           component: () => import('@/features/techniques/pages/TechniqueView.vue'),
-          meta: {requireAuth: true}
-        },
-        {
-          path: '/evaluations',
-          name: 'evaluations',
-          component: () => import('@/features/evaluations/pages/EvaluationView.vue'),
           meta: {requireAuth: true}
         },
         {
@@ -155,13 +143,7 @@ const router = createRouter({
         {
           path: '/reports',
           name: 'reports',
-          component: () => import('@/features/reports/pages/ReportView.vue'),
-          meta: {requireAuth: true}
-        },
-        {
-          path: '/operations-dashboard',
-          name: 'ops-dashboard',
-          component: () => import('@/features/operations-dashboard/pages/OperationsDashboardView.vue'),
+          component: () => import('@/features/reports/pages/FinanceReportsView.vue'),
           meta: {requireAuth: true}
         },
       ]

@@ -1343,6 +1343,7 @@ import {renderSingleServiceInvoiceWindow} from "@/features/billing/invoices/sing
 import {renderPackageServiceInvoiceWindow} from "@/features/billing/invoices/package-service-invoice.util"
 import {renderHmoInvoiceWindow} from "@/features/billing/invoices/hmo-invoice.util"
 import {renderLguInvoiceWindow} from "@/features/billing/invoices/lgu-invoice.util"
+import {readActivePromosServiceCatalog} from "@/features/promos-offers/composables/promos-storage.composable"
 
 const route = useRoute()
 const toast = useToast()
@@ -2449,6 +2450,16 @@ const fetchSessionLookup = async (): Promise<BillingPickerLookup[]> => {
   return data?.content ?? []
 }
 
+const getSharedEvaluationLookups = (): BillingPickerLookup[] =>
+  readActivePromosServiceCatalog()
+    .filter(item => item.type === "evaluation")
+    .map(item => ({
+      id: item.id,
+      name: item.name,
+      price: Number(item.price ?? 0),
+      type: "evaluation"
+    }))
+
 const form = ref<{
   patient_id?: number
   appointment_id?: number
@@ -2819,10 +2830,9 @@ const lguWillExceedRemainingFund = computed(() =>
 )
 
 const loadLookups = async (): Promise<void> => {
-  const [machinesRes, techniquesRes, evaluationsRes, addOnMachinesRes, addOnTechniquesRes, addOnHomeRes, sessionsRes] = await Promise.all([
+  const [machinesRes, techniquesRes, addOnMachinesRes, addOnTechniquesRes, addOnHomeRes, sessionsRes] = await Promise.all([
     fetchLookup("/machines/lookup"),
     fetchLookup("/techniques/lookup"),
-    fetchLookup("/evaluations/lookup"),
     fetchLookup("/add-on-machines/lookup"),
     fetchLookup("/add-on-techniques/lookup"),
     fetchLookup("/add-on-home-services/lookup"),
@@ -2832,7 +2842,7 @@ const loadLookups = async (): Promise<void> => {
   await loadPatientOptions()
   machines.value = machinesRes
   techniques.value = techniquesRes
-  evaluations.value = evaluationsRes
+  evaluations.value = getSharedEvaluationLookups()
   addOnMachines.value = addOnMachinesRes
   addOnTechniques.value = addOnTechniquesRes
   addOnHomeServices.value = addOnHomeRes

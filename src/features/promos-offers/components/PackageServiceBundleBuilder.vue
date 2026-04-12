@@ -168,10 +168,11 @@
         </Column>
         <Column header="Actions" style="width: 100px">
           <template #body="{data}">
-            <div class="flex gap-1">
+            <div v-if="isLocalEditableService(data)" class="flex gap-1">
               <Button size="small" text icon="pi pi-pencil" @click="openEditDialog(data)" v-tooltip="'Edit'" />
               <Button size="small" text severity="danger" icon="pi pi-trash" @click="confirmDelete(data)" v-tooltip="'Delete'" />
             </div>
+            <Tag v-else value="Managed in master data" severity="secondary" class="text-xs" />
           </template>
         </Column>
       </DataTable>
@@ -523,6 +524,13 @@ import {
   readPromosStorageArray,
   writePromosStorageArray
 } from "@/features/promos-offers/composables/promos-storage.composable"
+import {
+  isLocalEditablePromosService,
+  loadBackendPromosMasterCatalog,
+  normalizePromosServiceName,
+  partitionPromosCustomServices,
+  remapLegacyPromosServiceId
+} from "@/features/promos-offers/composables/promos-master-catalog.composable"
 
 type ServiceType = "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service"
 
@@ -605,7 +613,14 @@ const packageDialogVisible = ref(false)
 const editingPackageId = ref<string | null>(null)
 const refreshPromise = ref<Promise<unknown> | null>(null)
 
-const allServices = ref<SingleService[]>([])
+const customServices = ref<SingleService[]>([])
+const machineServices = ref<SingleService[]>([])
+const techniqueServices = ref<SingleService[]>([])
+const allServices = computed<SingleService[]>(() => [
+  ...machineServices.value,
+  ...techniqueServices.value,
+  ...customServices.value
+])
 const allBundles = ref<BundledService[]>([])
 const allPackages = ref<PackageService[]>([])
 const selectedServiceCatalogFilters = ref<ServiceCatalogFilter[]>([])
@@ -646,8 +661,6 @@ const withRefreshRetry = async <T>(operation: () => Promise<T>): Promise<T> => {
 }
 
 const typeOptions = [
-  {label: "Machine & Modalities", value: "machine"},
-  {label: "Technique", value: "technique"},
   {label: "Evaluations", value: "evaluation"},
   {label: "Add-Ons", value: "add-on-machine"}
 ]
@@ -708,13 +721,19 @@ const clearServiceCatalogFilters = (): void => {
   selectedServiceCatalogFilters.value = []
 }
 
+const isLocalEditableService = (service: SingleService): boolean => isLocalEditablePromosService(service)
+
+const remapServiceIdWithCatalog = (id: string, serviceType: "machine" | "technique", backendByName: Map<string, string>, legacyById: Map<string, SingleService>): string => {
+  return remapLegacyPromosServiceId(id, serviceType, backendByName, legacyById)
+}
+
 const formData = reactive<{
   type: ServiceType
   name: string
   price: number
   status: string
 }>({
-  type: "machine",
+  type: "evaluation",
   name: "",
   price: 0,
   status: "Active"
@@ -812,8 +831,6 @@ watch(
   {deep: true}
 )
 
-const machineServices = computed(() => allServices.value.filter(service => service.type === "machine"))
-const techniqueServices = computed(() => allServices.value.filter(service => service.type === "technique"))
 const evaluationServices = computed(() => allServices.value.filter(service => service.type === "evaluation"))
 const sessionServices = computed(() => sessionLookupServices.value)
 const activeBundles = computed(() => allBundles.value.filter(bundle => bundle.status !== "Inactive"))
@@ -903,11 +920,76 @@ const bundlePreviewOriginalPrice = computed(() => calcOriginalPrice({
 
 const packageRegularTotal = computed(() => calcPackageRegularTotal(packageFormData))
 
-const loadServices = (): void => {
+const loadServices = async (): Promise<void> => {
   try {
-    allServices.value = readPromosStorageArray<SingleService>(SINGLE_PAY_SERVICES_KEY)
+    const { machineServices: backendMachines, techniqueServices: backendTechniques } = await loadBackendPromosMasterCatalog()
+    machineServices.value = backendMachines as SingleService[]
+    techniqueServices.value = backendTechniques as SingleService[]
+
+    const storedServices = readPromosStorageArray<SingleService>(SINGLE_PAY_SERVICES_KEY)
+    const { customOnlyServices, legacyMachineTechniqueEntries } = partitionPromosCustomServices(storedServices)
+    customServices.value = customOnlyServices
+
+    if (customOnlyServices.length !== storedServices.length) {
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customOnlyServices)
+    }
+
+    const legacyById = new Map(legacyMachineTechniqueEntries.map(service => [service.id, service]))
+
+    const machineByName = new Map(machineServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+    const techniqueByName = new Map(techniqueServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+
+    const loadedBundles = readPromosStorageArray<BundledService>(props.bundleStorageKey)
+    const remappedBundles = loadedBundles.map(bundle => ({
+      ...bundle,
+      machineIds: bundle.machineIds
+        .map(id => remapServiceIdWithCatalog(id, "machine", machineByName, legacyById))
+        .filter((id, index, array) => array.indexOf(id) === index),
+      techniqueIds: bundle.techniqueIds
+        .map(id => remapServiceIdWithCatalog(id, "technique", techniqueByName, legacyById))
+        .filter((id, index, array) => array.indexOf(id) === index)
+    }))
+
+    allBundles.value = remappedBundles
+    if (JSON.stringify(remappedBundles) !== JSON.stringify(loadedBundles)) {
+      writePromosStorageArray(props.bundleStorageKey, remappedBundles)
+    }
+
+    const loadedPackages = readPromosStorageArray<PackageService>(props.packageStorageKey)
+    const remappedPackages = loadedPackages.map((pkg) => {
+      const machineIds = (pkg.machineIds ?? [])
+        .map(id => remapServiceIdWithCatalog(id, "machine", machineByName, legacyById))
+        .filter((id, index, array) => array.indexOf(id) === index)
+      const techniqueIds = (pkg.techniqueIds ?? [])
+        .map(id => remapServiceIdWithCatalog(id, "technique", techniqueByName, legacyById))
+        .filter((id, index, array) => array.indexOf(id) === index)
+
+      const machineItems = (pkg.machineItems ?? []).map(entry => ({
+        ...entry,
+        id: remapServiceIdWithCatalog(entry.id, "machine", machineByName, legacyById)
+      }))
+      const techniqueItems = (pkg.techniqueItems ?? []).map(entry => ({
+        ...entry,
+        id: remapServiceIdWithCatalog(entry.id, "technique", techniqueByName, legacyById)
+      }))
+
+      return {
+        ...pkg,
+        machineIds,
+        techniqueIds,
+        machineItems,
+        techniqueItems
+      }
+    })
+
+    allPackages.value = remappedPackages
+    if (JSON.stringify(remappedPackages) !== JSON.stringify(loadedPackages)) {
+      writePromosStorageArray(props.packageStorageKey, remappedPackages)
+    }
   } catch {
-    allServices.value = []
+    machineServices.value = []
+    techniqueServices.value = []
+    customServices.value = []
   }
 }
 
@@ -953,9 +1035,7 @@ const loadSessionLookupServices = async (): Promise<void> => {
 const refreshAll = async (): Promise<void> => {
   isLoading.value = true
   try {
-    loadServices()
-    loadBundles()
-    loadPackages()
+    await loadServices()
     await loadSessionLookupServices()
   } finally {
     isLoading.value = false
@@ -964,7 +1044,7 @@ const refreshAll = async (): Promise<void> => {
 
 const openAddDialog = (): void => {
   editingId.value = null
-  formData.type = "machine"
+  formData.type = "evaluation"
   formData.name = ""
   formData.price = 0
   formData.status = "Active"
@@ -972,6 +1052,11 @@ const openAddDialog = (): void => {
 }
 
 const openEditDialog = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
   editingId.value = service.id
   formData.type = service.type.startsWith("add-on") ? "add-on-machine" : service.type
   formData.name = service.name
@@ -981,6 +1066,11 @@ const openEditDialog = (service: SingleService): void => {
 }
 
 const saveService = (): void => {
+  if (formData.type === "machine" || formData.type === "technique") {
+    errorToast(toast, "Machines and techniques are managed from their dedicated modules.")
+    return
+  }
+
   if (!formData.name.trim()) {
     errorToast(toast, "Service name is required")
     return
@@ -991,27 +1081,32 @@ const saveService = (): void => {
   }
 
   if (editingId.value) {
-    const index = allServices.value.findIndex(service => service.id === editingId.value)
+    const index = customServices.value.findIndex(service => service.id === editingId.value)
     if (index >= 0) {
-      allServices.value[index] = {id: editingId.value, type: formData.type, name: formData.name, price: formData.price, status: formData.status}
+      customServices.value[index] = {id: editingId.value, type: formData.type, name: formData.name, price: formData.price, status: formData.status}
     }
   } else {
-    allServices.value.push({id: `service-${Date.now()}`, type: formData.type, name: formData.name, price: formData.price, status: formData.status})
+    customServices.value.push({id: `service-${Date.now()}`, type: formData.type, name: formData.name, price: formData.price, status: formData.status})
   }
 
-  writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, allServices.value)
+  writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
   dialogVisible.value = false
   successToast(toast, editingId.value ? "Service updated" : "Service added")
 }
 
 const confirmDelete = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
   confirm.require({
     message: `Delete "${service.name}"?`,
     header: "Confirm",
     icon: "pi pi-exclamation-triangle",
     accept: () => {
-      allServices.value = allServices.value.filter(entry => entry.id !== service.id)
-      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, allServices.value)
+      customServices.value = customServices.value.filter(entry => entry.id !== service.id)
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
       successToast(toast, "Service deleted")
       refreshAll()
     }

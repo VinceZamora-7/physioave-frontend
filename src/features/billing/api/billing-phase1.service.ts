@@ -118,6 +118,7 @@ export interface BillingEncounterTicket {
     service_type?: string
     billing_status?: string
     service_name?: string
+    session_sequence_label?: string
     amount_due: number
     amount_paid: number
     total_amount: number
@@ -180,6 +181,7 @@ export interface PaymentMethodLookup {
 export interface LguProgramLookup {
   id: number
   name: string
+  clinic_id?: number | null
 }
 
 export interface LguBudgetSummary {
@@ -287,6 +289,34 @@ export interface DailyIncomeExpenseReport {
   expenses: DailyExpenseEntry[]
 }
 
+export interface MonthlyIncomeExpenseDay {
+  report_date: string
+  income_entry_count: number
+  expense_entry_count: number
+  gross_income: number
+  cash_collected: number
+  outstanding_balance: number
+  expense_total: number
+  net_cash: number
+}
+
+export interface MonthlyIncomeExpenseReport {
+  selected_month: string
+  summary: {
+    active_day_count: number
+    days_with_income: number
+    days_with_expenses: number
+    income_entry_count: number
+    expense_entry_count: number
+    gross_income: number
+    cash_collected: number
+    outstanding_balance: number
+    expense_total: number
+    net_cash: number
+  }
+  days: MonthlyIncomeExpenseDay[]
+}
+
 export interface DailyExpenseRequest {
   expense_date: string
   item_name: string
@@ -321,8 +351,19 @@ export const billingPhase1Service = {
     const {data} = await pamsAPI.get<PaymentMethodLookup[]>("/billings/payment-methods")
     return data
   },
-  async getLguPrograms(): Promise<LguProgramLookup[] | undefined> {
-    const {data} = await pamsAPI.get<LguProgramLookup[]>("/billings/lgu-programs")
+  async getLguPrograms(clinicId?: number): Promise<LguProgramLookup[] | undefined> {
+    const {data} = await pamsAPI.get<LguProgramLookup[]>("/billings/lgu-programs", {
+      params: {
+        clinic_id: clinicId
+      }
+    })
+    return data
+  },
+  async createLguProgram(name: string, clinicId?: number): Promise<LguProgramLookup | undefined> {
+    const {data} = await pamsAPI.post<LguProgramLookup>("/billings/lgu-programs", {
+      name,
+      ...(clinicId ? { clinic_id: clinicId } : {})
+    })
     return data
   },
   async getLguBudgetSummary(patientId?: number, appointmentId?: number): Promise<LguBudgetSummary | null | undefined> {
@@ -363,6 +404,12 @@ export const billingPhase1Service = {
   async getDailyIncomeExpense(date?: string): Promise<DailyIncomeExpenseReport | undefined> {
     const {data} = await pamsAPI.get<DailyIncomeExpenseReport>("/billings/daily-income-expense", {
       params: {date}
+    })
+    return data
+  },
+  async getMonthlyIncomeExpense(month?: string, date?: string): Promise<MonthlyIncomeExpenseReport | undefined> {
+    const {data} = await pamsAPI.get<MonthlyIncomeExpenseReport>("/billings/monthly-income-expense", {
+      params: {month, date}
     })
     return data
   },

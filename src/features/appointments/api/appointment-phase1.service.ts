@@ -260,6 +260,9 @@ export interface AppointmentDailyLogItem {
   location_context: AppointmentLocationContext
   doctor_id?: number
   doctor_name?: string
+  support_staff_id?: number
+  support_staff_name?: string
+  support_staff_role_name?: string
   starts_at: string
   ends_at: string
   appointment_phase: AppointmentPhase
@@ -323,6 +326,7 @@ export interface PtCompletedSessionsItem {
   pt_id: number
   pt_name: string
   completed_sessions_count: number
+  documentation_reminder_count: number
 }
 
 export interface PtCompletedSessionsReport {
@@ -330,6 +334,63 @@ export interface PtCompletedSessionsReport {
   to_date: string
   total_completed_sessions: number
   physical_therapists: PtCompletedSessionsItem[]
+}
+
+export interface PtEndOfDayPendingSignatureByPt {
+  pt_id: number
+  pt_name: string
+  eligible_appointment_count: number
+  pending_pt_signature_count: number
+}
+
+export interface PtEndOfDayReport {
+  selected_date: string
+  clinic: {
+    id: number
+    name: string
+    start_time: string
+    end_time: string
+    window_starts_at: string
+    window_ends_at: string
+  }
+  eod_report_generated: boolean
+  eod_generated_at?: string
+  summary: {
+    total_appointments: number
+    eligible_appointments: number
+    pt_signed_appointments: number
+    pending_pt_signature_count: number
+    billing_cleared_appointments: number
+    pending_billing_count: number
+    all_appointments_done: boolean
+    all_billings_cleared: boolean
+  }
+  pending_pt_signatures_by_pt: PtEndOfDayPendingSignatureByPt[]
+}
+
+export interface EndOfDayHistoryItem {
+  id: number
+  report_date: string
+  clinic_id?: number
+  clinic_name?: string
+  clinic_start_time?: string
+  clinic_end_time?: string
+  eod_generated_at: string
+  summary: {
+    total_appointments: number
+    eligible_appointments: number
+    pt_signed_appointments: number
+    pending_pt_signature_count: number
+    billing_cleared_appointments: number
+    pending_billing_count: number
+    all_appointments_done: boolean
+    all_billings_cleared: boolean
+  }
+  pending_pt_signatures_by_pt: PtEndOfDayPendingSignatureByPt[]
+  generated_by_staff_id?: number
+  generated_by_name?: string
+  generated_by_email?: string
+  created_at: string
 }
 
 export const appointmentPhase1Service = {
@@ -411,6 +472,22 @@ export const appointmentPhase1Service = {
         "/appointments/reports/pt-completed-sessions",
         {params: {from_date, to_date}}
       )
+      return data
+    })
+  },
+  async getPtEndOfDay(date: string, clinic_id: number): Promise<PtEndOfDayReport | undefined> {
+    return await this.withRefreshRetry(async () => {
+      const {data} = await pamsAPI.get<PtEndOfDayReport>("/appointments/reports/pt-end-of-day", {
+        params: {date, clinic_id}
+      })
+      return data
+    })
+  },
+  async getEndOfDayHistory(params?: { clinic_id?: number; from_date?: string; to_date?: string; limit?: number }): Promise<EndOfDayHistoryItem[] | undefined> {
+    return await this.withRefreshRetry(async () => {
+      const {data} = await pamsAPI.get<EndOfDayHistoryItem[]>("/appointments/reports/end-of-day-history", {
+        params
+      })
       return data
     })
   },

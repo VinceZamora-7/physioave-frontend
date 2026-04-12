@@ -6,7 +6,7 @@
           <p class="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Promos And Offers</p>
           <h1 class="text-2xl font-semibold text-[rgb(var(--app-fg))]">HMO Service Management</h1>
           <p class="max-w-3xl text-sm leading-6 opacity-80">
-            Manage the shared individual service catalog from the HMO workspace. Changes here are reflected in Self Pay: Single Service as well.
+            Machines and techniques are synced from backend master data. Manage HMO-specific evaluation and add-on entries here. Changes here are reflected in Self Pay: Single Service as well.
           </p>
         </div>
 
@@ -167,7 +167,7 @@
         </Column>
         <Column v-if="canViewConfidentialRates" header="Actions" style="width: 100px">
           <template #body="{data}">
-            <div class="flex gap-1">
+            <div v-if="isLocalEditableService(data)" class="flex gap-1">
               <Button
                 size="small"
                 text
@@ -184,6 +184,7 @@
                 v-tooltip="'Delete'"
               />
             </div>
+            <Tag v-else value="Managed in master data" severity="secondary" class="text-xs" />
           </template>
         </Column>
       </DataTable>
@@ -385,6 +386,11 @@ import {
   readPromosStorageArray,
   writePromosStorageArray
 } from "@/features/promos-offers/composables/promos-storage.composable"
+import {
+  isLocalEditablePromosService,
+  loadBackendPromosMasterCatalog,
+  partitionPromosCustomServices
+} from "@/features/promos-offers/composables/promos-master-catalog.composable"
 
 type ServiceType = "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service"
 
@@ -437,7 +443,14 @@ const PRIVILEGED_ROLE_KEYWORDS = [
   "owner"
 ]
 
-const allServices = ref<HmoService[]>([])
+const customServices = ref<HmoService[]>([])
+const machineServices = ref<HmoService[]>([])
+const techniqueServices = ref<HmoService[]>([])
+const allServices = computed<HmoService[]>(() => [
+  ...machineServices.value,
+  ...techniqueServices.value,
+  ...customServices.value
+])
 const machineCatalog = ref<Array<{ id: number; name: string; price: number }>>([])
 const hmoProfiles = ref<HmoProfile[]>([])
 const selectedProfileId = ref<string>()
@@ -527,8 +540,6 @@ const ensureConfidentialAccess = (): boolean => {
 }
 
 const typeOptions = [
-  { label: "Machine & Modalities", value: "machine" },
-  { label: "Technique", value: "technique" },
   { label: "Evaluations", value: "evaluation" },
   { label: "Add-Ons", value: "add-on-machine" }
 ]
@@ -589,13 +600,15 @@ const clearServiceCatalogFilters = (): void => {
   selectedServiceCatalogFilters.value = []
 }
 
+const isLocalEditableService = (service: HmoService): boolean => isLocalEditablePromosService(service)
+
 const formData = reactive<{
   type: ServiceType
   name: string
   price: number
   status: string
 }>({
-  type: "machine",
+  type: "evaluation",
   name: "",
   price: 0,
   status: "Active"
@@ -631,8 +644,21 @@ const getTypeSeverity = (type: ServiceType): string => {
 const loadServices = async (): Promise<void> => {
   try {
     isLoading.value = true
-    allServices.value = readPromosStorageArray<HmoService>(SINGLE_PAY_SERVICES_KEY)
+    const { machineServices: backendMachines, techniqueServices: backendTechniques } = await loadBackendPromosMasterCatalog()
+    machineServices.value = backendMachines as HmoService[]
+    techniqueServices.value = backendTechniques as HmoService[]
+
+    const storedServices = readPromosStorageArray<HmoService>(SINGLE_PAY_SERVICES_KEY)
+    const { customOnlyServices } = partitionPromosCustomServices(storedServices)
+    customServices.value = customOnlyServices
+
+    if (customOnlyServices.length !== storedServices.length) {
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customOnlyServices)
+    }
   } catch {
+    machineServices.value = []
+    techniqueServices.value = []
+    customServices.value = []
     errorToast(toast, "Failed to load HMO services")
   } finally {
     isLoading.value = false
@@ -958,6 +984,13 @@ const clearSelectedProfilePriceList = async (): Promise<void> => {
 const getCustomRate = (service: HmoService): number | undefined => {
   const byId = selectedProfileRateMap.value.get(`id:${service.id}`)
   if (byId != null) return byId
+
+  if (service.type === "machine" && service.id.startsWith("machine-")) {
+    const machineId = service.id.replace("machine-", "")
+    const byMachineId = selectedProfileRateMap.value.get(`id:${machineId}`)
+    if (byMachineId != null) return byMachineId
+  }
+
   return selectedProfileRateMap.value.get(`name:${service.name.trim().toLowerCase()}`)
 }
 
@@ -986,7 +1019,7 @@ const downloadTemplate = (): void => {
 const openAddDialog = (): void => {
   if (!ensureConfidentialAccess()) return
   editingId.value = null
-  formData.type = "machine"
+  formData.type = "evaluation"
   formData.name = ""
   formData.price = 0
   formData.status = "Active"
@@ -995,6 +1028,10 @@ const openAddDialog = (): void => {
 
 const openEditDialog = (service: HmoService): void => {
   if (!ensureConfidentialAccess()) return
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
   editingId.value = service.id
   formData.type = service.type.startsWith("add-on") ? "add-on-machine" : service.type
   formData.name = service.name
@@ -1005,6 +1042,11 @@ const openEditDialog = (service: HmoService): void => {
 
 const saveService = (): void => {
   if (!ensureConfidentialAccess()) return
+  if (formData.type === "machine" || formData.type === "technique") {
+    errorToast(toast, "Machines and techniques are managed from their dedicated modules.")
+    return
+  }
+
   if (!formData.name.trim()) {
     errorToast(toast, "Service name is required")
     return
@@ -1015,9 +1057,9 @@ const saveService = (): void => {
   }
 
   if (editingId.value) {
-    const index = allServices.value.findIndex(s => s.id === editingId.value)
+    const index = customServices.value.findIndex(s => s.id === editingId.value)
     if (index >= 0) {
-      allServices.value[index] = {
+      customServices.value[index] = {
         id: editingId.value,
         type: formData.type,
         name: formData.name,
@@ -1026,7 +1068,7 @@ const saveService = (): void => {
       }
     }
   } else {
-    allServices.value.push({
+    customServices.value.push({
       id: `hmo-service-${Date.now()}`,
       type: formData.type,
       name: formData.name,
@@ -1035,20 +1077,25 @@ const saveService = (): void => {
     })
   }
 
-  writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, allServices.value)
+  writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
   dialogVisible.value = false
   successToast(toast, editingId.value ? "HMO service updated" : "HMO service added")
 }
 
 const confirmDelete = (service: HmoService): void => {
   if (!ensureConfidentialAccess()) return
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
   confirm.require({
     message: `Delete "${service.name}"?`,
     header: "Confirm",
     icon: "pi pi-exclamation-triangle",
     accept: () => {
-      allServices.value = allServices.value.filter(s => s.id !== service.id)
-      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, allServices.value)
+      customServices.value = customServices.value.filter(s => s.id !== service.id)
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
       successToast(toast, "HMO service deleted")
     }
   })

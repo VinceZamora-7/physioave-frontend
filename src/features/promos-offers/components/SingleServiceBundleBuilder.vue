@@ -6,7 +6,7 @@
           <p class="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Promos And Offers</p>
           <h1 class="text-2xl font-semibold text-[rgb(var(--app-fg))]">Single Pay: Single Service Management</h1>
           <p class="max-w-3xl text-sm leading-6 opacity-80">
-            Manage individual service items (machines, techniques, evaluations, add-ons) with prices. These items are available for selection when creating Single Pay: Single Service appointments and billings. Home Service add-ons created here will automatically switch an appointment to Home Care when selected.
+            Machines and techniques are synced from their backend master data. Manage evaluations and add-ons with prices here. These items are available for selection when creating Single Pay: Single Service appointments and billings. Home Service add-ons created here will automatically switch an appointment to Home Care when selected.
           </p>
         </div>
 
@@ -71,7 +71,7 @@
         </Column>
         <Column header="Actions" style="width: 100px">
           <template #body="{data}">
-            <div class="flex gap-1">
+            <div v-if="isLocalEditableService(data)" class="flex gap-1">
               <Button
                 size="small"
                 text
@@ -88,6 +88,7 @@
                 v-tooltip="'Delete'"
               />
             </div>
+            <Tag v-else value="Managed in master data" severity="secondary" class="text-xs" />
           </template>
         </Column>
       </DataTable>
@@ -281,7 +282,7 @@
         <IftaLabel>
           <MultiSelect
             v-model="bundleFormData.machineIds"
-            :options="allServices.filter(s => s.type === 'machine')"
+            :options="machineServices"
             optionLabel="name"
             optionValue="id"
             filter
@@ -294,7 +295,7 @@
         <IftaLabel>
           <MultiSelect
             v-model="bundleFormData.techniqueIds"
-            :options="allServices.filter(s => s.type === 'technique')"
+            :options="techniqueServices"
             optionLabel="name"
             optionValue="id"
             filter
@@ -379,13 +380,19 @@ import MultiSelect from "primevue/multiselect"
 import Tag from "primevue/tag"
 import { useConfirm, useToast } from "primevue"
 import { errorToast, successToast } from "@/utils/toast.util"
-import { pamsAPI } from "@/utils/axios-interceptor"
 import {
   BUNDLED_SERVICES_KEY,
   SINGLE_PAY_SERVICES_KEY,
   readPromosStorageArray,
   writePromosStorageArray
 } from "@/features/promos-offers/composables/promos-storage.composable"
+import {
+  isLocalEditablePromosService,
+  loadBackendPromosMasterCatalog,
+  normalizePromosServiceName,
+  partitionPromosCustomServices,
+  remapLegacyPromosServiceId
+} from "@/features/promos-offers/composables/promos-master-catalog.composable"
 
 type ServiceType = "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service"
 
@@ -424,9 +431,17 @@ const isLoading = ref(false)
 const dialogVisible = ref(false)
 const editingId = ref<string | null>(null)
 
-const allServices = ref<SingleService[]>([])
+const customServices = ref<SingleService[]>([])
+const machineServices = ref<SingleService[]>([])
+const techniqueServices = ref<SingleService[]>([])
 const allBundles = ref<BundledService[]>([])
 const selectedServiceCatalogFilters = ref<ServiceCatalogFilter[]>([])
+
+const allServices = computed<SingleService[]>(() => [
+  ...machineServices.value,
+  ...techniqueServices.value,
+  ...customServices.value
+])
 
 // Bundle dialog state
 const bundleDialogVisible = ref(false)
@@ -463,8 +478,6 @@ const bundlePreviewOriginalPrice = computed(() => {
 })
 
 const typeOptions = [
-  { label: "Machine & Modalities", value: "machine" },
-  { label: "Technique", value: "technique" },
   { label: "Evaluations", value: "evaluation" },
   { label: "Add-ons", value: "add-on-machine" },
   { label: "Add-on (Home Service)", value: "add-on-home-service" }
@@ -526,13 +539,42 @@ const clearServiceCatalogFilters = (): void => {
   selectedServiceCatalogFilters.value = []
 }
 
+const isLocalEditableService = (service: SingleService): boolean => isLocalEditablePromosService(service)
+
+const remapBundleIdsToBackendCatalog = (bundles: BundledService[], legacyServices: SingleService[]): BundledService[] => {
+  if (!bundles.length) return bundles
+
+  const machineByName = new Map(machineServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+  const techniqueByName = new Map(techniqueServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+
+  const legacyById = new Map(legacyServices.map(service => [service.id, service]))
+
+  const remapIds = (
+    ids: string[],
+    serviceType: "machine" | "technique",
+    backendByName: Map<string, string>
+  ): string[] => {
+    return ids
+      .map((id) => {
+        return remapLegacyPromosServiceId(id, serviceType, backendByName, legacyById)
+      })
+      .filter((id, index, array) => array.indexOf(id) === index)
+  }
+
+  return bundles.map(bundle => ({
+    ...bundle,
+    machineIds: remapIds(bundle.machineIds, "machine", machineByName),
+    techniqueIds: remapIds(bundle.techniqueIds, "technique", techniqueByName)
+  }))
+}
+
 const formData = reactive<{
   type: ServiceType
   name: string
   price: number
   status: string
 }>({
-  type: "machine",
+  type: "evaluation",
   name: "",
   price: 0,
   status: "Active"
@@ -583,7 +625,25 @@ const getTypeSeverity = (type: ServiceType): string => {
 const loadServices = async (): Promise<void> => {
   try {
     isLoading.value = true
-    allServices.value = readPromosStorageArray<SingleService>(SINGLE_PAY_SERVICES_KEY)
+    const { machineServices: backendMachines, techniqueServices: backendTechniques } = await loadBackendPromosMasterCatalog()
+    machineServices.value = backendMachines as SingleService[]
+    techniqueServices.value = backendTechniques as SingleService[]
+
+    const storedServices = readPromosStorageArray<SingleService>(SINGLE_PAY_SERVICES_KEY)
+    const { customOnlyServices: localCustomOnly, legacyMachineTechniqueEntries } = partitionPromosCustomServices(storedServices)
+
+    if (legacyMachineTechniqueEntries.length > 0 || localCustomOnly.length !== storedServices.length) {
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, localCustomOnly)
+    }
+
+    customServices.value = localCustomOnly
+
+    const loadedBundles = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
+    const remappedBundles = remapBundleIdsToBackendCatalog(loadedBundles, legacyMachineTechniqueEntries)
+    allBundles.value = remappedBundles
+    if (JSON.stringify(remappedBundles) !== JSON.stringify(loadedBundles)) {
+      writePromosStorageArray(BUNDLED_SERVICES_KEY, remappedBundles)
+    }
   } catch (error: unknown) {
     errorToast(toast, "Failed to load services")
   } finally {
@@ -593,7 +653,7 @@ const loadServices = async (): Promise<void> => {
 
 const openAddDialog = (): void => {
   editingId.value = null
-  formData.type = "machine"
+  formData.type = "evaluation"
   formData.name = ""
   formData.price = 0
   formData.status = "Active"
@@ -601,6 +661,11 @@ const openAddDialog = (): void => {
 }
 
 const openEditDialog = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
   editingId.value = service.id
   formData.type = service.type === "add-on-home-service"
     ? "add-on-home-service"
@@ -614,6 +679,11 @@ const openEditDialog = (service: SingleService): void => {
 }
 
 const saveService = (): void => {
+  if (formData.type === "machine" || formData.type === "technique") {
+    errorToast(toast, "Machines and techniques are managed from their dedicated modules.")
+    return
+  }
+
   if (!formData.name.trim()) {
     errorToast(toast, "Service name is required")
     return
@@ -625,9 +695,9 @@ const saveService = (): void => {
 
   if (editingId.value) {
     // Update existing
-    const index = allServices.value.findIndex(s => s.id === editingId.value)
+    const index = customServices.value.findIndex(s => s.id === editingId.value)
     if (index >= 0) {
-      allServices.value[index] = {
+      customServices.value[index] = {
         id: editingId.value,
         type: formData.type,
         name: formData.name,
@@ -637,7 +707,7 @@ const saveService = (): void => {
     }
   } else {
     // Add new
-    allServices.value.push({
+    customServices.value.push({
       id: `service-${Date.now()}`,
       type: formData.type,
       name: formData.name,
@@ -646,19 +716,24 @@ const saveService = (): void => {
     })
   }
 
-  writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, allServices.value)
+  writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
   dialogVisible.value = false
   successToast(toast, editingId.value ? "Service updated" : "Service added")
 }
 
 const confirmDelete = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
   confirm.require({
     message: `Delete "${service.name}"?`,
     header: "Confirm",
     icon: "pi pi-exclamation-triangle",
     accept: () => {
-      allServices.value = allServices.value.filter(s => s.id !== service.id)
-      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, allServices.value)
+      customServices.value = customServices.value.filter(s => s.id !== service.id)
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
       successToast(toast, "Service deleted")
     }
   })
@@ -758,6 +833,5 @@ const confirmDeleteBundle = (bundle: BundledService): void => {
 
 onMounted(() => {
   loadServices()
-  loadBundles()
 })
 </script>

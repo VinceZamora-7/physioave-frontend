@@ -87,28 +87,43 @@
                 <span v-if="!collapsed" class="truncate">My Schedule</span>
               </button>
             </li>
-          </ul>
-        </div>
 
-        <div>
-          <button
-            type="button"
-            class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
-          >
-            <span v-if="!collapsed">MY TOOLS</span>
-          </button>
-
-          <ul class="mt-2 space-y-1">
-            <li>
+            <li v-if="canAccessRoute('patients')">
               <button
                 type="button"
-                @click="goToAndClose('settings')"
-                :class="itemClass('settings')"
-                aria-label="Mobile Calendar"
-                title="Mobile Calendar"
+                @click="goToAndClose('patients')"
+                :class="itemClass('patients')"
+                aria-label="Patient"
+                title="Patient"
               >
-                <span :class="iconWrapClass('settings')"><i class="pi pi-mobile text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">Mobile Calendar</span>
+                <span :class="iconWrapClass('patients')"><i class="pi pi-users text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">Patient</span>
+              </button>
+            </li>
+
+            <li v-if="canAccessRoute('appointments')">
+              <button
+                type="button"
+                @click="goToAndClose('appointments')"
+                :class="itemClass('appointments')"
+                aria-label="Appointments"
+                title="Appointments"
+              >
+                <span :class="iconWrapClass('appointments')"><i class="pi pi-calendar text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">Appointments</span>
+              </button>
+            </li>
+
+            <li v-if="canAccessRoute('patient-daily-log')">
+              <button
+                type="button"
+                @click="goToAndClose('patient-daily-log')"
+                :class="itemClass('patient-daily-log')"
+                aria-label="Patient Daily Log"
+                title="Patient Daily Log"
+              >
+                <span :class="iconWrapClass('patient-daily-log')"><i class="pi pi-clipboard text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">Patient Daily Log</span>
               </button>
             </li>
           </ul>
@@ -125,7 +140,7 @@
           </button>
 
           <ul class="mt-2 space-y-1">
-            <li>
+            <li v-if="canAccessRoute('dashboard')">
               <button
                 type="button"
                 @click="goToAndClose('dashboard')"
@@ -140,7 +155,7 @@
           </ul>
         </div>
 
-        
+
         <div>
           <button
             type="button"
@@ -153,7 +168,7 @@
 
           <ul v-show="patientCareOpen" class="mt-2 space-y-1">
 
-            <li>
+            <li v-if="canAccessRoute('patients')">
               <button
                 type="button"
                 @click="goToAndClose('patients')"
@@ -166,7 +181,7 @@
               </button>
             </li>
 
-            <li>
+            <li v-if="canAccessRoute('appointments')">
               <button
                 type="button"
                 @click="goToAndClose('appointments')"
@@ -179,7 +194,7 @@
               </button>
             </li>
 
-            <li>
+            <li v-if="canAccessRoute('patient-daily-log')">
               <button
                 type="button"
                 @click="goToAndClose('patient-daily-log')"
@@ -203,12 +218,12 @@
             class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
             @click="billingOpen = !billingOpen"
           >
-            <span v-if="!collapsed">BILLING</span>
+            <span v-if="!collapsed">FINANCE &amp; CLOSEOUT</span>
             <i class="pi text-[11px]" :class="billingOpen ? 'pi-chevron-down' : 'pi-chevron-right'" />
           </button>
 
           <ul v-show="billingOpen" class="mt-2 space-y-1">
-            <li>
+            <li v-if="canAccessRoute('billing')">
               <button
                 type="button"
                 @click="goToAndClose('billing')"
@@ -221,16 +236,16 @@
               </button>
             </li>
 
-            <li>
+            <li v-if="canAccessRoute('reports')">
               <button
                 type="button"
                 @click="goToAndClose('reports')"
                 :class="itemClass('reports')"
-                aria-label="Reports"
-                title="Reports"
+                aria-label="Finance and Closeout Reports"
+                title="Finance and Closeout Reports"
               >
                 <span :class="iconWrapClass('reports')"><i class="pi pi-chart-bar text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">Reports</span>
+                <span v-if="!collapsed" class="truncate">Finance &amp; Reports</span>
               </button>
             </li>
           </ul>
@@ -242,12 +257,25 @@
             class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
             @click="promosOffersOpen = !promosOffersOpen"
           >
-            <span v-if="!collapsed">PROMOS AND OFFERS</span>
+            <span v-if="!collapsed">OFFERS &amp; COVERAGE</span>
             <i class="pi text-[11px]" :class="promosOffersOpen ? 'pi-chevron-down' : 'pi-chevron-right'" />
           </button>
 
           <ul v-show="promosOffersOpen" class="mt-2 space-y-1">
-            <li>
+            <li v-if="canAccessRoute('promos-offers')">
+              <button
+                type="button"
+                @click="goToAndClose('promos-offers')"
+                :class="itemClass('promos-offers')"
+                aria-label="Offers Overview"
+                title="Offers Overview"
+              >
+                <span :class="iconWrapClass('promos-offers')"><i class="pi pi-briefcase text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">Offers Overview</span>
+              </button>
+            </li>
+
+            <li v-if="canAccessRoute('promos-offers-single-service')">
               <button
                 type="button"
                 @click="goToAndClose('promos-offers-single-service')"
@@ -260,7 +288,7 @@
               </button>
             </li>
 
-            <li>
+            <li v-if="canAccessRoute('promos-offers-package-service')">
               <button
                 type="button"
                 @click="goToAndClose('promos-offers-package-service')"
@@ -273,7 +301,7 @@
               </button>
             </li>
 
-            <li>
+            <li v-if="canAccessRoute('promos-offers-hmo')">
               <button
                 type="button"
                 @click="goToAndClose('promos-offers-hmo')"
@@ -286,7 +314,7 @@
               </button>
             </li>
 
-            <li>
+            <li v-if="canAccessRoute('promos-offers-lgu')">
               <button
                 type="button"
                 @click="goToAndClose('promos-offers-lgu')"
@@ -307,25 +335,12 @@
             class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
             @click="operationsOpen = !operationsOpen"
           >
-            <span v-if="!collapsed">OPERATIONS</span>
+            <span v-if="!collapsed">ADMINISTRATION</span>
             <i class="pi text-[11px]" :class="operationsOpen ? 'pi-chevron-down' : 'pi-chevron-right'" />
           </button>
 
           <ul v-show="operationsOpen" class="mt-2 space-y-1">
-            <li>
-              <button
-                type="button"
-                @click="goToAndClose('ops-dashboard')"
-                :class="itemClass('ops-dashboard')"
-                aria-label="Operations Dashboard"
-                title="Operations Dashboard"
-              >
-                <span :class="iconWrapClass('ops-dashboard')"><i class="pi pi-gauge text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">Ops Dashboard</span>
-              </button>
-            </li>
-
-            <li>
+            <li v-if="canAccessRoute('settings')">
               <button
                 type="button"
                 @click="goToAndClose('settings')"
@@ -338,7 +353,7 @@
               </button>
             </li>
 
-            <li>
+            <li v-if="canAccessRoute('clinics')">
               <button
                 type="button"
                 @click="goToAndClose('clinics')"
@@ -351,7 +366,7 @@
               </button>
             </li>
 
-            <li>
+            <li v-if="canAccessRoute('staffs')">
               <button
                 type="button"
                 @click="goToAndClose('staffs')"
@@ -363,6 +378,7 @@
                 <span v-if="!collapsed" class="truncate">Staff</span>
               </button>
             </li>
+
           </ul>
         </div>
       </div>
@@ -654,6 +670,84 @@ const normalizedUserProviderType = computed(() => {
 
 const isPhysicalTherapistUser = computed(() => normalizedUserProviderType.value === "PHYSICAL_THERAPIST")
 
+type RouteAccessRule = {
+  anyOf: string[]
+}
+
+const ROUTE_ACCESS_RULES: Record<string, RouteAccessRule> = {
+  dashboard: {
+    anyOf: ["Appointment::READ", "Patient::READ", "Billing::READ"],
+  },
+  patients: {
+    anyOf: ["Patient::READ", "Patient::LOOKUP", "Patient::CREATE", "Patient::UPDATE"],
+  },
+  appointments: {
+    anyOf: ["Appointment::READ", "Appointment::LOOKUP", "Appointment::CREATE", "Appointment::UPDATE"],
+  },
+  "patient-daily-log": {
+    anyOf: ["Appointment::READ", "Appointment::LOOKUP", "Patient::READ", "Patient::LOOKUP"],
+  },
+  billing: {
+    anyOf: ["Appointment::MANAGE_BILL", "Patient::MANAGE_BILLS"],
+  },
+  reports: {
+    anyOf: ["Appointment::READ", "Patient::READ", "Appointment::MANAGE_BILL", "Patient::MANAGE_BILLS"],
+  },
+  "promos-offers": {
+    anyOf: ["Reference::LOOKUP", "Reference::READ", "Reference::CREATE", "Reference::UPDATE"],
+  },
+  "promos-offers-single-service": {
+    anyOf: ["Reference::LOOKUP", "Reference::READ", "Reference::CREATE", "Reference::UPDATE"],
+  },
+  "promos-offers-package-service": {
+    anyOf: ["Reference::LOOKUP", "Reference::READ", "Reference::CREATE", "Reference::UPDATE"],
+  },
+  "promos-offers-hmo": {
+    anyOf: ["Reference::LOOKUP", "Reference::READ", "Reference::CREATE", "Reference::UPDATE"],
+  },
+  "promos-offers-lgu": {
+    anyOf: ["Reference::LOOKUP", "Reference::READ", "Reference::CREATE", "Reference::UPDATE"],
+  },
+  settings: {
+    anyOf: ["Clinic::READ", "Clinic::LOOKUP", "Staff::READ", "Staff::LOOKUP", "Reference::LOOKUP", "AccessMatrix::READ"],
+  },
+  clinics: {
+    anyOf: ["Clinic::READ", "Clinic::LOOKUP", "Clinic::CREATE", "Clinic::UPDATE"],
+  },
+  staffs: {
+    anyOf: ["Staff::READ", "Staff::LOOKUP", "Staff::CREATE", "Staff::UPDATE"],
+  },
+}
+
+const userPermissionSet = computed(() => {
+  const permissions = userSnapshot.value?.permissions
+  if (!Array.isArray(permissions)) return new Set<string>()
+
+  const normalized = permissions
+    .map(permission => (typeof permission === "string" ? permission.trim() : ""))
+    .filter(Boolean)
+
+  return new Set<string>(normalized)
+})
+
+const hasPermissionData = computed(() => userPermissionSet.value.size > 0)
+
+const hasAnyPermission = (...permissions: string[]) => permissions.some(permission => userPermissionSet.value.has(permission))
+
+const canAccessRoute = (routeName: string): boolean => {
+  const normalizedRole = displayRole.value.trim().toLowerCase()
+  if (normalizedRole === "owner") return true
+
+  const rule = ROUTE_ACCESS_RULES[routeName]
+  if (!rule) return true
+
+  if (!hasPermissionData.value) {
+    return false
+  }
+
+  return hasAnyPermission(...rule.anyOf)
+}
+
 const userInitials = computed(() => {
   const words = displayName.value
     .split(/\s+/)
@@ -684,10 +778,12 @@ defineExpose({
 onMounted(() => {
   void fetchCurrentUser()
   window.addEventListener("storage", syncUserSnapshot)
+  window.addEventListener("auth-user-updated", fetchCurrentUser)
 })
 
 onUnmounted(() => {
   window.removeEventListener("storage", syncUserSnapshot)
+  window.removeEventListener("auth-user-updated", fetchCurrentUser)
 })
 
 const asideClass = computed(() => [
