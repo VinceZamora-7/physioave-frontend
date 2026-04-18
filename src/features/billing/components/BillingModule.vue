@@ -1333,6 +1333,7 @@ import {
   renderEncounterTicketPdfWindow,
   type EncounterTicketPdfCard
 } from "@/utils/encounter-ticket-pdf.util"
+import {getApiErrorMessage} from "@/utils/actionable-error.util"
 import {
   openBillingReceiptWindow,
   renderBillingReceiptWindow,
@@ -1383,10 +1384,13 @@ const lguBudgetSummaryError = ref("")
 const roleName = ref("")
 
 const extractApiErrorMessage = (error: unknown, fallback: string): string => {
-  if (!axios.isAxiosError(error)) return fallback
-  const status = error.response?.status
-  const detail = error.response?.data?.message || error.response?.data?.detail || error.message
-  return detail ? `${fallback}${status ? ` (${status})` : ""}: ${detail}` : fallback
+  return getApiErrorMessage(error, {
+    baseMessage: fallback,
+    permissionHint: "Billing access (Read Only or Can Edit) in Role Access",
+    notFoundHint: "The billing record was not found. Refresh the list and try again.",
+    invalidInputHint: "Some billing fields are invalid. Check patient, line items, and payment values, then retry.",
+    retryHint: "Please try again."
+  })
 }
 
 type LocalService = { id: string; type: string; name: string; price: number; status: string }
@@ -2198,7 +2202,7 @@ const exportBillingEncounterTicketPack = async (billingIds: number[], sourceLabe
   try {
     popup = openEncounterTicketPdfWindow("Encounter Ticket PDF Pack")
   } catch (error: unknown) {
-    errorToast(toast, error instanceof Error ? error.message : "Unable to open the PDF export window")
+    errorToast(toast, "Unable to open the PDF export window. Allow pop-ups for this site, then try again.")
     return
   }
   exportingEncounterTicketsPdf.value = true
@@ -2864,8 +2868,14 @@ const fetchBillings = async (): Promise<void> => {
     })
     billings.value = response?.content ?? []
     selectedBillingRows.value = []
-  } catch {
-    errorToast(toast, "Failed to load billings")
+  } catch (error: unknown) {
+    errorToast(
+      toast,
+      extractApiErrorMessage(
+        error,
+        "Could not load billings. Check your filters and click Refresh."
+      )
+    )
   } finally {
     isLoading.value = false
   }
@@ -2949,7 +2959,7 @@ const copyFromLastSession = async (): Promise<void> => {
 
     const detail = await billingPhase1Service.getById(billingId)
     if (!detail) {
-      errorToast(toast, "Failed to load previous billing details")
+      errorToast(toast, "Previous billing was found but details could not be loaded. Refresh and try Copy from Last Session again.")
       return
     }
 
@@ -2964,8 +2974,14 @@ const copyFromLastSession = async (): Promise<void> => {
 
     selectedLines.value = lines
     successToast(toast, `Copied ${lines.length} item${lines.length === 1 ? '' : 's'} from last session (${detail.created_at})`)
-  } catch {
-    errorToast(toast, "Failed to copy from last session")
+  } catch (error: unknown) {
+    errorToast(
+      toast,
+      extractApiErrorMessage(
+        error,
+        "Could not copy from last session. Verify patient selection and try again."
+      )
+    )
   } finally {
     copyingFromLastSession.value = false
   }
@@ -3160,7 +3176,7 @@ const getReceiptDisplayNumber = (detail: BillingListItem): string =>
 const openBillingDetails = async (billingId: number): Promise<void> => {
   const detail = await billingPhase1Service.getById(billingId)
   if (!detail) {
-    errorToast(toast, "Failed to load billing details")
+    errorToast(toast, "Billing details could not be loaded. Refresh the list and open the record again.")
     return
   }
 
@@ -3188,6 +3204,11 @@ const printSelectedBillingReceipt = (): void => {
         billingDate: detail.created_at,
         referenceNumber: getReceiptDisplayNumber(detail),
         patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
+        patientAddress: detail.patient_address,
+        patientAge: detail.patient_age,
+        patientGender: detail.patient_gender,
+        physicalTherapist: detail.physical_therapist,
+        doctor: detail.doctor,
         paymentMethod: derivePaymentType(detail) || "Cash/Card/Online Transfer",
         paymentReferenceNo: detail.payment_reference || detail.receipt_number,
         subtotal: Number(detail.subtotal_amount ?? detail.amount_due ?? detail.total_amount ?? 0),
@@ -3211,6 +3232,11 @@ const printSelectedBillingReceipt = (): void => {
         billingDate: detail.created_at,
         referenceNumber: getReceiptDisplayNumber(detail),
         patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
+        patientAddress: detail.patient_address,
+        patientAge: detail.patient_age,
+        patientGender: detail.patient_gender,
+        physicalTherapist: detail.physical_therapist,
+        doctor: detail.doctor,
         paymentMethod: derivePaymentType(detail) || "Cash/Card/Online Transfer",
         paymentReferenceNo: detail.payment_reference || detail.receipt_number,
         subtotal: Number(detail.subtotal_amount ?? detail.amount_due ?? detail.total_amount ?? 0),
@@ -3244,6 +3270,11 @@ const printSelectedBillingReceipt = (): void => {
         billingDate: detail.created_at,
         referenceNumber: getReceiptDisplayNumber(detail),
         patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
+        patientAddress: detail.patient_address,
+        patientAge: detail.patient_age,
+        patientGender: detail.patient_gender,
+        physicalTherapist: detail.physical_therapist,
+        doctor: detail.doctor,
         hmoName: detail.hmo_name,
         hmoTypeName: detail.hmo_type_name,
         hmoCompanyName: detail.hmo_company_name,
@@ -3278,6 +3309,11 @@ const printSelectedBillingReceipt = (): void => {
         billingDate: detail.created_at,
         referenceNumber: getReceiptDisplayNumber(detail),
         patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
+        patientAddress: detail.patient_address,
+        patientAge: detail.patient_age,
+        patientGender: detail.patient_gender,
+        physicalTherapist: detail.physical_therapist,
+        doctor: detail.doctor,
         lguProgramName: detail.lgu_program_name,
         lguReferenceLabel: detail.lgu_reference_label,
         lguDateIssued: detail.lgu_date_issued,

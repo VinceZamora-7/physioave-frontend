@@ -249,6 +249,7 @@ import InputText from "primevue/inputtext";
 import IftaLabel from "primevue/iftalabel";
 import Select from "primevue/select";
 import {useQueryClient} from "@tanstack/vue-query";
+import { getApiErrorMessage } from "@/utils/actionable-error.util";
 import {errorToast, successToast} from "@/utils/toast.util.ts";
 
 const toast = useToast()
@@ -341,8 +342,13 @@ const onSubmit = (event: FormSubmitEvent) => {
             successToast(toast, "Editing Patient HMO Information success")
             await resetQueries()
           },
-          async onError() {
-            errorToast(toast, "Editing Patient HMO Information failed")
+          async onError(error: unknown) {
+            errorToast(toast, getApiErrorMessage(error, {
+              baseMessage: "Editing Patient HMO Information failed",
+              permissionHint: "Patient access (Can Edit) in Role Access",
+              invalidInputHint: "Some HMO fields are invalid. Review required fields and try again.",
+              retryHint: "Please try again."
+            }))
             await resetQueries()
           },
         })
@@ -356,8 +362,13 @@ const onSubmit = (event: FormSubmitEvent) => {
           event.reset()
           await resetQueries()
         },
-        async onError() {
-          errorToast(toast, "Saving Patient HMO Information failed")
+        async onError(error: unknown) {
+          errorToast(toast, getApiErrorMessage(error, {
+            baseMessage: "Saving Patient HMO Information failed",
+            permissionHint: "Patient access (Can Edit) in Role Access",
+            invalidInputHint: "Some HMO fields are invalid. Review required fields and try again.",
+            retryHint: "Please try again."
+          }))
           await resetQueries()
         },
       })

@@ -212,17 +212,25 @@
 
           <Column header="Primary PT Signature" style="min-width: 180px">
             <template #body="{ data }">
-              <button
-                v-if="data.pt_signature_data_url"
-                type="button"
-                class="w-full rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-2 text-left transition hover:border-[#A91D8B]/40 hover:shadow-sm"
-                @click="openSignaturePreview('PT Signature', data.pt_signature_data_url, providerLabel(data))"
-              >
-                <img :src="data.pt_signature_data_url" alt="PT signature preview" class="h-16 w-full rounded-xl object-contain bg-white/80" />
-                <div class="mt-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">Signed</div>
-              </button>
-              <div v-else class="rounded-2xl border border-dashed border-[rgb(var(--app-border))] px-3 py-5 text-center text-xs opacity-60">
-                PT signature pending
+              <div v-if="data.pt_signature_data_url" class="space-y-2">
+                <button
+                  type="button"
+                  class="w-full rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-2 text-left transition hover:border-[#A91D8B]/40 hover:shadow-sm"
+                  @click="openSignaturePreview('PT Signature', data.pt_signature_data_url, providerLabel(data))"
+                >
+                  <img :src="data.pt_signature_data_url" alt="PT signature preview" class="h-16 w-full rounded-xl object-contain bg-white/80" />
+                  <div class="mt-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">Signed</div>
+                </button>
+              </div>
+              <div v-else class="space-y-2">
+                <button
+                  type="button"
+                  class="w-full rounded-2xl border border-dashed border-[rgb(var(--app-border))] px-3 py-4 text-center text-xs opacity-60 transition hover:opacity-100 hover:border-[#A91D8B]/40"
+                  @click="openPtCompletionDialog(data)"
+                >
+                  <div class="font-medium">Add signature</div>
+                  <div class="mt-1 text-[11px] opacity-50">Click to sign and mark complete</div>
+                </button>
               </div>
             </template>
           </Column>
@@ -323,6 +331,76 @@
         </div>
       </div>
     </Dialog>
+
+    <Dialog
+      v-model:visible="ptCompletionVisible"
+      modal
+      header="Mark Schedule as Finished"
+      :style="{ width: '560px' }"
+      :breakpoints="{ '1024px': '92vw', '768px': '100vw' }"
+    >
+      <div v-if="selectedPtCompletionEntry" class="space-y-4">
+        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
+          <div class="text-sm font-semibold text-[rgb(var(--app-fg))]">Session Details</div>
+          <div class="mt-4 grid gap-3 md:grid-cols-2 text-sm">
+            <div>
+              <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Patient</div>
+              <div class="mt-1 font-medium text-[rgb(var(--app-fg))]">{{ selectedPtCompletionEntry.patient_name }}</div>
+              <div class="text-xs opacity-65">{{ selectedPtCompletionEntry.patient_public_id }}</div>
+            </div>
+            <div>
+              <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Schedule</div>
+              <div class="mt-1 font-medium text-[rgb(var(--app-fg))]">{{ formatTimeRange(selectedPtCompletionEntry.starts_at, selectedPtCompletionEntry.ends_at) }}</div>
+              <div class="text-xs opacity-65">{{ formatFullDate(selectedPtCompletionEntry.starts_at) }}</div>
+            </div>
+            <div>
+              <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Clinic</div>
+              <div class="mt-1 font-medium text-[rgb(var(--app-fg))]">{{ selectedPtCompletionEntry.clinic_name || 'No clinic assigned' }}</div>
+            </div>
+            <div>
+              <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Status</div>
+              <div class="mt-1">
+                <Tag :value="displaySignatureState(selectedPtCompletionEntry.signature_state)" :severity="signatureStateSeverity(selectedPtCompletionEntry.signature_state)" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
+          <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Completion Note (Optional)</div>
+          <div class="mt-2 text-sm text-[rgb(var(--app-fg))]/65">
+            Add a short handoff note if needed, like "completed at home" or "session cut short due to patient condition".
+          </div>
+          <InputText
+            v-model="ptCompletionTag"
+            fluid
+            class="mt-4"
+            placeholder="Optional PT completion tag"
+          />
+        </div>
+
+        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
+          <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Your PT Signature</div>
+          <div class="mt-2 text-sm text-[rgb(var(--app-fg))]/65">
+            Sign below to confirm the session was completed.
+          </div>
+          <div class="mt-4">
+            <PatientSignaturePad v-model="ptCompletionSignatureDataUrl" />
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <Button label="Cancel" text @click="ptCompletionVisible = false" />
+        <Button
+          label="Save Signature & Mark Complete"
+          icon="pi pi-check"
+          :loading="isPtCompletionSaving"
+          :pt="ptPrimaryBtn"
+          @click="submitPtCompletion"
+        />
+      </template>
+    </Dialog>
   </main>
 </template>
 
@@ -345,12 +423,14 @@ import {
   type AppointmentLocationContext,
   type AppointmentPhase
 } from "@/features/appointments/api/appointment-phase1.service"
+import PatientSignaturePad from "@/features/appointments/components/PatientSignaturePad.vue"
 import {clinicService} from "@/features/clinics/api/clinic.service"
 import type {Clinic} from "@/features/clinics/types/clinic"
 import {ptInputText, ptOutlinedBtn, ptPrimaryBtn, ptSelect} from "@/features/shared/table-header.styles"
 import {staffService} from "@/features/staff/api/staff.service"
 import type {Staff} from "@/features/staff/types/staff"
 import {defaultPage} from "@/models/paging"
+import {getApiErrorMessage} from "@/utils/actionable-error.util"
 import {Status} from "@/utils/global.type"
 import {errorToast} from "@/utils/toast.util"
 
@@ -379,6 +459,11 @@ const signaturePreviewVisible = ref(false)
 const signaturePreview = ref<SignaturePreviewState>()
 const supportStaffDetailsVisible = ref(false)
 const selectedSupportStaffEntry = ref<AppointmentDailyLogItem>()
+const ptCompletionVisible = ref(false)
+const selectedPtCompletionEntry = ref<AppointmentDailyLogItem>()
+const ptCompletionSignatureDataUrl = ref("")
+const ptCompletionTag = ref("")
+const isPtCompletionSaving = ref(false)
 
 const selectedDateLabel = computed(() =>
   selectedDate.value.toLocaleDateString("en-PH", {
@@ -463,6 +548,14 @@ const toDateParam = (value: Date): string => {
   const day = String(value.getDate()).padStart(2, "0")
   return `${year}-${month}-${day}`
 }
+
+const extractMessage = (error: unknown): string =>
+  getApiErrorMessage(error, {
+    baseMessage: "Failed to save PT signature",
+    permissionHint: "Appointment update access for the assigned Physical Therapist",
+    invalidInputHint: "The PT completion details are incomplete or no longer editable.",
+    retryHint: "Refresh the daily log and try again."
+  })
 
 const formatFullDate = (value: string): string =>
   new Date(value).toLocaleDateString("en-PH", {
@@ -619,6 +712,44 @@ const openSignaturePreview = (title: string, imageUrl: string, subtitle: string)
     imageUrl
   }
   signaturePreviewVisible.value = true
+}
+
+const openPtCompletionDialog = (entry: AppointmentDailyLogItem): void => {
+  selectedPtCompletionEntry.value = entry
+  ptCompletionSignatureDataUrl.value = ""
+  ptCompletionTag.value = ""
+  ptCompletionVisible.value = true
+}
+
+const submitPtCompletion = async (): Promise<void> => {
+  if (!selectedPtCompletionEntry.value) return
+  if (!ptCompletionSignatureDataUrl.value?.trim()) {
+    errorToast(toast, "Please provide your signature to mark the session as complete")
+    return
+  }
+
+  try {
+    isPtCompletionSaving.value = true
+    const appointmentId = selectedPtCompletionEntry.value.id
+    await appointmentPhase1Service.processPtCompletion(appointmentId, {
+      pt_signature_data_url: ptCompletionSignatureDataUrl.value,
+      pt_completion_tag: ptCompletionTag.value.trim() || undefined
+    })
+
+    ptCompletionVisible.value = false
+    await refreshDailyLog()
+    toast.add({
+      severity: "success",
+      summary: "Success",
+      detail: "Session marked as complete. Your signature has been saved.",
+      life: 3000
+    })
+  } catch (error) {
+    errorToast(toast, extractMessage(error))
+    console.error("PT completion error:", error)
+  } finally {
+    isPtCompletionSaving.value = false
+  }
 }
 
 watch(selectedClinicId, (clinicId) => {

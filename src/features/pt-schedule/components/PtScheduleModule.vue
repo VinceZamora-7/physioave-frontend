@@ -356,7 +356,6 @@
 <script setup lang="ts">
 import {computed, onMounted, ref} from "vue"
 import {useToast} from "primevue"
-import axios from "axios"
 import Button from "primevue/button"
 import DatePicker from "primevue/datepicker"
 import Dialog from "primevue/dialog"
@@ -376,6 +375,7 @@ import {
   type AppointmentPtCompletionPayload
 } from "@/features/appointments/api/appointment-phase1.service"
 import {authMeService, type AuthMe} from "@/services/auth-me.service"
+import {getApiErrorMessage} from "@/utils/actionable-error.util"
 import {errorToast, successToast} from "@/utils/toast.util"
 import {ptOutlinedBtn, ptPrimaryBtn} from "@/features/shared/table-header.styles"
 
@@ -418,7 +418,10 @@ type CalendarDayStatus =
 const canUseDashboard = computed(() => currentUser.value?.appointment_provider_type === "PHYSICAL_THERAPIST")
 const nextAppointment = computed(() => appointments.value[0])
 const selectedPtEncounterTicket = computed(() => selectedPtAppointmentDetail.value?.encounter_ticket)
-const isSelectedPtEncounterTicketLocked = computed(() => Boolean(selectedPtEncounterTicket.value?.record_locked))
+const isSelectedPtEncounterTicketLocked = computed(() =>
+  Boolean(selectedPtEncounterTicket.value?.record_locked) &&
+  Boolean(selectedPtEncounterTicket.value?.pt_signature_data_url?.trim())
+)
 const selectedPtEncounterTicketHasSignature = computed(() => Boolean(selectedPtEncounterTicket.value?.pt_signature_data_url?.trim()))
 const todaysAppointmentsCount = computed(() => {
   const todayKey = formatDateKey(new Date())
@@ -559,10 +562,12 @@ const refreshSchedule = async (): Promise<void> => {
 }
 
 const extractMessage = (error: unknown): string => {
-  const fallback = "Failed to load your upcoming schedule"
-  if (!axios.isAxiosError(error)) return fallback
-  const detail = error.response?.data?.message || error.response?.data?.detail || error.message
-  return typeof detail === "string" && detail.trim() ? detail.trim() : fallback
+  return getApiErrorMessage(error, {
+    baseMessage: "Failed to load your upcoming schedule",
+    permissionHint: "Appointment read access for PT schedule",
+    invalidInputHint: "Schedule filters are invalid. Refresh and try again.",
+    retryHint: "Please try again."
+  })
 }
 
 const seedPtCompletionForm = (ticket?: AppointmentEncounterTicket): void => {
@@ -589,10 +594,6 @@ const openPtCompletionDialog = async (appointment: AppointmentListItem): Promise
 
 const submitPtCompletion = async (): Promise<void> => {
   if (!selectedPtAppointmentDetail.value) return
-  if (isSelectedPtEncounterTicketLocked.value) {
-    errorToast(toast, "This encounter ticket is already locked")
-    return
-  }
   if (!ptCompletionSignatureDataUrl.value.trim()) {
     errorToast(toast, "PT signature is required before saving the session sign-off")
     return

@@ -205,6 +205,7 @@ import {TechniqueTanstackKey} from "@/utils/keys/tanstack-key.ts";
 import type {AxiosResponse} from "axios";
 import {exportToExcel} from "@/utils/export-excel.util.ts";
 import type {MenuItem} from "primevue/menuitem";
+import {getApiErrorMessage} from "@/utils/actionable-error.util";
 import {errorToast, successToast, warningToast} from "@/utils/toast.util.ts";
 import type {APIError} from "@/utils/error-handler.ts";
 import OfferForm from "@/features/offers/components/OfferForm.vue";
@@ -290,6 +291,15 @@ const statusLabel = (isActive: boolean): string => {
   return isActive ? 'Active' : 'Inactive'
 }
 
+const extractApiErrorMessage = (error: unknown, fallback: string): string => {
+  return getApiErrorMessage(error, {
+    baseMessage: fallback,
+    permissionHint: "Technique access (Can Edit) in Role Access",
+    invalidInputHint: "Technique values are invalid. Review name and price, then try again.",
+    retryHint: "Please try again."
+  })
+}
+
 const editFn = (payload: OfferEditPayload): void => {
   updateMutation(payload, {
     async onSuccess() {
@@ -298,7 +308,7 @@ const editFn = (payload: OfferEditPayload): void => {
       await resetQueries()
     },
     async onError(error: APIError) {
-      errorToast(toast, `Edit failed ${error.message}`)
+      errorToast(toast, extractApiErrorMessage(error, "Technique edit failed"))
       await resetQueries()
     },
   })
@@ -312,7 +322,7 @@ const saveFn = (request: OfferRequest): void => {
       await resetQueries()
     },
     async onError(error: APIError) {
-      errorToast(toast, `Save failed ${error.message}`)
+      errorToast(toast, extractApiErrorMessage(error, "Technique save failed"))
       await resetQueries()
     },
   })
@@ -415,7 +425,7 @@ const menuButtons = (offer: Technique): MenuItem[] => {
                 await resetQueries()
               },
               async onError(error: APIError) {
-                errorToast(toast, `Toggle status failed ${error.message}`)
+                errorToast(toast, extractApiErrorMessage(error, "Toggle technique status failed"))
                 await resetQueries()
               },
             })

@@ -135,7 +135,6 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue"
-import axios from "axios"
 import Button from "primevue/button"
 import Dialog from "primevue/dialog"
 import IftaLabel from "primevue/iftalabel"
@@ -147,6 +146,7 @@ import { useToast } from "primevue"
 import type { Pageable } from "@/models/paging"
 import type { SpecialtyTag } from "@/models/reference"
 import { pamsAPI } from "@/utils/axios-interceptor"
+import { getApiErrorMessage } from "@/utils/actionable-error.util"
 import { errorToast, successToast } from "@/utils/toast.util"
 import { Status } from "@/utils/global.type"
 
@@ -190,11 +190,12 @@ const statusFilterOptions = [
 ]
 
 function extractApiErrorMessage(error: unknown, fallback: string): string {
-  if (axios.isAxiosError(error)) {
-    const detail = error.response?.data?.message || error.response?.data?.detail || error.message
-    return detail ? `${fallback}: ${detail}` : fallback
-  }
-  return error instanceof Error && error.message ? `${fallback}: ${error.message}` : fallback
+  return getApiErrorMessage(error, {
+    baseMessage: fallback,
+    permissionHint: "Reference permissions in Role Access",
+    invalidInputHint: "Specialty values are invalid. Review the form and try again.",
+    retryHint: "Please try again."
+  })
 }
 
 function applySelectedSpecialty(specialty?: SpecialtyTag): void {

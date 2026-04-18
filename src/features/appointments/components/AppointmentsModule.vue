@@ -486,6 +486,62 @@
           </div>
         </div>
 
+        <div
+          v-if="selectedDetail.lgu_credit_summary?.items?.length"
+          class="overflow-hidden rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))]"
+        >
+          <div class="border-b border-[rgb(var(--app-border))] px-4 py-3">
+            <div class="flex items-center justify-between gap-2">
+              <div>
+                <div class="text-sm font-semibold text-[rgb(var(--app-fg))]">LGU Credit Ledger</div>
+                <div class="mt-1 text-xs opacity-70">
+                  {{ selectedDetail.lgu_credit_summary.package_name }}: {{ selectedDetail.lgu_credit_summary.consumed_sessions }} of {{ selectedDetail.lgu_credit_summary.total_sessions }} consumed
+                </div>
+              </div>
+              <Button
+                v-if="selectedDetail.lgu_credit_summary.consumed_sessions > 0 && selectedDetail.lgu_credit_summary.authorization_status === 'ACTIVE'"
+                label="Create Month-End Claim"
+                icon="pi pi-file"
+                size="small"
+                :pt="ptPrimaryBtn"
+                @click="openLguMonthlyClaimDialog"
+              />
+            </div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+              <thead class="bg-black/5 text-left text-xs uppercase tracking-wide opacity-70 dark:bg-white/5">
+                <tr>
+                  <th class="px-4 py-3 font-medium">Service Item</th>
+                  <th class="px-4 py-3 font-medium">Package</th>
+                  <th class="px-4 py-3 font-medium text-right">Total</th>
+                  <th class="px-4 py-3 font-medium text-right">Used</th>
+                  <th class="px-4 py-3 font-medium text-right">Balance</th>
+                  <th class="px-4 py-3 font-medium">Expiry</th>
+                  <th class="px-4 py-3 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="item in selectedDetail.lgu_credit_summary.items"
+                  :key="item.id"
+                  class="border-t border-[rgb(var(--app-border))]"
+                >
+                  <td class="px-4 py-3 font-medium">{{ item.service_item }}</td>
+                  <td class="px-4 py-3">{{ item.package_name }}</td>
+                  <td class="px-4 py-3 text-right">{{ item.total_purchased }}</td>
+                  <td class="px-4 py-3 text-right">{{ item.used }}</td>
+                  <td class="px-4 py-3 text-right">{{ item.balance }}</td>
+                  <td class="px-4 py-3">{{ item.expiry_date || "Open" }}</td>
+                  <td class="px-4 py-3">
+                    <Tag :value="item.status" :severity="item.balance <= 0 ? 'contrast' : item.status === 'DROPPED_OUT' ? 'danger' : 'info'" />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <div class="flex flex-wrap gap-2 pt-1">
           <Button label="Open Patient Record" icon="pi pi-user" outlined :pt="ptOutlinedBtn" class="min-w-[180px]" @click="goToPatients" />
           <Button
@@ -530,6 +586,85 @@
           Create or open the billing record first so the signed ticket can be permanently attached to the patient’s billing profile.
         </p>
       </div>
+    </Dialog>
+
+    <Dialog
+      v-model:visible="lguMonthlyClaimVisible"
+      modal
+      header="Create Month-End LGU Claim"
+      :style="{ width: '540px' }"
+      :breakpoints="{ '1024px': '92vw', '768px': '100vw' }"
+    >
+      <div v-if="selectedDetail?.lgu_credit_summary" class="space-y-4">
+        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
+          <div class="text-sm font-semibold text-[rgb(var(--app-fg))]">Appointment & Package Summary</div>
+          <div class="mt-4 grid gap-3 md:grid-cols-2 text-sm">
+            <div>
+              <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Patient</div>
+              <div class="mt-1 font-medium text-[rgb(var(--app-fg))]">{{ selectedDetail.patient_name }}</div>
+              <div class="text-xs opacity-65">{{ selectedDetail.patient_public_id }}</div>
+            </div>
+            <div>
+              <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Package</div>
+              <div class="mt-1 font-medium text-[rgb(var(--app-fg))]">{{ selectedDetail.lgu_credit_summary.package_name }}</div>
+            </div>
+            <div>
+              <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Consumed Credits</div>
+              <div class="mt-1">
+                <span class="text-xl font-semibold text-[rgb(var(--app-fg))]">{{ selectedDetail.lgu_credit_summary.consumed_sessions }}</span>
+                <span class="text-xs opacity-65"> of {{ selectedDetail.lgu_credit_summary.total_sessions }} total</span>
+              </div>
+            </div>
+            <div>
+              <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Status</div>
+              <div class="mt-1">
+                <Tag :value="selectedDetail.lgu_credit_summary.authorization_status" :severity="selectedDetail.lgu_credit_summary.authorization_status === 'ACTIVE' ? 'success' : 'danger'" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
+          <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Billing Month</div>
+          <div class="mt-2 text-sm text-[rgb(var(--app-fg))]/65">
+            Select the month to bill these consumed LGU credits. Format: YYYY-MM (e.g., 2026-04 for April 2026).
+          </div>
+          <IftaLabel class="mt-4">
+            <InputText
+              v-model="lguMonthlyClaimMonth"
+              fluid
+              placeholder="2026-04"
+              @input="sanitizeLguMonthInput"
+            />
+            <label>Billing Month</label>
+          </IftaLabel>
+          <small class="mt-2 block text-[11px] opacity-65">
+            Only consumed credits from this month will be included in the claim.
+          </small>
+        </div>
+
+        <Message
+          v-if="lguMonthlyClaimSummary"
+          severity="info"
+          :closable="false"
+          class="text-sm"
+        >
+          <div class="font-medium">{{ lguMonthlyClaimSummary.consumed_count }} credits from consumed items</div>
+          <div class="text-xs opacity-75 mt-1">will be billed as individual pricing</div>
+        </Message>
+      </div>
+
+      <template #footer>
+        <Button label="Cancel" text @click="lguMonthlyClaimVisible = false" />
+        <Button
+          label="Create Claim"
+          icon="pi pi-check"
+          :loading="isLguMonthlyClaimSaving"
+          :pt="ptPrimaryBtn"
+          :disabled="!lguMonthlyClaimMonth?.trim()"
+          @click="submitLguMonthlyClaim"
+        />
+      </template>
     </Dialog>
 
     <Dialog
@@ -992,7 +1127,7 @@
 </template>
 
           <!-- Service Mode Toggle -->
-          <div v-if="createBillingType !== 'SELF_PAY_PACKAGE'" class="flex flex-col gap-1.5">
+          <div v-if="!isCreatePackageServiceFlow" class="flex flex-col gap-1.5">
             <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Service Mode</label>
             <div class="flex rounded-xl bg-[rgb(var(--app-bg))] border border-[rgb(var(--app-border))] p-1 gap-1">
               <button
@@ -1012,7 +1147,7 @@
           </div>
 
           <!-- Package -->
-          <div v-if="createBillingType === 'SELF_PAY_PACKAGE'" class="space-y-3">
+          <div v-if="isCreatePackageServiceFlow" class="space-y-3">
             <div class="flex flex-col gap-1.5">
               <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Package Offer</label>
               <Select
@@ -1027,6 +1162,31 @@
               />
               <p v-if="activePackageServiceOffers.length === 0" class="px-1 text-xs text-[rgb(var(--app-fg))]/50">
                 No package offers available. Add them in Self Pay: Package Service Management.
+              </p>
+            </div>
+            <div v-if="createBillingType === 'LGU_BILLING'" class="flex flex-col gap-1.5">
+              <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Bundle</label>
+              <div class="flex flex-col gap-2 md:flex-row md:items-end">
+                <Select
+                  v-model="selectedBundleId"
+                  :options="activeBundledServices"
+                  optionLabel="name"
+                  optionValue="id"
+                  filter
+                  fluid
+                  placeholder="Select a bundle"
+                  :pt="ptSelect"
+                />
+                <Button
+                  label="Add Bundle"
+                  icon="pi pi-box"
+                  outlined
+                  :disabled="!selectedBundleId"
+                  @click="addSelectedBundle"
+                />
+              </div>
+              <p v-if="activeBundledServices.length === 0" class="px-1 text-xs text-[rgb(var(--app-fg))]/50">
+                No bundles available. Add them in Single Pay: Single Service Management.
               </p>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1355,11 +1515,10 @@ import {
   openEncounterTicketPdfWindow,
   renderEncounterTicketPdfWindow
 } from "@/utils/encounter-ticket-pdf.util";
+import {getApiErrorMessage} from "@/utils/actionable-error.util";
 import {errorToast, successToast} from "@/utils/toast.util";
 import type {Lookup} from "@/models/global.model";
 import {patientService} from "@/features/patients/api/patient.service";
-import {staffService} from "@/features/staff/api/staff.service";
-import {clinicService} from "@/features/clinics/api/clinic.service";
 import {defaultPage, defaultPageSize} from "@/models/paging";
 import {Status} from "@/utils/global.type";
 import type {Clinic} from "@/features/clinics/types/clinic";
@@ -1400,6 +1559,10 @@ const encounterTicketVisible = ref(false)
 const isEncounterTicketSaving = ref(false)
 const encounterTicketAttendedAt = ref<Date>(new Date())
 const encounterTicketSignatureDataUrl = ref("")
+const lguMonthlyClaimVisible = ref(false)
+const lguMonthlyClaimMonth = ref("")
+const isLguMonthlyClaimSaving = ref(false)
+const lguMonthlyClaimSummary = ref<{ consumed_count: number; billing_month: string } | null>(null)
 const isLoading = ref(false)
 const isPtDeckLoading = ref(false)
 const slotMinuteStep = 15
@@ -1548,6 +1711,9 @@ const serviceModeOptions: Array<{label: string; value: ServiceMode}> = [
   {label: "Individual", value: "individual"},
   {label: "Bundled", value: "bundled"},
 ]
+const isPackageServiceFlowBillingType = (billingType: BillingType): boolean =>
+  billingType === "SELF_PAY_PACKAGE" || billingType === "LGU_BILLING"
+const isCreatePackageServiceFlow = computed(() => isPackageServiceFlowBillingType(createBillingType.value))
 const visibleServiceModeOptions = computed(() =>
   createBillingType.value === "HMO_BILLING"
     ? serviceModeOptions.filter(option => option.value === "individual")
@@ -1654,10 +1820,13 @@ const resolveCreateServiceType = (billingType: BillingType): NonNullable<Paramet
 }
 
 const extractApiErrorMessage = (error: unknown, fallback: string): string => {
-  if (!axios.isAxiosError(error)) return fallback
-  const status = error.response?.status
-  const detail = error.response?.data?.message || error.response?.data?.detail || error.message
-  return detail ? `${fallback}${status ? ` (${status})` : ""}: ${detail}` : fallback
+  return getApiErrorMessage(error, {
+    baseMessage: fallback,
+    permissionHint: "Appointment or Patient permissions in Role Access",
+    notFoundHint: "The selected record was not found. Refresh the page and try again.",
+    invalidInputHint: "Some inputs are invalid. Check required fields and schedule values, then retry.",
+    retryHint: "Please try again."
+  })
 }
 
 const toOptionalStringId = (value: unknown): string | undefined => {
@@ -2167,6 +2336,7 @@ const patientWalletAmountToCollect = computed(() =>
 )
 const hasPatientWalletAmountToCollect = computed(() => patientWalletAmountToCollect.value > 0)
 const sponsorWalletSummary = computed(() => selectedCheckoutSummary.value?.sponsor_wallet)
+const selectedLguCreditSummary = computed(() => selectedDetail.value?.lgu_credit_summary)
 const selectedEncounterTicket = computed(() => selectedDetail.value?.encounter_ticket)
 const selectedEncounterTicketHasPatientSignature = computed(() =>
   Boolean(selectedEncounterTicket.value?.patient_signature_data_url?.trim())
@@ -2313,23 +2483,88 @@ const dropoutToggleSeverity = computed(() =>
 )
 const dropoutStatusDescription = computed(() => {
   const status = dropoutStatusValue.value
-  if (status === "DROPPED_OUT") return "Patient has dropped out. A 10% dropout surcharge was applied to previous sessions."
+  if (status === "DROPPED_OUT") return "Consumed LGU credits are converted into an individual-pricing dropout claim. Month-end package claims are blocked until the patient returns."
   if (status === "RETURNED") return "Patient returned after previously dropping out."
-  return "Patient is actively participating in the LGU program."
+  return selectedLguCreditSummary.value
+    ? "Patient is active. Month-end LGU claims can only be created from consumed credits with both PT and patient signatures."
+    : "Patient is actively participating in the LGU program."
 })
 const toggleDropoutStatus = async () => {
   if (!selectedDetail.value?.id) return
   const nextStatus = dropoutStatusValue.value === "DROPPED_OUT" ? "RETURNED" : "DROPPED_OUT"
   dropoutLoading.value = true
   try {
-    await appointmentPhase1Service.updateDropoutStatus(selectedDetail.value.id, nextStatus)
-    successToast(toast, `Status updated to ${nextStatus === "DROPPED_OUT" ? "Dropped Out" : "Returned"}`)
+    const result = await appointmentPhase1Service.updateDropoutStatus(selectedDetail.value.id, nextStatus)
+    const baseMessage = `Status updated to ${nextStatus === "DROPPED_OUT" ? "Dropped Out" : "Returned"}`
+    if (result?.dropout_billing_public_id) {
+      successToast(toast, `${baseMessage}. Dropout claim ${result.dropout_billing_public_id} was created.`)
+    } else {
+      successToast(toast, baseMessage)
+    }
     // Refresh detail
     selectedDetail.value = await appointmentPhase1Service.getById(selectedDetail.value.id)
   } catch (error: unknown) {
     errorToast(toast, extractApiErrorMessage(error, "Failed to update dropout status"))
   } finally {
     dropoutLoading.value = false
+  }
+}
+
+const openLguMonthlyClaimDialog = (): void => {
+  if (!selectedDetail.value) return
+  const today = new Date()
+  const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`
+  lguMonthlyClaimMonth.value = currentMonth
+  lguMonthlyClaimSummary.value = {
+    consumed_count: selectedDetail.value.lgu_credit_summary?.consumed_sessions ?? 0,
+    billing_month: currentMonth
+  }
+  lguMonthlyClaimVisible.value = true
+}
+
+const sanitizeLguMonthInput = (): void => {
+  // Allow only YYYY-MM format: accept digits and hyphens, enforce format
+  const value = lguMonthlyClaimMonth.value
+  const sanitized = value.replace(/[^\d-]/g, "").substring(0, 7)
+  lguMonthlyClaimMonth.value = sanitized
+  
+  // Auto-format as user types
+  if (sanitized.length >= 4 && sanitized[4] !== "-") {
+    lguMonthlyClaimMonth.value = `${sanitized.substring(0, 4)}-${sanitized.substring(4)}`
+  }
+}
+
+const submitLguMonthlyClaim = async (): Promise<void> => {
+  if (!selectedDetail.value?.id || !lguMonthlyClaimMonth.value?.trim()) return
+  
+  // Validate month format YYYY-MM
+  const monthRegex = /^\d{4}-\d{2}$/
+  if (!monthRegex.test(lguMonthlyClaimMonth.value)) {
+    errorToast(toast, "Billing month must be in YYYY-MM format (e.g., 2026-04)")
+    return
+  }
+
+  try {
+    isLguMonthlyClaimSaving.value = true
+    const result = await billingPhase1Service.createLguMonthlyClaim({
+      appointment_id: selectedDetail.value.id,
+      billing_month: lguMonthlyClaimMonth.value
+    })
+
+    if (result) {
+      lguMonthlyClaimVisible.value = false
+      // Refresh the appointment detail
+      selectedDetail.value = await appointmentPhase1Service.getById(selectedDetail.value.id)
+      successToast(
+        toast,
+        `Month-end LGU claim created successfully. Billing ID: ${result.billing_public_id} (${result.consumed_count} credits)`
+      )
+    }
+  } catch (error: unknown) {
+    const errorMsg = extractApiErrorMessage(error, "Failed to create month-end LGU claim")
+    errorToast(toast, errorMsg)
+  } finally {
+    isLguMonthlyClaimSaving.value = false
   }
 }
 
@@ -2559,6 +2794,87 @@ const loadSinglePayServices = async (): Promise<void> => {
   } catch {
     allPackageServiceOffers.value = []
   }
+
+  // Fallback: booking users might not have Promos/Offers module access that populates localStorage,
+  // or may have stale/partial cached data (e.g. evaluation only). In either case, load lookup APIs.
+  const hasMachineCatalog = allSinglePayServices.value.some(service => service.type === "machine")
+  const hasTechniqueCatalog = allSinglePayServices.value.some(service => service.type === "technique")
+
+  if (!allSinglePayServices.value.length || !hasMachineCatalog || !hasTechniqueCatalog) {
+    const [machinesResult, techniquesResult, evaluationsResult, addOnMachinesResult, addOnTechniquesResult, addOnHomeServicesResult] = await Promise.allSettled([
+      fetchLookup("/machines/lookup"),
+      fetchLookup("/techniques/lookup"),
+      fetchLookup("/evaluations/lookup"),
+      fetchLookup("/add-on-machines/lookup"),
+      fetchLookup("/add-on-techniques/lookup"),
+      fetchLookup("/add-on-home-services/lookup")
+    ])
+
+    const asLookup = (result: PromiseSettledResult<BillingPickerLookup[]>): BillingPickerLookup[] =>
+      result.status === "fulfilled" ? result.value : []
+
+    const machines = asLookup(machinesResult).map(item => ({
+      id: String(item.id),
+      type: "machine" as const,
+      name: item.name,
+      price: Number(item.price ?? 0),
+      status: "Active"
+    }))
+
+    const techniques = asLookup(techniquesResult).map(item => ({
+      id: String(item.id),
+      type: "technique" as const,
+      name: item.name,
+      price: Number(item.price ?? 0),
+      status: "Active"
+    }))
+
+    const evaluations = asLookup(evaluationsResult).map(item => ({
+      id: String(item.id),
+      type: "evaluation" as const,
+      name: item.name,
+      price: Number(item.price ?? 0),
+      status: "Active"
+    }))
+
+    const addOnMachines = asLookup(addOnMachinesResult).map(item => ({
+      id: String(item.id),
+      type: "add-on-machine" as const,
+      name: item.name,
+      price: Number(item.price ?? 0),
+      status: "Active"
+    }))
+
+    const addOnTechniques = asLookup(addOnTechniquesResult).map(item => ({
+      id: String(item.id),
+      type: "add-on-technique" as const,
+      name: item.name,
+      price: Number(item.price ?? 0),
+      status: "Active"
+    }))
+
+    const addOnHomeServices = asLookup(addOnHomeServicesResult).map(item => ({
+      id: String(item.id),
+      type: "add-on-home-service" as const,
+      name: item.name,
+      price: Number(item.price ?? 0),
+      status: "Active"
+    }))
+
+    const localEvaluations = allSinglePayServices.value.filter(service => service.type === "evaluation")
+    const localAddOnMachines = allSinglePayServices.value.filter(service => service.type === "add-on-machine")
+    const localAddOnTechniques = allSinglePayServices.value.filter(service => service.type === "add-on-technique")
+    const localAddOnHomeServices = allSinglePayServices.value.filter(service => service.type === "add-on-home-service")
+
+    allSinglePayServices.value = [
+      ...machines,
+      ...techniques,
+      ...(localEvaluations.length ? localEvaluations : evaluations),
+      ...(localAddOnMachines.length ? localAddOnMachines : addOnMachines),
+      ...(localAddOnTechniques.length ? localAddOnTechniques : addOnTechniques),
+      ...(localAddOnHomeServices.length ? localAddOnHomeServices : addOnHomeServices)
+    ]
+  }
 }
 
 const removeHomeServiceAddOn = (): void => {
@@ -2654,7 +2970,7 @@ const selectPackageOffer = (packageId: string): void => {
 }
 
 const selectBundle = (bundleId: string): void => {
-  if (createBillingType.value === "HMO_BILLING") {
+  if (createBillingType.value === "HMO_BILLING" || createBillingType.value === "SELF_PAY_PACKAGE") {
     selectedBundleId.value = undefined
     return
   }
@@ -2682,6 +2998,11 @@ const selectBundle = (bundleId: string): void => {
     originalPrice
   })
   selectedBundleId.value = undefined
+}
+
+const addSelectedBundle = (): void => {
+  if (!selectedBundleId.value) return
+  selectBundle(selectedBundleId.value)
 }
 
 const addServiceLine = (type: string): void => {
@@ -3041,7 +3362,13 @@ const fetchAppointments = async (): Promise<void> => {
     appointments.value = response?.content ?? []
     totalElements.value = response?.total_elements ?? 0
   } catch (error: unknown) {
-    errorToast(toast, "Failed to load appointments")
+    errorToast(
+      toast,
+      extractApiErrorMessage(
+        error,
+        "Could not load appointments. Adjust filters (date, clinic, provider) and click Refresh."
+      )
+    )
   } finally {
     isLoading.value = false
   }
@@ -3076,7 +3403,7 @@ const refreshAll = async (): Promise<void> => {
 }
 
 const loadCreateLookups = async (): Promise<void> => {
-  const [patientsPage, doctorsPage, clinics, specialtyTags, sessionLookupPage] = await Promise.all([
+  const [patientsPage, staffLookupPage, clinicLookupPage, specialtyTags, sessionLookupPage] = await Promise.all([
     patientService.getAll({
       clinic_id: undefined,
       pageable_request: {
@@ -3086,20 +3413,21 @@ const loadCreateLookups = async (): Promise<void> => {
         name: undefined
       }
     }),
-    staffService.getAll({
-      clinic_id: undefined,
-      pageable_request: {
+    pamsAPI.get<Pageable<Staff>>("/staffs/lookup", {
+      params: {
         page: defaultPage,
         size: 100,
         status: Status.ACTIVE,
         name: undefined
       }
     }),
-    clinicService.getAll({
-      page: defaultPage,
-      size: 100,
-      status: Status.ACTIVE,
-      name: undefined
+    pamsAPI.get<Pageable<Clinic>>("/clinics/lookup", {
+      params: {
+        page: defaultPage,
+        size: 100,
+        status: Status.ACTIVE,
+        name: undefined
+      }
     }),
     specialtyTagReferenceService.getAll({
       page: defaultPage,
@@ -3122,7 +3450,7 @@ const loadCreateLookups = async (): Promise<void> => {
       .join(" "),
     clinic_id: patient.clinic_id
   }))
-  doctorOptions.value = (doctorsPage?.content ?? []).map((doctor: Staff) => ({
+  doctorOptions.value = (staffLookupPage.data?.content ?? []).map((doctor: Staff) => ({
     id: doctor.id,
     name: doctor.name,
     label: formatAppointmentProviderLabel(doctor),
@@ -3134,7 +3462,7 @@ const loadCreateLookups = async (): Promise<void> => {
     specialty_tag_name: doctor.specialty_tag_name
   }))
     .filter((doctor) => isPhysicalTherapistProviderType(doctor.appointment_provider_type))
-    const allStaffMapped = (doctorsPage?.content ?? []).map((doctor: Staff) => ({
+    const allStaffMapped = (staffLookupPage.data?.content ?? []).map((doctor: Staff) => ({
       id: doctor.id,
       name: doctor.name,
       label: formatAppointmentProviderLabel(doctor),
@@ -3147,7 +3475,7 @@ const loadCreateLookups = async (): Promise<void> => {
     }))
     referringDoctorOptions.value = allStaffMapped.filter((s) => isDoctorConsultantProviderType(s.appointment_provider_type))
     supportStaffOptions.value = allStaffMapped.filter((s) => isSupportStaffProviderType(s.appointment_provider_type))
-  clinicOptions.value = clinics?.content ?? []
+  clinicOptions.value = clinicLookupPage.data?.content ?? []
   specialtyTagOptions.value = specialtyTags?.content ?? []
   sessionServices.value = sessionLookupPage.data?.content ?? []
   if (!selectedClinicId.value && clinicOptions.value.length) {
@@ -3320,19 +3648,13 @@ const submitCreateAppointment = async (): Promise<void> => {
     await refreshAll()
     await refreshBookedDotsForVisibleMonth()
   } catch (error: unknown) {
-    if (axios.isAxiosError(error)) {
-      if (error.response?.status === 401) {
-        errorToast(toast, "Session expired (401). Please log in again.")
-        return
-      }
-      if (error.response?.status === 403) {
-        errorToast(toast, "Permission denied (403): cannot create appointment.")
-        return
-      }
-      errorToast(toast, extractApiErrorMessage(error, "Create failed"))
-      return
-    }
-    errorToast(toast, "Failed to create appointment")
+    errorToast(
+      toast,
+      extractApiErrorMessage(
+        error,
+        "Could not create appointment. Verify patient, PT, services, and schedule, then try again."
+      )
+    )
   }
 }
 
@@ -3726,13 +4048,13 @@ watch(createLocationContext, (locationContext) => {
 })
 
 watch(createBillingType, (billingType) => {
-  if (billingType === "HMO_BILLING") {
+  if (billingType === "HMO_BILLING" || billingType === "SELF_PAY_PACKAGE") {
     serviceMode.value = "individual"
     selectedBundleId.value = undefined
     selectedServiceLines.value = selectedServiceLines.value.filter(line => line.type !== "bundle")
   }
 
-  if (billingType !== "SELF_PAY_PACKAGE") {
+  if (!isPackageServiceFlowBillingType(billingType)) {
     selectedPackageOfferDetail.value = null
     packageSessionSchedules.value = []
     selectedServiceLines.value = selectedServiceLines.value.filter(line => line.type !== "package")

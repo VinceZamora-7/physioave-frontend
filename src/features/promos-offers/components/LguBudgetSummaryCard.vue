@@ -118,6 +118,14 @@
 
       <div class="flex flex-wrap items-end gap-2">
         <Button
+          label="Refresh Budget"
+          icon="pi pi-refresh"
+          outlined
+          :loading="refreshingDashboardBudget"
+          :disabled="loadingDashboardBudget || loadingTransactionHistory || savingDashboardBudget"
+          @click="refreshDashboardBudget"
+        />
+        <Button
           label="Add Rollover"
           icon="pi pi-plus"
           outlined
@@ -139,7 +147,7 @@
       </div>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
       <div class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3">
         <p class="text-xs opacity-70">Total Available Fund</p>
         <p class="text-lg font-semibold">{{ asCurrency(totalAvailableFund) }}</p>
@@ -147,6 +155,10 @@
       <div class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3">
         <p class="text-xs opacity-70">Used LGU Fund</p>
         <p class="text-lg font-semibold">{{ asCurrency(usedLguFund) }}</p>
+      </div>
+      <div class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3">
+        <p class="text-xs opacity-70">Pending Used LGU Fund</p>
+        <p class="text-lg font-semibold text-amber-600">{{ asCurrency(pendingUsedLguFund) }}</p>
       </div>
       <div class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3">
         <p class="text-xs opacity-70">Remaining Available Fund</p>
@@ -211,6 +223,20 @@
           </template>
         </Column>
 
+        <Column header="Action" style="width: 130px">
+          <template #body="{ data }">
+            <Button
+              v-if="data.patient_id"
+              label="View Details"
+              icon="pi pi-external-link"
+              size="small"
+              outlined
+              @click="openPatientDetail(data.patient_id)"
+            />
+            <span v-else class="text-xs opacity-60">N/A</span>
+          </template>
+        </Column>
+
         <Column header="Period" style="width: 120px">
           <template #body="{ data }">
             <div class="text-sm">{{ formatBudgetPeriod(data.period_year, data.period_month) }}</div>
@@ -244,16 +270,189 @@
         </Column>
       </DataTable>
     </div>
+
+    <!-- Patient LGU Credit Detail Dialog -->
+    <Dialog
+      v-model:visible="showPatientDetailDialog"
+      modal
+      :header="selectedPatientDetail ? `${selectedPatientDetail.patient_name} - LGU Credit Detail` : 'LGU Credit Detail'"
+      style="width: min(92vw, 860px)"
+      :pt="{ content: { class: 'space-y-4' } }"
+    >
+      <Message v-if="loadingPatientDetail" severity="secondary" :closable="false" size="small">
+        Loading patient LGU credit details...
+      </Message>
+      <Message v-else-if="patientDetailError" severity="warn" :closable="false" size="small">
+        {{ patientDetailError }}
+      </Message>
+      <template v-else-if="selectedPatientDetail">
+        <div class="flex flex-wrap items-center gap-2">
+          <Tag
+            :value="selectedPatientDetail.dropout_status ?? selectedPatientDetail.authorizations[0]?.authorization_status ?? 'UNKNOWN'"
+            :severity="selectedPatientDetail.dropout_status === 'DROPPED_OUT' ? 'danger' : selectedPatientDetail.authorizations[0]?.authorization_status === 'COMPLETED' ? 'success' : 'info'"
+          />
+          <span class="text-xs opacity-60">Patient ID: {{ selectedPatientDetail.patient_id }}</span>
+        </div>
+
+        <div class="space-y-2">
+          <div class="flex items-center justify-between border-b border-[rgb(var(--app-border))] pb-1">
+            <div class="text-sm font-semibold">Appointments</div>
+            <Button
+              label="Create Claim"
+              icon="pi pi-file"
+              size="small"
+              :loading="isCreatingClaims"
+              :disabled="isCreatingClaims"
+              @click="createClaimsForEligibleAppointments()"
+            />
+          </div>
+          <div class="overflow-x-auto rounded-xl border border-[rgb(var(--app-border))]">
+            <table class="min-w-full text-sm">
+              <thead class="bg-black/5 text-left text-xs uppercase tracking-wide opacity-70 dark:bg-white/5">
+                <tr>
+                  <th class="px-3 py-2 font-medium">Appointment</th>
+                  <th class="px-3 py-2 font-medium">Date</th>
+                  <th class="px-3 py-2 font-medium">Package</th>
+                  <th class="px-3 py-2 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="(appointment, index) in selectedPatientDetail.appointments"
+                  :key="appointment.appointment_id"
+                  :class="[
+                    'border-t border-[rgb(var(--app-border))]',
+                    firstDroppedOutAppointmentId === appointment.appointment_id
+                      ? 'bg-red-50/70 dark:bg-red-900/20'
+                      : ''
+                  ]"
+                >
+                  <td class="px-3 py-2">
+                    <div class="text-xs font-semibold">Session {{ index + 1 }}</div>
+                    <div class="font-mono text-[11px] opacity-60">APT-{{ appointment.appointment_id }}</div>
+                  </td>
+                  <td class="px-3 py-2 text-xs">{{ formatDateTime(appointment.appointment_date) }}</td>
+                  <td class="px-3 py-2 text-xs">{{ appointment.package_name || '-' }}</td>
+                  <td class="px-3 py-2">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <Tag
+                        :value="appointment.status"
+                        :severity="appointment.status === 'COMPLETED' ? 'success' : appointment.status === 'DROPPED_OUT' ? 'danger' : 'warn'"
+                        class="text-xs"
+                      />
+                      <span
+                        v-if="firstDroppedOutAppointmentId === appointment.appointment_id"
+                        class="inline-flex rounded bg-red-100 px-2 py-0.5 text-[11px] font-medium text-red-700 dark:bg-red-900/30 dark:text-red-300"
+                      >Dropout Starts Here</span>
+                    </div>
+                  </td>
+
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-if="!selectedPatientDetail.appointments.length" class="text-xs opacity-60">No appointments recorded yet.</div>
+        </div>
+
+        <div class="space-y-2">
+          <div class="text-sm font-semibold border-b border-[rgb(var(--app-border))] pb-1">Package Availment</div>
+          <div class="overflow-x-auto rounded-xl border border-[rgb(var(--app-border))]">
+            <table class="min-w-full text-sm">
+              <thead class="bg-black/5 text-left text-xs uppercase tracking-wide opacity-70 dark:bg-white/5">
+                <tr>
+                  <th class="px-3 py-2 font-medium">Availed Package</th>
+                  <th class="px-3 py-2 font-medium text-right">Total Purchased</th>
+                  <th class="px-3 py-2 font-medium text-right">Used</th>
+                  <th class="px-3 py-2 font-medium text-right">Balance</th>
+                  <th class="px-3 py-2 font-medium">Expiry</th>
+                  <th class="px-3 py-2 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="pkg in selectedPatientDetail.package_availments"
+                  :key="pkg.authorization_id"
+                  class="border-t border-[rgb(var(--app-border))]"
+                >
+                  <td class="px-3 py-2">{{ pkg.package_name }}</td>
+                  <td class="px-3 py-2 text-right">{{ pkg.availed_count }}</td>
+                  <td class="px-3 py-2 text-right">{{ pkg.used_count }}</td>
+                  <td class="px-3 py-2 text-right">{{ pkg.available_balance }}</td>
+                  <td class="px-3 py-2 text-xs">{{ pkg.expiry_date || '-' }}</td>
+                  <td class="px-3 py-2">
+                    <Tag
+                      :value="pkg.status"
+                      :severity="pkg.status === 'COMPLETED' ? 'success' : pkg.status === 'DROPPED_OUT' ? 'danger' : pkg.status === 'ACTIVE' ? 'info' : 'secondary'"
+                      class="text-xs"
+                    />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-if="!selectedPatientDetail.package_availments.length" class="text-xs opacity-60">No package availment records yet.</div>
+        </div>
+
+        <div v-if="selectedPatientDetail.billings.length" class="space-y-2">
+          <div class="text-sm font-semibold border-b border-[rgb(var(--app-border))] pb-1">Billing Summary</div>
+          <div class="overflow-x-auto rounded-xl border border-[rgb(var(--app-border))]">
+            <table class="min-w-full text-sm">
+              <thead class="bg-black/5 text-left text-xs uppercase tracking-wide opacity-70 dark:bg-white/5">
+                <tr>
+                  <th class="px-3 py-2 font-medium">Reference</th>
+                  <th class="px-3 py-2 font-medium">Service</th>
+                  <th class="px-3 py-2 font-medium">Type</th>
+                  <th class="px-3 py-2 font-medium text-right">Amount</th>
+                  <th class="px-3 py-2 font-medium">Status</th>
+                  <th class="px-3 py-2 font-medium">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="billing in selectedPatientDetail.billings"
+                  :key="billing.id"
+                  class="border-t border-[rgb(var(--app-border))]"
+                >
+                  <td class="px-3 py-2 font-mono text-xs">{{ billing.public_id }}</td>
+                  <td class="px-3 py-2 text-xs">{{ billing.service_name || '-' }}</td>
+                  <td class="px-3 py-2">
+                    <span
+                      v-if="billing.pricing_source === 'LGU_DROPOUT_INDIVIDUAL_CLAIM'"
+                      class="inline-flex rounded bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700 dark:bg-orange-900/30 dark:text-orange-300"
+                    >Dropout Claim</span>
+                    <span
+                      v-else-if="billing.pricing_source === 'LGU_PACKAGE_MONTHLY_CLAIM'"
+                      class="inline-flex rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+                    >Monthly Claim</span>
+                    <span v-else class="text-xs opacity-60">{{ billing.pricing_source || '-' }}</span>
+                  </td>
+                  <td class="px-3 py-2 text-right font-medium">{{ asCurrency(billing.amount_due) }}</td>
+                  <td class="px-3 py-2">
+                    <Tag
+                      :value="billing.billing_status"
+                      :severity="billing.billing_status === 'PAID' ? 'success' : billing.billing_status === 'BILLED' ? 'info' : billing.billing_status === 'VOID' ? 'danger' : 'secondary'"
+                      class="text-xs"
+                    />
+                  </td>
+                  <td class="px-3 py-2 text-xs opacity-60">{{ formatDateTime(billing.created_at) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div v-else class="text-xs opacity-60">No LGU claim billings generated yet.</div>
+      </template>
+    </Dialog>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue"
-import axios from "axios"
 import Button from "primevue/button"
 import Column from "primevue/column"
 import DataTable from "primevue/datatable"
 import DatePicker from "primevue/datepicker"
+import Dialog from "primevue/dialog"
 import IftaLabel from "primevue/iftalabel"
 import InputNumber from "primevue/inputnumber"
 import InputText from "primevue/inputtext"
@@ -265,8 +464,10 @@ import {
   billingPhase1Service,
   type LguDashboardBudget,
   type LguDashboardHistoryItem,
+  type LguPatientCreditDetail,
   type LguProgramLookup
 } from "@/features/billing/api/billing-phase1.service"
+import { getApiErrorMessage } from "@/utils/actionable-error.util"
 import { errorToast, successToast } from "@/utils/toast.util"
 
 type LocalLguBudgetDraft = {
@@ -290,11 +491,17 @@ const selectedBudgetMonthDate = ref<Date>(new Date(currentMonthStart))
 const lguDashboardBudget = ref<LguDashboardBudget | null>(null)
 const loadingDashboardBudget = ref(false)
 const savingDashboardBudget = ref(false)
+const refreshingDashboardBudget = ref(false)
 const hasLocalOnlyBudgetDraft = ref(false)
 const budgetSyncError = ref("")
 const lguTransactionHistory = ref<LguDashboardHistoryItem[]>([])
 const loadingTransactionHistory = ref(false)
 const transactionHistoryError = ref("")
+const showPatientDetailDialog = ref(false)
+const selectedPatientDetail = ref<LguPatientCreditDetail | null>(null)
+const loadingPatientDetail = ref(false)
+const patientDetailError = ref("")
+const isCreatingClaims = ref(false)
 
 const MANAGER_ROLE_KEYWORDS = [
   "manager",
@@ -311,6 +518,11 @@ const formatDateTime = (value?: string): string => {
   if (!value) return "N/A"
   return new Date(value).toLocaleString("en-PH")
 }
+
+const firstDroppedOutAppointmentId = computed<number | null>(() => {
+  const appointments = selectedPatientDetail.value?.appointments ?? []
+  return appointments.find(appointment => appointment.status === "DROPPED_OUT")?.appointment_id ?? null
+})
 
 const formatBudgetPeriod = (year: number, month: number): string =>
   new Date(year, month - 1, 1).toLocaleDateString("en-PH", {
@@ -350,7 +562,15 @@ const usageStatusSeverity = (value?: string): "success" | "warn" | "danger" | "s
 }
 
 const usedLguFund = computed(() =>
-  Number(lguDashboardBudget.value?.used_amount ?? 0)
+  lguTransactionHistory.value
+    .filter(entry => entry.billing_status === "BILLED")
+    .reduce((sum, entry) => sum + Number(entry.amount_out ?? 0), 0)
+)
+
+const pendingUsedLguFund = computed(() =>
+  lguTransactionHistory.value
+    .filter(entry => entry.billing_status && entry.billing_status !== "BILLED")
+    .reduce((sum, entry) => sum + Number(entry.amount_out ?? 0), 0)
 )
 
 const totalAvailableFund = computed(() =>
@@ -430,17 +650,23 @@ const resolveRoleFromStorage = (): string => {
   return ""
 }
 
-const extractApiErrorMessage = (error: unknown, fallback: string): string => {
-  if (!axios.isAxiosError(error)) return fallback
-  const detail = error.response?.data?.message || error.response?.data?.detail || error.message
-  return detail ? `${fallback}: ${detail}` : fallback
-}
+const extractApiErrorMessage = (error: unknown, fallback: string): string =>
+  getApiErrorMessage(error, {
+    baseMessage: fallback,
+    permissionHint: "Billing or LGU dashboard access in Role Access",
+    invalidInputHint: "LGU values are invalid. Check the period and amount fields, then try again.",
+    retryHint: "Please try again."
+  })
 
 const hasAnyBudgetDraft = (draft: LocalLguBudgetDraft | null): boolean =>
   Number(draft?.baseMonthlyBudget ?? 0) > 0 || Number(draft?.rolloverAmount ?? 0) > 0
 
 const localDashboardBudgetStorageKey = computed(() =>
   `lgu_dashboard_budget:${selectedProgramId.value ?? "all"}:${selectedBudgetPeriodYear.value}-${String(selectedBudgetPeriodMonth.value).padStart(2, "0")}`
+)
+
+const selectedBillingMonth = computed(() =>
+  `${selectedBudgetPeriodYear.value}-${String(selectedBudgetPeriodMonth.value).padStart(2, "0")}`
 )
 
 const readLocalDashboardBudget = (): LocalLguBudgetDraft | null => {
@@ -512,6 +738,53 @@ const loadDashboardBudget = async (): Promise<void> => {
   }
 }
 
+  const openPatientDetail = async (patientId: number | null | undefined): Promise<void> => {
+    if (!patientId) return
+    selectedPatientDetail.value = null
+    patientDetailError.value = ""
+    showPatientDetailDialog.value = true
+    loadingPatientDetail.value = true
+    try {
+      selectedPatientDetail.value = await billingPhase1Service.getLguPatientCreditDetail(patientId) ?? null
+    } catch (error: unknown) {
+      patientDetailError.value = extractApiErrorMessage(error, "Failed to load patient LGU credit details")
+    } finally {
+      loadingPatientDetail.value = false
+    }
+  }
+
+  const refreshSelectedPatientDetail = async (): Promise<void> => {
+    const patientId = selectedPatientDetail.value?.patient_id
+    if (!patientId) return
+    try {
+      selectedPatientDetail.value = await billingPhase1Service.getLguPatientCreditDetail(patientId) ?? null
+    } catch (error: unknown) {
+      patientDetailError.value = extractApiErrorMessage(error, "Failed to refresh patient LGU credit details")
+    }
+  }
+
+  const createClaimsForEligibleAppointments = async (): Promise<void> => {
+    if (isCreatingClaims.value || !selectedPatientDetail.value) return
+    isCreatingClaims.value = true
+    try {
+      const result = await billingPhase1Service.createLguPatientClaim({
+        patient_id: selectedPatientDetail.value.patient_id,
+        billing_month: selectedBillingMonth.value
+      })
+      successToast(
+        toast,
+        result?.consumed_count
+          ? `${result.consumed_count} session${result.consumed_count > 1 ? "s" : ""} claimed (${result.billing_public_id ?? ""}) for ${selectedBillingMonth.value}.`
+          : `Claim created for ${selectedBillingMonth.value}.`
+      )
+      await Promise.all([loadTransactionHistory(), refreshSelectedPatientDetail()])
+    } catch (error: unknown) {
+      errorToast(toast, extractApiErrorMessage(error, "Failed to create LGU claim"))
+    } finally {
+      isCreatingClaims.value = false
+    }
+  }
+
 const loadTransactionHistory = async (): Promise<void> => {
   loadingTransactionHistory.value = true
   transactionHistoryError.value = ""
@@ -566,6 +839,42 @@ const saveDashboardBudget = async (): Promise<void> => {
     errorToast(toast, message)
   } finally {
     savingDashboardBudget.value = false
+  }
+}
+
+const refreshDashboardBudget = async (): Promise<void> => {
+  refreshingDashboardBudget.value = true
+  budgetSyncError.value = ""
+  try {
+    if (canManageLguDashboard.value) {
+      const result = await billingPhase1Service.refreshLguDashboardBudget(
+        selectedBudgetPeriodYear.value,
+        selectedBudgetPeriodMonth.value,
+        selectedProgramId.value ?? undefined
+      )
+      await Promise.all([
+        loadDashboardBudget(),
+        loadTransactionHistory()
+      ])
+      successToast(
+        toast,
+        result?.reversed_entries
+          ? `LGU budget refreshed. Reversed ${result.reversed_entries} duplicate billing charge${result.reversed_entries === 1 ? "" : "s"}.`
+          : "LGU budget refreshed successfully"
+      )
+      return
+    }
+
+    await Promise.all([
+      loadDashboardBudget(),
+      loadTransactionHistory()
+    ])
+  } catch (error: unknown) {
+    const message = extractApiErrorMessage(error, "Failed to refresh the LGU budget")
+    budgetSyncError.value = message
+    errorToast(toast, message)
+  } finally {
+    refreshingDashboardBudget.value = false
   }
 }
 

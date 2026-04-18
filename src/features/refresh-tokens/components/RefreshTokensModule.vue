@@ -139,6 +139,7 @@ import Column from "primevue/column";
 import Tag from "primevue/tag";
 import Button from "primevue/button";
 import type {RefreshToken} from "@/features/refresh-tokens/types/refresh-token";
+import {getApiErrorMessage} from "@/utils/actionable-error.util";
 import {errorToast, successToast} from "@/utils/toast.util.ts";
 import type {APIError} from "@/utils/error-handler.ts";
 import {useQueryClient} from "@tanstack/vue-query";
@@ -174,6 +175,14 @@ watchDebounced(
 
 const resetFilters = (): void => {
   selectedStatus.value = defaultStatus
+}
+
+const extractApiErrorMessage = (error: unknown, fallback: string): string => {
+  return getApiErrorMessage(error, {
+    baseMessage: fallback,
+    permissionHint: "Authentication or session access in Role Access",
+    retryHint: "Please try again."
+  })
 }
 
 const pageRequestWithStatus = computed(() => ({
@@ -216,7 +225,7 @@ const onRevoke = (refreshToken: RefreshToken): void => {
           await resetQueries()
         },
         async onError(error: APIError): Promise<void> {
-          errorToast(toast, `Failed to revoke token: ${error.message}`)
+          errorToast(toast, extractApiErrorMessage(error, "Failed to revoke token"))
           await resetQueries()
         },
       })

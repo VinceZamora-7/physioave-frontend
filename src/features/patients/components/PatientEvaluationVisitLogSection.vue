@@ -300,6 +300,7 @@ import Tag from "primevue/tag"
 import Textarea from "primevue/textarea"
 import { useFileSelect } from "@/composables/file-select.composable.ts"
 import { pamsAPI } from "@/utils/axios-interceptor.ts"
+import { getApiErrorMessage } from "@/utils/actionable-error.util"
 import { errorToast, successToast } from "@/utils/toast.util.ts"
 import type { Patient } from "@/features/patients/types/patient"
 import {
@@ -475,9 +476,13 @@ const loadVisitLogs = async (): Promise<void> => {
     isLoading.value = true
     loadError.value = ""
     visitLogs.value = await patientEvaluationVisitLogService.getAll(props.patient.id)
-  } catch {
+  } catch (error: unknown) {
     visitLogs.value = []
-    loadError.value = "Failed to load evaluation visit logs"
+    loadError.value = getApiErrorMessage(error, {
+      baseMessage: "Failed to load evaluation visit logs",
+      permissionHint: "Patient access (Read or Lookup) in Role Access",
+      retryHint: "Refresh and try again."
+    })
   } finally {
     isLoading.value = false
   }
@@ -603,8 +608,13 @@ const saveVisitLog = async (): Promise<void> => {
 
     await loadVisitLogs()
     closeDialog()
-  } catch {
-    errorToast(toast, "Failed to save evaluation visit log")
+  } catch (error: unknown) {
+    errorToast(toast, getApiErrorMessage(error, {
+      baseMessage: "Failed to save evaluation visit log",
+      permissionHint: "Patient access (Can Edit) in Role Access",
+      invalidInputHint: "Some visit log values are invalid. Check required fields and PDF attachments, then try again.",
+      retryHint: "Please try again."
+    }))
   } finally {
     isSaving.value = false
   }
@@ -632,8 +642,12 @@ const confirmDelete = (logId: number): void => {
         await patientEvaluationVisitLogService.delete(patientId, logId)
         successToast(toast, "Evaluation visit log deleted")
         await loadVisitLogs()
-      } catch {
-        errorToast(toast, "Failed to delete evaluation visit log")
+      } catch (error: unknown) {
+        errorToast(toast, getApiErrorMessage(error, {
+          baseMessage: "Failed to delete evaluation visit log",
+          permissionHint: "Patient access (Can Edit) in Role Access",
+          retryHint: "Refresh the visit list and try again."
+        }))
       }
     }
   })

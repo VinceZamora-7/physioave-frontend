@@ -278,6 +278,7 @@ import { ptInputText, ptOutlinedBtn, ptPrimaryBtn } from "@/features/shared/tabl
 import type { TreatmentArea } from "@/models/reference"
 import { defaultPage } from "@/models/paging"
 import { Status } from "@/utils/global.type"
+import { getApiErrorMessage } from "@/utils/actionable-error.util"
 import { errorToast, successToast } from "@/utils/toast.util"
 
 const props = defineProps<{
@@ -365,6 +366,15 @@ const resetFilters = (): void => {
   statusFilter.value = Status.ALL
 }
 
+const extractApiErrorMessage = (error: unknown, fallback: string): string => {
+  return getApiErrorMessage(error, {
+    baseMessage: fallback,
+    permissionHint: "Clinic access (Can Edit) in Role Access",
+    invalidInputHint: "Treatment area values are invalid. Review name and color, then try again.",
+    retryHint: "Please try again."
+  })
+}
+
 const resolveRowClass = (data: TreatmentArea): string => {
   const isSelected = selectedTreatmentArea.value?.id === data.id
   const base = "cursor-pointer transition-colors"
@@ -398,7 +408,7 @@ const loadTreatmentAreas = async (): Promise<void> => {
     treatmentAreas.value = response?.content ?? []
     syncSelectedTreatmentArea()
   } catch (error: unknown) {
-    errorToast(toast, error instanceof Error ? error.message : "Failed to load treatment areas")
+    errorToast(toast, extractApiErrorMessage(error, "Failed to load treatment areas"))
     treatmentAreas.value = []
     selectedTreatmentArea.value = undefined
   } finally {
@@ -441,7 +451,7 @@ const submit = async (): Promise<void> => {
     resetDraft()
     await loadTreatmentAreas()
   } catch (error: unknown) {
-    errorToast(toast, error instanceof Error ? error.message : "Failed to save treatment area")
+    errorToast(toast, extractApiErrorMessage(error, "Failed to save treatment area"))
   } finally {
     isSaving.value = false
   }
@@ -464,7 +474,7 @@ const confirmToggleStatus = (treatmentArea: TreatmentArea): void => {
         successToast(toast, treatmentArea.is_active ? "Treatment area deactivated" : "Treatment area activated")
         await loadTreatmentAreas()
       } catch (error: unknown) {
-        errorToast(toast, error instanceof Error ? error.message : "Failed to update treatment area status")
+        errorToast(toast, extractApiErrorMessage(error, "Failed to update treatment area status"))
       }
     }
   })

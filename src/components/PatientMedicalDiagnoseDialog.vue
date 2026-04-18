@@ -97,6 +97,7 @@ import { exportToExcel } from "@/utils/export-excel.util.ts"
 import { defaultThrottle, type DialogExpose } from "@/utils/global.type.ts"
 import { ptModalPrimaryBtn } from "@/features/shared/table-header.styles"
 import { PatientTanstackKey } from "@/utils/keys/tanstack-key.ts"
+import { getApiErrorMessage } from "@/utils/actionable-error.util"
 import { errorToast, successToast } from "@/utils/toast.util.ts"
 
 const toast = useToast()
@@ -188,7 +189,12 @@ const onMedicalDiagnoseToggle = async (medicalDiagnose: MedicalDiagnose, checked
       await refreshAssignments()
     },
     async onError(error: APIError) {
-      errorToast(toast, `${errorPrefix}: ${error.message}`)
+      errorToast(toast, getApiErrorMessage(error, {
+        baseMessage: errorPrefix,
+        permissionHint: "Patient access (Can Edit) in Role Access",
+        invalidInputHint: "The selected medical diagnosis value is invalid. Refresh and try again.",
+        retryHint: "Please try again."
+      }))
       clearPendingDiagnose(medicalDiagnose.id)
       await refreshAssignments()
     }

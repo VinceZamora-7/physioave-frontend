@@ -482,7 +482,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue"
 import { useRoute } from "vue-router"
-import axios from "axios"
 import Button from "primevue/button"
 import Column from "primevue/column"
 import DataTable from "primevue/datatable"
@@ -505,6 +504,7 @@ import {
   type GoogleCalendarSyncStatus
 } from "@/services/google-calendar-sync.service"
 import { pamsAPI } from "@/utils/axios-interceptor"
+import { getApiErrorMessage } from "@/utils/actionable-error.util"
 import type { Lookup } from "@/models/global.model"
 import type { Pageable } from "@/models/paging"
 import { defaultPage } from "@/models/paging"
@@ -762,13 +762,13 @@ const roleAppointmentHelpText = (role: Role): string => {
   return "This job title is for staff access and reporting only, not for appointment provider selection."
 }
 
-const extractApiErrorMessage = (error: unknown, fallback: string): string => {
-  if (axios.isAxiosError(error)) {
-    const detail = error.response?.data?.message || error.response?.data?.detail || error.message
-    return detail ? `${fallback}: ${detail}` : fallback
-  }
-  return error instanceof Error && error.message ? `${fallback}: ${error.message}` : fallback
-}
+const extractApiErrorMessage = (error: unknown, fallback: string): string =>
+  getApiErrorMessage(error, {
+    baseMessage: fallback,
+    permissionHint: "Settings access in Role Access",
+    invalidInputHint: "Some settings inputs are invalid. Review the fields and try again.",
+    retryHint: "Please try again."
+  })
 const formatCalendarSyncDateTime = (value?: string): string => {
   if (!value) return "Not yet"
   const date = new Date(value)

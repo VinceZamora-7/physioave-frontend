@@ -141,6 +141,7 @@ import {
 import {useIsLoading} from "@/composables/tanstack-loader.composable.ts";
 import {pamsAPI} from "@/utils/axios-interceptor.ts";
 import {PatientAttachmentTanstackKey} from "@/utils/keys/tanstack-key.ts";
+import { getApiErrorMessage } from "@/utils/actionable-error.util";
 import { ptModalPrimaryBtn } from "@/features/shared/table-header.styles";
 
 const confirm = useConfirm()
@@ -241,7 +242,11 @@ const loadAttachmentPreview = async (force = false): Promise<void> => {
     attachmentPreviewUrl.value = URL.createObjectURL(response.data)
   } catch (error: unknown) {
     isPreviewLoading.value = false
-    attachmentPreviewError.value = `Failed to load the attachment preview: ${(error as APIError)?.message ?? 'Unknown error'}`
+    attachmentPreviewError.value = getApiErrorMessage(error, {
+      baseMessage: "Failed to load the attachment preview",
+      permissionHint: "Patient access (Read) in Role Access",
+      retryHint: "Please try again."
+    })
   }
 }
 
@@ -334,7 +339,11 @@ const onDelete = async (): Promise<void> => {
           await refetch()
         },
         async onError(error: APIError) {
-          errorToast(toast, `Failed to uploaded record: ${error.message}`)
+          errorToast(toast, getApiErrorMessage(error, {
+            baseMessage: "Failed to remove patient attachment",
+            permissionHint: "Patient access (Can Edit) in Role Access",
+            retryHint: "Please try again."
+          }))
         }
       })
     },
@@ -352,8 +361,11 @@ const onPreview = async (): Promise<void> => {
     await refetch()
     await loadAttachmentPreview(true)
   } catch (error: unknown) {
-    const typedError = error as APIError
-    errorToast(toast, `Failed to preview attachment: ${typedError.message}`)
+    errorToast(toast, getApiErrorMessage(error, {
+      baseMessage: "Failed to preview attachment",
+      permissionHint: "Patient access (Read) in Role Access",
+      retryHint: "Please try again."
+    }))
   }
 }
 
@@ -433,7 +445,12 @@ const onSubmit = (): void => {
           try {
             errorHandler(error)
           } catch (apiError: unknown) {
-            errorToast(toast, `Failed to uploaded record: ${(apiError as APIError).message}`)
+            errorToast(toast, getApiErrorMessage(apiError, {
+              baseMessage: "Failed to upload patient attachment",
+              permissionHint: "Patient access (Can Edit) in Role Access",
+              invalidInputHint: "Attachment values are invalid. Check the selected file type and try again.",
+              retryHint: "Please try again."
+            }))
           }
         }
         uploadProgress.value = 0

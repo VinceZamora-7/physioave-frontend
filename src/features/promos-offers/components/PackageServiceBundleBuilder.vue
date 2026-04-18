@@ -594,15 +594,11 @@ const props = withDefaults(defineProps<{
   pageDescription?: string
   bundledSectionTitle?: string
   bundledSectionDescription?: string
-  bundleStorageKey?: string
-  packageStorageKey?: string
 }>(), {
   pageTitle: "Self Pay: Package Service Management",
   pageDescription: "Manage the same service inventory used by single-service billing, reuse service bundles, and assemble package offers with session counts, evaluations, regular totals, and package prices.",
   bundledSectionTitle: "Bundled Services",
   bundledSectionDescription: "Same bundled-services table and logic used in Self Pay: Single Service.",
-  bundleStorageKey: BUNDLED_SERVICES_KEY,
-  packageStorageKey: PACKAGE_SERVICES_KEY,
 })
 const isLoading = ref(false)
 const dialogVisible = ref(false)
@@ -939,7 +935,7 @@ const loadServices = async (): Promise<void> => {
     const machineByName = new Map(machineServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
     const techniqueByName = new Map(techniqueServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
 
-    const loadedBundles = readPromosStorageArray<BundledService>(props.bundleStorageKey)
+    const loadedBundles = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
     const remappedBundles = loadedBundles.map(bundle => ({
       ...bundle,
       machineIds: bundle.machineIds
@@ -952,10 +948,10 @@ const loadServices = async (): Promise<void> => {
 
     allBundles.value = remappedBundles
     if (JSON.stringify(remappedBundles) !== JSON.stringify(loadedBundles)) {
-      writePromosStorageArray(props.bundleStorageKey, remappedBundles)
+      writePromosStorageArray(BUNDLED_SERVICES_KEY, remappedBundles)
     }
 
-    const loadedPackages = readPromosStorageArray<PackageService>(props.packageStorageKey)
+    const loadedPackages = readPromosStorageArray<PackageService>(PACKAGE_SERVICES_KEY)
     const remappedPackages = loadedPackages.map((pkg) => {
       const machineIds = (pkg.machineIds ?? [])
         .map(id => remapServiceIdWithCatalog(id, "machine", machineByName, legacyById))
@@ -984,7 +980,7 @@ const loadServices = async (): Promise<void> => {
 
     allPackages.value = remappedPackages
     if (JSON.stringify(remappedPackages) !== JSON.stringify(loadedPackages)) {
-      writePromosStorageArray(props.packageStorageKey, remappedPackages)
+      writePromosStorageArray(PACKAGE_SERVICES_KEY, remappedPackages)
     }
   } catch {
     machineServices.value = []
@@ -995,7 +991,7 @@ const loadServices = async (): Promise<void> => {
 
 const loadBundles = (): void => {
   try {
-    allBundles.value = readPromosStorageArray<BundledService>(props.bundleStorageKey)
+    allBundles.value = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
   } catch {
     allBundles.value = []
   }
@@ -1003,7 +999,7 @@ const loadBundles = (): void => {
 
 const loadPackages = (): void => {
   try {
-    allPackages.value = readPromosStorageArray<PackageService>(props.packageStorageKey)
+    allPackages.value = readPromosStorageArray<PackageService>(PACKAGE_SERVICES_KEY)
   } catch {
     allPackages.value = []
   }
@@ -1179,7 +1175,7 @@ const saveBundle = (): void => {
     })
   }
 
-  writePromosStorageArray(props.bundleStorageKey, allBundles.value)
+  writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
   bundleDialogVisible.value = false
   successToast(toast, editingBundleId.value ? "Bundle updated" : "Bundle added")
   refreshAll()
@@ -1192,7 +1188,7 @@ const confirmDeleteBundle = (bundle: BundledService): void => {
     icon: "pi pi-exclamation-triangle",
     accept: () => {
       allBundles.value = allBundles.value.filter(entry => entry.id !== bundle.id)
-      writePromosStorageArray(props.bundleStorageKey, allBundles.value)
+      writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
       successToast(toast, "Bundle deleted")
       refreshAll()
     }
@@ -1311,7 +1307,7 @@ const savePackage = (): void => {
     allPackages.value.push(payload)
   }
 
-  writePromosStorageArray(props.packageStorageKey, allPackages.value)
+  writePromosStorageArray(PACKAGE_SERVICES_KEY, allPackages.value)
   packageDialogVisible.value = false
   successToast(toast, editingPackageId.value ? "Package updated" : "Package added")
   refreshAll()
@@ -1324,7 +1320,7 @@ const confirmDeletePackage = (item: PackageService): void => {
     icon: "pi pi-exclamation-triangle",
     accept: () => {
       allPackages.value = allPackages.value.filter(entry => entry.id !== item.id)
-      writePromosStorageArray(props.packageStorageKey, allPackages.value)
+      writePromosStorageArray(PACKAGE_SERVICES_KEY, allPackages.value)
       successToast(toast, "Package deleted")
       refreshAll()
     }

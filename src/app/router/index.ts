@@ -1,5 +1,7 @@
 import {createRouter, createWebHistory} from 'vue-router'
 import LoginView from '../../features/auth/pages/LoginView.vue'
+import { authMeService } from '@/services/auth-me.service'
+import { ROUTE_ACCESS_RULES, type RouteAccessRule, DASHBOARD_ROLES } from '@/shared/permissions'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -149,6 +151,55 @@ const router = createRouter({
       ]
     },
   ],
+})
+
+let userPermissions: string[] = []
+let userRole: string = ''
+
+const loadUserPermissions = async () => {
+  try {
+    const user = await authMeService.get()
+    userPermissions = user?.permissions ?? []
+    userRole = user?.role_name ?? ''
+  } catch {
+    userPermissions = []
+    userRole = ''
+  }
+}
+
+const hasAnyPermission = (permissions: string[]): boolean => {
+  return permissions.some(permission => userPermissions.includes(permission))
+}
+
+router.beforeEach(async (to, from, next) => {
+  if (to.meta.requiresAuth === false) {
+    return next()
+  }
+
+  // Load permissions if not loaded
+  if (userPermissions.length === 0) {
+    await loadUserPermissions()
+  }
+
+  const routeName = String(to.name ?? "")
+  
+  // Special handling for dashboard - role-based access
+  if (routeName === 'dashboard') {
+    if (DASHBOARD_ROLES.has(userRole)) {
+      return next()
+    } else {
+      return next({ name: 'dashboard' }) // Redirect to dashboard if not allowed
+    }
+  }
+
+  const rule = ROUTE_ACCESS_RULES[routeName]
+  if (rule) {
+    if (!hasAnyPermission(rule.anyOf)) {
+      return next({ name: 'dashboard' }) // Redirect to dashboard if no access
+    }
+  }
+
+  next()
 })
 
 export default router

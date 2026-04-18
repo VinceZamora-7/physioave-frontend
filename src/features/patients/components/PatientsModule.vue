@@ -225,6 +225,7 @@ import {useIsLoading} from "@/composables/tanstack-loader.composable.ts";
 import Button from "primevue/button";
 import Menu from "primevue/menu";
 import type {MenuItem} from "primevue/menuitem";
+import { getApiErrorMessage } from "@/utils/actionable-error.util";
 import {errorToast, infoToast, successToast, warningToast} from "@/utils/toast.util.ts";
 import type {APIError} from "@/utils/error-handler.ts";
 import {createDraftService} from "@/services/draft.service.ts";
@@ -637,7 +638,12 @@ const onSubmit = async (event: FormSubmitEvent): Promise<void> => {
             await resetQueries()
           },
           async onError(error: APIError) {
-            errorToast(toast, `Edit failed ${error.message}`)
+            errorToast(toast, getApiErrorMessage(error, {
+              baseMessage: "Patient edit failed",
+              permissionHint: "Patient access (Can Edit) in Role Access",
+              invalidInputHint: "Some patient form values are invalid. Review required fields and try again.",
+              retryHint: "Please try again."
+            }))
             await resetQueries()
           },
         })
@@ -680,7 +686,12 @@ const onSubmit = async (event: FormSubmitEvent): Promise<void> => {
           }
         },
         async onError(error: APIError) {
-          errorToast(toast, `Save failed ${error.message}`)
+          errorToast(toast, getApiErrorMessage(error, {
+            baseMessage: "Patient save failed",
+            permissionHint: "Patient access (Can Edit) in Role Access",
+            invalidInputHint: "Some patient form values are invalid. Review required fields and try again.",
+            retryHint: "Please try again."
+          }))
           await resetQueries()
         },
       })
@@ -732,7 +743,11 @@ const menuButtons = (patient: Patient): MenuItem[] => {
                 await resetQueries()
               },
               async onError(error: APIError) {
-                errorToast(toast, `Toggle status failed ${error.message}`)
+                errorToast(toast, getApiErrorMessage(error, {
+                  baseMessage: "Toggle patient status failed",
+                  permissionHint: "Patient access (Can Edit) in Role Access",
+                  retryHint: "Please try again."
+                }))
                 await resetQueries()
               },
             })

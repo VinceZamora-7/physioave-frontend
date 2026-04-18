@@ -151,6 +151,7 @@ import { exportToExcel } from "@/utils/export-excel.util.ts"
 import { defaultThrottle, type DialogExpose } from "@/utils/global.type.ts"
 import { ptModalPrimaryBtn } from "@/features/shared/table-header.styles"
 import { FileServerTanstackKey, PatientTanstackKey } from "@/utils/keys/tanstack-key.ts"
+import { getApiErrorMessage } from "@/utils/actionable-error.util"
 import { errorToast, successToast, warningToast } from "@/utils/toast.util.ts"
 
 const patientMedicalImagingDialogForm = useTemplateRef<InstanceType<typeof PatientMedicalImagingDialogForm>>("patientMedicalImagingDialogForm")
@@ -268,7 +269,11 @@ const onDelete = async (patientMedicalImaging: PatientMedicalImaging): Promise<v
           ])
         },
         async onError(error: APIError) {
-          errorToast(toast, `Failed to uploaded record: ${error.message}`)
+          errorToast(toast, getApiErrorMessage(error, {
+            baseMessage: "Failed to remove patient medical imaging record",
+            permissionHint: "Patient access (Can Edit) in Role Access",
+            retryHint: "Please try again."
+          }))
           await refreshImagings()
         }
       })
@@ -311,7 +316,10 @@ const onPatientMedicalDialogFormSubmit = (event: PatientMedicalImagingDialogForm
 
       const fileDTO: FileDTO | undefined = await fileSaveFn(event.attachment)
       if (!fileDTO) {
-        errorToast(toast, "File failed to be saved")
+        errorToast(toast, getApiErrorMessage(undefined, {
+          baseMessage: "Attachment file could not be saved",
+          retryHint: "Re-select the file and try again."
+        }))
         return
       }
 
@@ -334,7 +342,12 @@ const onPatientMedicalDialogFormSubmit = (event: PatientMedicalImagingDialogForm
           patientMedicalImagingDialogForm.value?.toggleDialog()
         },
         async onError(error: APIError) {
-          errorToast(toast, `Failed to uploaded record: ${error.message}`)
+          errorToast(toast, getApiErrorMessage(error, {
+            baseMessage: "Failed to upload patient medical imaging record",
+            permissionHint: "Patient access (Can Edit) in Role Access",
+            invalidInputHint: "Attachment values are invalid. Check the selected file and imaging type, then retry.",
+            retryHint: "Please try again."
+          }))
           await Promise.all([
             fileDeleteFn(fileDTO.file_id),
             refreshImagings()

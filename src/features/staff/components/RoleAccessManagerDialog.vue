@@ -222,6 +222,23 @@
                   <span class="min-w-0 flex-1">
                     <span class="block text-sm font-semibold text-[rgb(var(--app-fg))]">{{ option.label }}</span>
                     <span class="mt-1 block text-xs text-[rgb(var(--app-fg))]/60">{{ option.description }}</span>
+                    <div
+                      v-if="isPermissionLevelSupported(option.key) && selectedSidebarAccess.includes(option.key)"
+                      class="mt-2"
+                    >
+                      <div class="mb-1 text-[11px] font-medium uppercase tracking-wide text-[rgb(var(--app-fg))]/60">
+                        Access level
+                      </div>
+                      <SelectButton
+                        :modelValue="getPermissionLevel(option.key)"
+                        :options="permissionLevelOptions"
+                        optionLabel="label"
+                        optionValue="value"
+                        :allowEmpty="false"
+                        :disabled="isBusy"
+                        @update:modelValue="setPermissionLevel(option.key, $event)"
+                      />
+                    </div>
                     <Tag class="mt-2" :value="`${mappedPermissionCount(option.key)} mapped permission rules`" severity="secondary" />
                   </span>
                 </div>
@@ -304,7 +321,6 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue"
-import axios from "axios"
 import Button from "primevue/button"
 import Dialog from "primevue/dialog"
 import IftaLabel from "primevue/iftalabel"
@@ -318,6 +334,7 @@ import { useToast } from "primevue/usetoast"
 import type { Pageable } from "@/models/paging"
 import type { AppointmentProviderType, Permission, Role } from "@/models/reference"
 import { pamsAPI } from "@/utils/axios-interceptor"
+import { getApiErrorMessage } from "@/utils/actionable-error.util"
 import { errorToast, successToast } from "@/utils/toast.util"
 import { Status } from "@/utils/global.type"
 
@@ -334,11 +351,7 @@ type SidebarAccessKey =
   | "patient-daily-log"
   | "billing"
   | "reports"
-  | "promos-offers"
-  | "promos-offers-single-service"
-  | "promos-offers-package-service"
-  | "promos-offers-hmo"
-  | "promos-offers-lgu"
+  | "offers-promotions"
   | "settings"
   | "clinics"
   | "staffs"
@@ -349,6 +362,9 @@ type SidebarAccessOption = {
   description: string
   matcher: (permission: Permission) => boolean
 }
+
+type PermissionLevel = "read" | "edit"
+type PermissionLevelKey = "patients" | "appointments" | "billing"
 
 const emit = defineEmits<{
   (e: "rolesUpdated"): void
@@ -364,6 +380,7 @@ const availablePermissions = ref<Permission[]>([])
 const selectedSidebarAccess = ref<SidebarAccessKey[]>([])
 const advancedOpenTabs = ref<SidebarAccessKey[]>([])
 const advancedRulesByTab = ref<Partial<Record<SidebarAccessKey, number[]>>>({})
+const permissionLevelByTab = ref<Partial<Record<PermissionLevelKey, PermissionLevel>>>({})
 const statusFilter = ref<Status>(Status.ALL)
 const isRoleLoading = ref(false)
 const isPermissionLoading = ref(false)
@@ -387,6 +404,10 @@ const statusFilterOptions = [
   { label: "Active", value: Status.ACTIVE },
   { label: "Inactive", value: Status.INACTIVE }
 ]
+const permissionLevelOptions: Array<{ label: string; value: PermissionLevel }> = [
+  { label: "Read Only", value: "read" },
+  { label: "Can Edit", value: "edit" }
+]
 
 const startsWithAny = (permissionName: string, prefixes: string[]): boolean =>
   prefixes.some(prefix => permissionName.startsWith(prefix))
@@ -396,84 +417,76 @@ const sidebarAccessOptions: SidebarAccessOption[] = [
     key: "dashboard",
     label: "Dashboard",
     description: "Overview and snapshot cards.",
-    matcher: permission => startsWithAny(permission.name, ["Appointment::READ", "Patient::READ", "Billing::READ"])
+    // Unique: Dashboard::READ is only used by this tab
+    matcher: permission => permission.name === "Dashboard::READ"
   },
   {
     key: "patients",
     label: "Patient",
     description: "Open and manage patient records.",
+    // All Patient permissions — Patient::MANAGE_BILLS is shared with billing but billing uses it as its own
     matcher: permission => permission.name.startsWith("Patient::")
   },
   {
     key: "appointments",
     label: "Appointments",
     description: "Calendar, scheduling, and appointment actions.",
-    matcher: permission => permission.name.startsWith("Appointment::")
+    // Appointment read/write actions — MANAGE_BILL belongs to billing tab only
+    matcher: permission => startsWithAny(permission.name, ["Appointment::READ", "Appointment::LOOKUP", "Appointment::CREATE", "Appointment::UPDATE"])
   },
   {
     key: "patient-daily-log",
     label: "Patient Daily Log",
     description: "Daily appointment and patient tracking view.",
-    matcher: permission => startsWithAny(permission.name, ["Appointment::READ", "Appointment::LOOKUP", "Patient::READ", "Patient::LOOKUP"])
+    // Read-only appointment access — subset of appointments tab
+    // Priority rule in syncSidebarAccessSelection prevents overlap with appointments
+    matcher: permission => permission.name === "Appointment::READ" || permission.name === "Appointment::LOOKUP"
   },
   {
     key: "billing",
     label: "Billing",
     description: "Payment and billing workflows.",
-    matcher: permission => startsWithAny(permission.name, ["Appointment::MANAGE_BILL", "Patient::MANAGE_BILLS"])
+    // Billing supports bill-specific permissions while keeping legacy workflow flags.
+    matcher: permission =>
+      permission.name.startsWith("CashBill::") ||
+      permission.name.startsWith("HMOBill::") ||
+      permission.name === "Appointment::MANAGE_BILL" ||
+      permission.name === "Patient::MANAGE_BILLS"
   },
   {
     key: "reports",
     label: "Finance & Reports",
     description: "View closeout and financial reports.",
-    matcher: permission => startsWithAny(permission.name, ["Appointment::READ", "Patient::READ", "Patient::MANAGE_BILLS", "Appointment::MANAGE_BILL"])
+    // Read-only access across appointments and patients for reporting
+    // Priority rule prevents overlap when patients or appointments tabs are enabled
+    matcher: permission => permission.name === "Appointment::READ" || permission.name === "Patient::READ"
   },
   {
-    key: "promos-offers",
-    label: "Offers Overview",
-    description: "Open offers and coverage workspaces.",
-    matcher: permission => startsWithAny(permission.name, ["Reference::LOOKUP", "Reference::READ", "Reference::UPDATE", "Reference::CREATE"])
-  },
-  {
-    key: "promos-offers-single-service",
-    label: "Single Pay: Single Service",
-    description: "Single service catalog workspace.",
-    matcher: permission => startsWithAny(permission.name, ["Reference::LOOKUP", "Reference::READ", "Reference::UPDATE", "Reference::CREATE"])
-  },
-  {
-    key: "promos-offers-package-service",
-    label: "Self-Pay: Package Service",
-    description: "Package service workspace.",
-    matcher: permission => startsWithAny(permission.name, ["Reference::LOOKUP", "Reference::READ", "Reference::UPDATE", "Reference::CREATE"])
-  },
-  {
-    key: "promos-offers-hmo",
-    label: "HMO",
-    description: "HMO workspace and negotiated service rates.",
-    matcher: permission => startsWithAny(permission.name, ["Reference::LOOKUP", "Reference::READ", "Reference::UPDATE", "Reference::CREATE"])
-  },
-  {
-    key: "promos-offers-lgu",
-    label: "LGU",
-    description: "LGU budget and service workspace.",
+    key: "offers-promotions",
+    label: "Offers & Promotions",
+    description: "All offers, coverage, and promotional workspaces.",
+    // Unique: Reference::* is only used by this tab (settings now uses only AccessMatrix)
     matcher: permission => startsWithAny(permission.name, ["Reference::LOOKUP", "Reference::READ", "Reference::UPDATE", "Reference::CREATE"])
   },
   {
     key: "settings",
     label: "Settings",
     description: "Branch setup, specialties, and role access setup.",
-    matcher: permission => startsWithAny(permission.name, ["Clinic::", "Staff::", "Reference::", "AccessMatrix::"])
+    // Unique: AccessMatrix::* is exclusively for settings — Clinic/Staff/Reference now belong to their own tabs
+    matcher: permission => permission.name.startsWith("AccessMatrix::")
   },
   {
     key: "clinics",
     label: "Clinic",
     description: "Clinic setup and treatment areas.",
+    // Unique: Clinic::* only belongs to this tab
     matcher: permission => permission.name.startsWith("Clinic::")
   },
   {
     key: "staffs",
     label: "Staff",
     description: "Staff directory and account maintenance.",
+    // Unique: Staff::* only belongs to this tab
     matcher: permission => permission.name.startsWith("Staff::")
   }
 ]
@@ -526,6 +539,94 @@ const hasMappedPermissions = (key: SidebarAccessKey): boolean => mappedPermissio
 
 const getMappedPermissionIds = (key: SidebarAccessKey): number[] =>
   getPermissionsForSidebarAccess(key).map(permission => permission.id)
+
+const permissionLevelKeys: PermissionLevelKey[] = ["patients", "appointments", "billing"]
+
+const isPermissionLevelSupported = (key: SidebarAccessKey): key is PermissionLevelKey =>
+  permissionLevelKeys.includes(key as PermissionLevelKey)
+
+const getPermissionLevel = (key: SidebarAccessKey): PermissionLevel => {
+  if (!isPermissionLevelSupported(key)) return "edit"
+  return permissionLevelByTab.value[key] ?? "edit"
+}
+
+const getPermissionIdsByNames = (key: SidebarAccessKey, names: string[]): number[] => {
+  const targets = new Set(names)
+  return getPermissionsForSidebarAccess(key)
+    .filter(permission => targets.has(permission.name))
+    .map(permission => permission.id)
+}
+
+const getPermissionIdsByPrefix = (key: SidebarAccessKey, prefixes: string[]): number[] =>
+  getPermissionsForSidebarAccess(key)
+    .filter(permission => prefixes.some(prefix => permission.name.startsWith(prefix)))
+    .map(permission => permission.id)
+
+const getReadPermissionIdsForTab = (key: PermissionLevelKey): number[] => {
+  if (key === "patients") {
+    return getPermissionIdsByNames(key, ["Patient::READ", "Patient::LOOKUP"])
+  }
+
+  if (key === "appointments") {
+    return getPermissionIdsByNames(key, ["Appointment::READ", "Appointment::LOOKUP"])
+  }
+
+  return getPermissionIdsByNames(key, [
+    "CashBill::READ",
+    "HMOBill::READ",
+    "Appointment::MANAGE_BILL",
+    "Patient::MANAGE_BILLS"
+  ])
+}
+
+const getEditPermissionIdsForTab = (key: PermissionLevelKey): number[] => {
+  if (key === "patients") {
+    return [
+      ...getReadPermissionIdsForTab(key),
+      ...getPermissionIdsByNames(key, ["Patient::CREATE", "Patient::UPDATE", "Patient::DELETE"])
+    ]
+  }
+
+  if (key === "appointments") {
+    return [
+      ...getReadPermissionIdsForTab(key),
+      ...getPermissionIdsByNames(key, [
+        "Appointment::CREATE",
+        "Appointment::UPDATE",
+        "Appointment::DELETE",
+        "Appointment::MANAGE_STATUS",
+        "Appointment::OVERRIDE_RESCHEDULE_LIMIT"
+      ])
+    ]
+  }
+
+  return [
+    ...getReadPermissionIdsForTab(key),
+    ...getPermissionIdsByPrefix(key, ["CashBill::", "HMOBill::"])
+  ]
+}
+
+const applyPermissionLevelToAdvancedRules = (key: PermissionLevelKey, level: PermissionLevel): void => {
+  const ids = level === "read" ? getReadPermissionIdsForTab(key) : getEditPermissionIdsForTab(key)
+  setAdvancedRules(key, ids)
+}
+
+const setPermissionLevel = (key: SidebarAccessKey, level: PermissionLevel): void => {
+  if (!isPermissionLevelSupported(key)) return
+  permissionLevelByTab.value = {
+    ...permissionLevelByTab.value,
+    [key]: level
+  }
+  applyPermissionLevelToAdvancedRules(key, level)
+}
+
+const setDefaultRulesForTab = (key: SidebarAccessKey): void => {
+  if (isPermissionLevelSupported(key)) {
+    applyPermissionLevelToAdvancedRules(key, getPermissionLevel(key))
+    return
+  }
+  setAdvancedRules(key, getMappedPermissionIds(key))
+}
 
 const isAdvancedOpen = (key: SidebarAccessKey): boolean => advancedOpenTabs.value.includes(key)
 
@@ -591,9 +692,64 @@ const syncAdvancedRulesSelection = (): void => {
   advancedRulesByTab.value = next
 }
 
+const syncPermissionLevelsSelection = (): void => {
+  const assignedIds = assignedPermissionIdSet.value
+  const next: Partial<Record<PermissionLevelKey, PermissionLevel>> = {}
+
+  for (const key of permissionLevelKeys) {
+    const editIds = new Set(getEditPermissionIdsForTab(key))
+    const readIds = new Set(getReadPermissionIdsForTab(key))
+
+    const hasAnyRead = Array.from(readIds).some(id => assignedIds.has(id))
+    const hasAnyEditOnly = Array.from(editIds).some(id => assignedIds.has(id) && !readIds.has(id))
+
+    next[key] = hasAnyEditOnly || !hasAnyRead ? "edit" : "read"
+  }
+
+  permissionLevelByTab.value = next
+}
+
 const syncSidebarAccessSelection = (): void => {
+  const assignedIds = assignedPermissionIdSet.value
+
+  const hasMatchingAssigned = (matcher: (p: Permission) => boolean): boolean =>
+    allRolePermissions.value.some(p => matcher(p) && assignedIds.has(p.id))
+
+  // These are the "exclusive" write/lookup permissions that uniquely identify
+  // whether a tab was intentionally enabled vs being a read-only side effect.
+  const hasAppointmentWriteAssigned = hasMatchingAssigned(
+    p => p.name === "Appointment::CREATE" || p.name === "Appointment::UPDATE"
+  )
+  const hasExclusivePatientAssigned = hasMatchingAssigned(
+    p => p.name === "Patient::LOOKUP" || p.name === "Patient::CREATE" || p.name === "Patient::UPDATE"
+  )
+
   selectedSidebarAccess.value = sidebarAccessOptions
-    .filter(option => getPermissionsForSidebarAccess(option.key).some(permission => assignedPermissionIdSet.value.has(permission.id)))
+    .filter(option => {
+      const hasAny = getPermissionsForSidebarAccess(option.key).some(p => assignedIds.has(p.id))
+      if (!hasAny) return false
+
+      switch (option.key) {
+        // appointments: only if write perms are assigned (CREATE or UPDATE).
+        // If only READ/LOOKUP assigned → patient-daily-log gets credit instead.
+        case "appointments":
+          return hasAppointmentWriteAssigned
+
+        // patient-daily-log: only if READ/LOOKUP assigned but no write perms.
+        // When appointments (write) is enabled, it already grants READ/LOOKUP access.
+        case "patient-daily-log":
+          return !hasAppointmentWriteAssigned
+
+        // reports: only if read-only permissions are the cause — not a side effect of
+        // patients (write/lookup) or appointments (write) being enabled.
+        case "reports":
+          return !hasAppointmentWriteAssigned && !hasExclusivePatientAssigned
+
+        // All other tabs are independent (unique permission sets) — show if any assigned.
+        default:
+          return true
+      }
+    })
     .map(option => option.key)
 }
 
@@ -601,15 +757,22 @@ const toggleSidebarAccess = (key: SidebarAccessKey): void => {
   if (!hasMappedPermissions(key)) return
   if (selectedSidebarAccess.value.includes(key)) {
     selectedSidebarAccess.value = selectedSidebarAccess.value.filter(entry => entry !== key)
+    // Clear advanced rules when unchecking main sidebar tab
+    setAdvancedRules(key, [])
     return
   }
   selectedSidebarAccess.value = [...selectedSidebarAccess.value, key]
+  setDefaultRulesForTab(key)
 }
 
 const selectAllSidebarTabs = (): void => {
   selectedSidebarAccess.value = sidebarAccessOptions
     .filter(option => hasMappedPermissions(option.key))
     .map(option => option.key)
+
+  for (const key of selectedSidebarAccess.value) {
+    setDefaultRulesForTab(key)
+  }
 }
 
 const clearAllSidebarTabs = (): void => {
@@ -619,6 +782,9 @@ const clearAllSidebarTabs = (): void => {
 const applyPhysicalTherapistDefaults = (): void => {
   const defaults: SidebarAccessKey[] = ["patients", "appointments", "patient-daily-log"]
   selectedSidebarAccess.value = defaults.filter(key => hasMappedPermissions(key))
+  for (const key of selectedSidebarAccess.value) {
+    setDefaultRulesForTab(key)
+  }
 }
 
 function formatProviderType(providerType: AppointmentProviderType): string {
@@ -637,11 +803,12 @@ function getPermissionSubtitle(permission: Permission): string {
 }
 
 function extractApiErrorMessage(error: unknown, fallback: string): string {
-  if (axios.isAxiosError(error)) {
-    const detail = error.response?.data?.message || error.response?.data?.detail || error.message
-    return detail ? `${fallback}: ${detail}` : fallback
-  }
-  return error instanceof Error && error.message ? `${fallback}: ${error.message}` : fallback
+  return getApiErrorMessage(error, {
+    baseMessage: fallback,
+    permissionHint: "Reference and Access Matrix permissions in Role Access",
+    invalidInputHint: "Some role or permission values are invalid. Review inputs and try again.",
+    retryHint: "Please try again."
+  })
 }
 
 function applyRoleToForm(role?: Role): void {
@@ -707,6 +874,7 @@ async function fetchPermissions(roleId: number): Promise<void> {
   selectedSidebarAccess.value = []
   advancedOpenTabs.value = []
   advancedRulesByTab.value = {}
+  permissionLevelByTab.value = {}
 
   try {
     const params = { role_id: roleId, page: 1, size: 500, status: "ACTIVE" }
@@ -718,6 +886,7 @@ async function fetchPermissions(roleId: number): Promise<void> {
     assignedPermissions.value = assigned?.content ?? []
     availablePermissions.value = unassigned?.content ?? []
     syncAdvancedRulesSelection()
+    syncPermissionLevelsSelection()
     syncSidebarAccessSelection()
   } catch (error: unknown) {
     errorToast(toast, extractApiErrorMessage(error, "Failed to load permissions"))
@@ -739,6 +908,11 @@ function startCreateRole(): void {
   selectedSidebarAccess.value = []
   advancedOpenTabs.value = []
   advancedRulesByTab.value = {}
+  permissionLevelByTab.value = {
+    patients: "edit",
+    appointments: "edit",
+    billing: "edit"
+  }
   applyRoleToForm()
 }
 

@@ -99,8 +99,19 @@
         <Column header="Documentation Reminder" style="min-width: 220px">
           <template #body="{ data }">
             <Tag
-              :value="data.documentationReminderCount > 0 ? `Complete ${data.documentationReminderCount} documentation` : 'Up to date'"
-              :severity="data.documentationReminderCount > 0 ? 'warn' : 'success'"
+              v-if="data.redAlertCount > 0"
+              :value="`⚠ ${data.redAlertCount} session${data.redAlertCount > 1 ? 's' : ''} missing Evaluation Visit Log`"
+              severity="danger"
+            />
+            <Tag
+              v-else-if="data.documentationReminderCount > 0"
+              :value="`Complete ${data.documentationReminderCount} documentation`"
+              severity="warn"
+            />
+            <Tag
+              v-else
+              value="Up to date"
+              severity="success"
             />
           </template>
         </Column>
@@ -180,7 +191,7 @@ const billingDistribution = ref<Array<{
 ])
 
 const recentAppointments = ref<DashboardRecentAppointment[]>([])
-const ptPerformance = ref<Array<{pt_name: string; bookings: number; documentationReminderCount: number}>>([])
+const ptPerformance = ref<Array<{pt_name: string; bookings: number; documentationReminderCount: number; redAlertCount: number}>>([])
 const referringDoctorSummary = ref<ReferringDoctorCompletedSessionsItem[]>([])
 
 const formatDateTime = (value: string): string => new Date(value).toLocaleString()
@@ -273,6 +284,7 @@ const loadPtPerformance = async (): Promise<void> => {
       pt_name: item.pt_name?.trim() || "Unassigned",
       bookings: Number(item.completed_sessions_count ?? 0),
       documentationReminderCount: Number(item.documentation_reminder_count ?? 0),
+      redAlertCount: Number(item.red_alert_count ?? 0),
     }))
     .sort((a, b) => b.bookings - a.bookings)
 }
@@ -336,7 +348,7 @@ const loadRecentAppointments = async (): Promise<void> => {
 const refreshDashboard = async (): Promise<void> => {
   try {
     isLoading.value = true
-    await Promise.all([
+    const results = await Promise.allSettled([
       loadMetrics(),
       loadTrend(),
       loadBillingDistribution(),
@@ -344,8 +356,16 @@ const refreshDashboard = async (): Promise<void> => {
       loadPtPerformance(),
       loadReferringDoctorSummary(),
     ])
-  } catch {
-    errorToast(toast, "Failed to load dashboard data")
+
+    const failedResults = results.filter(result => result.status === 'rejected')
+    if (failedResults.length > 0) {
+      console.warn('Some dashboard data failed to load:', failedResults)
+      // Only show error for critical failures (metrics and trend are most important)
+      const criticalFailures = failedResults.filter((_, index) => index < 2) // loadMetrics and loadTrend
+      if (criticalFailures.length > 0) {
+        errorToast(toast, "Failed to load some dashboard data")
+      }
+    }
   } finally {
     isLoading.value = false
   }

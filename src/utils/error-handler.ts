@@ -32,9 +32,9 @@ export const errorHandler = (error: unknown): never => {
     } else if (Array.isArray(data?.errors) && data.errors.length) {
       message = data.errors.map((e: any) => `${e.field}: ${e.message}`).join(", ")
     } else if (status === 403) {
-      message = "Forbidden (403): You do not have permission to perform this action."
+      message = "You do not have permission to perform this action."
     } else if (status === 401) {
-      message = "Unauthorized (401): Please login again."
+      message = "Your session has expired. Please log in again."
     }
 
     throw new APIError(message, status)
@@ -65,7 +65,7 @@ export const errorHandler = (error: unknown): never => {
     throw new APIError(error.message)
   }
 
-  throw new APIError("Unexpected error occurred!")
+  throw new APIError("Something went wrong. Please try again.")
 }
 
 

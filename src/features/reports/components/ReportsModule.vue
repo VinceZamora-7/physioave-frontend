@@ -26,7 +26,9 @@ import {clinicService} from "@/features/clinics/api/clinic.service"
 import type {Clinic} from "@/features/clinics/types/clinic"
 import {defaultPage, defaultPageSize} from "@/models/paging"
 import {ptOutlinedBtn, ptPrimaryBtn} from "@/features/shared/table-header.styles"
+import {getApiErrorMessage} from "@/utils/actionable-error.util"
 import {errorToast, successToast} from "@/utils/toast.util"
+import {authMeService, type AuthMe} from "@/services/auth-me.service"
 
 const toast = useToast()
 const confirm = useConfirm()
@@ -56,6 +58,18 @@ const expenseForm = ref({
   amount: 0,
   notes: ""
 })
+
+const user = ref<AuthMe | null>(null)
+const userPermissions = computed(() => user.value?.permissions ?? [])
+
+const hasAnyPermission = (...permissions: string[]): boolean => {
+  return permissions.some(permission => userPermissions.value.includes(permission))
+}
+
+const canViewEodReports = computed(() => hasAnyPermission("Appointment::READ"))
+const canViewFinanceReports = computed(() => hasAnyPermission("Appointment::MANAGE_BILL", "Patient::MANAGE_BILLS"))
+const canManageExpenses = computed(() => hasAnyPermission("Appointment::MANAGE_BILL", "Patient::MANAGE_BILLS"))
+const canViewDoctorSessions = computed(() => hasAnyPermission("Appointment::READ"))
 
 const selectedDateLabel = computed(() =>
   selectedDate.value.toLocaleDateString("en-PH", {
@@ -234,7 +248,17 @@ const billingRouteSeverity = (value: string): "success" | "info" | "warn" | "con
   return "success"
 }
 
+const getFinanceReportsErrorMessage = (error: unknown): string =>
+  getApiErrorMessage(error, {
+    baseMessage: "Finance reports could not be loaded",
+    permissionHint: "Billing access (Read Only or Can Edit) in Role Access",
+    notFoundHint: "No finance report data was found for the selected date. Try another date or refresh the page.",
+    invalidInputHint: "The selected date or filters are invalid. Please check your inputs and try again.",
+    retryHint: "Refresh and try again."
+  })
+
 const refreshReport = async (): Promise<void> => {
+  if (!canViewFinanceReports.value) return
   try {
     isLoading.value = true
     const [dailyReport, monthReport] = await Promise.all([
@@ -243,14 +267,15 @@ const refreshReport = async (): Promise<void> => {
     ])
     report.value = dailyReport
     monthlyReport.value = monthReport
-  } catch {
-    errorToast(toast, "Failed to load finance reports")
+  } catch (error: unknown) {
+    errorToast(toast, getFinanceReportsErrorMessage(error))
   } finally {
     isLoading.value = false
   }
 }
 
 const refreshEodReport = async (): Promise<void> => {
+  if (!canViewEodReports.value) return
   if (!selectedClinicId.value) {
     eodReport.value = undefined
     return
@@ -259,14 +284,24 @@ const refreshEodReport = async (): Promise<void> => {
   try {
     isEodLoading.value = true
     eodReport.value = await appointmentPhase1Service.getPtEndOfDay(toDateParam(selectedDate.value), selectedClinicId.value)
-  } catch {
-    errorToast(toast, "Failed to load end-of-day report")
+  } catch (error: unknown) {
+    errorToast(
+      toast,
+      getApiErrorMessage(error, {
+        baseMessage: "End-of-day report could not be loaded",
+        permissionHint: "Reports access (Appointment Read)",
+        notFoundHint: "No end-of-day data was found for the selected date and clinic. Select another date/clinic, then click Refresh.",
+        invalidInputHint: "The selected date or clinic is invalid. Re-select both values and try again.",
+        retryHint: "Select date and clinic, then click Refresh."
+      })
+    )
   } finally {
     isEodLoading.value = false
   }
 }
 
 const refreshEodHistory = async (): Promise<void> => {
+  if (!canViewEodReports.value) return
   if (!selectedClinicId.value) {
     eodHistoryItems.value = []
     return
@@ -280,24 +315,34 @@ const refreshEodHistory = async (): Promise<void> => {
         limit: 100
       })
       ?? []
-  } catch {
-    errorToast(toast, "Failed to load end-of-day history log")
+  } catch (error: unknown) {
+    errorToast(
+      toast,
+      getApiErrorMessage(error, {
+        baseMessage: "End-of-day history could not be loaded",
+        permissionHint: "Reports access (Appointment Read)",
+        notFoundHint: "No end-of-day history was found for this clinic yet. Try another clinic or date range.",
+        invalidInputHint: "The selected clinic is invalid. Re-select a clinic, then refresh.",
+        retryHint: "Re-select clinic and click Refresh."
+      })
+    )
   } finally {
     isEodHistoryLoading.value = false
   }
 }
 
 const refreshDoctorSessionsReport = async (): Promise<void> => {
+  if (!canViewDoctorSessions.value) return
   const range = doctorSessionsDateRange.value ?? []
   if (range.length < 2 || !range[0] || !range[1]) {
-    errorToast(toast, "Please select a start and end date")
+    errorToast(toast, "Select both Start Date and End Date, then click Load Completed Sessions.")
     return
   }
 
   const fromDate = range[0]
   const toDate = range[1]
   if (fromDate.getTime() > toDate.getTime()) {
-    errorToast(toast, "Start date must be on or before end date")
+    errorToast(toast, "Start Date cannot be later than End Date. Adjust the range, then try again.")
     return
   }
 
@@ -307,8 +352,17 @@ const refreshDoctorSessionsReport = async (): Promise<void> => {
       toDateParam(fromDate),
       toDateParam(toDate)
     )
-  } catch {
-    errorToast(toast, "Failed to load completed sessions by referring doctor")
+  } catch (error: unknown) {
+    errorToast(
+      toast,
+      getApiErrorMessage(error, {
+        baseMessage: "Completed sessions report could not be loaded",
+        permissionHint: "Reports access (Appointment Read)",
+        notFoundHint: "No completed sessions were found for the selected date range. Try a wider range.",
+        invalidInputHint: "The selected date range is invalid. Correct the dates and load again.",
+        retryHint: "Check date range and try again."
+      })
+    )
   } finally {
     isDoctorSessionsLoading.value = false
   }
@@ -323,6 +377,7 @@ const resetExpenseForm = (): void => {
 }
 
 const saveExpense = async (): Promise<void> => {
+  if (!canManageExpenses.value) return
   if (!expenseForm.value.item_name.trim()) {
     errorToast(toast, "Expense item name is required")
     return
@@ -344,14 +399,23 @@ const saveExpense = async (): Promise<void> => {
     successToast(toast, "Expense added")
     resetExpenseForm()
     await refreshReport()
-  } catch {
-    errorToast(toast, "Failed to save expense")
+  } catch (error: unknown) {
+    errorToast(
+      toast,
+      getApiErrorMessage(error, {
+        baseMessage: "Expense could not be saved",
+        permissionHint: "Billing access (Can Edit)",
+        invalidInputHint: "Expense details are incomplete or invalid. Check item name and amount, then save again.",
+        retryHint: "Verify details and try again."
+      })
+    )
   } finally {
     isSavingExpense.value = false
   }
 }
 
 const confirmDeleteExpense = (id: number, itemName: string): void => {
+  if (!canManageExpenses.value) return
   confirm.require({
     message: `Delete expense entry for ${itemName}?`,
     header: "Delete Expense",
@@ -371,8 +435,15 @@ const confirmDeleteExpense = (id: number, itemName: string): void => {
         await billingPhase1Service.deleteDailyExpense(id)
         successToast(toast, "Expense deleted")
         await refreshReport()
-      } catch {
-        errorToast(toast, "Failed to delete expense")
+      } catch (error: unknown) {
+        errorToast(
+          toast,
+          getApiErrorMessage(error, {
+            baseMessage: "Expense could not be deleted",
+            permissionHint: "Billing access (Can Edit)",
+            retryHint: "Refresh the page and try again."
+          })
+        )
       }
     }
   })
@@ -401,8 +472,15 @@ const loadClinics = async (): Promise<void> => {
     if (!selectedClinicId.value && clinics.value.length > 0) {
       selectedClinicId.value = clinics.value[0]?.id
     }
-  } catch {
-    errorToast(toast, "Failed to load clinics")
+  } catch (error: unknown) {
+    errorToast(
+      toast,
+      getApiErrorMessage(error, {
+        baseMessage: "Clinic list could not be loaded",
+        permissionHint: "Clinic access (Read or Lookup)",
+        retryHint: "Refresh this page or ask admin to grant Clinic access."
+      })
+    )
   } finally {
     isClinicsLoading.value = false
   }
@@ -478,7 +556,12 @@ watch(() => route.query.section, () => {
   void scrollToRequestedSection()
 })
 
-onMounted(() => {
+onMounted(async () => {
+  try {
+    user.value = await authMeService.get() ?? null
+  } catch {
+    // Ignore
+  }
   initializeDoctorSessionsDateRange()
   void loadClinics()
   void refreshReport()
@@ -566,7 +649,7 @@ onMounted(() => {
       </article>
     </section>
 
-    <section ref="monthlySectionRef" class="app-section-card-comfy space-y-4">
+    <section v-if="canViewEodReports" ref="monthlySectionRef" class="app-section-card-comfy space-y-4">
       <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 class="app-section-title">End-of-Day Report</h2>
@@ -751,7 +834,7 @@ onMounted(() => {
       </div>
     </Dialog>
 
-    <section class="app-section-card-comfy space-y-4">
+    <section v-if="canViewFinanceReports" class="app-section-card-comfy space-y-4">
       <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 class="app-section-title">Daily Income</h2>
@@ -871,7 +954,7 @@ onMounted(() => {
           <InputText v-model="expenseForm.notes" fluid placeholder="Optional note or receipt detail" />
         </div>
 
-        <div class="flex items-end">
+        <div v-if="canManageExpenses" class="flex items-end">
           <Button
             label="Add Expense"
             icon="pi pi-plus"
@@ -916,7 +999,7 @@ onMounted(() => {
             </template>
           </Column>
 
-          <Column header="Actions" style="width: 96px">
+          <Column v-if="canManageExpenses" header="Actions" style="width: 96px">
             <template #body="{ data }">
               <Button
                 size="small"
@@ -949,7 +1032,7 @@ onMounted(() => {
       </div>
     </section>
 
-    <section class="app-section-card-comfy space-y-4">
+    <section v-if="canViewFinanceReports" class="app-section-card-comfy space-y-4">
       <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 class="app-section-title">Monthly Income &amp; Expenses</h2>
@@ -1014,7 +1097,7 @@ onMounted(() => {
       </div>
     </section>
 
-    <section class="app-section-card-comfy space-y-4">
+    <section v-if="canViewDoctorSessions" class="app-section-card-comfy space-y-4">
       <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h2 class="app-section-title">Completed Sessions by Referring Doctor</h2>

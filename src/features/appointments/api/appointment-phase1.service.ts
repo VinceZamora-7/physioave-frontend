@@ -127,6 +127,25 @@ export interface AppointmentDetail extends AppointmentListItem {
   dropout_status?: string
   checkout_summary: AppointmentCheckoutSummary
   encounter_ticket?: AppointmentEncounterTicket
+  lgu_credit_summary?: {
+    authorization_id: number
+    package_name: string
+    total_sessions: number
+    consumed_sessions: number
+    billed_sessions: number
+    authorization_status: string
+    expiry_date?: string
+    items: Array<{
+      id: number
+      service_item: string
+      package_name: string
+      total_purchased: number
+      used: number
+      balance: number
+      expiry_date?: string
+      status: string
+    }>
+  }
 }
 
 export interface DailyPtDeckBlock extends AppointmentListItem {
@@ -327,6 +346,7 @@ export interface PtCompletedSessionsItem {
   pt_name: string
   completed_sessions_count: number
   documentation_reminder_count: number
+  red_alert_count: number
 }
 
 export interface PtCompletedSessionsReport {
@@ -536,9 +556,12 @@ export const appointmentPhase1Service = {
       return data
     })
   },
-  async updateDropoutStatus(id: number, dropoutStatus: string): Promise<{ dropout_status: string } | undefined> {
+  async updateDropoutStatus(
+    id: number,
+    dropoutStatus: string
+  ): Promise<{ dropout_status: string; dropout_billing_id?: number; dropout_billing_public_id?: string } | undefined> {
     return await this.withRefreshRetry(async () => {
-      const {data} = await pamsAPI.patch<{ dropout_status: string }>(`/appointments/${id}/dropout-status`, { dropout_status: dropoutStatus })
+      const {data} = await pamsAPI.patch<{ dropout_status: string; dropout_billing_id?: number; dropout_billing_public_id?: string }>(`/appointments/${id}/dropout-status`, { dropout_status: dropoutStatus })
       return data
     })
   },
