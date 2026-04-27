@@ -91,7 +91,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref } from "vue"
 import { useRoute } from "vue-router"
-import Select from "primevue/select"
+import Dropdown from "primevue/dropdown"
 import { storeToRefs } from "pinia"
 import { clinicStore } from "@/stores/clinic.store"
 
@@ -99,7 +99,7 @@ type SideBarExpose = {
   toggleMobile: () => void
 }
 
-const SideBar = defineAsyncComponent(() => import("@/app/layouts/SideBar.vue"))
+  <Dropdown
 
 const sidebarRef = ref<SideBarExpose | null>(null)
 
