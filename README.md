@@ -1,4 +1,4 @@
-# PhysioAve Frontend Documentation
+# PhysioAve Frontend
 
 Vue 3 + Vite frontend for the PhysioAve Management System.
 
