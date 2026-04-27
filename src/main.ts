@@ -40,6 +40,5 @@ app.use(VueQueryPlugin)
 
 app.directive('tooltip', Tooltip)
 app.directive('ripple', Ripple)
-app.directive('keyfilter', KeyFilter)
 
 app.mount('#app')
