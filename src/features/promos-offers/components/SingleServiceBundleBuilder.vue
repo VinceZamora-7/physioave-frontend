@@ -11,7 +11,12 @@
         </div>
 
         <div class="flex flex-wrap gap-2">
-          <Button label="Add New Service" icon="pi pi-plus" @click="openAddDialog" />
+          <Button
+            v-if="canCreateService"
+            label="Add New Service"
+            icon="pi pi-plus"
+            @click="openAddDialog"
+          />
           <Button label="Refresh" icon="pi pi-refresh" text outlined @click="loadServices" />
         </div>
       </div>
@@ -152,7 +157,12 @@
           <h3 class="text-sm font-semibold">Bundled Services</h3>
           <p class="text-xs opacity-70">Create service bundles combining multiple services at a discounted price.</p>
         </div>
-        <Button label="Add New Bundle" icon="pi pi-plus" @click="openAddBundleDialog" />
+        <Button
+          v-if="canCreateService"
+          label="Add New Bundle"
+          icon="pi pi-plus"
+          @click="openAddBundleDialog"
+        />
       </div>
 
       <DataTable
@@ -378,7 +388,8 @@ import Message from "primevue/message"
 import Select from "primevue/select"
 import MultiSelect from "primevue/multiselect"
 import Tag from "primevue/tag"
-import { useConfirm, useToast } from "primevue"
+import { useConfirm } from "primevue/useconfirm"
+import { useToast } from "primevue/usetoast"
 import { errorToast, successToast } from "@/utils/toast.util"
 import {
   BUNDLED_SERVICES_KEY,
@@ -478,6 +489,8 @@ const bundlePreviewOriginalPrice = computed(() => {
 })
 
 const typeOptions = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
   { label: "Evaluations", value: "evaluation" },
   { label: "Add-ons", value: "add-on-machine" },
   { label: "Add-on (Home Service)", value: "add-on-home-service" }
@@ -584,11 +597,19 @@ const asCurrency = (value: number): string =>
   Number(value ?? 0).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
 
 const serviceNamePlaceholder = computed(() => {
+  if (formData.type === "machine") return "Example: Ultrasound Machine, Traction Device"
+  if (formData.type === "technique") return "Example: Manual Therapy, Hot Compress"
   if (formData.type === "add-on-home-service") return "Example: Add-on: Home Service - 1 km"
   return "Enter service name"
 })
 
 const serviceTypeGuidance = computed(() => {
+  if (formData.type === "machine") {
+    return "Create a physical therapy machine/equipment that can be assigned to sessions and bundled with techniques."
+  }
+  if (formData.type === "technique") {
+    return "Create a treatment technique that can be paired with machines and assigned to sessions."
+  }
   if (formData.type === "add-on-home-service") {
     return "Home Service add-ons are used for travel tiers and will mark Appointments as Home Care when selected."
   }
@@ -679,11 +700,6 @@ const openEditDialog = (service: SingleService): void => {
 }
 
 const saveService = (): void => {
-  if (formData.type === "machine" || formData.type === "technique") {
-    errorToast(toast, "Machines and techniques are managed from their dedicated modules.")
-    return
-  }
-
   if (!formData.name.trim()) {
     errorToast(toast, "Service name is required")
     return
@@ -835,3 +851,5517 @@ onMounted(() => {
   loadServices()
 })
 </script>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from "vue"
+import Button from "primevue/button"
+import Column from "primevue/column"
+import ConfirmDialog from "primevue/confirmdialog"
+import DataTable from "primevue/datatable"
+import Dialog from "primevue/dialog"
+import IftaLabel from "primevue/iftalabel"
+import InputNumber from "primevue/inputnumber"
+import InputText from "primevue/inputtext"
+import Message from "primevue/message"
+import Select from "primevue/select"
+import MultiSelect from "primevue/multiselect"
+import Tag from "primevue/tag"
+import { useConfirm } from "primevue/useconfirm"
+import { useToast } from "primevue/usetoast"
+import { errorToast, successToast } from "@/utils/toast.util"
+import {
+  BUNDLED_SERVICES_KEY,
+  SINGLE_PAY_SERVICES_KEY,
+  readPromosStorageArray,
+  writePromosStorageArray
+} from "@/features/promos-offers/composables/promos-storage.composable"
+import {
+  isLocalEditablePromosService,
+  loadBackendPromosMasterCatalog,
+  normalizePromosServiceName,
+  partitionPromosCustomServices,
+  remapLegacyPromosServiceId
+} from "@/features/promos-offers/composables/promos-master-catalog.composable"
+
+type ServiceType = "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service"
+
+interface SingleService {
+  id: string
+  type: ServiceType
+  name: string
+  price: number
+  status: string
+}
+
+interface BundledService {
+  id: string
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds?: string[]
+  bundledPrice: number
+  status: string
+}
+
+type ServiceCatalogFilter = "machine" | "technique" | "evaluation" | "add-ons"
+
+type ServiceCatalogMatrixRow = {
+  key: number
+  machine?: SingleService
+  technique?: SingleService
+  evaluation?: SingleService
+  addOns?: SingleService
+}
+
+const toast = useToast()
+const confirm = useConfirm()
+const isLoading = ref(false)
+const dialogVisible = ref(false)
+const editingId = ref<string | null>(null)
+
+const customServices = ref<SingleService[]>([])
+const machineServices = ref<SingleService[]>([])
+const techniqueServices = ref<SingleService[]>([])
+const allBundles = ref<BundledService[]>([])
+const selectedServiceCatalogFilters = ref<ServiceCatalogFilter[]>([])
+
+const allServices = computed<SingleService[]>(() => [
+  ...machineServices.value,
+  ...techniqueServices.value,
+  ...customServices.value
+])
+
+// Bundle dialog state
+const bundleDialogVisible = ref(false)
+const editingBundleId = ref<string | null>(null)
+const bundleFormData = reactive<{
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds: string[]
+  bundledPrice: number
+  status: string
+}>({
+  name: "",
+  machineIds: [],
+  techniqueIds: [],
+  evaluationIds: [],
+  addOnIds: [],
+  bundledPrice: 0,
+  status: "Active"
+})
+
+const getServiceName = (id: string): string =>
+  allServices.value.find(s => s.id === id)?.name ?? id
+
+const calcOriginalPrice = (bundle: BundledService): number => {
+  const ids = [...bundle.machineIds, ...bundle.techniqueIds, ...bundle.evaluationIds]
+  return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
+}
+
+const bundlePreviewOriginalPrice = computed(() => {
+  const ids = [...bundleFormData.machineIds, ...bundleFormData.techniqueIds, ...bundleFormData.evaluationIds]
+  return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
+})
+
+const typeOptions = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluations", value: "evaluation" },
+  { label: "Add-ons", value: "add-on-machine" },
+  { label: "Add-on (Home Service)", value: "add-on-home-service" }
+]
+
+const serviceCatalogFilterOptions: Array<{label: string; value: ServiceCatalogFilter}> = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluation", value: "evaluation" },
+  { label: "Add-Ons", value: "add-ons" }
+]
+
+const normalizeServiceCatalogFilter = (type: ServiceType): ServiceCatalogFilter => {
+  if (type === "machine") return "machine"
+  if (type === "technique") return "technique"
+  if (type === "evaluation") return "evaluation"
+  return "add-ons"
+}
+
+const serviceCatalogBuckets = computed(() => ({
+  machine: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "machine"),
+  technique: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "technique"),
+  evaluation: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "evaluation"),
+  "add-ons": allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "add-ons")
+}))
+
+const hasServiceCatalogFilters = computed(() => selectedServiceCatalogFilters.value.length > 0)
+
+const filteredServiceCatalogItems = computed(() =>
+  allServices.value.filter(service => selectedServiceCatalogFilters.value.includes(normalizeServiceCatalogFilter(service.type)))
+)
+
+const serviceCatalogMatrixRows = computed<ServiceCatalogMatrixRow[]>(() => {
+  const buckets = serviceCatalogBuckets.value
+  const maxRows = Math.max(
+    buckets.machine.length,
+    buckets.technique.length,
+    buckets.evaluation.length,
+    buckets["add-ons"].length,
+    0
+  )
+
+  return Array.from({ length: maxRows }, (_, index) => ({
+    key: index + 1,
+    machine: buckets.machine[index],
+    technique: buckets.technique[index],
+    evaluation: buckets.evaluation[index],
+    addOns: buckets["add-ons"][index]
+  }))
+})
+
+const toggleServiceCatalogFilter = (filter: ServiceCatalogFilter): void => {
+  selectedServiceCatalogFilters.value = selectedServiceCatalogFilters.value.includes(filter)
+    ? selectedServiceCatalogFilters.value.filter(entry => entry !== filter)
+    : [...selectedServiceCatalogFilters.value, filter]
+}
+
+const clearServiceCatalogFilters = (): void => {
+  selectedServiceCatalogFilters.value = []
+}
+
+const isLocalEditableService = (service: SingleService): boolean => isLocalEditablePromosService(service)
+
+const remapBundleIdsToBackendCatalog = (bundles: BundledService[], legacyServices: SingleService[]): BundledService[] => {
+  if (!bundles.length) return bundles
+
+  const machineByName = new Map(machineServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+  const techniqueByName = new Map(techniqueServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+
+  const legacyById = new Map(legacyServices.map(service => [service.id, service]))
+
+  const remapIds = (
+    ids: string[],
+    serviceType: "machine" | "technique",
+    backendByName: Map<string, string>
+  ): string[] => {
+    return ids
+      .map((id) => {
+        return remapLegacyPromosServiceId(id, serviceType, backendByName, legacyById)
+      })
+      .filter((id, index, array) => array.indexOf(id) === index)
+  }
+
+  return bundles.map(bundle => ({
+    ...bundle,
+    machineIds: remapIds(bundle.machineIds, "machine", machineByName),
+    techniqueIds: remapIds(bundle.techniqueIds, "technique", techniqueByName)
+  }))
+}
+
+const formData = reactive<{
+  type: ServiceType
+  name: string
+  price: number
+  status: string
+}>({
+  type: "evaluation",
+  name: "",
+  price: 0,
+  status: "Active"
+})
+
+const asCurrency = (value: number): string =>
+  Number(value ?? 0).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
+
+const serviceNamePlaceholder = computed(() => {
+  if (formData.type === "machine") return "Example: Ultrasound Machine, Traction Device"
+  if (formData.type === "technique") return "Example: Manual Therapy, Hot Compress"
+  if (formData.type === "add-on-home-service") return "Example: Add-on: Home Service - 1 km"
+  return "Enter service name"
+})
+
+const serviceTypeGuidance = computed(() => {
+  if (formData.type === "machine") {
+    return "Create a physical therapy machine/equipment that can be assigned to sessions and bundled with techniques."
+  }
+  if (formData.type === "technique") {
+    return "Create a treatment technique that can be paired with machines and assigned to sessions."
+  }
+  if (formData.type === "add-on-home-service") {
+    return "Home Service add-ons are used for travel tiers and will mark Appointments as Home Care when selected."
+  }
+  if (formData.type === "add-on-machine") {
+    return "Use this for regular add-ons that should stay under the Add-ons picker."
+  }
+  return "Choose a clear service name so staff can find it quickly during booking and billing."
+})
+
+const formatType = (type: ServiceType): string => {
+  const typeMap: Record<ServiceType, string> = {
+    machine: "Machine",
+    technique: "Technique",
+    evaluation: "Evaluation",
+    "add-on-machine": "Add-ons",
+    "add-on-technique": "Add-ons",
+    "add-on-home-service": "Add-on (Home Service)"
+  }
+  return typeMap[type] || type
+}
+
+const getTypeSeverity = (type: ServiceType): string => {
+  const severityMap: Record<ServiceType, string> = {
+    machine: "info",
+    technique: "success",
+    evaluation: "warning",
+    "add-on-machine": "secondary",
+    "add-on-technique": "secondary",
+    "add-on-home-service": "warn"
+  }
+  return severityMap[type] || "info"
+}
+
+const loadServices = async (): Promise<void> => {
+  try {
+    isLoading.value = true
+    const { machineServices: backendMachines, techniqueServices: backendTechniques } = await loadBackendPromosMasterCatalog()
+    machineServices.value = backendMachines as SingleService[]
+    techniqueServices.value = backendTechniques as SingleService[]
+
+    const storedServices = readPromosStorageArray<SingleService>(SINGLE_PAY_SERVICES_KEY)
+    const { customOnlyServices: localCustomOnly, legacyMachineTechniqueEntries } = partitionPromosCustomServices(storedServices)
+
+    if (legacyMachineTechniqueEntries.length > 0 || localCustomOnly.length !== storedServices.length) {
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, localCustomOnly)
+    }
+
+    customServices.value = localCustomOnly
+
+    const loadedBundles = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
+    const remappedBundles = remapBundleIdsToBackendCatalog(loadedBundles, legacyMachineTechniqueEntries)
+    allBundles.value = remappedBundles
+    if (JSON.stringify(remappedBundles) !== JSON.stringify(loadedBundles)) {
+      writePromosStorageArray(BUNDLED_SERVICES_KEY, remappedBundles)
+    }
+  } catch (error: unknown) {
+    errorToast(toast, "Failed to load services")
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const openAddDialog = (): void => {
+  editingId.value = null
+  formData.type = "evaluation"
+  formData.name = ""
+  formData.price = 0
+  formData.status = "Active"
+  dialogVisible.value = true
+}
+
+const openEditDialog = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
+  editingId.value = service.id
+  formData.type = service.type === "add-on-home-service"
+    ? "add-on-home-service"
+    : service.type.startsWith("add-on")
+      ? "add-on-machine"
+      : service.type
+  formData.name = service.name
+  formData.price = service.price
+  formData.status = service.status
+  dialogVisible.value = true
+}
+
+const saveService = (): void => {
+  if (!formData.name.trim()) {
+    errorToast(toast, "Service name is required")
+    return
+  }
+  if (formData.price < 0) {
+    errorToast(toast, "Price must be 0 or greater")
+    return
+  }
+
+  if (editingId.value) {
+    // Update existing
+    const index = customServices.value.findIndex(s => s.id === editingId.value)
+    if (index >= 0) {
+      customServices.value[index] = {
+        id: editingId.value,
+        type: formData.type,
+        name: formData.name,
+        price: formData.price,
+        status: formData.status
+      }
+    }
+  } else {
+    // Add new
+    customServices.value.push({
+      id: `service-${Date.now()}`,
+      type: formData.type,
+      name: formData.name,
+      price: formData.price,
+      status: formData.status
+    })
+  }
+
+  writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
+  dialogVisible.value = false
+  successToast(toast, editingId.value ? "Service updated" : "Service added")
+}
+
+const confirmDelete = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
+  confirm.require({
+    message: `Delete "${service.name}"?`,
+    header: "Confirm",
+    icon: "pi pi-exclamation-triangle",
+    accept: () => {
+      customServices.value = customServices.value.filter(s => s.id !== service.id)
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
+      successToast(toast, "Service deleted")
+    }
+  })
+}
+
+const loadBundles = (): void => {
+  try {
+    allBundles.value = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
+  } catch {
+    allBundles.value = []
+  }
+}
+
+const openAddBundleDialog = (): void => {
+  editingBundleId.value = null
+  bundleFormData.name = ""
+  bundleFormData.machineIds = []
+  bundleFormData.techniqueIds = []
+  bundleFormData.evaluationIds = []
+  bundleFormData.addOnIds = []
+  bundleFormData.bundledPrice = 0
+  bundleFormData.status = "Active"
+  bundleDialogVisible.value = true
+}
+
+const openEditBundleDialog = (bundle: BundledService): void => {
+  editingBundleId.value = bundle.id
+  bundleFormData.name = bundle.name
+  bundleFormData.machineIds = [...bundle.machineIds]
+  bundleFormData.techniqueIds = [...bundle.techniqueIds]
+  bundleFormData.evaluationIds = [...bundle.evaluationIds]
+  bundleFormData.addOnIds = []
+  bundleFormData.bundledPrice = bundle.bundledPrice
+  bundleFormData.status = bundle.status
+  bundleDialogVisible.value = true
+}
+
+const saveBundle = (): void => {
+  if (!bundleFormData.name.trim()) {
+    errorToast(toast, "Bundle name is required")
+    return
+  }
+  const total = bundleFormData.machineIds.length + bundleFormData.techniqueIds.length + bundleFormData.evaluationIds.length
+  if (total === 0) {
+    errorToast(toast, "Add at least one machine, technique, or evaluation")
+    return
+  }
+  if (bundleFormData.bundledPrice < 0) {
+    errorToast(toast, "Bundled price must be 0 or greater")
+    return
+  }
+
+  if (editingBundleId.value) {
+    const index = allBundles.value.findIndex(b => b.id === editingBundleId.value)
+    if (index >= 0) {
+      allBundles.value[index] = {
+        id: editingBundleId.value,
+        name: bundleFormData.name,
+        machineIds: [...bundleFormData.machineIds],
+        techniqueIds: [...bundleFormData.techniqueIds],
+        evaluationIds: [...bundleFormData.evaluationIds],
+        addOnIds: [],
+        bundledPrice: bundleFormData.bundledPrice,
+        status: bundleFormData.status
+      }
+    }
+  } else {
+    allBundles.value.push({
+      id: `bundle-${Date.now()}`,
+      name: bundleFormData.name,
+      machineIds: [...bundleFormData.machineIds],
+      techniqueIds: [...bundleFormData.techniqueIds],
+      evaluationIds: [...bundleFormData.evaluationIds],
+      addOnIds: [],
+      bundledPrice: bundleFormData.bundledPrice,
+      status: bundleFormData.status
+    })
+  }
+
+  writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
+  bundleDialogVisible.value = false
+  successToast(toast, editingBundleId.value ? "Bundle updated" : "Bundle added")
+}
+
+const confirmDeleteBundle = (bundle: BundledService): void => {
+  confirm.require({
+    message: `Delete bundle "${bundle.name}"?`,
+    header: "Confirm",
+    icon: "pi pi-exclamation-triangle",
+    accept: () => {
+      allBundles.value = allBundles.value.filter(b => b.id !== bundle.id)
+      writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
+      successToast(toast, "Bundle deleted")
+    }
+  })
+}
+
+onMounted(() => {
+  loadServices()
+})
+</script>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from "vue"
+import Button from "primevue/button"
+import Column from "primevue/column"
+import ConfirmDialog from "primevue/confirmdialog"
+import DataTable from "primevue/datatable"
+import Dialog from "primevue/dialog"
+import IftaLabel from "primevue/iftalabel"
+import InputNumber from "primevue/inputnumber"
+import InputText from "primevue/inputtext"
+import Message from "primevue/message"
+import Select from "primevue/select"
+import MultiSelect from "primevue/multiselect"
+import Tag from "primevue/tag"
+import { useConfirm } from "primevue/useconfirm"
+import { useToast } from "primevue/usetoast"
+import { errorToast, successToast } from "@/utils/toast.util"
+import {
+  BUNDLED_SERVICES_KEY,
+  SINGLE_PAY_SERVICES_KEY,
+  readPromosStorageArray,
+  writePromosStorageArray
+} from "@/features/promos-offers/composables/promos-storage.composable"
+import {
+  isLocalEditablePromosService,
+  loadBackendPromosMasterCatalog,
+  normalizePromosServiceName,
+  partitionPromosCustomServices,
+  remapLegacyPromosServiceId
+} from "@/features/promos-offers/composables/promos-master-catalog.composable"
+
+type ServiceType = "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service"
+
+interface SingleService {
+  id: string
+  type: ServiceType
+  name: string
+  price: number
+  status: string
+}
+
+interface BundledService {
+  id: string
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds?: string[]
+  bundledPrice: number
+  status: string
+}
+
+type ServiceCatalogFilter = "machine" | "technique" | "evaluation" | "add-ons"
+
+type ServiceCatalogMatrixRow = {
+  key: number
+  machine?: SingleService
+  technique?: SingleService
+  evaluation?: SingleService
+  addOns?: SingleService
+}
+
+const toast = useToast()
+const confirm = useConfirm()
+const isLoading = ref(false)
+const dialogVisible = ref(false)
+const editingId = ref<string | null>(null)
+
+const customServices = ref<SingleService[]>([])
+const machineServices = ref<SingleService[]>([])
+const techniqueServices = ref<SingleService[]>([])
+const allBundles = ref<BundledService[]>([])
+const selectedServiceCatalogFilters = ref<ServiceCatalogFilter[]>([])
+
+const allServices = computed<SingleService[]>(() => [
+  ...machineServices.value,
+  ...techniqueServices.value,
+  ...customServices.value
+])
+
+// Bundle dialog state
+const bundleDialogVisible = ref(false)
+const editingBundleId = ref<string | null>(null)
+const bundleFormData = reactive<{
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds: string[]
+  bundledPrice: number
+  status: string
+}>({
+  name: "",
+  machineIds: [],
+  techniqueIds: [],
+  evaluationIds: [],
+  addOnIds: [],
+  bundledPrice: 0,
+  status: "Active"
+})
+
+const getServiceName = (id: string): string =>
+  allServices.value.find(s => s.id === id)?.name ?? id
+
+const calcOriginalPrice = (bundle: BundledService): number => {
+  const ids = [...bundle.machineIds, ...bundle.techniqueIds, ...bundle.evaluationIds]
+  return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
+}
+
+const bundlePreviewOriginalPrice = computed(() => {
+  const ids = [...bundleFormData.machineIds, ...bundleFormData.techniqueIds, ...bundleFormData.evaluationIds]
+  return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
+})
+
+const typeOptions = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluations", value: "evaluation" },
+  { label: "Add-ons", value: "add-on-machine" },
+  { label: "Add-on (Home Service)", value: "add-on-home-service" }
+]
+
+const serviceCatalogFilterOptions: Array<{label: string; value: ServiceCatalogFilter}> = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluation", value: "evaluation" },
+  { label: "Add-Ons", value: "add-ons" }
+]
+
+const normalizeServiceCatalogFilter = (type: ServiceType): ServiceCatalogFilter => {
+  if (type === "machine") return "machine"
+  if (type === "technique") return "technique"
+  if (type === "evaluation") return "evaluation"
+  return "add-ons"
+}
+
+const serviceCatalogBuckets = computed(() => ({
+  machine: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "machine"),
+  technique: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "technique"),
+  evaluation: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "evaluation"),
+  "add-ons": allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "add-ons")
+}))
+
+const hasServiceCatalogFilters = computed(() => selectedServiceCatalogFilters.value.length > 0)
+
+const filteredServiceCatalogItems = computed(() =>
+  allServices.value.filter(service => selectedServiceCatalogFilters.value.includes(normalizeServiceCatalogFilter(service.type)))
+)
+
+const serviceCatalogMatrixRows = computed<ServiceCatalogMatrixRow[]>(() => {
+  const buckets = serviceCatalogBuckets.value
+  const maxRows = Math.max(
+    buckets.machine.length,
+    buckets.technique.length,
+    buckets.evaluation.length,
+    buckets["add-ons"].length,
+    0
+  )
+
+  return Array.from({ length: maxRows }, (_, index) => ({
+    key: index + 1,
+    machine: buckets.machine[index],
+    technique: buckets.technique[index],
+    evaluation: buckets.evaluation[index],
+    addOns: buckets["add-ons"][index]
+  }))
+})
+
+const toggleServiceCatalogFilter = (filter: ServiceCatalogFilter): void => {
+  selectedServiceCatalogFilters.value = selectedServiceCatalogFilters.value.includes(filter)
+    ? selectedServiceCatalogFilters.value.filter(entry => entry !== filter)
+    : [...selectedServiceCatalogFilters.value, filter]
+}
+
+const clearServiceCatalogFilters = (): void => {
+  selectedServiceCatalogFilters.value = []
+}
+
+const isLocalEditableService = (service: SingleService): boolean => isLocalEditablePromosService(service)
+
+const remapBundleIdsToBackendCatalog = (bundles: BundledService[], legacyServices: SingleService[]): BundledService[] => {
+  if (!bundles.length) return bundles
+
+  const machineByName = new Map(machineServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+  const techniqueByName = new Map(techniqueServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+
+  const legacyById = new Map(legacyServices.map(service => [service.id, service]))
+
+  const remapIds = (
+    ids: string[],
+    serviceType: "machine" | "technique",
+    backendByName: Map<string, string>
+  ): string[] => {
+    return ids
+      .map((id) => {
+        return remapLegacyPromosServiceId(id, serviceType, backendByName, legacyById)
+      })
+      .filter((id, index, array) => array.indexOf(id) === index)
+  }
+
+  return bundles.map(bundle => ({
+    ...bundle,
+    machineIds: remapIds(bundle.machineIds, "machine", machineByName),
+    techniqueIds: remapIds(bundle.techniqueIds, "technique", techniqueByName)
+  }))
+}
+
+const formData = reactive<{
+  type: ServiceType
+  name: string
+  price: number
+  status: string
+}>({
+  type: "evaluation",
+  name: "",
+  price: 0,
+  status: "Active"
+})
+
+const asCurrency = (value: number): string =>
+  Number(value ?? 0).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
+
+const serviceNamePlaceholder = computed(() => {
+  if (formData.type === "machine") return "Example: Ultrasound Machine, Traction Device"
+  if (formData.type === "technique") return "Example: Manual Therapy, Hot Compress"
+  if (formData.type === "add-on-home-service") return "Example: Add-on: Home Service - 1 km"
+  return "Enter service name"
+})
+
+const serviceTypeGuidance = computed(() => {
+  if (formData.type === "machine") {
+    return "Create a physical therapy machine/equipment that can be assigned to sessions and bundled with techniques."
+  }
+  if (formData.type === "technique") {
+    return "Create a treatment technique that can be paired with machines and assigned to sessions."
+  }
+  if (formData.type === "add-on-home-service") {
+    return "Home Service add-ons are used for travel tiers and will mark Appointments as Home Care when selected."
+  }
+  if (formData.type === "add-on-machine") {
+    return "Use this for regular add-ons that should stay under the Add-ons picker."
+  }
+  return "Choose a clear service name so staff can find it quickly during booking and billing."
+})
+
+const formatType = (type: ServiceType): string => {
+  const typeMap: Record<ServiceType, string> = {
+    machine: "Machine",
+    technique: "Technique",
+    evaluation: "Evaluation",
+    "add-on-machine": "Add-ons",
+    "add-on-technique": "Add-ons",
+    "add-on-home-service": "Add-on (Home Service)"
+  }
+  return typeMap[type] || type
+}
+
+const getTypeSeverity = (type: ServiceType): string => {
+  const severityMap: Record<ServiceType, string> = {
+    machine: "info",
+    technique: "success",
+    evaluation: "warning",
+    "add-on-machine": "secondary",
+    "add-on-technique": "secondary",
+    "add-on-home-service": "warn"
+  }
+  return severityMap[type] || "info"
+}
+
+const loadServices = async (): Promise<void> => {
+  try {
+    isLoading.value = true
+    const { machineServices: backendMachines, techniqueServices: backendTechniques } = await loadBackendPromosMasterCatalog()
+    machineServices.value = backendMachines as SingleService[]
+    techniqueServices.value = backendTechniques as SingleService[]
+
+    const storedServices = readPromosStorageArray<SingleService>(SINGLE_PAY_SERVICES_KEY)
+    const { customOnlyServices: localCustomOnly, legacyMachineTechniqueEntries } = partitionPromosCustomServices(storedServices)
+
+    if (legacyMachineTechniqueEntries.length > 0 || localCustomOnly.length !== storedServices.length) {
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, localCustomOnly)
+    }
+
+    customServices.value = localCustomOnly
+
+    const loadedBundles = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
+    const remappedBundles = remapBundleIdsToBackendCatalog(loadedBundles, legacyMachineTechniqueEntries)
+    allBundles.value = remappedBundles
+    if (JSON.stringify(remappedBundles) !== JSON.stringify(loadedBundles)) {
+      writePromosStorageArray(BUNDLED_SERVICES_KEY, remappedBundles)
+    }
+  } catch (error: unknown) {
+    errorToast(toast, "Failed to load services")
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const openAddDialog = (): void => {
+  editingId.value = null
+  formData.type = "evaluation"
+  formData.name = ""
+  formData.price = 0
+  formData.status = "Active"
+  dialogVisible.value = true
+}
+
+const openEditDialog = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
+  editingId.value = service.id
+  formData.type = service.type === "add-on-home-service"
+    ? "add-on-home-service"
+    : service.type.startsWith("add-on")
+      ? "add-on-machine"
+      : service.type
+  formData.name = service.name
+  formData.price = service.price
+  formData.status = service.status
+  dialogVisible.value = true
+}
+
+const saveService = (): void => {
+  if (!formData.name.trim()) {
+    errorToast(toast, "Service name is required")
+    return
+  }
+  if (formData.price < 0) {
+    errorToast(toast, "Price must be 0 or greater")
+    return
+  }
+
+  if (editingId.value) {
+    // Update existing
+    const index = customServices.value.findIndex(s => s.id === editingId.value)
+    if (index >= 0) {
+      customServices.value[index] = {
+        id: editingId.value,
+        type: formData.type,
+        name: formData.name,
+        price: formData.price,
+        status: formData.status
+      }
+    }
+  } else {
+    // Add new
+    customServices.value.push({
+      id: `service-${Date.now()}`,
+      type: formData.type,
+      name: formData.name,
+      price: formData.price,
+      status: formData.status
+    })
+  }
+
+  writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
+  dialogVisible.value = false
+  successToast(toast, editingId.value ? "Service updated" : "Service added")
+}
+
+const confirmDelete = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
+  confirm.require({
+    message: `Delete "${service.name}"?`,
+    header: "Confirm",
+    icon: "pi pi-exclamation-triangle",
+    accept: () => {
+      customServices.value = customServices.value.filter(s => s.id !== service.id)
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
+      successToast(toast, "Service deleted")
+    }
+  })
+}
+
+const loadBundles = (): void => {
+  try {
+    allBundles.value = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
+  } catch {
+    allBundles.value = []
+  }
+}
+
+const openAddBundleDialog = (): void => {
+  editingBundleId.value = null
+  bundleFormData.name = ""
+  bundleFormData.machineIds = []
+  bundleFormData.techniqueIds = []
+  bundleFormData.evaluationIds = []
+  bundleFormData.addOnIds = []
+  bundleFormData.bundledPrice = 0
+  bundleFormData.status = "Active"
+  bundleDialogVisible.value = true
+}
+
+const openEditBundleDialog = (bundle: BundledService): void => {
+  editingBundleId.value = bundle.id
+  bundleFormData.name = bundle.name
+  bundleFormData.machineIds = [...bundle.machineIds]
+  bundleFormData.techniqueIds = [...bundle.techniqueIds]
+  bundleFormData.evaluationIds = [...bundle.evaluationIds]
+  bundleFormData.addOnIds = []
+  bundleFormData.bundledPrice = bundle.bundledPrice
+  bundleFormData.status = bundle.status
+  bundleDialogVisible.value = true
+}
+
+const saveBundle = (): void => {
+  if (!bundleFormData.name.trim()) {
+    errorToast(toast, "Bundle name is required")
+    return
+  }
+  const total = bundleFormData.machineIds.length + bundleFormData.techniqueIds.length + bundleFormData.evaluationIds.length
+  if (total === 0) {
+    errorToast(toast, "Add at least one machine, technique, or evaluation")
+    return
+  }
+  if (bundleFormData.bundledPrice < 0) {
+    errorToast(toast, "Bundled price must be 0 or greater")
+    return
+  }
+
+  if (editingBundleId.value) {
+    const index = allBundles.value.findIndex(b => b.id === editingBundleId.value)
+    if (index >= 0) {
+      allBundles.value[index] = {
+        id: editingBundleId.value,
+        name: bundleFormData.name,
+        machineIds: [...bundleFormData.machineIds],
+        techniqueIds: [...bundleFormData.techniqueIds],
+        evaluationIds: [...bundleFormData.evaluationIds],
+        addOnIds: [],
+        bundledPrice: bundleFormData.bundledPrice,
+        status: bundleFormData.status
+      }
+    }
+  } else {
+    allBundles.value.push({
+      id: `bundle-${Date.now()}`,
+      name: bundleFormData.name,
+      machineIds: [...bundleFormData.machineIds],
+      techniqueIds: [...bundleFormData.techniqueIds],
+      evaluationIds: [...bundleFormData.evaluationIds],
+      addOnIds: [],
+      bundledPrice: bundleFormData.bundledPrice,
+      status: bundleFormData.status
+    })
+  }
+
+  writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
+  bundleDialogVisible.value = false
+  successToast(toast, editingBundleId.value ? "Bundle updated" : "Bundle added")
+}
+
+const confirmDeleteBundle = (bundle: BundledService): void => {
+  confirm.require({
+    message: `Delete bundle "${bundle.name}"?`,
+    header: "Confirm",
+    icon: "pi pi-exclamation-triangle",
+    accept: () => {
+      allBundles.value = allBundles.value.filter(b => b.id !== bundle.id)
+      writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
+      successToast(toast, "Bundle deleted")
+    }
+  })
+}
+
+onMounted(() => {
+  loadServices()
+})
+</script>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from "vue"
+import Button from "primevue/button"
+import Column from "primevue/column"
+import ConfirmDialog from "primevue/confirmdialog"
+import DataTable from "primevue/datatable"
+import Dialog from "primevue/dialog"
+import IftaLabel from "primevue/iftalabel"
+import InputNumber from "primevue/inputnumber"
+import InputText from "primevue/inputtext"
+import Message from "primevue/message"
+import Select from "primevue/select"
+import MultiSelect from "primevue/multiselect"
+import Tag from "primevue/tag"
+import { useConfirm } from "primevue/useconfirm"
+import { useToast } from "primevue/usetoast"
+import { errorToast, successToast } from "@/utils/toast.util"
+import {
+  BUNDLED_SERVICES_KEY,
+  SINGLE_PAY_SERVICES_KEY,
+  readPromosStorageArray,
+  writePromosStorageArray
+} from "@/features/promos-offers/composables/promos-storage.composable"
+import {
+  isLocalEditablePromosService,
+  loadBackendPromosMasterCatalog,
+  normalizePromosServiceName,
+  partitionPromosCustomServices,
+  remapLegacyPromosServiceId
+} from "@/features/promos-offers/composables/promos-master-catalog.composable"
+
+type ServiceType = "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service"
+
+interface SingleService {
+  id: string
+  type: ServiceType
+  name: string
+  price: number
+  status: string
+}
+
+interface BundledService {
+  id: string
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds?: string[]
+  bundledPrice: number
+  status: string
+}
+
+type ServiceCatalogFilter = "machine" | "technique" | "evaluation" | "add-ons"
+
+type ServiceCatalogMatrixRow = {
+  key: number
+  machine?: SingleService
+  technique?: SingleService
+  evaluation?: SingleService
+  addOns?: SingleService
+}
+
+const toast = useToast()
+const confirm = useConfirm()
+const isLoading = ref(false)
+const dialogVisible = ref(false)
+const editingId = ref<string | null>(null)
+
+const customServices = ref<SingleService[]>([])
+const machineServices = ref<SingleService[]>([])
+const techniqueServices = ref<SingleService[]>([])
+const allBundles = ref<BundledService[]>([])
+const selectedServiceCatalogFilters = ref<ServiceCatalogFilter[]>([])
+
+const allServices = computed<SingleService[]>(() => [
+  ...machineServices.value,
+  ...techniqueServices.value,
+  ...customServices.value
+])
+
+// Bundle dialog state
+const bundleDialogVisible = ref(false)
+const editingBundleId = ref<string | null>(null)
+const bundleFormData = reactive<{
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds: string[]
+  bundledPrice: number
+  status: string
+}>({
+  name: "",
+  machineIds: [],
+  techniqueIds: [],
+  evaluationIds: [],
+  addOnIds: [],
+  bundledPrice: 0,
+  status: "Active"
+})
+
+const getServiceName = (id: string): string =>
+  allServices.value.find(s => s.id === id)?.name ?? id
+
+const calcOriginalPrice = (bundle: BundledService): number => {
+  const ids = [...bundle.machineIds, ...bundle.techniqueIds, ...bundle.evaluationIds]
+  return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
+}
+
+const bundlePreviewOriginalPrice = computed(() => {
+  const ids = [...bundleFormData.machineIds, ...bundleFormData.techniqueIds, ...bundleFormData.evaluationIds]
+  return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
+})
+
+const typeOptions = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluations", value: "evaluation" },
+  { label: "Add-ons", value: "add-on-machine" },
+  { label: "Add-on (Home Service)", value: "add-on-home-service" }
+]
+
+const serviceCatalogFilterOptions: Array<{label: string; value: ServiceCatalogFilter}> = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluation", value: "evaluation" },
+  { label: "Add-Ons", value: "add-ons" }
+]
+
+const normalizeServiceCatalogFilter = (type: ServiceType): ServiceCatalogFilter => {
+  if (type === "machine") return "machine"
+  if (type === "technique") return "technique"
+  if (type === "evaluation") return "evaluation"
+  return "add-ons"
+}
+
+const serviceCatalogBuckets = computed(() => ({
+  machine: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "machine"),
+  technique: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "technique"),
+  evaluation: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "evaluation"),
+  "add-ons": allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "add-ons")
+}))
+
+const hasServiceCatalogFilters = computed(() => selectedServiceCatalogFilters.value.length > 0)
+
+const filteredServiceCatalogItems = computed(() =>
+  allServices.value.filter(service => selectedServiceCatalogFilters.value.includes(normalizeServiceCatalogFilter(service.type)))
+)
+
+const serviceCatalogMatrixRows = computed<ServiceCatalogMatrixRow[]>(() => {
+  const buckets = serviceCatalogBuckets.value
+  const maxRows = Math.max(
+    buckets.machine.length,
+    buckets.technique.length,
+    buckets.evaluation.length,
+    buckets["add-ons"].length,
+    0
+  )
+
+  return Array.from({ length: maxRows }, (_, index) => ({
+    key: index + 1,
+    machine: buckets.machine[index],
+    technique: buckets.technique[index],
+    evaluation: buckets.evaluation[index],
+    addOns: buckets["add-ons"][index]
+  }))
+})
+
+const toggleServiceCatalogFilter = (filter: ServiceCatalogFilter): void => {
+  selectedServiceCatalogFilters.value = selectedServiceCatalogFilters.value.includes(filter)
+    ? selectedServiceCatalogFilters.value.filter(entry => entry !== filter)
+    : [...selectedServiceCatalogFilters.value, filter]
+}
+
+const clearServiceCatalogFilters = (): void => {
+  selectedServiceCatalogFilters.value = []
+}
+
+const isLocalEditableService = (service: SingleService): boolean => isLocalEditablePromosService(service)
+
+const remapBundleIdsToBackendCatalog = (bundles: BundledService[], legacyServices: SingleService[]): BundledService[] => {
+  if (!bundles.length) return bundles
+
+  const machineByName = new Map(machineServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+  const techniqueByName = new Map(techniqueServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+
+  const legacyById = new Map(legacyServices.map(service => [service.id, service]))
+
+  const remapIds = (
+    ids: string[],
+    serviceType: "machine" | "technique",
+    backendByName: Map<string, string>
+  ): string[] => {
+    return ids
+      .map((id) => {
+        return remapLegacyPromosServiceId(id, serviceType, backendByName, legacyById)
+      })
+      .filter((id, index, array) => array.indexOf(id) === index)
+  }
+
+  return bundles.map(bundle => ({
+    ...bundle,
+    machineIds: remapIds(bundle.machineIds, "machine", machineByName),
+    techniqueIds: remapIds(bundle.techniqueIds, "technique", techniqueByName)
+  }))
+}
+
+const formData = reactive<{
+  type: ServiceType
+  name: string
+  price: number
+  status: string
+}>({
+  type: "evaluation",
+  name: "",
+  price: 0,
+  status: "Active"
+})
+
+const asCurrency = (value: number): string =>
+  Number(value ?? 0).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
+
+const serviceNamePlaceholder = computed(() => {
+  if (formData.type === "machine") return "Example: Ultrasound Machine, Traction Device"
+  if (formData.type === "technique") return "Example: Manual Therapy, Hot Compress"
+  if (formData.type === "add-on-home-service") return "Example: Add-on: Home Service - 1 km"
+  return "Enter service name"
+})
+
+const serviceTypeGuidance = computed(() => {
+  if (formData.type === "machine") {
+    return "Create a physical therapy machine/equipment that can be assigned to sessions and bundled with techniques."
+  }
+  if (formData.type === "technique") {
+    return "Create a treatment technique that can be paired with machines and assigned to sessions."
+  }
+  if (formData.type === "add-on-home-service") {
+    return "Home Service add-ons are used for travel tiers and will mark Appointments as Home Care when selected."
+  }
+  if (formData.type === "add-on-machine") {
+    return "Use this for regular add-ons that should stay under the Add-ons picker."
+  }
+  return "Choose a clear service name so staff can find it quickly during booking and billing."
+})
+
+const formatType = (type: ServiceType): string => {
+  const typeMap: Record<ServiceType, string> = {
+    machine: "Machine",
+    technique: "Technique",
+    evaluation: "Evaluation",
+    "add-on-machine": "Add-ons",
+    "add-on-technique": "Add-ons",
+    "add-on-home-service": "Add-on (Home Service)"
+  }
+  return typeMap[type] || type
+}
+
+const getTypeSeverity = (type: ServiceType): string => {
+  const severityMap: Record<ServiceType, string> = {
+    machine: "info",
+    technique: "success",
+    evaluation: "warning",
+    "add-on-machine": "secondary",
+    "add-on-technique": "secondary",
+    "add-on-home-service": "warn"
+  }
+  return severityMap[type] || "info"
+}
+
+const loadServices = async (): Promise<void> => {
+  try {
+    isLoading.value = true
+    const { machineServices: backendMachines, techniqueServices: backendTechniques } = await loadBackendPromosMasterCatalog()
+    machineServices.value = backendMachines as SingleService[]
+    techniqueServices.value = backendTechniques as SingleService[]
+
+    const storedServices = readPromosStorageArray<SingleService>(SINGLE_PAY_SERVICES_KEY)
+    const { customOnlyServices: localCustomOnly, legacyMachineTechniqueEntries } = partitionPromosCustomServices(storedServices)
+
+    if (legacyMachineTechniqueEntries.length > 0 || localCustomOnly.length !== storedServices.length) {
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, localCustomOnly)
+    }
+
+    customServices.value = localCustomOnly
+
+    const loadedBundles = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
+    const remappedBundles = remapBundleIdsToBackendCatalog(loadedBundles, legacyMachineTechniqueEntries)
+    allBundles.value = remappedBundles
+    if (JSON.stringify(remappedBundles) !== JSON.stringify(loadedBundles)) {
+      writePromosStorageArray(BUNDLED_SERVICES_KEY, remappedBundles)
+    }
+  } catch (error: unknown) {
+    errorToast(toast, "Failed to load services")
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const openAddDialog = (): void => {
+  editingId.value = null
+  formData.type = "evaluation"
+  formData.name = ""
+  formData.price = 0
+  formData.status = "Active"
+  dialogVisible.value = true
+}
+
+const openEditDialog = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
+  editingId.value = service.id
+  formData.type = service.type === "add-on-home-service"
+    ? "add-on-home-service"
+    : service.type.startsWith("add-on")
+      ? "add-on-machine"
+      : service.type
+  formData.name = service.name
+  formData.price = service.price
+  formData.status = service.status
+  dialogVisible.value = true
+}
+
+const saveService = (): void => {
+  if (!formData.name.trim()) {
+    errorToast(toast, "Service name is required")
+    return
+  }
+  if (formData.price < 0) {
+    errorToast(toast, "Price must be 0 or greater")
+    return
+  }
+
+  if (editingId.value) {
+    // Update existing
+    const index = customServices.value.findIndex(s => s.id === editingId.value)
+    if (index >= 0) {
+      customServices.value[index] = {
+        id: editingId.value,
+        type: formData.type,
+        name: formData.name,
+        price: formData.price,
+        status: formData.status
+      }
+    }
+  } else {
+    // Add new
+    customServices.value.push({
+      id: `service-${Date.now()}`,
+      type: formData.type,
+      name: formData.name,
+      price: formData.price,
+      status: formData.status
+    })
+  }
+
+  writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
+  dialogVisible.value = false
+  successToast(toast, editingId.value ? "Service updated" : "Service added")
+}
+
+const confirmDelete = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
+  confirm.require({
+    message: `Delete "${service.name}"?`,
+    header: "Confirm",
+    icon: "pi pi-exclamation-triangle",
+    accept: () => {
+      customServices.value = customServices.value.filter(s => s.id !== service.id)
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
+      successToast(toast, "Service deleted")
+    }
+  })
+}
+
+const loadBundles = (): void => {
+  try {
+    allBundles.value = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
+  } catch {
+    allBundles.value = []
+  }
+}
+
+const openAddBundleDialog = (): void => {
+  editingBundleId.value = null
+  bundleFormData.name = ""
+  bundleFormData.machineIds = []
+  bundleFormData.techniqueIds = []
+  bundleFormData.evaluationIds = []
+  bundleFormData.addOnIds = []
+  bundleFormData.bundledPrice = 0
+  bundleFormData.status = "Active"
+  bundleDialogVisible.value = true
+}
+
+const openEditBundleDialog = (bundle: BundledService): void => {
+  editingBundleId.value = bundle.id
+  bundleFormData.name = bundle.name
+  bundleFormData.machineIds = [...bundle.machineIds]
+  bundleFormData.techniqueIds = [...bundle.techniqueIds]
+  bundleFormData.evaluationIds = [...bundle.evaluationIds]
+  bundleFormData.addOnIds = []
+  bundleFormData.bundledPrice = bundle.bundledPrice
+  bundleFormData.status = bundle.status
+  bundleDialogVisible.value = true
+}
+
+const saveBundle = (): void => {
+  if (!bundleFormData.name.trim()) {
+    errorToast(toast, "Bundle name is required")
+    return
+  }
+  const total = bundleFormData.machineIds.length + bundleFormData.techniqueIds.length + bundleFormData.evaluationIds.length
+  if (total === 0) {
+    errorToast(toast, "Add at least one machine, technique, or evaluation")
+    return
+  }
+  if (bundleFormData.bundledPrice < 0) {
+    errorToast(toast, "Bundled price must be 0 or greater")
+    return
+  }
+
+  if (editingBundleId.value) {
+    const index = allBundles.value.findIndex(b => b.id === editingBundleId.value)
+    if (index >= 0) {
+      allBundles.value[index] = {
+        id: editingBundleId.value,
+        name: bundleFormData.name,
+        machineIds: [...bundleFormData.machineIds],
+        techniqueIds: [...bundleFormData.techniqueIds],
+        evaluationIds: [...bundleFormData.evaluationIds],
+        addOnIds: [],
+        bundledPrice: bundleFormData.bundledPrice,
+        status: bundleFormData.status
+      }
+    }
+  } else {
+    allBundles.value.push({
+      id: `bundle-${Date.now()}`,
+      name: bundleFormData.name,
+      machineIds: [...bundleFormData.machineIds],
+      techniqueIds: [...bundleFormData.techniqueIds],
+      evaluationIds: [...bundleFormData.evaluationIds],
+      addOnIds: [],
+      bundledPrice: bundleFormData.bundledPrice,
+      status: bundleFormData.status
+    })
+  }
+
+  writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
+  bundleDialogVisible.value = false
+  successToast(toast, editingBundleId.value ? "Bundle updated" : "Bundle added")
+}
+
+const confirmDeleteBundle = (bundle: BundledService): void => {
+  confirm.require({
+    message: `Delete bundle "${bundle.name}"?`,
+    header: "Confirm",
+    icon: "pi pi-exclamation-triangle",
+    accept: () => {
+      allBundles.value = allBundles.value.filter(b => b.id !== bundle.id)
+      writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
+      successToast(toast, "Bundle deleted")
+    }
+  })
+}
+
+onMounted(() => {
+  loadServices()
+})
+</script>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from "vue"
+import Button from "primevue/button"
+import Column from "primevue/column"
+import ConfirmDialog from "primevue/confirmdialog"
+import DataTable from "primevue/datatable"
+import Dialog from "primevue/dialog"
+import IftaLabel from "primevue/iftalabel"
+import InputNumber from "primevue/inputnumber"
+import InputText from "primevue/inputtext"
+import Message from "primevue/message"
+import Select from "primevue/select"
+import MultiSelect from "primevue/multiselect"
+import Tag from "primevue/tag"
+import { useConfirm } from "primevue/useconfirm"
+import { useToast } from "primevue/usetoast"
+import { errorToast, successToast } from "@/utils/toast.util"
+import {
+  BUNDLED_SERVICES_KEY,
+  SINGLE_PAY_SERVICES_KEY,
+  readPromosStorageArray,
+  writePromosStorageArray
+} from "@/features/promos-offers/composables/promos-storage.composable"
+import {
+  isLocalEditablePromosService,
+  loadBackendPromosMasterCatalog,
+  normalizePromosServiceName,
+  partitionPromosCustomServices,
+  remapLegacyPromosServiceId
+} from "@/features/promos-offers/composables/promos-master-catalog.composable"
+
+type ServiceType = "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service"
+
+interface SingleService {
+  id: string
+  type: ServiceType
+  name: string
+  price: number
+  status: string
+}
+
+interface BundledService {
+  id: string
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds?: string[]
+  bundledPrice: number
+  status: string
+}
+
+type ServiceCatalogFilter = "machine" | "technique" | "evaluation" | "add-ons"
+
+type ServiceCatalogMatrixRow = {
+  key: number
+  machine?: SingleService
+  technique?: SingleService
+  evaluation?: SingleService
+  addOns?: SingleService
+}
+
+const toast = useToast()
+const confirm = useConfirm()
+const isLoading = ref(false)
+const dialogVisible = ref(false)
+const editingId = ref<string | null>(null)
+
+const customServices = ref<SingleService[]>([])
+const machineServices = ref<SingleService[]>([])
+const techniqueServices = ref<SingleService[]>([])
+const allBundles = ref<BundledService[]>([])
+const selectedServiceCatalogFilters = ref<ServiceCatalogFilter[]>([])
+
+const allServices = computed<SingleService[]>(() => [
+  ...machineServices.value,
+  ...techniqueServices.value,
+  ...customServices.value
+])
+
+// Bundle dialog state
+const bundleDialogVisible = ref(false)
+const editingBundleId = ref<string | null>(null)
+const bundleFormData = reactive<{
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds: string[]
+  bundledPrice: number
+  status: string
+}>({
+  name: "",
+  machineIds: [],
+  techniqueIds: [],
+  evaluationIds: [],
+  addOnIds: [],
+  bundledPrice: 0,
+  status: "Active"
+})
+
+const getServiceName = (id: string): string =>
+  allServices.value.find(s => s.id === id)?.name ?? id
+
+const calcOriginalPrice = (bundle: BundledService): number => {
+  const ids = [...bundle.machineIds, ...bundle.techniqueIds, ...bundle.evaluationIds]
+  return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
+}
+
+const bundlePreviewOriginalPrice = computed(() => {
+  const ids = [...bundleFormData.machineIds, ...bundleFormData.techniqueIds, ...bundleFormData.evaluationIds]
+  return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
+})
+
+const typeOptions = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluations", value: "evaluation" },
+  { label: "Add-ons", value: "add-on-machine" },
+  { label: "Add-on (Home Service)", value: "add-on-home-service" }
+]
+
+const serviceCatalogFilterOptions: Array<{label: string; value: ServiceCatalogFilter}> = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluation", value: "evaluation" },
+  { label: "Add-Ons", value: "add-ons" }
+]
+
+const normalizeServiceCatalogFilter = (type: ServiceType): ServiceCatalogFilter => {
+  if (type === "machine") return "machine"
+  if (type === "technique") return "technique"
+  if (type === "evaluation") return "evaluation"
+  return "add-ons"
+}
+
+const serviceCatalogBuckets = computed(() => ({
+  machine: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "machine"),
+  technique: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "technique"),
+  evaluation: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "evaluation"),
+  "add-ons": allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "add-ons")
+}))
+
+const hasServiceCatalogFilters = computed(() => selectedServiceCatalogFilters.value.length > 0)
+
+const filteredServiceCatalogItems = computed(() =>
+  allServices.value.filter(service => selectedServiceCatalogFilters.value.includes(normalizeServiceCatalogFilter(service.type)))
+)
+
+const serviceCatalogMatrixRows = computed<ServiceCatalogMatrixRow[]>(() => {
+  const buckets = serviceCatalogBuckets.value
+  const maxRows = Math.max(
+    buckets.machine.length,
+    buckets.technique.length,
+    buckets.evaluation.length,
+    buckets["add-ons"].length,
+    0
+  )
+
+  return Array.from({ length: maxRows }, (_, index) => ({
+    key: index + 1,
+    machine: buckets.machine[index],
+    technique: buckets.technique[index],
+    evaluation: buckets.evaluation[index],
+    addOns: buckets["add-ons"][index]
+  }))
+})
+
+const toggleServiceCatalogFilter = (filter: ServiceCatalogFilter): void => {
+  selectedServiceCatalogFilters.value = selectedServiceCatalogFilters.value.includes(filter)
+    ? selectedServiceCatalogFilters.value.filter(entry => entry !== filter)
+    : [...selectedServiceCatalogFilters.value, filter]
+}
+
+const clearServiceCatalogFilters = (): void => {
+  selectedServiceCatalogFilters.value = []
+}
+
+const isLocalEditableService = (service: SingleService): boolean => isLocalEditablePromosService(service)
+
+const remapBundleIdsToBackendCatalog = (bundles: BundledService[], legacyServices: SingleService[]): BundledService[] => {
+  if (!bundles.length) return bundles
+
+  const machineByName = new Map(machineServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+  const techniqueByName = new Map(techniqueServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+
+  const legacyById = new Map(legacyServices.map(service => [service.id, service]))
+
+  const remapIds = (
+    ids: string[],
+    serviceType: "machine" | "technique",
+    backendByName: Map<string, string>
+  ): string[] => {
+    return ids
+      .map((id) => {
+        return remapLegacyPromosServiceId(id, serviceType, backendByName, legacyById)
+      })
+      .filter((id, index, array) => array.indexOf(id) === index)
+  }
+
+  return bundles.map(bundle => ({
+    ...bundle,
+    machineIds: remapIds(bundle.machineIds, "machine", machineByName),
+    techniqueIds: remapIds(bundle.techniqueIds, "technique", techniqueByName)
+  }))
+}
+
+const formData = reactive<{
+  type: ServiceType
+  name: string
+  price: number
+  status: string
+}>({
+  type: "evaluation",
+  name: "",
+  price: 0,
+  status: "Active"
+})
+
+const asCurrency = (value: number): string =>
+  Number(value ?? 0).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
+
+const serviceNamePlaceholder = computed(() => {
+  if (formData.type === "machine") return "Example: Ultrasound Machine, Traction Device"
+  if (formData.type === "technique") return "Example: Manual Therapy, Hot Compress"
+  if (formData.type === "add-on-home-service") return "Example: Add-on: Home Service - 1 km"
+  return "Enter service name"
+})
+
+const serviceTypeGuidance = computed(() => {
+  if (formData.type === "machine") {
+    return "Create a physical therapy machine/equipment that can be assigned to sessions and bundled with techniques."
+  }
+  if (formData.type === "technique") {
+    return "Create a treatment technique that can be paired with machines and assigned to sessions."
+  }
+  if (formData.type === "add-on-home-service") {
+    return "Home Service add-ons are used for travel tiers and will mark Appointments as Home Care when selected."
+  }
+  if (formData.type === "add-on-machine") {
+    return "Use this for regular add-ons that should stay under the Add-ons picker."
+  }
+  return "Choose a clear service name so staff can find it quickly during booking and billing."
+})
+
+const formatType = (type: ServiceType): string => {
+  const typeMap: Record<ServiceType, string> = {
+    machine: "Machine",
+    technique: "Technique",
+    evaluation: "Evaluation",
+    "add-on-machine": "Add-ons",
+    "add-on-technique": "Add-ons",
+    "add-on-home-service": "Add-on (Home Service)"
+  }
+  return typeMap[type] || type
+}
+
+const getTypeSeverity = (type: ServiceType): string => {
+  const severityMap: Record<ServiceType, string> = {
+    machine: "info",
+    technique: "success",
+    evaluation: "warning",
+    "add-on-machine": "secondary",
+    "add-on-technique": "secondary",
+    "add-on-home-service": "warn"
+  }
+  return severityMap[type] || "info"
+}
+
+const loadServices = async (): Promise<void> => {
+  try {
+    isLoading.value = true
+    const { machineServices: backendMachines, techniqueServices: backendTechniques } = await loadBackendPromosMasterCatalog()
+    machineServices.value = backendMachines as SingleService[]
+    techniqueServices.value = backendTechniques as SingleService[]
+
+    const storedServices = readPromosStorageArray<SingleService>(SINGLE_PAY_SERVICES_KEY)
+    const { customOnlyServices: localCustomOnly, legacyMachineTechniqueEntries } = partitionPromosCustomServices(storedServices)
+
+    if (legacyMachineTechniqueEntries.length > 0 || localCustomOnly.length !== storedServices.length) {
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, localCustomOnly)
+    }
+
+    customServices.value = localCustomOnly
+
+    const loadedBundles = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
+    const remappedBundles = remapBundleIdsToBackendCatalog(loadedBundles, legacyMachineTechniqueEntries)
+    allBundles.value = remappedBundles
+    if (JSON.stringify(remappedBundles) !== JSON.stringify(loadedBundles)) {
+      writePromosStorageArray(BUNDLED_SERVICES_KEY, remappedBundles)
+    }
+  } catch (error: unknown) {
+    errorToast(toast, "Failed to load services")
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const openAddDialog = (): void => {
+  editingId.value = null
+  formData.type = "evaluation"
+  formData.name = ""
+  formData.price = 0
+  formData.status = "Active"
+  dialogVisible.value = true
+}
+
+const openEditDialog = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
+  editingId.value = service.id
+  formData.type = service.type === "add-on-home-service"
+    ? "add-on-home-service"
+    : service.type.startsWith("add-on")
+      ? "add-on-machine"
+      : service.type
+  formData.name = service.name
+  formData.price = service.price
+  formData.status = service.status
+  dialogVisible.value = true
+}
+
+const saveService = (): void => {
+  if (!formData.name.trim()) {
+    errorToast(toast, "Service name is required")
+    return
+  }
+  if (formData.price < 0) {
+    errorToast(toast, "Price must be 0 or greater")
+    return
+  }
+
+  if (editingId.value) {
+    // Update existing
+    const index = customServices.value.findIndex(s => s.id === editingId.value)
+    if (index >= 0) {
+      customServices.value[index] = {
+        id: editingId.value,
+        type: formData.type,
+        name: formData.name,
+        price: formData.price,
+        status: formData.status
+      }
+    }
+  } else {
+    // Add new
+    customServices.value.push({
+      id: `service-${Date.now()}`,
+      type: formData.type,
+      name: formData.name,
+      price: formData.price,
+      status: formData.status
+    })
+  }
+
+  writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
+  dialogVisible.value = false
+  successToast(toast, editingId.value ? "Service updated" : "Service added")
+}
+
+const confirmDelete = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
+  confirm.require({
+    message: `Delete "${service.name}"?`,
+    header: "Confirm",
+    icon: "pi pi-exclamation-triangle",
+    accept: () => {
+      customServices.value = customServices.value.filter(s => s.id !== service.id)
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
+      successToast(toast, "Service deleted")
+    }
+  })
+}
+
+const loadBundles = (): void => {
+  try {
+    allBundles.value = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
+  } catch {
+    allBundles.value = []
+  }
+}
+
+const openAddBundleDialog = (): void => {
+  editingBundleId.value = null
+  bundleFormData.name = ""
+  bundleFormData.machineIds = []
+  bundleFormData.techniqueIds = []
+  bundleFormData.evaluationIds = []
+  bundleFormData.addOnIds = []
+  bundleFormData.bundledPrice = 0
+  bundleFormData.status = "Active"
+  bundleDialogVisible.value = true
+}
+
+const openEditBundleDialog = (bundle: BundledService): void => {
+  editingBundleId.value = bundle.id
+  bundleFormData.name = bundle.name
+  bundleFormData.machineIds = [...bundle.machineIds]
+  bundleFormData.techniqueIds = [...bundle.techniqueIds]
+  bundleFormData.evaluationIds = [...bundle.evaluationIds]
+  bundleFormData.addOnIds = []
+  bundleFormData.bundledPrice = bundle.bundledPrice
+  bundleFormData.status = bundle.status
+  bundleDialogVisible.value = true
+}
+
+const saveBundle = (): void => {
+  if (!bundleFormData.name.trim()) {
+    errorToast(toast, "Bundle name is required")
+    return
+  }
+  const total = bundleFormData.machineIds.length + bundleFormData.techniqueIds.length + bundleFormData.evaluationIds.length
+  if (total === 0) {
+    errorToast(toast, "Add at least one machine, technique, or evaluation")
+    return
+  }
+  if (bundleFormData.bundledPrice < 0) {
+    errorToast(toast, "Bundled price must be 0 or greater")
+    return
+  }
+
+  if (editingBundleId.value) {
+    const index = allBundles.value.findIndex(b => b.id === editingBundleId.value)
+    if (index >= 0) {
+      allBundles.value[index] = {
+        id: editingBundleId.value,
+        name: bundleFormData.name,
+        machineIds: [...bundleFormData.machineIds],
+        techniqueIds: [...bundleFormData.techniqueIds],
+        evaluationIds: [...bundleFormData.evaluationIds],
+        addOnIds: [],
+        bundledPrice: bundleFormData.bundledPrice,
+        status: bundleFormData.status
+      }
+    }
+  } else {
+    allBundles.value.push({
+      id: `bundle-${Date.now()}`,
+      name: bundleFormData.name,
+      machineIds: [...bundleFormData.machineIds],
+      techniqueIds: [...bundleFormData.techniqueIds],
+      evaluationIds: [...bundleFormData.evaluationIds],
+      addOnIds: [],
+      bundledPrice: bundleFormData.bundledPrice,
+      status: bundleFormData.status
+    })
+  }
+
+  writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
+  bundleDialogVisible.value = false
+  successToast(toast, editingBundleId.value ? "Bundle updated" : "Bundle added")
+}
+
+const confirmDeleteBundle = (bundle: BundledService): void => {
+  confirm.require({
+    message: `Delete bundle "${bundle.name}"?`,
+    header: "Confirm",
+    icon: "pi pi-exclamation-triangle",
+    accept: () => {
+      allBundles.value = allBundles.value.filter(b => b.id !== bundle.id)
+      writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
+      successToast(toast, "Bundle deleted")
+    }
+  })
+}
+
+onMounted(() => {
+  loadServices()
+})
+</script>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from "vue"
+import Button from "primevue/button"
+import Column from "primevue/column"
+import ConfirmDialog from "primevue/confirmdialog"
+import DataTable from "primevue/datatable"
+import Dialog from "primevue/dialog"
+import IftaLabel from "primevue/iftalabel"
+import InputNumber from "primevue/inputnumber"
+import InputText from "primevue/inputtext"
+import Message from "primevue/message"
+import Select from "primevue/select"
+import MultiSelect from "primevue/multiselect"
+import Tag from "primevue/tag"
+import { useConfirm } from "primevue/useconfirm"
+import { useToast } from "primevue/usetoast"
+import { errorToast, successToast } from "@/utils/toast.util"
+import {
+  BUNDLED_SERVICES_KEY,
+  SINGLE_PAY_SERVICES_KEY,
+  readPromosStorageArray,
+  writePromosStorageArray
+} from "@/features/promos-offers/composables/promos-storage.composable"
+import {
+  isLocalEditablePromosService,
+  loadBackendPromosMasterCatalog,
+  normalizePromosServiceName,
+  partitionPromosCustomServices,
+  remapLegacyPromosServiceId
+} from "@/features/promos-offers/composables/promos-master-catalog.composable"
+
+type ServiceType = "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service"
+
+interface SingleService {
+  id: string
+  type: ServiceType
+  name: string
+  price: number
+  status: string
+}
+
+interface BundledService {
+  id: string
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds?: string[]
+  bundledPrice: number
+  status: string
+}
+
+type ServiceCatalogFilter = "machine" | "technique" | "evaluation" | "add-ons"
+
+type ServiceCatalogMatrixRow = {
+  key: number
+  machine?: SingleService
+  technique?: SingleService
+  evaluation?: SingleService
+  addOns?: SingleService
+}
+
+const toast = useToast()
+const confirm = useConfirm()
+const isLoading = ref(false)
+const dialogVisible = ref(false)
+const editingId = ref<string | null>(null)
+
+const customServices = ref<SingleService[]>([])
+const machineServices = ref<SingleService[]>([])
+const techniqueServices = ref<SingleService[]>([])
+const allBundles = ref<BundledService[]>([])
+const selectedServiceCatalogFilters = ref<ServiceCatalogFilter[]>([])
+
+const allServices = computed<SingleService[]>(() => [
+  ...machineServices.value,
+  ...techniqueServices.value,
+  ...customServices.value
+])
+
+// Bundle dialog state
+const bundleDialogVisible = ref(false)
+const editingBundleId = ref<string | null>(null)
+const bundleFormData = reactive<{
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds: string[]
+  bundledPrice: number
+  status: string
+}>({
+  name: "",
+  machineIds: [],
+  techniqueIds: [],
+  evaluationIds: [],
+  addOnIds: [],
+  bundledPrice: 0,
+  status: "Active"
+})
+
+const getServiceName = (id: string): string =>
+  allServices.value.find(s => s.id === id)?.name ?? id
+
+const calcOriginalPrice = (bundle: BundledService): number => {
+  const ids = [...bundle.machineIds, ...bundle.techniqueIds, ...bundle.evaluationIds]
+  return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
+}
+
+const bundlePreviewOriginalPrice = computed(() => {
+  const ids = [...bundleFormData.machineIds, ...bundleFormData.techniqueIds, ...bundleFormData.evaluationIds]
+  return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
+})
+
+const typeOptions = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluations", value: "evaluation" },
+  { label: "Add-ons", value: "add-on-machine" },
+  { label: "Add-on (Home Service)", value: "add-on-home-service" }
+]
+
+const serviceCatalogFilterOptions: Array<{label: string; value: ServiceCatalogFilter}> = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluation", value: "evaluation" },
+  { label: "Add-Ons", value: "add-ons" }
+]
+
+const normalizeServiceCatalogFilter = (type: ServiceType): ServiceCatalogFilter => {
+  if (type === "machine") return "machine"
+  if (type === "technique") return "technique"
+  if (type === "evaluation") return "evaluation"
+  return "add-ons"
+}
+
+const serviceCatalogBuckets = computed(() => ({
+  machine: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "machine"),
+  technique: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "technique"),
+  evaluation: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "evaluation"),
+  "add-ons": allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "add-ons")
+}))
+
+const hasServiceCatalogFilters = computed(() => selectedServiceCatalogFilters.value.length > 0)
+
+const filteredServiceCatalogItems = computed(() =>
+  allServices.value.filter(service => selectedServiceCatalogFilters.value.includes(normalizeServiceCatalogFilter(service.type)))
+)
+
+const serviceCatalogMatrixRows = computed<ServiceCatalogMatrixRow[]>(() => {
+  const buckets = serviceCatalogBuckets.value
+  const maxRows = Math.max(
+    buckets.machine.length,
+    buckets.technique.length,
+    buckets.evaluation.length,
+    buckets["add-ons"].length,
+    0
+  )
+
+  return Array.from({ length: maxRows }, (_, index) => ({
+    key: index + 1,
+    machine: buckets.machine[index],
+    technique: buckets.technique[index],
+    evaluation: buckets.evaluation[index],
+    addOns: buckets["add-ons"][index]
+  }))
+})
+
+const toggleServiceCatalogFilter = (filter: ServiceCatalogFilter): void => {
+  selectedServiceCatalogFilters.value = selectedServiceCatalogFilters.value.includes(filter)
+    ? selectedServiceCatalogFilters.value.filter(entry => entry !== filter)
+    : [...selectedServiceCatalogFilters.value, filter]
+}
+
+const clearServiceCatalogFilters = (): void => {
+  selectedServiceCatalogFilters.value = []
+}
+
+const isLocalEditableService = (service: SingleService): boolean => isLocalEditablePromosService(service)
+
+const remapBundleIdsToBackendCatalog = (bundles: BundledService[], legacyServices: SingleService[]): BundledService[] => {
+  if (!bundles.length) return bundles
+
+  const machineByName = new Map(machineServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+  const techniqueByName = new Map(techniqueServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+
+  const legacyById = new Map(legacyServices.map(service => [service.id, service]))
+
+  const remapIds = (
+    ids: string[],
+    serviceType: "machine" | "technique",
+    backendByName: Map<string, string>
+  ): string[] => {
+    return ids
+      .map((id) => {
+        return remapLegacyPromosServiceId(id, serviceType, backendByName, legacyById)
+      })
+      .filter((id, index, array) => array.indexOf(id) === index)
+  }
+
+  return bundles.map(bundle => ({
+    ...bundle,
+    machineIds: remapIds(bundle.machineIds, "machine", machineByName),
+    techniqueIds: remapIds(bundle.techniqueIds, "technique", techniqueByName)
+  }))
+}
+
+const formData = reactive<{
+  type: ServiceType
+  name: string
+  price: number
+  status: string
+}>({
+  type: "evaluation",
+  name: "",
+  price: 0,
+  status: "Active"
+})
+
+const asCurrency = (value: number): string =>
+  Number(value ?? 0).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
+
+const serviceNamePlaceholder = computed(() => {
+  if (formData.type === "machine") return "Example: Ultrasound Machine, Traction Device"
+  if (formData.type === "technique") return "Example: Manual Therapy, Hot Compress"
+  if (formData.type === "add-on-home-service") return "Example: Add-on: Home Service - 1 km"
+  return "Enter service name"
+})
+
+const serviceTypeGuidance = computed(() => {
+  if (formData.type === "machine") {
+    return "Create a physical therapy machine/equipment that can be assigned to sessions and bundled with techniques."
+  }
+  if (formData.type === "technique") {
+    return "Create a treatment technique that can be paired with machines and assigned to sessions."
+  }
+  if (formData.type === "add-on-home-service") {
+    return "Home Service add-ons are used for travel tiers and will mark Appointments as Home Care when selected."
+  }
+  if (formData.type === "add-on-machine") {
+    return "Use this for regular add-ons that should stay under the Add-ons picker."
+  }
+  return "Choose a clear service name so staff can find it quickly during booking and billing."
+})
+
+const formatType = (type: ServiceType): string => {
+  const typeMap: Record<ServiceType, string> = {
+    machine: "Machine",
+    technique: "Technique",
+    evaluation: "Evaluation",
+    "add-on-machine": "Add-ons",
+    "add-on-technique": "Add-ons",
+    "add-on-home-service": "Add-on (Home Service)"
+  }
+  return typeMap[type] || type
+}
+
+const getTypeSeverity = (type: ServiceType): string => {
+  const severityMap: Record<ServiceType, string> = {
+    machine: "info",
+    technique: "success",
+    evaluation: "warning",
+    "add-on-machine": "secondary",
+    "add-on-technique": "secondary",
+    "add-on-home-service": "warn"
+  }
+  return severityMap[type] || "info"
+}
+
+const loadServices = async (): Promise<void> => {
+  try {
+    isLoading.value = true
+    const { machineServices: backendMachines, techniqueServices: backendTechniques } = await loadBackendPromosMasterCatalog()
+    machineServices.value = backendMachines as SingleService[]
+    techniqueServices.value = backendTechniques as SingleService[]
+
+    const storedServices = readPromosStorageArray<SingleService>(SINGLE_PAY_SERVICES_KEY)
+    const { customOnlyServices: localCustomOnly, legacyMachineTechniqueEntries } = partitionPromosCustomServices(storedServices)
+
+    if (legacyMachineTechniqueEntries.length > 0 || localCustomOnly.length !== storedServices.length) {
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, localCustomOnly)
+    }
+
+    customServices.value = localCustomOnly
+
+    const loadedBundles = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
+    const remappedBundles = remapBundleIdsToBackendCatalog(loadedBundles, legacyMachineTechniqueEntries)
+    allBundles.value = remappedBundles
+    if (JSON.stringify(remappedBundles) !== JSON.stringify(loadedBundles)) {
+      writePromosStorageArray(BUNDLED_SERVICES_KEY, remappedBundles)
+    }
+  } catch (error: unknown) {
+    errorToast(toast, "Failed to load services")
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const openAddDialog = (): void => {
+  editingId.value = null
+  formData.type = "evaluation"
+  formData.name = ""
+  formData.price = 0
+  formData.status = "Active"
+  dialogVisible.value = true
+}
+
+const openEditDialog = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
+  editingId.value = service.id
+  formData.type = service.type === "add-on-home-service"
+    ? "add-on-home-service"
+    : service.type.startsWith("add-on")
+      ? "add-on-machine"
+      : service.type
+  formData.name = service.name
+  formData.price = service.price
+  formData.status = service.status
+  dialogVisible.value = true
+}
+
+const saveService = (): void => {
+  if (!formData.name.trim()) {
+    errorToast(toast, "Service name is required")
+    return
+  }
+  if (formData.price < 0) {
+    errorToast(toast, "Price must be 0 or greater")
+    return
+  }
+
+  if (editingId.value) {
+    // Update existing
+    const index = customServices.value.findIndex(s => s.id === editingId.value)
+    if (index >= 0) {
+      customServices.value[index] = {
+        id: editingId.value,
+        type: formData.type,
+        name: formData.name,
+        price: formData.price,
+        status: formData.status
+      }
+    }
+  } else {
+    // Add new
+    customServices.value.push({
+      id: `service-${Date.now()}`,
+      type: formData.type,
+      name: formData.name,
+      price: formData.price,
+      status: formData.status
+    })
+  }
+
+  writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
+  dialogVisible.value = false
+  successToast(toast, editingId.value ? "Service updated" : "Service added")
+}
+
+const confirmDelete = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
+  confirm.require({
+    message: `Delete "${service.name}"?`,
+    header: "Confirm",
+    icon: "pi pi-exclamation-triangle",
+    accept: () => {
+      customServices.value = customServices.value.filter(s => s.id !== service.id)
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
+      successToast(toast, "Service deleted")
+    }
+  })
+}
+
+const loadBundles = (): void => {
+  try {
+    allBundles.value = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
+  } catch {
+    allBundles.value = []
+  }
+}
+
+const openAddBundleDialog = (): void => {
+  editingBundleId.value = null
+  bundleFormData.name = ""
+  bundleFormData.machineIds = []
+  bundleFormData.techniqueIds = []
+  bundleFormData.evaluationIds = []
+  bundleFormData.addOnIds = []
+  bundleFormData.bundledPrice = 0
+  bundleFormData.status = "Active"
+  bundleDialogVisible.value = true
+}
+
+const openEditBundleDialog = (bundle: BundledService): void => {
+  editingBundleId.value = bundle.id
+  bundleFormData.name = bundle.name
+  bundleFormData.machineIds = [...bundle.machineIds]
+  bundleFormData.techniqueIds = [...bundle.techniqueIds]
+  bundleFormData.evaluationIds = [...bundle.evaluationIds]
+  bundleFormData.addOnIds = []
+  bundleFormData.bundledPrice = bundle.bundledPrice
+  bundleFormData.status = bundle.status
+  bundleDialogVisible.value = true
+}
+
+const saveBundle = (): void => {
+  if (!bundleFormData.name.trim()) {
+    errorToast(toast, "Bundle name is required")
+    return
+  }
+  const total = bundleFormData.machineIds.length + bundleFormData.techniqueIds.length + bundleFormData.evaluationIds.length
+  if (total === 0) {
+    errorToast(toast, "Add at least one machine, technique, or evaluation")
+    return
+  }
+  if (bundleFormData.bundledPrice < 0) {
+    errorToast(toast, "Bundled price must be 0 or greater")
+    return
+  }
+
+  if (editingBundleId.value) {
+    const index = allBundles.value.findIndex(b => b.id === editingBundleId.value)
+    if (index >= 0) {
+      allBundles.value[index] = {
+        id: editingBundleId.value,
+        name: bundleFormData.name,
+        machineIds: [...bundleFormData.machineIds],
+        techniqueIds: [...bundleFormData.techniqueIds],
+        evaluationIds: [...bundleFormData.evaluationIds],
+        addOnIds: [],
+        bundledPrice: bundleFormData.bundledPrice,
+        status: bundleFormData.status
+      }
+    }
+  } else {
+    allBundles.value.push({
+      id: `bundle-${Date.now()}`,
+      name: bundleFormData.name,
+      machineIds: [...bundleFormData.machineIds],
+      techniqueIds: [...bundleFormData.techniqueIds],
+      evaluationIds: [...bundleFormData.evaluationIds],
+      addOnIds: [],
+      bundledPrice: bundleFormData.bundledPrice,
+      status: bundleFormData.status
+    })
+  }
+
+  writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
+  bundleDialogVisible.value = false
+  successToast(toast, editingBundleId.value ? "Bundle updated" : "Bundle added")
+}
+
+const confirmDeleteBundle = (bundle: BundledService): void => {
+  confirm.require({
+    message: `Delete bundle "${bundle.name}"?`,
+    header: "Confirm",
+    icon: "pi pi-exclamation-triangle",
+    accept: () => {
+      allBundles.value = allBundles.value.filter(b => b.id !== bundle.id)
+      writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
+      successToast(toast, "Bundle deleted")
+    }
+  })
+}
+
+onMounted(() => {
+  loadServices()
+})
+</script>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from "vue"
+import Button from "primevue/button"
+import Column from "primevue/column"
+import ConfirmDialog from "primevue/confirmdialog"
+import DataTable from "primevue/datatable"
+import Dialog from "primevue/dialog"
+import IftaLabel from "primevue/iftalabel"
+import InputNumber from "primevue/inputnumber"
+import InputText from "primevue/inputtext"
+import Message from "primevue/message"
+import Select from "primevue/select"
+import MultiSelect from "primevue/multiselect"
+import Tag from "primevue/tag"
+import { useConfirm } from "primevue/useconfirm"
+import { useToast } from "primevue/usetoast"
+import { errorToast, successToast } from "@/utils/toast.util"
+import {
+  BUNDLED_SERVICES_KEY,
+  SINGLE_PAY_SERVICES_KEY,
+  readPromosStorageArray,
+  writePromosStorageArray
+} from "@/features/promos-offers/composables/promos-storage.composable"
+import {
+  isLocalEditablePromosService,
+  loadBackendPromosMasterCatalog,
+  normalizePromosServiceName,
+  partitionPromosCustomServices,
+  remapLegacyPromosServiceId
+} from "@/features/promos-offers/composables/promos-master-catalog.composable"
+
+type ServiceType = "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service"
+
+interface SingleService {
+  id: string
+  type: ServiceType
+  name: string
+  price: number
+  status: string
+}
+
+interface BundledService {
+  id: string
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds?: string[]
+  bundledPrice: number
+  status: string
+}
+
+type ServiceCatalogFilter = "machine" | "technique" | "evaluation" | "add-ons"
+
+type ServiceCatalogMatrixRow = {
+  key: number
+  machine?: SingleService
+  technique?: SingleService
+  evaluation?: SingleService
+  addOns?: SingleService
+}
+
+const toast = useToast()
+const confirm = useConfirm()
+const isLoading = ref(false)
+const dialogVisible = ref(false)
+const editingId = ref<string | null>(null)
+
+const customServices = ref<SingleService[]>([])
+const machineServices = ref<SingleService[]>([])
+const techniqueServices = ref<SingleService[]>([])
+const allBundles = ref<BundledService[]>([])
+const selectedServiceCatalogFilters = ref<ServiceCatalogFilter[]>([])
+
+const allServices = computed<SingleService[]>(() => [
+  ...machineServices.value,
+  ...techniqueServices.value,
+  ...customServices.value
+])
+
+// Bundle dialog state
+const bundleDialogVisible = ref(false)
+const editingBundleId = ref<string | null>(null)
+const bundleFormData = reactive<{
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds: string[]
+  bundledPrice: number
+  status: string
+}>({
+  name: "",
+  machineIds: [],
+  techniqueIds: [],
+  evaluationIds: [],
+  addOnIds: [],
+  bundledPrice: 0,
+  status: "Active"
+})
+
+const getServiceName = (id: string): string =>
+  allServices.value.find(s => s.id === id)?.name ?? id
+
+const calcOriginalPrice = (bundle: BundledService): number => {
+  const ids = [...bundle.machineIds, ...bundle.techniqueIds, ...bundle.evaluationIds]
+  return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
+}
+
+const bundlePreviewOriginalPrice = computed(() => {
+  const ids = [...bundleFormData.machineIds, ...bundleFormData.techniqueIds, ...bundleFormData.evaluationIds]
+  return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
+})
+
+const typeOptions = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluations", value: "evaluation" },
+  { label: "Add-ons", value: "add-on-machine" },
+  { label: "Add-on (Home Service)", value: "add-on-home-service" }
+]
+
+const serviceCatalogFilterOptions: Array<{label: string; value: ServiceCatalogFilter}> = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluation", value: "evaluation" },
+  { label: "Add-Ons", value: "add-ons" }
+]
+
+const normalizeServiceCatalogFilter = (type: ServiceType): ServiceCatalogFilter => {
+  if (type === "machine") return "machine"
+  if (type === "technique") return "technique"
+  if (type === "evaluation") return "evaluation"
+  return "add-ons"
+}
+
+const serviceCatalogBuckets = computed(() => ({
+  machine: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "machine"),
+  technique: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "technique"),
+  evaluation: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "evaluation"),
+  "add-ons": allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "add-ons")
+}))
+
+const hasServiceCatalogFilters = computed(() => selectedServiceCatalogFilters.value.length > 0)
+
+const filteredServiceCatalogItems = computed(() =>
+  allServices.value.filter(service => selectedServiceCatalogFilters.value.includes(normalizeServiceCatalogFilter(service.type)))
+)
+
+const serviceCatalogMatrixRows = computed<ServiceCatalogMatrixRow[]>(() => {
+  const buckets = serviceCatalogBuckets.value
+  const maxRows = Math.max(
+    buckets.machine.length,
+    buckets.technique.length,
+    buckets.evaluation.length,
+    buckets["add-ons"].length,
+    0
+  )
+
+  return Array.from({ length: maxRows }, (_, index) => ({
+    key: index + 1,
+    machine: buckets.machine[index],
+    technique: buckets.technique[index],
+    evaluation: buckets.evaluation[index],
+    addOns: buckets["add-ons"][index]
+  }))
+})
+
+const toggleServiceCatalogFilter = (filter: ServiceCatalogFilter): void => {
+  selectedServiceCatalogFilters.value = selectedServiceCatalogFilters.value.includes(filter)
+    ? selectedServiceCatalogFilters.value.filter(entry => entry !== filter)
+    : [...selectedServiceCatalogFilters.value, filter]
+}
+
+const clearServiceCatalogFilters = (): void => {
+  selectedServiceCatalogFilters.value = []
+}
+
+const isLocalEditableService = (service: SingleService): boolean => isLocalEditablePromosService(service)
+
+const remapBundleIdsToBackendCatalog = (bundles: BundledService[], legacyServices: SingleService[]): BundledService[] => {
+  if (!bundles.length) return bundles
+
+  const machineByName = new Map(machineServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+  const techniqueByName = new Map(techniqueServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+
+  const legacyById = new Map(legacyServices.map(service => [service.id, service]))
+
+  const remapIds = (
+    ids: string[],
+    serviceType: "machine" | "technique",
+    backendByName: Map<string, string>
+  ): string[] => {
+    return ids
+      .map((id) => {
+        return remapLegacyPromosServiceId(id, serviceType, backendByName, legacyById)
+      })
+      .filter((id, index, array) => array.indexOf(id) === index)
+  }
+
+  return bundles.map(bundle => ({
+    ...bundle,
+    machineIds: remapIds(bundle.machineIds, "machine", machineByName),
+    techniqueIds: remapIds(bundle.techniqueIds, "technique", techniqueByName)
+  }))
+}
+
+const formData = reactive<{
+  type: ServiceType
+  name: string
+  price: number
+  status: string
+}>({
+  type: "evaluation",
+  name: "",
+  price: 0,
+  status: "Active"
+})
+
+const asCurrency = (value: number): string =>
+  Number(value ?? 0).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
+
+const serviceNamePlaceholder = computed(() => {
+  if (formData.type === "machine") return "Example: Ultrasound Machine, Traction Device"
+  if (formData.type === "technique") return "Example: Manual Therapy, Hot Compress"
+  if (formData.type === "add-on-home-service") return "Example: Add-on: Home Service - 1 km"
+  return "Enter service name"
+})
+
+const serviceTypeGuidance = computed(() => {
+  if (formData.type === "machine") {
+    return "Create a physical therapy machine/equipment that can be assigned to sessions and bundled with techniques."
+  }
+  if (formData.type === "technique") {
+    return "Create a treatment technique that can be paired with machines and assigned to sessions."
+  }
+  if (formData.type === "add-on-home-service") {
+    return "Home Service add-ons are used for travel tiers and will mark Appointments as Home Care when selected."
+  }
+  if (formData.type === "add-on-machine") {
+    return "Use this for regular add-ons that should stay under the Add-ons picker."
+  }
+  return "Choose a clear service name so staff can find it quickly during booking and billing."
+})
+
+const formatType = (type: ServiceType): string => {
+  const typeMap: Record<ServiceType, string> = {
+    machine: "Machine",
+    technique: "Technique",
+    evaluation: "Evaluation",
+    "add-on-machine": "Add-ons",
+    "add-on-technique": "Add-ons",
+    "add-on-home-service": "Add-on (Home Service)"
+  }
+  return typeMap[type] || type
+}
+
+const getTypeSeverity = (type: ServiceType): string => {
+  const severityMap: Record<ServiceType, string> = {
+    machine: "info",
+    technique: "success",
+    evaluation: "warning",
+    "add-on-machine": "secondary",
+    "add-on-technique": "secondary",
+    "add-on-home-service": "warn"
+  }
+  return severityMap[type] || "info"
+}
+
+const loadServices = async (): Promise<void> => {
+  try {
+    isLoading.value = true
+    const { machineServices: backendMachines, techniqueServices: backendTechniques } = await loadBackendPromosMasterCatalog()
+    machineServices.value = backendMachines as SingleService[]
+    techniqueServices.value = backendTechniques as SingleService[]
+
+    const storedServices = readPromosStorageArray<SingleService>(SINGLE_PAY_SERVICES_KEY)
+    const { customOnlyServices: localCustomOnly, legacyMachineTechniqueEntries } = partitionPromosCustomServices(storedServices)
+
+    if (legacyMachineTechniqueEntries.length > 0 || localCustomOnly.length !== storedServices.length) {
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, localCustomOnly)
+    }
+
+    customServices.value = localCustomOnly
+
+    const loadedBundles = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
+    const remappedBundles = remapBundleIdsToBackendCatalog(loadedBundles, legacyMachineTechniqueEntries)
+    allBundles.value = remappedBundles
+    if (JSON.stringify(remappedBundles) !== JSON.stringify(loadedBundles)) {
+      writePromosStorageArray(BUNDLED_SERVICES_KEY, remappedBundles)
+    }
+  } catch (error: unknown) {
+    errorToast(toast, "Failed to load services")
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const openAddDialog = (): void => {
+  editingId.value = null
+  formData.type = "evaluation"
+  formData.name = ""
+  formData.price = 0
+  formData.status = "Active"
+  dialogVisible.value = true
+}
+
+const openEditDialog = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
+  editingId.value = service.id
+  formData.type = service.type === "add-on-home-service"
+    ? "add-on-home-service"
+    : service.type.startsWith("add-on")
+      ? "add-on-machine"
+      : service.type
+  formData.name = service.name
+  formData.price = service.price
+  formData.status = service.status
+  dialogVisible.value = true
+}
+
+const saveService = (): void => {
+  if (!formData.name.trim()) {
+    errorToast(toast, "Service name is required")
+    return
+  }
+  if (formData.price < 0) {
+    errorToast(toast, "Price must be 0 or greater")
+    return
+  }
+
+  if (editingId.value) {
+    // Update existing
+    const index = customServices.value.findIndex(s => s.id === editingId.value)
+    if (index >= 0) {
+      customServices.value[index] = {
+        id: editingId.value,
+        type: formData.type,
+        name: formData.name,
+        price: formData.price,
+        status: formData.status
+      }
+    }
+  } else {
+    // Add new
+    customServices.value.push({
+      id: `service-${Date.now()}`,
+      type: formData.type,
+      name: formData.name,
+      price: formData.price,
+      status: formData.status
+    })
+  }
+
+  writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
+  dialogVisible.value = false
+  successToast(toast, editingId.value ? "Service updated" : "Service added")
+}
+
+const confirmDelete = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
+  confirm.require({
+    message: `Delete "${service.name}"?`,
+    header: "Confirm",
+    icon: "pi pi-exclamation-triangle",
+    accept: () => {
+      customServices.value = customServices.value.filter(s => s.id !== service.id)
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
+      successToast(toast, "Service deleted")
+    }
+  })
+}
+
+const loadBundles = (): void => {
+  try {
+    allBundles.value = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
+  } catch {
+    allBundles.value = []
+  }
+}
+
+const openAddBundleDialog = (): void => {
+  editingBundleId.value = null
+  bundleFormData.name = ""
+  bundleFormData.machineIds = []
+  bundleFormData.techniqueIds = []
+  bundleFormData.evaluationIds = []
+  bundleFormData.addOnIds = []
+  bundleFormData.bundledPrice = 0
+  bundleFormData.status = "Active"
+  bundleDialogVisible.value = true
+}
+
+const openEditBundleDialog = (bundle: BundledService): void => {
+  editingBundleId.value = bundle.id
+  bundleFormData.name = bundle.name
+  bundleFormData.machineIds = [...bundle.machineIds]
+  bundleFormData.techniqueIds = [...bundle.techniqueIds]
+  bundleFormData.evaluationIds = [...bundle.evaluationIds]
+  bundleFormData.addOnIds = []
+  bundleFormData.bundledPrice = bundle.bundledPrice
+  bundleFormData.status = bundle.status
+  bundleDialogVisible.value = true
+}
+
+const saveBundle = (): void => {
+  if (!bundleFormData.name.trim()) {
+    errorToast(toast, "Bundle name is required")
+    return
+  }
+  const total = bundleFormData.machineIds.length + bundleFormData.techniqueIds.length + bundleFormData.evaluationIds.length
+  if (total === 0) {
+    errorToast(toast, "Add at least one machine, technique, or evaluation")
+    return
+  }
+  if (bundleFormData.bundledPrice < 0) {
+    errorToast(toast, "Bundled price must be 0 or greater")
+    return
+  }
+
+  if (editingBundleId.value) {
+    const index = allBundles.value.findIndex(b => b.id === editingBundleId.value)
+    if (index >= 0) {
+      allBundles.value[index] = {
+        id: editingBundleId.value,
+        name: bundleFormData.name,
+        machineIds: [...bundleFormData.machineIds],
+        techniqueIds: [...bundleFormData.techniqueIds],
+        evaluationIds: [...bundleFormData.evaluationIds],
+        addOnIds: [],
+        bundledPrice: bundleFormData.bundledPrice,
+        status: bundleFormData.status
+      }
+    }
+  } else {
+    allBundles.value.push({
+      id: `bundle-${Date.now()}`,
+      name: bundleFormData.name,
+      machineIds: [...bundleFormData.machineIds],
+      techniqueIds: [...bundleFormData.techniqueIds],
+      evaluationIds: [...bundleFormData.evaluationIds],
+      addOnIds: [],
+      bundledPrice: bundleFormData.bundledPrice,
+      status: bundleFormData.status
+    })
+  }
+
+  writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
+  bundleDialogVisible.value = false
+  successToast(toast, editingBundleId.value ? "Bundle updated" : "Bundle added")
+}
+
+const confirmDeleteBundle = (bundle: BundledService): void => {
+  confirm.require({
+    message: `Delete bundle "${bundle.name}"?`,
+    header: "Confirm",
+    icon: "pi pi-exclamation-triangle",
+    accept: () => {
+      allBundles.value = allBundles.value.filter(b => b.id !== bundle.id)
+      writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
+      successToast(toast, "Bundle deleted")
+    }
+  })
+}
+
+onMounted(() => {
+  loadServices()
+})
+</script>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from "vue"
+import Button from "primevue/button"
+import Column from "primevue/column"
+import ConfirmDialog from "primevue/confirmdialog"
+import DataTable from "primevue/datatable"
+import Dialog from "primevue/dialog"
+import IftaLabel from "primevue/iftalabel"
+import InputNumber from "primevue/inputnumber"
+import InputText from "primevue/inputtext"
+import Message from "primevue/message"
+import Select from "primevue/select"
+import MultiSelect from "primevue/multiselect"
+import Tag from "primevue/tag"
+import { useConfirm } from "primevue/useconfirm"
+import { useToast } from "primevue/usetoast"
+import { errorToast, successToast } from "@/utils/toast.util"
+import {
+  BUNDLED_SERVICES_KEY,
+  SINGLE_PAY_SERVICES_KEY,
+  readPromosStorageArray,
+  writePromosStorageArray
+} from "@/features/promos-offers/composables/promos-storage.composable"
+import {
+  isLocalEditablePromosService,
+  loadBackendPromosMasterCatalog,
+  normalizePromosServiceName,
+  partitionPromosCustomServices,
+  remapLegacyPromosServiceId
+} from "@/features/promos-offers/composables/promos-master-catalog.composable"
+
+type ServiceType = "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service"
+
+interface SingleService {
+  id: string
+  type: ServiceType
+  name: string
+  price: number
+  status: string
+}
+
+interface BundledService {
+  id: string
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds?: string[]
+  bundledPrice: number
+  status: string
+}
+
+type ServiceCatalogFilter = "machine" | "technique" | "evaluation" | "add-ons"
+
+type ServiceCatalogMatrixRow = {
+  key: number
+  machine?: SingleService
+  technique?: SingleService
+  evaluation?: SingleService
+  addOns?: SingleService
+}
+
+const toast = useToast()
+const confirm = useConfirm()
+const isLoading = ref(false)
+const dialogVisible = ref(false)
+const editingId = ref<string | null>(null)
+
+const customServices = ref<SingleService[]>([])
+const machineServices = ref<SingleService[]>([])
+const techniqueServices = ref<SingleService[]>([])
+const allBundles = ref<BundledService[]>([])
+const selectedServiceCatalogFilters = ref<ServiceCatalogFilter[]>([])
+
+const allServices = computed<SingleService[]>(() => [
+  ...machineServices.value,
+  ...techniqueServices.value,
+  ...customServices.value
+])
+
+// Bundle dialog state
+const bundleDialogVisible = ref(false)
+const editingBundleId = ref<string | null>(null)
+const bundleFormData = reactive<{
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds: string[]
+  bundledPrice: number
+  status: string
+}>({
+  name: "",
+  machineIds: [],
+  techniqueIds: [],
+  evaluationIds: [],
+  addOnIds: [],
+  bundledPrice: 0,
+  status: "Active"
+})
+
+const getServiceName = (id: string): string =>
+  allServices.value.find(s => s.id === id)?.name ?? id
+
+const calcOriginalPrice = (bundle: BundledService): number => {
+  const ids = [...bundle.machineIds, ...bundle.techniqueIds, ...bundle.evaluationIds]
+  return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
+}
+
+const bundlePreviewOriginalPrice = computed(() => {
+  const ids = [...bundleFormData.machineIds, ...bundleFormData.techniqueIds, ...bundleFormData.evaluationIds]
+  return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
+})
+
+const typeOptions = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluations", value: "evaluation" },
+  { label: "Add-ons", value: "add-on-machine" },
+  { label: "Add-on (Home Service)", value: "add-on-home-service" }
+]
+
+const serviceCatalogFilterOptions: Array<{label: string; value: ServiceCatalogFilter}> = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluation", value: "evaluation" },
+  { label: "Add-Ons", value: "add-ons" }
+]
+
+const normalizeServiceCatalogFilter = (type: ServiceType): ServiceCatalogFilter => {
+  if (type === "machine") return "machine"
+  if (type === "technique") return "technique"
+  if (type === "evaluation") return "evaluation"
+  return "add-ons"
+}
+
+const serviceCatalogBuckets = computed(() => ({
+  machine: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "machine"),
+  technique: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "technique"),
+  evaluation: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "evaluation"),
+  "add-ons": allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "add-ons")
+}))
+
+const hasServiceCatalogFilters = computed(() => selectedServiceCatalogFilters.value.length > 0)
+
+const filteredServiceCatalogItems = computed(() =>
+  allServices.value.filter(service => selectedServiceCatalogFilters.value.includes(normalizeServiceCatalogFilter(service.type)))
+)
+
+const serviceCatalogMatrixRows = computed<ServiceCatalogMatrixRow[]>(() => {
+  const buckets = serviceCatalogBuckets.value
+  const maxRows = Math.max(
+    buckets.machine.length,
+    buckets.technique.length,
+    buckets.evaluation.length,
+    buckets["add-ons"].length,
+    0
+  )
+
+  return Array.from({ length: maxRows }, (_, index) => ({
+    key: index + 1,
+    machine: buckets.machine[index],
+    technique: buckets.technique[index],
+    evaluation: buckets.evaluation[index],
+    addOns: buckets["add-ons"][index]
+  }))
+})
+
+const toggleServiceCatalogFilter = (filter: ServiceCatalogFilter): void => {
+  selectedServiceCatalogFilters.value = selectedServiceCatalogFilters.value.includes(filter)
+    ? selectedServiceCatalogFilters.value.filter(entry => entry !== filter)
+    : [...selectedServiceCatalogFilters.value, filter]
+}
+
+const clearServiceCatalogFilters = (): void => {
+  selectedServiceCatalogFilters.value = []
+}
+
+const isLocalEditableService = (service: SingleService): boolean => isLocalEditablePromosService(service)
+
+const remapBundleIdsToBackendCatalog = (bundles: BundledService[], legacyServices: SingleService[]): BundledService[] => {
+  if (!bundles.length) return bundles
+
+  const machineByName = new Map(machineServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+  const techniqueByName = new Map(techniqueServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+
+  const legacyById = new Map(legacyServices.map(service => [service.id, service]))
+
+  const remapIds = (
+    ids: string[],
+    serviceType: "machine" | "technique",
+    backendByName: Map<string, string>
+  ): string[] => {
+    return ids
+      .map((id) => {
+        return remapLegacyPromosServiceId(id, serviceType, backendByName, legacyById)
+      })
+      .filter((id, index, array) => array.indexOf(id) === index)
+  }
+
+  return bundles.map(bundle => ({
+    ...bundle,
+    machineIds: remapIds(bundle.machineIds, "machine", machineByName),
+    techniqueIds: remapIds(bundle.techniqueIds, "technique", techniqueByName)
+  }))
+}
+
+const formData = reactive<{
+  type: ServiceType
+  name: string
+  price: number
+  status: string
+}>({
+  type: "evaluation",
+  name: "",
+  price: 0,
+  status: "Active"
+})
+
+const asCurrency = (value: number): string =>
+  Number(value ?? 0).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
+
+const serviceNamePlaceholder = computed(() => {
+  if (formData.type === "machine") return "Example: Ultrasound Machine, Traction Device"
+  if (formData.type === "technique") return "Example: Manual Therapy, Hot Compress"
+  if (formData.type === "add-on-home-service") return "Example: Add-on: Home Service - 1 km"
+  return "Enter service name"
+})
+
+const serviceTypeGuidance = computed(() => {
+  if (formData.type === "machine") {
+    return "Create a physical therapy machine/equipment that can be assigned to sessions and bundled with techniques."
+  }
+  if (formData.type === "technique") {
+    return "Create a treatment technique that can be paired with machines and assigned to sessions."
+  }
+  if (formData.type === "add-on-home-service") {
+    return "Home Service add-ons are used for travel tiers and will mark Appointments as Home Care when selected."
+  }
+  if (formData.type === "add-on-machine") {
+    return "Use this for regular add-ons that should stay under the Add-ons picker."
+  }
+  return "Choose a clear service name so staff can find it quickly during booking and billing."
+})
+
+const formatType = (type: ServiceType): string => {
+  const typeMap: Record<ServiceType, string> = {
+    machine: "Machine",
+    technique: "Technique",
+    evaluation: "Evaluation",
+    "add-on-machine": "Add-ons",
+    "add-on-technique": "Add-ons",
+    "add-on-home-service": "Add-on (Home Service)"
+  }
+  return typeMap[type] || type
+}
+
+const getTypeSeverity = (type: ServiceType): string => {
+  const severityMap: Record<ServiceType, string> = {
+    machine: "info",
+    technique: "success",
+    evaluation: "warning",
+    "add-on-machine": "secondary",
+    "add-on-technique": "secondary",
+    "add-on-home-service": "warn"
+  }
+  return severityMap[type] || "info"
+}
+
+const loadServices = async (): Promise<void> => {
+  try {
+    isLoading.value = true
+    const { machineServices: backendMachines, techniqueServices: backendTechniques } = await loadBackendPromosMasterCatalog()
+    machineServices.value = backendMachines as SingleService[]
+    techniqueServices.value = backendTechniques as SingleService[]
+
+    const storedServices = readPromosStorageArray<SingleService>(SINGLE_PAY_SERVICES_KEY)
+    const { customOnlyServices: localCustomOnly, legacyMachineTechniqueEntries } = partitionPromosCustomServices(storedServices)
+
+    if (legacyMachineTechniqueEntries.length > 0 || localCustomOnly.length !== storedServices.length) {
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, localCustomOnly)
+    }
+
+    customServices.value = localCustomOnly
+
+    const loadedBundles = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
+    const remappedBundles = remapBundleIdsToBackendCatalog(loadedBundles, legacyMachineTechniqueEntries)
+    allBundles.value = remappedBundles
+    if (JSON.stringify(remappedBundles) !== JSON.stringify(loadedBundles)) {
+      writePromosStorageArray(BUNDLED_SERVICES_KEY, remappedBundles)
+    }
+  } catch (error: unknown) {
+    errorToast(toast, "Failed to load services")
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const openAddDialog = (): void => {
+  editingId.value = null
+  formData.type = "evaluation"
+  formData.name = ""
+  formData.price = 0
+  formData.status = "Active"
+  dialogVisible.value = true
+}
+
+const openEditDialog = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
+  editingId.value = service.id
+  formData.type = service.type === "add-on-home-service"
+    ? "add-on-home-service"
+    : service.type.startsWith("add-on")
+      ? "add-on-machine"
+      : service.type
+  formData.name = service.name
+  formData.price = service.price
+  formData.status = service.status
+  dialogVisible.value = true
+}
+
+const saveService = (): void => {
+  if (!formData.name.trim()) {
+    errorToast(toast, "Service name is required")
+    return
+  }
+  if (formData.price < 0) {
+    errorToast(toast, "Price must be 0 or greater")
+    return
+  }
+
+  if (editingId.value) {
+    // Update existing
+    const index = customServices.value.findIndex(s => s.id === editingId.value)
+    if (index >= 0) {
+      customServices.value[index] = {
+        id: editingId.value,
+        type: formData.type,
+        name: formData.name,
+        price: formData.price,
+        status: formData.status
+      }
+    }
+  } else {
+    // Add new
+    customServices.value.push({
+      id: `service-${Date.now()}`,
+      type: formData.type,
+      name: formData.name,
+      price: formData.price,
+      status: formData.status
+    })
+  }
+
+  writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
+  dialogVisible.value = false
+  successToast(toast, editingId.value ? "Service updated" : "Service added")
+}
+
+const confirmDelete = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
+  confirm.require({
+    message: `Delete "${service.name}"?`,
+    header: "Confirm",
+    icon: "pi pi-exclamation-triangle",
+    accept: () => {
+      customServices.value = customServices.value.filter(s => s.id !== service.id)
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
+      successToast(toast, "Service deleted")
+    }
+  })
+}
+
+const loadBundles = (): void => {
+  try {
+    allBundles.value = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
+  } catch {
+    allBundles.value = []
+  }
+}
+
+const openAddBundleDialog = (): void => {
+  editingBundleId.value = null
+  bundleFormData.name = ""
+  bundleFormData.machineIds = []
+  bundleFormData.techniqueIds = []
+  bundleFormData.evaluationIds = []
+  bundleFormData.addOnIds = []
+  bundleFormData.bundledPrice = 0
+  bundleFormData.status = "Active"
+  bundleDialogVisible.value = true
+}
+
+const openEditBundleDialog = (bundle: BundledService): void => {
+  editingBundleId.value = bundle.id
+  bundleFormData.name = bundle.name
+  bundleFormData.machineIds = [...bundle.machineIds]
+  bundleFormData.techniqueIds = [...bundle.techniqueIds]
+  bundleFormData.evaluationIds = [...bundle.evaluationIds]
+  bundleFormData.addOnIds = []
+  bundleFormData.bundledPrice = bundle.bundledPrice
+  bundleFormData.status = bundle.status
+  bundleDialogVisible.value = true
+}
+
+const saveBundle = (): void => {
+  if (!bundleFormData.name.trim()) {
+    errorToast(toast, "Bundle name is required")
+    return
+  }
+  const total = bundleFormData.machineIds.length + bundleFormData.techniqueIds.length + bundleFormData.evaluationIds.length
+  if (total === 0) {
+    errorToast(toast, "Add at least one machine, technique, or evaluation")
+    return
+  }
+  if (bundleFormData.bundledPrice < 0) {
+    errorToast(toast, "Bundled price must be 0 or greater")
+    return
+  }
+
+  if (editingBundleId.value) {
+    const index = allBundles.value.findIndex(b => b.id === editingBundleId.value)
+    if (index >= 0) {
+      allBundles.value[index] = {
+        id: editingBundleId.value,
+        name: bundleFormData.name,
+        machineIds: [...bundleFormData.machineIds],
+        techniqueIds: [...bundleFormData.techniqueIds],
+        evaluationIds: [...bundleFormData.evaluationIds],
+        addOnIds: [],
+        bundledPrice: bundleFormData.bundledPrice,
+        status: bundleFormData.status
+      }
+    }
+  } else {
+    allBundles.value.push({
+      id: `bundle-${Date.now()}`,
+      name: bundleFormData.name,
+      machineIds: [...bundleFormData.machineIds],
+      techniqueIds: [...bundleFormData.techniqueIds],
+      evaluationIds: [...bundleFormData.evaluationIds],
+      addOnIds: [],
+      bundledPrice: bundleFormData.bundledPrice,
+      status: bundleFormData.status
+    })
+  }
+
+  writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
+  bundleDialogVisible.value = false
+  successToast(toast, editingBundleId.value ? "Bundle updated" : "Bundle added")
+}
+
+const confirmDeleteBundle = (bundle: BundledService): void => {
+  confirm.require({
+    message: `Delete bundle "${bundle.name}"?`,
+    header: "Confirm",
+    icon: "pi pi-exclamation-triangle",
+    accept: () => {
+      allBundles.value = allBundles.value.filter(b => b.id !== bundle.id)
+      writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
+      successToast(toast, "Bundle deleted")
+    }
+  })
+}
+
+onMounted(() => {
+  loadServices()
+})
+</script>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from "vue"
+import Button from "primevue/button"
+import Column from "primevue/column"
+import ConfirmDialog from "primevue/confirmdialog"
+import DataTable from "primevue/datatable"
+import Dialog from "primevue/dialog"
+import IftaLabel from "primevue/iftalabel"
+import InputNumber from "primevue/inputnumber"
+import InputText from "primevue/inputtext"
+import Message from "primevue/message"
+import Select from "primevue/select"
+import MultiSelect from "primevue/multiselect"
+import Tag from "primevue/tag"
+import { useConfirm } from "primevue/useconfirm"
+import { useToast } from "primevue/usetoast"
+import { errorToast, successToast } from "@/utils/toast.util"
+import {
+  BUNDLED_SERVICES_KEY,
+  SINGLE_PAY_SERVICES_KEY,
+  readPromosStorageArray,
+  writePromosStorageArray
+} from "@/features/promos-offers/composables/promos-storage.composable"
+import {
+  isLocalEditablePromosService,
+  loadBackendPromosMasterCatalog,
+  normalizePromosServiceName,
+  partitionPromosCustomServices,
+  remapLegacyPromosServiceId
+} from "@/features/promos-offers/composables/promos-master-catalog.composable"
+
+type ServiceType = "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service"
+
+interface SingleService {
+  id: string
+  type: ServiceType
+  name: string
+  price: number
+  status: string
+}
+
+interface BundledService {
+  id: string
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds?: string[]
+  bundledPrice: number
+  status: string
+}
+
+type ServiceCatalogFilter = "machine" | "technique" | "evaluation" | "add-ons"
+
+type ServiceCatalogMatrixRow = {
+  key: number
+  machine?: SingleService
+  technique?: SingleService
+  evaluation?: SingleService
+  addOns?: SingleService
+}
+
+const toast = useToast()
+const confirm = useConfirm()
+const isLoading = ref(false)
+const dialogVisible = ref(false)
+const editingId = ref<string | null>(null)
+
+const customServices = ref<SingleService[]>([])
+const machineServices = ref<SingleService[]>([])
+const techniqueServices = ref<SingleService[]>([])
+const allBundles = ref<BundledService[]>([])
+const selectedServiceCatalogFilters = ref<ServiceCatalogFilter[]>([])
+
+const allServices = computed<SingleService[]>(() => [
+  ...machineServices.value,
+  ...techniqueServices.value,
+  ...customServices.value
+])
+
+// Bundle dialog state
+const bundleDialogVisible = ref(false)
+const editingBundleId = ref<string | null>(null)
+const bundleFormData = reactive<{
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds: string[]
+  bundledPrice: number
+  status: string
+}>({
+  name: "",
+  machineIds: [],
+  techniqueIds: [],
+  evaluationIds: [],
+  addOnIds: [],
+  bundledPrice: 0,
+  status: "Active"
+})
+
+const getServiceName = (id: string): string =>
+  allServices.value.find(s => s.id === id)?.name ?? id
+
+const calcOriginalPrice = (bundle: BundledService): number => {
+  const ids = [...bundle.machineIds, ...bundle.techniqueIds, ...bundle.evaluationIds]
+  return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
+}
+
+const bundlePreviewOriginalPrice = computed(() => {
+  const ids = [...bundleFormData.machineIds, ...bundleFormData.techniqueIds, ...bundleFormData.evaluationIds]
+  return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
+})
+
+const typeOptions = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluations", value: "evaluation" },
+  { label: "Add-ons", value: "add-on-machine" },
+  { label: "Add-on (Home Service)", value: "add-on-home-service" }
+]
+
+const serviceCatalogFilterOptions: Array<{label: string; value: ServiceCatalogFilter}> = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluation", value: "evaluation" },
+  { label: "Add-Ons", value: "add-ons" }
+]
+
+const normalizeServiceCatalogFilter = (type: ServiceType): ServiceCatalogFilter => {
+  if (type === "machine") return "machine"
+  if (type === "technique") return "technique"
+  if (type === "evaluation") return "evaluation"
+  return "add-ons"
+}
+
+const serviceCatalogBuckets = computed(() => ({
+  machine: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "machine"),
+  technique: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "technique"),
+  evaluation: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "evaluation"),
+  "add-ons": allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "add-ons")
+}))
+
+const hasServiceCatalogFilters = computed(() => selectedServiceCatalogFilters.value.length > 0)
+
+const filteredServiceCatalogItems = computed(() =>
+  allServices.value.filter(service => selectedServiceCatalogFilters.value.includes(normalizeServiceCatalogFilter(service.type)))
+)
+
+const serviceCatalogMatrixRows = computed<ServiceCatalogMatrixRow[]>(() => {
+  const buckets = serviceCatalogBuckets.value
+  const maxRows = Math.max(
+    buckets.machine.length,
+    buckets.technique.length,
+    buckets.evaluation.length,
+    buckets["add-ons"].length,
+    0
+  )
+
+  return Array.from({ length: maxRows }, (_, index) => ({
+    key: index + 1,
+    machine: buckets.machine[index],
+    technique: buckets.technique[index],
+    evaluation: buckets.evaluation[index],
+    addOns: buckets["add-ons"][index]
+  }))
+})
+
+const toggleServiceCatalogFilter = (filter: ServiceCatalogFilter): void => {
+  selectedServiceCatalogFilters.value = selectedServiceCatalogFilters.value.includes(filter)
+    ? selectedServiceCatalogFilters.value.filter(entry => entry !== filter)
+    : [...selectedServiceCatalogFilters.value, filter]
+}
+
+const clearServiceCatalogFilters = (): void => {
+  selectedServiceCatalogFilters.value = []
+}
+
+const isLocalEditableService = (service: SingleService): boolean => isLocalEditablePromosService(service)
+
+const remapBundleIdsToBackendCatalog = (bundles: BundledService[], legacyServices: SingleService[]): BundledService[] => {
+  if (!bundles.length) return bundles
+
+  const machineByName = new Map(machineServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+  const techniqueByName = new Map(techniqueServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+
+  const legacyById = new Map(legacyServices.map(service => [service.id, service]))
+
+  const remapIds = (
+    ids: string[],
+    serviceType: "machine" | "technique",
+    backendByName: Map<string, string>
+  ): string[] => {
+    return ids
+      .map((id) => {
+        return remapLegacyPromosServiceId(id, serviceType, backendByName, legacyById)
+      })
+      .filter((id, index, array) => array.indexOf(id) === index)
+  }
+
+  return bundles.map(bundle => ({
+    ...bundle,
+    machineIds: remapIds(bundle.machineIds, "machine", machineByName),
+    techniqueIds: remapIds(bundle.techniqueIds, "technique", techniqueByName)
+  }))
+}
+
+const formData = reactive<{
+  type: ServiceType
+  name: string
+  price: number
+  status: string
+}>({
+  type: "evaluation",
+  name: "",
+  price: 0,
+  status: "Active"
+})
+
+const asCurrency = (value: number): string =>
+  Number(value ?? 0).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
+
+const serviceNamePlaceholder = computed(() => {
+  if (formData.type === "machine") return "Example: Ultrasound Machine, Traction Device"
+  if (formData.type === "technique") return "Example: Manual Therapy, Hot Compress"
+  if (formData.type === "add-on-home-service") return "Example: Add-on: Home Service - 1 km"
+  return "Enter service name"
+})
+
+const serviceTypeGuidance = computed(() => {
+  if (formData.type === "machine") {
+    return "Create a physical therapy machine/equipment that can be assigned to sessions and bundled with techniques."
+  }
+  if (formData.type === "technique") {
+    return "Create a treatment technique that can be paired with machines and assigned to sessions."
+  }
+  if (formData.type === "add-on-home-service") {
+    return "Home Service add-ons are used for travel tiers and will mark Appointments as Home Care when selected."
+  }
+  if (formData.type === "add-on-machine") {
+    return "Use this for regular add-ons that should stay under the Add-ons picker."
+  }
+  return "Choose a clear service name so staff can find it quickly during booking and billing."
+})
+
+const formatType = (type: ServiceType): string => {
+  const typeMap: Record<ServiceType, string> = {
+    machine: "Machine",
+    technique: "Technique",
+    evaluation: "Evaluation",
+    "add-on-machine": "Add-ons",
+    "add-on-technique": "Add-ons",
+    "add-on-home-service": "Add-on (Home Service)"
+  }
+  return typeMap[type] || type
+}
+
+const getTypeSeverity = (type: ServiceType): string => {
+  const severityMap: Record<ServiceType, string> = {
+    machine: "info",
+    technique: "success",
+    evaluation: "warning",
+    "add-on-machine": "secondary",
+    "add-on-technique": "secondary",
+    "add-on-home-service": "warn"
+  }
+  return severityMap[type] || "info"
+}
+
+const loadServices = async (): Promise<void> => {
+  try {
+    isLoading.value = true
+    const { machineServices: backendMachines, techniqueServices: backendTechniques } = await loadBackendPromosMasterCatalog()
+    machineServices.value = backendMachines as SingleService[]
+    techniqueServices.value = backendTechniques as SingleService[]
+
+    const storedServices = readPromosStorageArray<SingleService>(SINGLE_PAY_SERVICES_KEY)
+    const { customOnlyServices: localCustomOnly, legacyMachineTechniqueEntries } = partitionPromosCustomServices(storedServices)
+
+    if (legacyMachineTechniqueEntries.length > 0 || localCustomOnly.length !== storedServices.length) {
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, localCustomOnly)
+    }
+
+    customServices.value = localCustomOnly
+
+    const loadedBundles = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
+    const remappedBundles = remapBundleIdsToBackendCatalog(loadedBundles, legacyMachineTechniqueEntries)
+    allBundles.value = remappedBundles
+    if (JSON.stringify(remappedBundles) !== JSON.stringify(loadedBundles)) {
+      writePromosStorageArray(BUNDLED_SERVICES_KEY, remappedBundles)
+    }
+  } catch (error: unknown) {
+    errorToast(toast, "Failed to load services")
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const openAddDialog = (): void => {
+  editingId.value = null
+  formData.type = "evaluation"
+  formData.name = ""
+  formData.price = 0
+  formData.status = "Active"
+  dialogVisible.value = true
+}
+
+const openEditDialog = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
+  editingId.value = service.id
+  formData.type = service.type === "add-on-home-service"
+    ? "add-on-home-service"
+    : service.type.startsWith("add-on")
+      ? "add-on-machine"
+      : service.type
+  formData.name = service.name
+  formData.price = service.price
+  formData.status = service.status
+  dialogVisible.value = true
+}
+
+const saveService = (): void => {
+  if (!formData.name.trim()) {
+    errorToast(toast, "Service name is required")
+    return
+  }
+  if (formData.price < 0) {
+    errorToast(toast, "Price must be 0 or greater")
+    return
+  }
+
+  if (editingId.value) {
+    // Update existing
+    const index = customServices.value.findIndex(s => s.id === editingId.value)
+    if (index >= 0) {
+      customServices.value[index] = {
+        id: editingId.value,
+        type: formData.type,
+        name: formData.name,
+        price: formData.price,
+        status: formData.status
+      }
+    }
+  } else {
+    // Add new
+    customServices.value.push({
+      id: `service-${Date.now()}`,
+      type: formData.type,
+      name: formData.name,
+      price: formData.price,
+      status: formData.status
+    })
+  }
+
+  writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
+  dialogVisible.value = false
+  successToast(toast, editingId.value ? "Service updated" : "Service added")
+}
+
+const confirmDelete = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
+  confirm.require({
+    message: `Delete "${service.name}"?`,
+    header: "Confirm",
+    icon: "pi pi-exclamation-triangle",
+    accept: () => {
+      customServices.value = customServices.value.filter(s => s.id !== service.id)
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
+      successToast(toast, "Service deleted")
+    }
+  })
+}
+
+const loadBundles = (): void => {
+  try {
+    allBundles.value = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
+  } catch {
+    allBundles.value = []
+  }
+}
+
+const openAddBundleDialog = (): void => {
+  editingBundleId.value = null
+  bundleFormData.name = ""
+  bundleFormData.machineIds = []
+  bundleFormData.techniqueIds = []
+  bundleFormData.evaluationIds = []
+  bundleFormData.addOnIds = []
+  bundleFormData.bundledPrice = 0
+  bundleFormData.status = "Active"
+  bundleDialogVisible.value = true
+}
+
+const openEditBundleDialog = (bundle: BundledService): void => {
+  editingBundleId.value = bundle.id
+  bundleFormData.name = bundle.name
+  bundleFormData.machineIds = [...bundle.machineIds]
+  bundleFormData.techniqueIds = [...bundle.techniqueIds]
+  bundleFormData.evaluationIds = [...bundle.evaluationIds]
+  bundleFormData.addOnIds = []
+  bundleFormData.bundledPrice = bundle.bundledPrice
+  bundleFormData.status = bundle.status
+  bundleDialogVisible.value = true
+}
+
+const saveBundle = (): void => {
+  if (!bundleFormData.name.trim()) {
+    errorToast(toast, "Bundle name is required")
+    return
+  }
+  const total = bundleFormData.machineIds.length + bundleFormData.techniqueIds.length + bundleFormData.evaluationIds.length
+  if (total === 0) {
+    errorToast(toast, "Add at least one machine, technique, or evaluation")
+    return
+  }
+  if (bundleFormData.bundledPrice < 0) {
+    errorToast(toast, "Bundled price must be 0 or greater")
+    return
+  }
+
+  if (editingBundleId.value) {
+    const index = allBundles.value.findIndex(b => b.id === editingBundleId.value)
+    if (index >= 0) {
+      allBundles.value[index] = {
+        id: editingBundleId.value,
+        name: bundleFormData.name,
+        machineIds: [...bundleFormData.machineIds],
+        techniqueIds: [...bundleFormData.techniqueIds],
+        evaluationIds: [...bundleFormData.evaluationIds],
+        addOnIds: [],
+        bundledPrice: bundleFormData.bundledPrice,
+        status: bundleFormData.status
+      }
+    }
+  } else {
+    allBundles.value.push({
+      id: `bundle-${Date.now()}`,
+      name: bundleFormData.name,
+      machineIds: [...bundleFormData.machineIds],
+      techniqueIds: [...bundleFormData.techniqueIds],
+      evaluationIds: [...bundleFormData.evaluationIds],
+      addOnIds: [],
+      bundledPrice: bundleFormData.bundledPrice,
+      status: bundleFormData.status
+    })
+  }
+
+  writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
+  bundleDialogVisible.value = false
+  successToast(toast, editingBundleId.value ? "Bundle updated" : "Bundle added")
+}
+
+const confirmDeleteBundle = (bundle: BundledService): void => {
+  confirm.require({
+    message: `Delete bundle "${bundle.name}"?`,
+    header: "Confirm",
+    icon: "pi pi-exclamation-triangle",
+    accept: () => {
+      allBundles.value = allBundles.value.filter(b => b.id !== bundle.id)
+      writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
+      successToast(toast, "Bundle deleted")
+    }
+  })
+}
+
+onMounted(() => {
+  loadServices()
+})
+</script>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from "vue"
+import Button from "primevue/button"
+import Column from "primevue/column"
+import ConfirmDialog from "primevue/confirmdialog"
+import DataTable from "primevue/datatable"
+import Dialog from "primevue/dialog"
+import IftaLabel from "primevue/iftalabel"
+import InputNumber from "primevue/inputnumber"
+import InputText from "primevue/inputtext"
+import Message from "primevue/message"
+import Select from "primevue/select"
+import MultiSelect from "primevue/multiselect"
+import Tag from "primevue/tag"
+import { useConfirm } from "primevue/useconfirm"
+import { useToast } from "primevue/usetoast"
+import { errorToast, successToast } from "@/utils/toast.util"
+import {
+  BUNDLED_SERVICES_KEY,
+  SINGLE_PAY_SERVICES_KEY,
+  readPromosStorageArray,
+  writePromosStorageArray
+} from "@/features/promos-offers/composables/promos-storage.composable"
+import {
+  isLocalEditablePromosService,
+  loadBackendPromosMasterCatalog,
+  normalizePromosServiceName,
+  partitionPromosCustomServices,
+  remapLegacyPromosServiceId
+} from "@/features/promos-offers/composables/promos-master-catalog.composable"
+
+type ServiceType = "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service"
+
+interface SingleService {
+  id: string
+  type: ServiceType
+  name: string
+  price: number
+  status: string
+}
+
+interface BundledService {
+  id: string
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds?: string[]
+  bundledPrice: number
+  status: string
+}
+
+type ServiceCatalogFilter = "machine" | "technique" | "evaluation" | "add-ons"
+
+type ServiceCatalogMatrixRow = {
+  key: number
+  machine?: SingleService
+  technique?: SingleService
+  evaluation?: SingleService
+  addOns?: SingleService
+}
+
+const toast = useToast()
+const confirm = useConfirm()
+const isLoading = ref(false)
+const dialogVisible = ref(false)
+const editingId = ref<string | null>(null)
+
+const customServices = ref<SingleService[]>([])
+const machineServices = ref<SingleService[]>([])
+const techniqueServices = ref<SingleService[]>([])
+const allBundles = ref<BundledService[]>([])
+const selectedServiceCatalogFilters = ref<ServiceCatalogFilter[]>([])
+
+const allServices = computed<SingleService[]>(() => [
+  ...machineServices.value,
+  ...techniqueServices.value,
+  ...customServices.value
+])
+
+// Bundle dialog state
+const bundleDialogVisible = ref(false)
+const editingBundleId = ref<string | null>(null)
+const bundleFormData = reactive<{
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds: string[]
+  bundledPrice: number
+  status: string
+}>({
+  name: "",
+  machineIds: [],
+  techniqueIds: [],
+  evaluationIds: [],
+  addOnIds: [],
+  bundledPrice: 0,
+  status: "Active"
+})
+
+const getServiceName = (id: string): string =>
+  allServices.value.find(s => s.id === id)?.name ?? id
+
+const calcOriginalPrice = (bundle: BundledService): number => {
+  const ids = [...bundle.machineIds, ...bundle.techniqueIds, ...bundle.evaluationIds]
+  return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
+}
+
+const bundlePreviewOriginalPrice = computed(() => {
+  const ids = [...bundleFormData.machineIds, ...bundleFormData.techniqueIds, ...bundleFormData.evaluationIds]
+  return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
+})
+
+const typeOptions = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluations", value: "evaluation" },
+  { label: "Add-ons", value: "add-on-machine" },
+  { label: "Add-on (Home Service)", value: "add-on-home-service" }
+]
+
+const serviceCatalogFilterOptions: Array<{label: string; value: ServiceCatalogFilter}> = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluation", value: "evaluation" },
+  { label: "Add-Ons", value: "add-ons" }
+]
+
+const normalizeServiceCatalogFilter = (type: ServiceType): ServiceCatalogFilter => {
+  if (type === "machine") return "machine"
+  if (type === "technique") return "technique"
+  if (type === "evaluation") return "evaluation"
+  return "add-ons"
+}
+
+const serviceCatalogBuckets = computed(() => ({
+  machine: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "machine"),
+  technique: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "technique"),
+  evaluation: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "evaluation"),
+  "add-ons": allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "add-ons")
+}))
+
+const hasServiceCatalogFilters = computed(() => selectedServiceCatalogFilters.value.length > 0)
+
+const filteredServiceCatalogItems = computed(() =>
+  allServices.value.filter(service => selectedServiceCatalogFilters.value.includes(normalizeServiceCatalogFilter(service.type)))
+)
+
+const serviceCatalogMatrixRows = computed<ServiceCatalogMatrixRow[]>(() => {
+  const buckets = serviceCatalogBuckets.value
+  const maxRows = Math.max(
+    buckets.machine.length,
+    buckets.technique.length,
+    buckets.evaluation.length,
+    buckets["add-ons"].length,
+    0
+  )
+
+  return Array.from({ length: maxRows }, (_, index) => ({
+    key: index + 1,
+    machine: buckets.machine[index],
+    technique: buckets.technique[index],
+    evaluation: buckets.evaluation[index],
+    addOns: buckets["add-ons"][index]
+  }))
+})
+
+const toggleServiceCatalogFilter = (filter: ServiceCatalogFilter): void => {
+  selectedServiceCatalogFilters.value = selectedServiceCatalogFilters.value.includes(filter)
+    ? selectedServiceCatalogFilters.value.filter(entry => entry !== filter)
+    : [...selectedServiceCatalogFilters.value, filter]
+}
+
+const clearServiceCatalogFilters = (): void => {
+  selectedServiceCatalogFilters.value = []
+}
+
+const isLocalEditableService = (service: SingleService): boolean => isLocalEditablePromosService(service)
+
+const remapBundleIdsToBackendCatalog = (bundles: BundledService[], legacyServices: SingleService[]): BundledService[] => {
+  if (!bundles.length) return bundles
+
+  const machineByName = new Map(machineServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+  const techniqueByName = new Map(techniqueServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+
+  const legacyById = new Map(legacyServices.map(service => [service.id, service]))
+
+  const remapIds = (
+    ids: string[],
+    serviceType: "machine" | "technique",
+    backendByName: Map<string, string>
+  ): string[] => {
+    return ids
+      .map((id) => {
+        return remapLegacyPromosServiceId(id, serviceType, backendByName, legacyById)
+      })
+      .filter((id, index, array) => array.indexOf(id) === index)
+  }
+
+  return bundles.map(bundle => ({
+    ...bundle,
+    machineIds: remapIds(bundle.machineIds, "machine", machineByName),
+    techniqueIds: remapIds(bundle.techniqueIds, "technique", techniqueByName)
+  }))
+}
+
+const formData = reactive<{
+  type: ServiceType
+  name: string
+  price: number
+  status: string
+}>({
+  type: "evaluation",
+  name: "",
+  price: 0,
+  status: "Active"
+})
+
+const asCurrency = (value: number): string =>
+  Number(value ?? 0).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
+
+const serviceNamePlaceholder = computed(() => {
+  if (formData.type === "machine") return "Example: Ultrasound Machine, Traction Device"
+  if (formData.type === "technique") return "Example: Manual Therapy, Hot Compress"
+  if (formData.type === "add-on-home-service") return "Example: Add-on: Home Service - 1 km"
+  return "Enter service name"
+})
+
+const serviceTypeGuidance = computed(() => {
+  if (formData.type === "machine") {
+    return "Create a physical therapy machine/equipment that can be assigned to sessions and bundled with techniques."
+  }
+  if (formData.type === "technique") {
+    return "Create a treatment technique that can be paired with machines and assigned to sessions."
+  }
+  if (formData.type === "add-on-home-service") {
+    return "Home Service add-ons are used for travel tiers and will mark Appointments as Home Care when selected."
+  }
+  if (formData.type === "add-on-machine") {
+    return "Use this for regular add-ons that should stay under the Add-ons picker."
+  }
+  return "Choose a clear service name so staff can find it quickly during booking and billing."
+})
+
+const formatType = (type: ServiceType): string => {
+  const typeMap: Record<ServiceType, string> = {
+    machine: "Machine",
+    technique: "Technique",
+    evaluation: "Evaluation",
+    "add-on-machine": "Add-ons",
+    "add-on-technique": "Add-ons",
+    "add-on-home-service": "Add-on (Home Service)"
+  }
+  return typeMap[type] || type
+}
+
+const getTypeSeverity = (type: ServiceType): string => {
+  const severityMap: Record<ServiceType, string> = {
+    machine: "info",
+    technique: "success",
+    evaluation: "warning",
+    "add-on-machine": "secondary",
+    "add-on-technique": "secondary",
+    "add-on-home-service": "warn"
+  }
+  return severityMap[type] || "info"
+}
+
+const loadServices = async (): Promise<void> => {
+  try {
+    isLoading.value = true
+    const { machineServices: backendMachines, techniqueServices: backendTechniques } = await loadBackendPromosMasterCatalog()
+    machineServices.value = backendMachines as SingleService[]
+    techniqueServices.value = backendTechniques as SingleService[]
+
+    const storedServices = readPromosStorageArray<SingleService>(SINGLE_PAY_SERVICES_KEY)
+    const { customOnlyServices: localCustomOnly, legacyMachineTechniqueEntries } = partitionPromosCustomServices(storedServices)
+
+    if (legacyMachineTechniqueEntries.length > 0 || localCustomOnly.length !== storedServices.length) {
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, localCustomOnly)
+    }
+
+    customServices.value = localCustomOnly
+
+    const loadedBundles = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
+    const remappedBundles = remapBundleIdsToBackendCatalog(loadedBundles, legacyMachineTechniqueEntries)
+    allBundles.value = remappedBundles
+    if (JSON.stringify(remappedBundles) !== JSON.stringify(loadedBundles)) {
+      writePromosStorageArray(BUNDLED_SERVICES_KEY, remappedBundles)
+    }
+  } catch (error: unknown) {
+    errorToast(toast, "Failed to load services")
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const openAddDialog = (): void => {
+  editingId.value = null
+  formData.type = "evaluation"
+  formData.name = ""
+  formData.price = 0
+  formData.status = "Active"
+  dialogVisible.value = true
+}
+
+const openEditDialog = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
+  editingId.value = service.id
+  formData.type = service.type === "add-on-home-service"
+    ? "add-on-home-service"
+    : service.type.startsWith("add-on")
+      ? "add-on-machine"
+      : service.type
+  formData.name = service.name
+  formData.price = service.price
+  formData.status = service.status
+  dialogVisible.value = true
+}
+
+const saveService = (): void => {
+  if (!formData.name.trim()) {
+    errorToast(toast, "Service name is required")
+    return
+  }
+  if (formData.price < 0) {
+    errorToast(toast, "Price must be 0 or greater")
+    return
+  }
+
+  if (editingId.value) {
+    // Update existing
+    const index = customServices.value.findIndex(s => s.id === editingId.value)
+    if (index >= 0) {
+      customServices.value[index] = {
+        id: editingId.value,
+        type: formData.type,
+        name: formData.name,
+        price: formData.price,
+        status: formData.status
+      }
+    }
+  } else {
+    // Add new
+    customServices.value.push({
+      id: `service-${Date.now()}`,
+      type: formData.type,
+      name: formData.name,
+      price: formData.price,
+      status: formData.status
+    })
+  }
+
+  writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
+  dialogVisible.value = false
+  successToast(toast, editingId.value ? "Service updated" : "Service added")
+}
+
+const confirmDelete = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
+  confirm.require({
+    message: `Delete "${service.name}"?`,
+    header: "Confirm",
+    icon: "pi pi-exclamation-triangle",
+    accept: () => {
+      customServices.value = customServices.value.filter(s => s.id !== service.id)
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
+      successToast(toast, "Service deleted")
+    }
+  })
+}
+
+const loadBundles = (): void => {
+  try {
+    allBundles.value = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
+  } catch {
+    allBundles.value = []
+  }
+}
+
+const openAddBundleDialog = (): void => {
+  editingBundleId.value = null
+  bundleFormData.name = ""
+  bundleFormData.machineIds = []
+  bundleFormData.techniqueIds = []
+  bundleFormData.evaluationIds = []
+  bundleFormData.addOnIds = []
+  bundleFormData.bundledPrice = 0
+  bundleFormData.status = "Active"
+  bundleDialogVisible.value = true
+}
+
+const openEditBundleDialog = (bundle: BundledService): void => {
+  editingBundleId.value = bundle.id
+  bundleFormData.name = bundle.name
+  bundleFormData.machineIds = [...bundle.machineIds]
+  bundleFormData.techniqueIds = [...bundle.techniqueIds]
+  bundleFormData.evaluationIds = [...bundle.evaluationIds]
+  bundleFormData.addOnIds = []
+  bundleFormData.bundledPrice = bundle.bundledPrice
+  bundleFormData.status = bundle.status
+  bundleDialogVisible.value = true
+}
+
+const saveBundle = (): void => {
+  if (!bundleFormData.name.trim()) {
+    errorToast(toast, "Bundle name is required")
+    return
+  }
+  const total = bundleFormData.machineIds.length + bundleFormData.techniqueIds.length + bundleFormData.evaluationIds.length
+  if (total === 0) {
+    errorToast(toast, "Add at least one machine, technique, or evaluation")
+    return
+  }
+  if (bundleFormData.bundledPrice < 0) {
+    errorToast(toast, "Bundled price must be 0 or greater")
+    return
+  }
+
+  if (editingBundleId.value) {
+    const index = allBundles.value.findIndex(b => b.id === editingBundleId.value)
+    if (index >= 0) {
+      allBundles.value[index] = {
+        id: editingBundleId.value,
+        name: bundleFormData.name,
+        machineIds: [...bundleFormData.machineIds],
+        techniqueIds: [...bundleFormData.techniqueIds],
+        evaluationIds: [...bundleFormData.evaluationIds],
+        addOnIds: [],
+        bundledPrice: bundleFormData.bundledPrice,
+        status: bundleFormData.status
+      }
+    }
+  } else {
+    allBundles.value.push({
+      id: `bundle-${Date.now()}`,
+      name: bundleFormData.name,
+      machineIds: [...bundleFormData.machineIds],
+      techniqueIds: [...bundleFormData.techniqueIds],
+      evaluationIds: [...bundleFormData.evaluationIds],
+      addOnIds: [],
+      bundledPrice: bundleFormData.bundledPrice,
+      status: bundleFormData.status
+    })
+  }
+
+  writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
+  bundleDialogVisible.value = false
+  successToast(toast, editingBundleId.value ? "Bundle updated" : "Bundle added")
+}
+
+const confirmDeleteBundle = (bundle: BundledService): void => {
+  confirm.require({
+    message: `Delete bundle "${bundle.name}"?`,
+    header: "Confirm",
+    icon: "pi pi-exclamation-triangle",
+    accept: () => {
+      allBundles.value = allBundles.value.filter(b => b.id !== bundle.id)
+      writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
+      successToast(toast, "Bundle deleted")
+    }
+  })
+}
+
+onMounted(() => {
+  loadServices()
+})
+</script>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from "vue"
+import Button from "primevue/button"
+import Column from "primevue/column"
+import ConfirmDialog from "primevue/confirmdialog"
+import DataTable from "primevue/datatable"
+import Dialog from "primevue/dialog"
+import IftaLabel from "primevue/iftalabel"
+import InputNumber from "primevue/inputnumber"
+import InputText from "primevue/inputtext"
+import Message from "primevue/message"
+import Select from "primevue/select"
+import MultiSelect from "primevue/multiselect"
+import Tag from "primevue/tag"
+import { useConfirm } from "primevue/useconfirm"
+import { useToast } from "primevue/usetoast"
+import { errorToast, successToast } from "@/utils/toast.util"
+import {
+  BUNDLED_SERVICES_KEY,
+  SINGLE_PAY_SERVICES_KEY,
+  readPromosStorageArray,
+  writePromosStorageArray
+} from "@/features/promos-offers/composables/promos-storage.composable"
+import {
+  isLocalEditablePromosService,
+  loadBackendPromosMasterCatalog,
+  normalizePromosServiceName,
+  partitionPromosCustomServices,
+  remapLegacyPromosServiceId
+} from "@/features/promos-offers/composables/promos-master-catalog.composable"
+
+type ServiceType = "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service"
+
+interface SingleService {
+  id: string
+  type: ServiceType
+  name: string
+  price: number
+  status: string
+}
+
+interface BundledService {
+  id: string
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds?: string[]
+  bundledPrice: number
+  status: string
+}
+
+type ServiceCatalogFilter = "machine" | "technique" | "evaluation" | "add-ons"
+
+type ServiceCatalogMatrixRow = {
+  key: number
+  machine?: SingleService
+  technique?: SingleService
+  evaluation?: SingleService
+  addOns?: SingleService
+}
+
+const toast = useToast()
+const confirm = useConfirm()
+const isLoading = ref(false)
+const dialogVisible = ref(false)
+const editingId = ref<string | null>(null)
+
+const customServices = ref<SingleService[]>([])
+const machineServices = ref<SingleService[]>([])
+const techniqueServices = ref<SingleService[]>([])
+const allBundles = ref<BundledService[]>([])
+const selectedServiceCatalogFilters = ref<ServiceCatalogFilter[]>([])
+
+const allServices = computed<SingleService[]>(() => [
+  ...machineServices.value,
+  ...techniqueServices.value,
+  ...customServices.value
+])
+
+// Bundle dialog state
+const bundleDialogVisible = ref(false)
+const editingBundleId = ref<string | null>(null)
+const bundleFormData = reactive<{
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds: string[]
+  bundledPrice: number
+  status: string
+}>({
+  name: "",
+  machineIds: [],
+  techniqueIds: [],
+  evaluationIds: [],
+  addOnIds: [],
+  bundledPrice: 0,
+  status: "Active"
+})
+
+const getServiceName = (id: string): string =>
+  allServices.value.find(s => s.id === id)?.name ?? id
+
+const calcOriginalPrice = (bundle: BundledService): number => {
+  const ids = [...bundle.machineIds, ...bundle.techniqueIds, ...bundle.evaluationIds]
+  return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
+}
+
+const bundlePreviewOriginalPrice = computed(() => {
+  const ids = [...bundleFormData.machineIds, ...bundleFormData.techniqueIds, ...bundleFormData.evaluationIds]
+  return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
+})
+
+const typeOptions = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluations", value: "evaluation" },
+  { label: "Add-ons", value: "add-on-machine" },
+  { label: "Add-on (Home Service)", value: "add-on-home-service" }
+]
+
+const serviceCatalogFilterOptions: Array<{label: string; value: ServiceCatalogFilter}> = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluation", value: "evaluation" },
+  { label: "Add-Ons", value: "add-ons" }
+]
+
+const normalizeServiceCatalogFilter = (type: ServiceType): ServiceCatalogFilter => {
+  if (type === "machine") return "machine"
+  if (type === "technique") return "technique"
+  if (type === "evaluation") return "evaluation"
+  return "add-ons"
+}
+
+const serviceCatalogBuckets = computed(() => ({
+  machine: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "machine"),
+  technique: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "technique"),
+  evaluation: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "evaluation"),
+  "add-ons": allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "add-ons")
+}))
+
+const hasServiceCatalogFilters = computed(() => selectedServiceCatalogFilters.value.length > 0)
+
+const filteredServiceCatalogItems = computed(() =>
+  allServices.value.filter(service => selectedServiceCatalogFilters.value.includes(normalizeServiceCatalogFilter(service.type)))
+)
+
+const serviceCatalogMatrixRows = computed<ServiceCatalogMatrixRow[]>(() => {
+  const buckets = serviceCatalogBuckets.value
+  const maxRows = Math.max(
+    buckets.machine.length,
+    buckets.technique.length,
+    buckets.evaluation.length,
+    buckets["add-ons"].length,
+    0
+  )
+
+  return Array.from({ length: maxRows }, (_, index) => ({
+    key: index + 1,
+    machine: buckets.machine[index],
+    technique: buckets.technique[index],
+    evaluation: buckets.evaluation[index],
+    addOns: buckets["add-ons"][index]
+  }))
+})
+
+const toggleServiceCatalogFilter = (filter: ServiceCatalogFilter): void => {
+  selectedServiceCatalogFilters.value = selectedServiceCatalogFilters.value.includes(filter)
+    ? selectedServiceCatalogFilters.value.filter(entry => entry !== filter)
+    : [...selectedServiceCatalogFilters.value, filter]
+}
+
+const clearServiceCatalogFilters = (): void => {
+  selectedServiceCatalogFilters.value = []
+}
+
+const isLocalEditableService = (service: SingleService): boolean => isLocalEditablePromosService(service)
+
+const remapBundleIdsToBackendCatalog = (bundles: BundledService[], legacyServices: SingleService[]): BundledService[] => {
+  if (!bundles.length) return bundles
+
+  const machineByName = new Map(machineServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+  const techniqueByName = new Map(techniqueServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+
+  const legacyById = new Map(legacyServices.map(service => [service.id, service]))
+
+  const remapIds = (
+    ids: string[],
+    serviceType: "machine" | "technique",
+    backendByName: Map<string, string>
+  ): string[] => {
+    return ids
+      .map((id) => {
+        return remapLegacyPromosServiceId(id, serviceType, backendByName, legacyById)
+      })
+      .filter((id, index, array) => array.indexOf(id) === index)
+  }
+
+  return bundles.map(bundle => ({
+    ...bundle,
+    machineIds: remapIds(bundle.machineIds, "machine", machineByName),
+    techniqueIds: remapIds(bundle.techniqueIds, "technique", techniqueByName)
+  }))
+}
+
+const formData = reactive<{
+  type: ServiceType
+  name: string
+  price: number
+  status: string
+}>({
+  type: "evaluation",
+  name: "",
+  price: 0,
+  status: "Active"
+})
+
+const asCurrency = (value: number): string =>
+  Number(value ?? 0).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
+
+const serviceNamePlaceholder = computed(() => {
+  if (formData.type === "machine") return "Example: Ultrasound Machine, Traction Device"
+  if (formData.type === "technique") return "Example: Manual Therapy, Hot Compress"
+  if (formData.type === "add-on-home-service") return "Example: Add-on: Home Service - 1 km"
+  return "Enter service name"
+})
+
+const serviceTypeGuidance = computed(() => {
+  if (formData.type === "machine") {
+    return "Create a physical therapy machine/equipment that can be assigned to sessions and bundled with techniques."
+  }
+  if (formData.type === "technique") {
+    return "Create a treatment technique that can be paired with machines and assigned to sessions."
+  }
+  if (formData.type === "add-on-home-service") {
+    return "Home Service add-ons are used for travel tiers and will mark Appointments as Home Care when selected."
+  }
+  if (formData.type === "add-on-machine") {
+    return "Use this for regular add-ons that should stay under the Add-ons picker."
+  }
+  return "Choose a clear service name so staff can find it quickly during booking and billing."
+})
+
+const formatType = (type: ServiceType): string => {
+  const typeMap: Record<ServiceType, string> = {
+    machine: "Machine",
+    technique: "Technique",
+    evaluation: "Evaluation",
+    "add-on-machine": "Add-ons",
+    "add-on-technique": "Add-ons",
+    "add-on-home-service": "Add-on (Home Service)"
+  }
+  return typeMap[type] || type
+}
+
+const getTypeSeverity = (type: ServiceType): string => {
+  const severityMap: Record<ServiceType, string> = {
+    machine: "info",
+    technique: "success",
+    evaluation: "warning",
+    "add-on-machine": "secondary",
+    "add-on-technique": "secondary",
+    "add-on-home-service": "warn"
+  }
+  return severityMap[type] || "info"
+}
+
+const loadServices = async (): Promise<void> => {
+  try {
+    isLoading.value = true
+    const { machineServices: backendMachines, techniqueServices: backendTechniques } = await loadBackendPromosMasterCatalog()
+    machineServices.value = backendMachines as SingleService[]
+    techniqueServices.value = backendTechniques as SingleService[]
+
+    const storedServices = readPromosStorageArray<SingleService>(SINGLE_PAY_SERVICES_KEY)
+    const { customOnlyServices: localCustomOnly, legacyMachineTechniqueEntries } = partitionPromosCustomServices(storedServices)
+
+    if (legacyMachineTechniqueEntries.length > 0 || localCustomOnly.length !== storedServices.length) {
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, localCustomOnly)
+    }
+
+    customServices.value = localCustomOnly
+
+    const loadedBundles = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
+    const remappedBundles = remapBundleIdsToBackendCatalog(loadedBundles, legacyMachineTechniqueEntries)
+    allBundles.value = remappedBundles
+    if (JSON.stringify(remappedBundles) !== JSON.stringify(loadedBundles)) {
+      writePromosStorageArray(BUNDLED_SERVICES_KEY, remappedBundles)
+    }
+  } catch (error: unknown) {
+    errorToast(toast, "Failed to load services")
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const openAddDialog = (): void => {
+  editingId.value = null
+  formData.type = "evaluation"
+  formData.name = ""
+  formData.price = 0
+  formData.status = "Active"
+  dialogVisible.value = true
+}
+
+const openEditDialog = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
+  editingId.value = service.id
+  formData.type = service.type === "add-on-home-service"
+    ? "add-on-home-service"
+    : service.type.startsWith("add-on")
+      ? "add-on-machine"
+      : service.type
+  formData.name = service.name
+  formData.price = service.price
+  formData.status = service.status
+  dialogVisible.value = true
+}
+
+const saveService = (): void => {
+  if (!formData.name.trim()) {
+    errorToast(toast, "Service name is required")
+    return
+  }
+  if (formData.price < 0) {
+    errorToast(toast, "Price must be 0 or greater")
+    return
+  }
+
+  if (editingId.value) {
+    // Update existing
+    const index = customServices.value.findIndex(s => s.id === editingId.value)
+    if (index >= 0) {
+      customServices.value[index] = {
+        id: editingId.value,
+        type: formData.type,
+        name: formData.name,
+        price: formData.price,
+        status: formData.status
+      }
+    }
+  } else {
+    // Add new
+    customServices.value.push({
+      id: `service-${Date.now()}`,
+      type: formData.type,
+      name: formData.name,
+      price: formData.price,
+      status: formData.status
+    })
+  }
+
+  writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
+  dialogVisible.value = false
+  successToast(toast, editingId.value ? "Service updated" : "Service added")
+}
+
+const confirmDelete = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
+  confirm.require({
+    message: `Delete "${service.name}"?`,
+    header: "Confirm",
+    icon: "pi pi-exclamation-triangle",
+    accept: () => {
+      customServices.value = customServices.value.filter(s => s.id !== service.id)
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
+      successToast(toast, "Service deleted")
+    }
+  })
+}
+
+const loadBundles = (): void => {
+  try {
+    allBundles.value = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
+  } catch {
+    allBundles.value = []
+  }
+}
+
+const openAddBundleDialog = (): void => {
+  editingBundleId.value = null
+  bundleFormData.name = ""
+  bundleFormData.machineIds = []
+  bundleFormData.techniqueIds = []
+  bundleFormData.evaluationIds = []
+  bundleFormData.addOnIds = []
+  bundleFormData.bundledPrice = 0
+  bundleFormData.status = "Active"
+  bundleDialogVisible.value = true
+}
+
+const openEditBundleDialog = (bundle: BundledService): void => {
+  editingBundleId.value = bundle.id
+  bundleFormData.name = bundle.name
+  bundleFormData.machineIds = [...bundle.machineIds]
+  bundleFormData.techniqueIds = [...bundle.techniqueIds]
+  bundleFormData.evaluationIds = [...bundle.evaluationIds]
+  bundleFormData.addOnIds = []
+  bundleFormData.bundledPrice = bundle.bundledPrice
+  bundleFormData.status = bundle.status
+  bundleDialogVisible.value = true
+}
+
+const saveBundle = (): void => {
+  if (!bundleFormData.name.trim()) {
+    errorToast(toast, "Bundle name is required")
+    return
+  }
+  const total = bundleFormData.machineIds.length + bundleFormData.techniqueIds.length + bundleFormData.evaluationIds.length
+  if (total === 0) {
+    errorToast(toast, "Add at least one machine, technique, or evaluation")
+    return
+  }
+  if (bundleFormData.bundledPrice < 0) {
+    errorToast(toast, "Bundled price must be 0 or greater")
+    return
+  }
+
+  if (editingBundleId.value) {
+    const index = allBundles.value.findIndex(b => b.id === editingBundleId.value)
+    if (index >= 0) {
+      allBundles.value[index] = {
+        id: editingBundleId.value,
+        name: bundleFormData.name,
+        machineIds: [...bundleFormData.machineIds],
+        techniqueIds: [...bundleFormData.techniqueIds],
+        evaluationIds: [...bundleFormData.evaluationIds],
+        addOnIds: [],
+        bundledPrice: bundleFormData.bundledPrice,
+        status: bundleFormData.status
+      }
+    }
+  } else {
+    allBundles.value.push({
+      id: `bundle-${Date.now()}`,
+      name: bundleFormData.name,
+      machineIds: [...bundleFormData.machineIds],
+      techniqueIds: [...bundleFormData.techniqueIds],
+      evaluationIds: [...bundleFormData.evaluationIds],
+      addOnIds: [],
+      bundledPrice: bundleFormData.bundledPrice,
+      status: bundleFormData.status
+    })
+  }
+
+  writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
+  bundleDialogVisible.value = false
+  successToast(toast, editingBundleId.value ? "Bundle updated" : "Bundle added")
+}
+
+const confirmDeleteBundle = (bundle: BundledService): void => {
+  confirm.require({
+    message: `Delete bundle "${bundle.name}"?`,
+    header: "Confirm",
+    icon: "pi pi-exclamation-triangle",
+    accept: () => {
+      allBundles.value = allBundles.value.filter(b => b.id !== bundle.id)
+      writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
+      successToast(toast, "Bundle deleted")
+    }
+  })
+}
+
+onMounted(() => {
+  loadServices()
+})
+</script>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from "vue"
+import Button from "primevue/button"
+import Column from "primevue/column"
+import ConfirmDialog from "primevue/confirmdialog"
+import DataTable from "primevue/datatable"
+import Dialog from "primevue/dialog"
+import IftaLabel from "primevue/iftalabel"
+import InputNumber from "primevue/inputnumber"
+import InputText from "primevue/inputtext"
+import Message from "primevue/message"
+import Select from "primevue/select"
+import MultiSelect from "primevue/multiselect"
+import Tag from "primevue/tag"
+import { useConfirm } from "primevue/useconfirm"
+import { useToast } from "primevue/usetoast"
+import { errorToast, successToast } from "@/utils/toast.util"
+import {
+  BUNDLED_SERVICES_KEY,
+  SINGLE_PAY_SERVICES_KEY,
+  readPromosStorageArray,
+  writePromosStorageArray
+} from "@/features/promos-offers/composables/promos-storage.composable"
+import {
+  isLocalEditablePromosService,
+  loadBackendPromosMasterCatalog,
+  normalizePromosServiceName,
+  partitionPromosCustomServices,
+  remapLegacyPromosServiceId
+} from "@/features/promos-offers/composables/promos-master-catalog.composable"
+
+type ServiceType = "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service"
+
+interface SingleService {
+  id: string
+  type: ServiceType
+  name: string
+  price: number
+  status: string
+}
+
+interface BundledService {
+  id: string
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds?: string[]
+  bundledPrice: number
+  status: string
+}
+
+type ServiceCatalogFilter = "machine" | "technique" | "evaluation" | "add-ons"
+
+type ServiceCatalogMatrixRow = {
+  key: number
+  machine?: SingleService
+  technique?: SingleService
+  evaluation?: SingleService
+  addOns?: SingleService
+}
+
+const toast = useToast()
+const confirm = useConfirm()
+const isLoading = ref(false)
+const dialogVisible = ref(false)
+const editingId = ref<string | null>(null)
+
+const customServices = ref<SingleService[]>([])
+const machineServices = ref<SingleService[]>([])
+const techniqueServices = ref<SingleService[]>([])
+const allBundles = ref<BundledService[]>([])
+const selectedServiceCatalogFilters = ref<ServiceCatalogFilter[]>([])
+
+const allServices = computed<SingleService[]>(() => [
+  ...machineServices.value,
+  ...techniqueServices.value,
+  ...customServices.value
+])
+
+// Bundle dialog state
+const bundleDialogVisible = ref(false)
+const editingBundleId = ref<string | null>(null)
+const bundleFormData = reactive<{
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds: string[]
+  bundledPrice: number
+  status: string
+}>({
+  name: "",
+  machineIds: [],
+  techniqueIds: [],
+  evaluationIds: [],
+  addOnIds: [],
+  bundledPrice: 0,
+  status: "Active"
+})
+
+const getServiceName = (id: string): string =>
+  allServices.value.find(s => s.id === id)?.name ?? id
+
+const calcOriginalPrice = (bundle: BundledService): number => {
+  const ids = [...bundle.machineIds, ...bundle.techniqueIds, ...bundle.evaluationIds]
+  return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
+}
+
+const bundlePreviewOriginalPrice = computed(() => {
+  const ids = [...bundleFormData.machineIds, ...bundleFormData.techniqueIds, ...bundleFormData.evaluationIds]
+  return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
+})
+
+const typeOptions = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluations", value: "evaluation" },
+  { label: "Add-ons", value: "add-on-machine" },
+  { label: "Add-on (Home Service)", value: "add-on-home-service" }
+]
+
+const serviceCatalogFilterOptions: Array<{label: string; value: ServiceCatalogFilter}> = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluation", value: "evaluation" },
+  { label: "Add-Ons", value: "add-ons" }
+]
+
+const normalizeServiceCatalogFilter = (type: ServiceType): ServiceCatalogFilter => {
+  if (type === "machine") return "machine"
+  if (type === "technique") return "technique"
+  if (type === "evaluation") return "evaluation"
+  return "add-ons"
+}
+
+const serviceCatalogBuckets = computed(() => ({
+  machine: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "machine"),
+  technique: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "technique"),
+  evaluation: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "evaluation"),
+  "add-ons": allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "add-ons")
+}))
+
+const hasServiceCatalogFilters = computed(() => selectedServiceCatalogFilters.value.length > 0)
+
+const filteredServiceCatalogItems = computed(() =>
+  allServices.value.filter(service => selectedServiceCatalogFilters.value.includes(normalizeServiceCatalogFilter(service.type)))
+)
+
+const serviceCatalogMatrixRows = computed<ServiceCatalogMatrixRow[]>(() => {
+  const buckets = serviceCatalogBuckets.value
+  const maxRows = Math.max(
+    buckets.machine.length,
+    buckets.technique.length,
+    buckets.evaluation.length,
+    buckets["add-ons"].length,
+    0
+  )
+
+  return Array.from({ length: maxRows }, (_, index) => ({
+    key: index + 1,
+    machine: buckets.machine[index],
+    technique: buckets.technique[index],
+    evaluation: buckets.evaluation[index],
+    addOns: buckets["add-ons"][index]
+  }))
+})
+
+const toggleServiceCatalogFilter = (filter: ServiceCatalogFilter): void => {
+  selectedServiceCatalogFilters.value = selectedServiceCatalogFilters.value.includes(filter)
+    ? selectedServiceCatalogFilters.value.filter(entry => entry !== filter)
+    : [...selectedServiceCatalogFilters.value, filter]
+}
+
+const clearServiceCatalogFilters = (): void => {
+  selectedServiceCatalogFilters.value = []
+}
+
+const isLocalEditableService = (service: SingleService): boolean => isLocalEditablePromosService(service)
+
+const remapBundleIdsToBackendCatalog = (bundles: BundledService[], legacyServices: SingleService[]): BundledService[] => {
+  if (!bundles.length) return bundles
+
+  const machineByName = new Map(machineServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+  const techniqueByName = new Map(techniqueServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+
+  const legacyById = new Map(legacyServices.map(service => [service.id, service]))
+
+  const remapIds = (
+    ids: string[],
+    serviceType: "machine" | "technique",
+    backendByName: Map<string, string>
+  ): string[] => {
+    return ids
+      .map((id) => {
+        return remapLegacyPromosServiceId(id, serviceType, backendByName, legacyById)
+      })
+      .filter((id, index, array) => array.indexOf(id) === index)
+  }
+
+  return bundles.map(bundle => ({
+    ...bundle,
+    machineIds: remapIds(bundle.machineIds, "machine", machineByName),
+    techniqueIds: remapIds(bundle.techniqueIds, "technique", techniqueByName)
+  }))
+}
+
+const formData = reactive<{
+  type: ServiceType
+  name: string
+  price: number
+  status: string
+}>({
+  type: "evaluation",
+  name: "",
+  price: 0,
+  status: "Active"
+})
+
+const asCurrency = (value: number): string =>
+  Number(value ?? 0).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
+
+const serviceNamePlaceholder = computed(() => {
+  if (formData.type === "machine") return "Example: Ultrasound Machine, Traction Device"
+  if (formData.type === "technique") return "Example: Manual Therapy, Hot Compress"
+  if (formData.type === "add-on-home-service") return "Example: Add-on: Home Service - 1 km"
+  return "Enter service name"
+})
+
+const serviceTypeGuidance = computed(() => {
+  if (formData.type === "machine") {
+    return "Create a physical therapy machine/equipment that can be assigned to sessions and bundled with techniques."
+  }
+  if (formData.type === "technique") {
+    return "Create a treatment technique that can be paired with machines and assigned to sessions."
+  }
+  if (formData.type === "add-on-home-service") {
+    return "Home Service add-ons are used for travel tiers and will mark Appointments as Home Care when selected."
+  }
+  if (formData.type === "add-on-machine") {
+    return "Use this for regular add-ons that should stay under the Add-ons picker."
+  }
+  return "Choose a clear service name so staff can find it quickly during booking and billing."
+})
+
+const formatType = (type: ServiceType): string => {
+  const typeMap: Record<ServiceType, string> = {
+    machine: "Machine",
+    technique: "Technique",
+    evaluation: "Evaluation",
+    "add-on-machine": "Add-ons",
+    "add-on-technique": "Add-ons",
+    "add-on-home-service": "Add-on (Home Service)"
+  }
+  return typeMap[type] || type
+}
+
+const getTypeSeverity = (type: ServiceType): string => {
+  const severityMap: Record<ServiceType, string> = {
+    machine: "info",
+    technique: "success",
+    evaluation: "warning",
+    "add-on-machine": "secondary",
+    "add-on-technique": "secondary",
+    "add-on-home-service": "warn"
+  }
+  return severityMap[type] || "info"
+}
+
+const loadServices = async (): Promise<void> => {
+  try {
+    isLoading.value = true
+    const { machineServices: backendMachines, techniqueServices: backendTechniques } = await loadBackendPromosMasterCatalog()
+    machineServices.value = backendMachines as SingleService[]
+    techniqueServices.value = backendTechniques as SingleService[]
+
+    const storedServices = readPromosStorageArray<SingleService>(SINGLE_PAY_SERVICES_KEY)
+    const { customOnlyServices: localCustomOnly, legacyMachineTechniqueEntries } = partitionPromosCustomServices(storedServices)
+
+    if (legacyMachineTechniqueEntries.length > 0 || localCustomOnly.length !== storedServices.length) {
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, localCustomOnly)
+    }
+
+    customServices.value = localCustomOnly
+
+    const loadedBundles = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
+    const remappedBundles = remapBundleIdsToBackendCatalog(loadedBundles, legacyMachineTechniqueEntries)
+    allBundles.value = remappedBundles
+    if (JSON.stringify(remappedBundles) !== JSON.stringify(loadedBundles)) {
+      writePromosStorageArray(BUNDLED_SERVICES_KEY, remappedBundles)
+    }
+  } catch (error: unknown) {
+    errorToast(toast, "Failed to load services")
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const openAddDialog = (): void => {
+  editingId.value = null
+  formData.type = "evaluation"
+  formData.name = ""
+  formData.price = 0
+  formData.status = "Active"
+  dialogVisible.value = true
+}
+
+const openEditDialog = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
+  editingId.value = service.id
+  formData.type = service.type === "add-on-home-service"
+    ? "add-on-home-service"
+    : service.type.startsWith("add-on")
+      ? "add-on-machine"
+      : service.type
+  formData.name = service.name
+  formData.price = service.price
+  formData.status = service.status
+  dialogVisible.value = true
+}
+
+const saveService = (): void => {
+  if (!formData.name.trim()) {
+    errorToast(toast, "Service name is required")
+    return
+  }
+  if (formData.price < 0) {
+    errorToast(toast, "Price must be 0 or greater")
+    return
+  }
+
+  if (editingId.value) {
+    // Update existing
+    const index = customServices.value.findIndex(s => s.id === editingId.value)
+    if (index >= 0) {
+      customServices.value[index] = {
+        id: editingId.value,
+        type: formData.type,
+        name: formData.name,
+        price: formData.price,
+        status: formData.status
+      }
+    }
+  } else {
+    // Add new
+    customServices.value.push({
+      id: `service-${Date.now()}`,
+      type: formData.type,
+      name: formData.name,
+      price: formData.price,
+      status: formData.status
+    })
+  }
+
+  writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
+  dialogVisible.value = false
+  successToast(toast, editingId.value ? "Service updated" : "Service added")
+}
+
+const confirmDelete = (service: SingleService): void => {
+  if (!isLocalEditableService(service)) {
+    errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
+    return
+  }
+
+  confirm.require({
+    message: `Delete "${service.name}"?`,
+    header: "Confirm",
+    icon: "pi pi-exclamation-triangle",
+    accept: () => {
+      customServices.value = customServices.value.filter(s => s.id !== service.id)
+      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
+      successToast(toast, "Service deleted")
+    }
+  })
+}
+
+const loadBundles = (): void => {
+  try {
+    allBundles.value = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
+  } catch {
+    allBundles.value = []
+  }
+}
+
+const openAddBundleDialog = (): void => {
+  editingBundleId.value = null
+  bundleFormData.name = ""
+  bundleFormData.machineIds = []
+  bundleFormData.techniqueIds = []
+  bundleFormData.evaluationIds = []
+  bundleFormData.addOnIds = []
+  bundleFormData.bundledPrice = 0
+  bundleFormData.status = "Active"
+  bundleDialogVisible.value = true
+}
+
+const openEditBundleDialog = (bundle: BundledService): void => {
+  editingBundleId.value = bundle.id
+  bundleFormData.name = bundle.name
+  bundleFormData.machineIds = [...bundle.machineIds]
+  bundleFormData.techniqueIds = [...bundle.techniqueIds]
+  bundleFormData.evaluationIds = [...bundle.evaluationIds]
+  bundleFormData.addOnIds = []
+  bundleFormData.bundledPrice = bundle.bundledPrice
+  bundleFormData.status = bundle.status
+  bundleDialogVisible.value = true
+}
+
+const saveBundle = (): void => {
+  if (!bundleFormData.name.trim()) {
+    errorToast(toast, "Bundle name is required")
+    return
+  }
+  const total = bundleFormData.machineIds.length + bundleFormData.techniqueIds.length + bundleFormData.evaluationIds.length
+  if (total === 0) {
+    errorToast(toast, "Add at least one machine, technique, or evaluation")
+    return
+  }
+  if (bundleFormData.bundledPrice < 0) {
+    errorToast(toast, "Bundled price must be 0 or greater")
+    return
+  }
+
+  if (editingBundleId.value) {
+    const index = allBundles.value.findIndex(b => b.id === editingBundleId.value)
+    if (index >= 0) {
+      allBundles.value[index] = {
+        id: editingBundleId.value,
+        name: bundleFormData.name,
+        machineIds: [...bundleFormData.machineIds],
+        techniqueIds: [...bundleFormData.techniqueIds],
+        evaluationIds: [...bundleFormData.evaluationIds],
+        addOnIds: [],
+        bundledPrice: bundleFormData.bundledPrice,
+        status: bundleFormData.status
+      }
+    }
+  } else {
+    allBundles.value.push({
+      id: `bundle-${Date.now()}`,
+      name: bundleFormData.name,
+      machineIds: [...bundleFormData.machineIds],
+      techniqueIds: [...bundleFormData.techniqueIds],
+      evaluationIds: [...bundleFormData.evaluationIds],
+      addOnIds: [],
+      bundledPrice: bundleFormData.bundledPrice,
+      status: bundleFormData.status
+    })
+  }
+
+  writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
+  bundleDialogVisible.value = false
+  successToast(toast, editingBundleId.value ? "Bundle updated" : "Bundle added")
+}
+
+const confirmDeleteBundle = (bundle: BundledService): void => {
+  confirm.require({
+    message: `Delete bundle "${bundle.name}"?`,
+    header: "Confirm",
+    icon: "pi pi-exclamation-triangle",
+    accept: () => {
+      allBundles.value = allBundles.value.filter(b => b.id !== bundle.id)
+      writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
+      successToast(toast, "Bundle deleted")
+    }
+  })
+}
+
+onMounted(() => {
+  loadServices()
+})
+</script>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from "vue"
+import Button from "primevue/button"
+import Column from "primevue/column"
+import ConfirmDialog from "primevue/confirmdialog"
+import DataTable from "primevue/datatable"
+import Dialog from "primevue/dialog"
+import IftaLabel from "primevue/iftalabel"
+import InputNumber from "primevue/inputnumber"
+import InputText from "primevue/inputtext"
+import Message from "primevue/message"
+import Select from "primevue/select"
+import MultiSelect from "primevue/multiselect"
+import Tag from "primevue/tag"
+import { useConfirm } from "primevue/useconfirm"
+import { useToast } from "primevue/usetoast"
+import { errorToast, successToast } from "@/utils/toast.util"
+import {
+  BUNDLED_SERVICES_KEY,
+  SINGLE_PAY_SERVICES_KEY,
+  readPromosStorageArray,
+  writePromosStorageArray
+} from "@/features/promos-offers/composables/promos-storage.composable"
+import {
+  isLocalEditablePromosService,
+  loadBackendPromosMasterCatalog,
+  normalizePromosServiceName,
+  partitionPromosCustomServices,
+  remapLegacyPromosServiceId
+} from "@/features/promos-offers/composables/promos-master-catalog.composable"
+
+type ServiceType = "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service"
+
+interface SingleService {
+  id: string
+  type: ServiceType
+  name: string
+  price: number
+  status: string
+}
+
+interface BundledService {
+  id: string
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds?: string[]
+  bundledPrice: number
+  status: string
+}
+
+type ServiceCatalogFilter = "machine" | "technique" | "evaluation" | "add-ons"
+
+type ServiceCatalogMatrixRow = {
+  key: number
+  machine?: SingleService
+  technique?: SingleService
+  evaluation?: SingleService
+  addOns?: SingleService
+}
+
+const toast = useToast()
+const confirm = useConfirm()
+const isLoading = ref(false)
+const dialogVisible = ref(false)
+const editingId = ref<string | null>(null)
+
+const customServices = ref<SingleService[]>([])
+const machineServices = ref<SingleService[]>([])
+const techniqueServices = ref<SingleService[]>([])
+const allBundles = ref<BundledService[]>([])
+const selectedServiceCatalogFilters = ref<ServiceCatalogFilter[]>([])
+
+const allServices = computed<SingleService[]>(() => [
+  ...machineServices.value,
+  ...techniqueServices.value,
+  ...customServices.value
+])
+
+// Bundle dialog state
+const bundleDialogVisible = ref(false)
+const editingBundleId = ref<string | null>(null)
+const bundleFormData = reactive<{
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds: string[]
+  bundledPrice: number
+  status: string
+}>({
+  name: "",
+  machineIds: [],
+  techniqueIds: [],
+  evaluationIds: [],
+  addOnIds: [],
+  bundledPrice: 0,
+  status: "Active"
+})
+
+const getServiceName = (id: string): string =>
+  allServices.value.find(s => s.id === id)?.name ?? id
+
+const calcOriginalPrice = (bundle: BundledService): number => {
+  const ids = [...bundle.machineIds, ...bundle.techniqueIds, ...bundle.evaluationIds]
+  return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
+}
+
+const bundlePreviewOriginalPrice = computed(() => {
+  const ids = [...bundleFormData.machineIds, ...bundleFormData.techniqueIds, ...bundleFormData.evaluationIds]
+  return ids.reduce((sum, id) => sum + (allServices.value.find(s => s.id === id)?.price ?? 0), 0)
+})
+
+const typeOptions = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluations", value: "evaluation" },
+  { label: "Add-ons", value: "add-on-machine" },
+  { label: "Add-on (Home Service)", value: "add-on-home-service" }
+]
+
+const serviceCatalogFilterOptions: Array<{label: string; value: ServiceCatalogFilter}> = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluation", value: "evaluation" },
+  { label: "Add-Ons", value: "add-ons" }
+]
+
+const normalizeServiceCatalogFilter = (type: ServiceType): ServiceCatalogFilter => {
+  if (type === "machine") return "machine"
+  if (type === "technique") return "technique"
+  if (type === "evaluation") return "evaluation"
+  return "add-ons"
+}
+
+const serviceCatalogBuckets = computed(() => ({
+  machine: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "machine"),
+  technique: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "technique"),
+  evaluation: allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "evaluation"),
+  "add-ons": allServices.value.filter(service => normalizeServiceCatalogFilter(service.type) === "add-ons")
+}))
+
+const hasServiceCatalogFilters = computed(() => selectedServiceCatalogFilters.value.length > 0)
+
+const filteredServiceCatalogItems = computed(() =>
+  allServices.value.filter(service => selectedServiceCatalogFilters.value.includes(normalizeServiceCatalogFilter(service.type)))
+)
+
+const serviceCatalogMatrixRows = computed<ServiceCatalogMatrixRow[]>(() => {
+  const buckets = serviceCatalogBuckets.value
+  const maxRows = Math.max(
+    buckets.machine.length,
+    buckets.technique.length,
+    buckets.evaluation.length,
+    buckets["add-ons"].length,
+    0
+  )
+
+  return Array.from({ length: maxRows }, (_, index) => ({
+    key: index + 1,
+    machine: buckets.machine[index],
+    technique: buckets.technique[index],
+    evaluation: buckets.evaluation[index],
+    addOns: buckets["add-ons"][index]
+  }))
+})
+
+const toggleServiceCatalogFilter = (filter: ServiceCatalogFilter): void => {
+  selectedServiceCatalogFilters.value = selectedServiceCatalogFilters.value.includes(filter)
+    ? selectedServiceCatalogFilters.value.filter(entry => entry !== filter)
+    : [...selectedServiceCatalogFilters.value, filter]
+}
+
+const clearServiceCatalogFilters = (): void => {
+  selectedServiceCatalogFilters.value = []
+}
+
+const isLocalEditableService = (service: SingleService): boolean => isLocalEditablePromosService(service)
+
+const remapBundleIdsToBackendCatalog = (bundles: BundledService[], legacyServices: SingleService[]): BundledService[] => {
+  if (!bundles.length) return bundles
+
+  const machineByName = new Map(machineServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+  const techniqueByName = new Map(techniqueServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
+
+  const legacyById = new Map(legacyServices.map(service => [service.id, service]))
+
+  const remapIds = (
+    ids: string[],
+    serviceType: "machine" | "technique",
+    backendByName: Map<string, string>
+  ): string[] => {
+    return ids
+      .map((id) => {
+        return remapLegacyPromosServiceId(id, serviceType, backendByName, legacyById)
+      })
+      .filter((id, index, array) => array.indexOf(id) === index)
+  }
+
+  return bundles.map(bundle => ({
+    ...bundle,
+    machineIds: remapIds(bundle.machineIds, "machine", machineByName),
+    techniqueIds: remapIds(bundle.techniqueIds, "technique", techniqueByName)
+  }))
+}
+
+const formData = reactive<{
+  type: ServiceType
+  name: string
+  price: number
+  status: string
+}>({
+  type: "evaluation",
+  name: "",
+  price: 0,
+  status: "Active"
+})
+
+const asCurrency = (value: number): string =>
+  Number(value ?? 0).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
+
+const serviceNamePlaceholder = computed(() => {
+  if (formData.type === "machine") return "Example: Ultrasound Machine, Traction Device"
+  if (formData.type === "technique") return "Example: Manual Therapy, Hot Compress"
+  if (formData.type === "add-on-home-service") return "Example: Add-on: Home Service - 1 km"
+  return "Enter service name"
+})
+
+const serviceTypeGuidance = computed(() => {
+  if (formData.type === "machine") {
+    return "Create a physical therapy machine/equipment that can be assigned to sessions and bundled with techniques."
+  }
+  if (formData.type === "technique") {
+    return "Create a treatment technique that can be paired with machines and assigned to sessions."
+  }
+  if (formData.type === "add-on-home-service") {
+    return "Home Service add-ons are used for travel tiers and will mark Appointments as Home Care when selected."
+  }
+  if (formData.type === "add-on-machine") {
+    return "Use this for regular add-ons that should stay under the Add-ons picker."
+  }
+  return "Choose a clear service name so staff can find it quickly during booking and billing

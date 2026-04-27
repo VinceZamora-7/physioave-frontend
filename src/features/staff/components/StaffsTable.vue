@@ -107,7 +107,7 @@ import { useClipboard } from "@vueuse/core"
 import DataTable from "primevue/datatable"
 import Column from "primevue/column"
 import Tag from "primevue/tag"
-import { Paginator } from "primevue"
+import Paginator from "primevue/paginator"
 
 import SkeletonLoader from "@/composables/SkeletonLoader.vue"
 import type { Pageable } from "@/models/paging"

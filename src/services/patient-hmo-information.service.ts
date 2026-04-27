@@ -1,5 +1,6 @@
 import type {
   PatientHMOInformation,
+  PatientHMOInformationHistoryEntry,
   PatientHMOInformationPayload,
   PatientHMOInformationRequest
 } from "@/models/hmo-information.ts";
@@ -14,6 +15,8 @@ interface PatientHMOInformationService {
   updateByPatientId(payload: PatientHMOInformationPayload): Promise<void | undefined>
 
   getByPatientId(patientId: number): Promise<PatientHMOInformation | undefined>
+
+  getHistoryByPatientId(patientId: number): Promise<PatientHMOInformationHistoryEntry[]>
 }
 
 export const patientHMOInformationService: PatientHMOInformationService = {
@@ -24,6 +27,17 @@ export const patientHMOInformationService: PatientHMOInformationService = {
       return response
     } catch (error: unknown) {
       errorHandler(error)
+      return undefined
+    }
+  },
+
+  async getHistoryByPatientId(patientId: number): Promise<PatientHMOInformationHistoryEntry[]> {
+    try {
+      const {data: response} = await pamsAPI.get<PatientHMOInformationHistoryEntry[]>(`/${ResourceKey.PATIENTS}/${patientId}/${ResourceKey.HMO_INFORMATION}/history`)
+      return response ?? []
+    } catch (error: unknown) {
+      errorHandler(error)
+      return []
     }
   },
 
@@ -34,6 +48,7 @@ export const patientHMOInformationService: PatientHMOInformationService = {
       return response
     } catch (error: unknown) {
       errorHandler(error)
+      return undefined
     }
   },
 
@@ -44,6 +59,7 @@ export const patientHMOInformationService: PatientHMOInformationService = {
       return response
     } catch (error: unknown) {
       errorHandler(error)
+      return undefined
     }
   }
 

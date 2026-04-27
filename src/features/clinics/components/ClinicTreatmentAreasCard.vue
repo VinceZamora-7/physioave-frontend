@@ -1,7 +1,7 @@
 <template>
   <section class="app-section-card-comfy mt-4 space-y-6">
 
-    <header class="rounded-3xl border border-[#A91D8B]/15 bg-[linear-gradient(120deg,rgba(36,39,87,0.03),rgba(169,29,139,0.08))] p-5 shadow-sm sm:p-6">
+    <header class="app-hero-banner sm:p-6">
       <div class="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
         <div class="space-y-2">
           <div class="flex items-center gap-2">
@@ -15,7 +15,7 @@
             Define and manage rooms for appointment scheduling and color-coded calendar views.
           </p>
         </div>
-        
+
         <div class="flex items-center gap-3">
           <Button
             v-if="selectedClinic"
@@ -59,19 +59,19 @@
       </div>
 
       <div class="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        
+
         <div class="lg:col-span-8 space-y-4">
           <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-[rgb(var(--app-bg))] p-2 rounded-2xl border border-[rgb(var(--app-border))] shadow-sm">
             <div class="relative flex-1">
               <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-[rgb(var(--app-fg))]/30" />
-              <InputText 
-                v-model="searchTerm" 
-                placeholder="Search by room name..." 
+              <InputText
+                v-model="searchTerm"
+                placeholder="Search by room name..."
                 class="w-full !border-none !bg-transparent !pl-10 focus:!ring-0"
                 :pt="ptInputText"
               />
             </div>
-            
+
             <div class="flex items-center gap-1 bg-[rgb(var(--app-fg))]/5 p-1 rounded-xl">
               <button
                 v-for="opt in statusFilterOptions"
@@ -132,11 +132,11 @@
                 <template #body="{ data }">
                   <div class="flex justify-end gap-1">
                     <Button icon="pi pi-pencil" text rounded size="small" @click="openEdit(data)" />
-                    <Button 
-                      :icon="data.is_active ? 'pi pi-ban' : 'pi pi-check-circle'" 
-                      :severity="data.is_active ? 'danger' : 'success'" 
-                      text rounded size="small" 
-                      @click="confirmToggleStatus(data)" 
+                    <Button
+                      :icon="data.is_active ? 'pi pi-ban' : 'pi pi-check-circle'"
+                      :severity="data.is_active ? 'danger' : 'success'"
+                      text rounded size="small"
+                      @click="confirmToggleStatus(data)"
                     />
                   </div>
                 </template>
@@ -148,7 +148,7 @@
         <aside class="lg:col-span-4 lg:sticky lg:top-6 h-fit">
           <div v-if="activeTreatmentArea" class="space-y-4 rounded-3xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-6 shadow-md">
             <h3 class="text-xs font-black uppercase tracking-[0.2em] text-[rgb(var(--app-fg))]/40">Selected Area</h3>
-            
+
             <div class="flex flex-col items-center py-6 text-center">
               <div class="mb-4 h-20 w-20 rounded-3xl border-4 border-white shadow-xl" :style="{ backgroundColor: activeTreatmentArea.color }" />
               <h4 class="text-2xl font-bold">{{ activeTreatmentArea.name }}</h4>
@@ -270,7 +270,8 @@ import DataTable from "primevue/datatable"
 import Dialog from "primevue/dialog"
 import InputText from "primevue/inputtext"
 import Tag from "primevue/tag"
-import { useConfirm, useToast } from "primevue"
+import { useConfirm } from "primevue/useconfirm"
+import { useToast } from "primevue/usetoast"
 
 import type { Clinic } from "@/features/clinics/types/clinic"
 import { clinicTreatmentAreaService } from "@/features/clinics/api/clinic-treatment-area.service"
@@ -302,23 +303,23 @@ const selectedTreatmentArea = ref<TreatmentArea>()
 
   // Improved Computed Property for Stats
 const statsCards = computed(() => [
-  { 
-    label: "Total Areas", 
-    value: summary.value.total, 
-    icon: "pi pi-box", 
-    class: "bg-white border-[rgb(var(--app-border))] text-[rgb(var(--app-fg))]" 
+  {
+    label: "Total Areas",
+    value: summary.value.total,
+    icon: "pi pi-box",
+    class: "bg-white border-[rgb(var(--app-border))] text-[rgb(var(--app-fg))]"
   },
-  { 
-    label: "Operational", 
-    value: summary.value.active, 
-    icon: "pi pi-check-circle", 
-    class: "bg-emerald-50 border-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/20" 
+  {
+    label: "Operational",
+    value: summary.value.active,
+    icon: "pi pi-check-circle",
+    class: "bg-emerald-50 border-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/20"
   },
-  { 
-    label: "Inactive", 
-    value: summary.value.inactive, 
-    icon: "pi pi-eye-slash", 
-    class: "bg-slate-50 border-slate-200 text-slate-600 dark:bg-slate-500/10 dark:border-slate-500/20" 
+  {
+    label: "Inactive",
+    value: summary.value.inactive,
+    icon: "pi pi-eye-slash",
+    class: "bg-slate-50 border-slate-200 text-slate-600 dark:bg-slate-500/10 dark:border-slate-500/20"
   }
 ])
 

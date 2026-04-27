@@ -1,12 +1,17 @@
 <template>
   <main class="app-page-shell space-y-5">
     <section class="app-section-card-comfy space-y-3">
-      <div class="flex items-center justify-between gap-2">
+      <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h2 class="app-section-title">Dashboard</h2>
           <p class="text-sm opacity-70">Clinic overview, trends, and operational report snapshot</p>
         </div>
-        <Button label="Refresh" icon="pi pi-refresh" severity="secondary" outlined :loading="isLoading" @click="refreshDashboard" />
+        <div class="flex flex-wrap items-end gap-2">
+          <span class="rounded-full border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] px-3 py-2 text-xs opacity-80">
+            Branch: {{ selectedClinic?.name || "All branches" }}
+          </span>
+          <Button label="Refresh" icon="pi pi-refresh" severity="secondary" outlined :loading="isLoading" @click="refreshDashboard" />
+        </div>
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
@@ -132,15 +137,17 @@
 </template>
 
 <script setup lang="ts">
-import {computed, ref} from "vue"
+import {computed, onMounted, ref, watch} from "vue"
+import {storeToRefs} from "pinia"
 import Button from "primevue/button"
 import Column from "primevue/column"
 import DataTable from "primevue/datatable"
 import Tag from "primevue/tag"
 import {errorToast} from "@/utils/toast.util"
-import {useToast} from "primevue"
+import {useToast} from "primevue/usetoast"
 import {
   dashboardService,
+  type DashboardConfidentialRevenue,
   type DashboardDistributionItem,
   type DashboardRecentAppointment,
   type DashboardTrendItem,
@@ -151,9 +158,12 @@ import {
   type PtCompletedSessionsItem,
   type ReferringDoctorCompletedSessionsItem,
 } from "@/features/appointments/api/appointment-phase1.service"
+import { clinicStore } from "@/stores/clinic.store"
 
 const toast = useToast()
 const isLoading = ref(false)
+const globalClinicStore = clinicStore()
+const { selectedClinicId, selectedClinic } = storeToRefs(globalClinicStore)
 
 const metrics = ref({
   monthlyTotalAppointments: 0,
@@ -184,34 +194,55 @@ const billingDistribution = ref<Array<{
   percent: number
   color: string
 }>>([
-  {label: "UNBILLED", count: 0, percent: 0, color: "rgb(96 165 250)"},
-  {label: "PENDING", count: 0, percent: 0, color: "rgb(251 191 36)"},
-  {label: "PARTIAL", count: 0, percent: 0, color: "rgb(251 146 60)"},
-  {label: "PAID", count: 0, percent: 0, color: "rgb(74 222 128)"},
+  {label: "Unbilled", count: 0, percent: 0, color: "rgb(96 165 250)"},
+  {label: "Pending", count: 0, percent: 0, color: "rgb(251 191 36)"},
+  {label: "Partial", count: 0, percent: 0, color: "rgb(251 146 60)"},
+  {label: "Paid", count: 0, percent: 0, color: "rgb(74 222 128)"},
 ])
 
 const recentAppointments = ref<DashboardRecentAppointment[]>([])
 const ptPerformance = ref<Array<{pt_name: string; bookings: number; documentationReminderCount: number; redAlertCount: number}>>([])
 const referringDoctorSummary = ref<ReferringDoctorCompletedSessionsItem[]>([])
+const canViewConfidentialRevenueCards = ref(false)
 
 const formatDateTime = (value: string): string => new Date(value).toLocaleString()
 const formatCurrency = (value: number): string =>
   new Intl.NumberFormat("en-PH", {style: "currency", currency: "PHP", maximumFractionDigits: 0}).format(value || 0)
 
-const kpiCards = computed(() => ([
-  {label: "Monthly Total Appointments", value: metrics.value.monthlyTotalAppointments},
-  {label: "Active Patients", value: metrics.value.activePatients},
-  {label: "Appointments Today", value: metrics.value.appointmentsToday},
-  {label: "Rescheduling/Cancellation Index", value: `${metrics.value.rescheduleCancellationIndex}%`},
-  {label: "HMO (Bookings) Monthly Total", value: metrics.value.hmoBookingsMonthlyTotal},
-  {label: "LGU (Bookings) Monthly Total", value: metrics.value.lguBookingsMonthlyTotal},
-  {label: "Pending Billings", value: metrics.value.pendingBillings},
-  {label: "Paid Billings", value: metrics.value.paidBillings},
-  {label: "HMO Revenue", value: formatCurrency(metrics.value.hmoRevenue)},
-  {label: "LGU Revenue", value: formatCurrency(metrics.value.lguRevenue)},
-  {label: "Online Marketing Revenue", value: formatCurrency(metrics.value.onlineMarketingRevenue)},
-  {label: "Direct Marketing Revenue", value: formatCurrency(metrics.value.directMarketingRevenue)},
-]))
+const kpiCards = computed(() => {
+  const cards = [
+    {label: "Monthly Total Appointments", value: metrics.value.monthlyTotalAppointments},
+    {label: "Active Patients", value: metrics.value.activePatients},
+    {label: "Appointments Today", value: metrics.value.appointmentsToday},
+    {label: "Rescheduling/Cancellation Index", value: `${metrics.value.rescheduleCancellationIndex}%`},
+    {label: "HMO (Bookings) Monthly Total", value: metrics.value.hmoBookingsMonthlyTotal},
+    {label: "LGU (Bookings) Monthly Total", value: metrics.value.lguBookingsMonthlyTotal},
+    {label: "Pending Billings", value: metrics.value.pendingBillings},
+    {label: "Paid Billings", value: metrics.value.paidBillings},
+    {label: "HMO Revenue", value: formatCurrency(metrics.value.hmoRevenue)},
+  ]
+
+  if (canViewConfidentialRevenueCards.value) {
+    cards.push(
+      {label: "LGU Revenue", value: formatCurrency(metrics.value.lguRevenue)},
+      {label: "Online Marketing Revenue", value: formatCurrency(metrics.value.onlineMarketingRevenue)},
+      {label: "Direct Marketing Revenue", value: formatCurrency(metrics.value.directMarketingRevenue)},
+    )
+  }
+
+  return cards
+})
+
+const loadConfidentialRevenue = async (): Promise<void> => {
+  const result: DashboardConfidentialRevenue | undefined = await dashboardService.getConfidentialRevenue(selectedClinicId.value)
+  canViewConfidentialRevenueCards.value = true
+  metrics.value = {
+    ...metrics.value,
+    lguRevenue: Number(result?.lgu_revenue ?? 0),
+    onlineMarketingRevenue: Number(result?.online_marketing_revenue ?? 0),
+    directMarketingRevenue: Number(result?.direct_marketing_revenue ?? 0),
+  }
+}
 
 const getMonthRange = (): {from: string; to: string; days: number} => {
   const now = new Date()
@@ -228,12 +259,13 @@ const containsLgu = (name?: string): boolean => String(name ?? "").toUpperCase()
 
 const loadMetrics = async (): Promise<void> => {
   const monthRange = getMonthRange()
+  const clinicId = selectedClinicId.value
   const [summaryResult, monthlyTrendResult, monthBillingsResult, monthHmoBillingsResult, monthAppointmentsResult] = await Promise.allSettled([
-    dashboardService.getSummary(),
-    dashboardService.getAppointmentTrend(monthRange.days),
-    billingPhase1Service.getAll({page: 1, size: 500, from_date: monthRange.from, to_date: monthRange.to}),
-    billingPhase1Service.getAll({page: 1, size: 500, service_type: "HMO", from_date: monthRange.from, to_date: monthRange.to}),
-    appointmentPhase1Service.getAll({page: 1, size: 500}),
+    dashboardService.getSummary(clinicId),
+    dashboardService.getAppointmentTrend(monthRange.days, clinicId),
+    billingPhase1Service.getAll({page: 1, size: 500, from_date: monthRange.from, to_date: monthRange.to, ...(clinicId ? {clinic_id: clinicId} : {})}),
+    billingPhase1Service.getAll({page: 1, size: 500, service_type: "HMO", from_date: monthRange.from, to_date: monthRange.to, ...(clinicId ? {clinic_id: clinicId} : {})}),
+    appointmentPhase1Service.getAll({page: 1, size: 500, ...(clinicId ? {clinic_id: clinicId} : {})}),
   ])
 
   const summary = summaryResult.status === "fulfilled" ? summaryResult.value : undefined
@@ -257,7 +289,6 @@ const loadMetrics = async (): Promise<void> => {
 
   const paidRows = billingRows.filter(item => String(item.billing_status).toUpperCase() === "PAID")
   const lguRows = billingRows.filter(item => containsLgu(item.package_name) || containsLgu(item.service_name))
-  const lguPaidRows = paidRows.filter(item => containsLgu(item.package_name) || containsLgu(item.service_name))
 
   metrics.value = {
     monthlyTotalAppointments: (monthlyTrend ?? []).reduce((sum, item) => sum + item.count, 0),
@@ -269,15 +300,16 @@ const loadMetrics = async (): Promise<void> => {
     pendingBillings: summary?.pending_billings ?? 0,
     paidBillings: summary?.paid_billings_month_to_date ?? paidRows.length,
     hmoRevenue: hmoRows.reduce((sum, item) => sum + Number(item.amount_paid || 0), 0),
-    lguRevenue: lguPaidRows.reduce((sum, item) => sum + Number(item.amount_paid || 0), 0),
-    onlineMarketingRevenue: 0,
-    directMarketingRevenue: 0,
+    lguRevenue: metrics.value.lguRevenue,
+    onlineMarketingRevenue: metrics.value.onlineMarketingRevenue,
+    directMarketingRevenue: metrics.value.directMarketingRevenue,
   }
 }
 
 const loadPtPerformance = async (): Promise<void> => {
   const monthRange = getMonthRange()
-  const report = await appointmentPhase1Service.getCompletedSessionsByPt(monthRange.from, monthRange.to)
+  const clinicId = selectedClinicId.value
+  const report = await appointmentPhase1Service.getCompletedSessionsByPt(monthRange.from, monthRange.to, clinicId)
   const rows: PtCompletedSessionsItem[] = report?.physical_therapists ?? []
   ptPerformance.value = rows
     .map(item => ({
@@ -291,7 +323,8 @@ const loadPtPerformance = async (): Promise<void> => {
 
 const loadReferringDoctorSummary = async (): Promise<void> => {
   const monthRange = getMonthRange()
-  const report = await appointmentPhase1Service.getCompletedSessionsByReferringDoctor(monthRange.from, monthRange.to)
+  const clinicId = selectedClinicId.value
+  const report = await appointmentPhase1Service.getCompletedSessionsByReferringDoctor(monthRange.from, monthRange.to, clinicId)
   referringDoctorSummary.value = (report?.doctors ?? [])
     .map(item => ({
       ...item,
@@ -302,7 +335,7 @@ const loadReferringDoctorSummary = async (): Promise<void> => {
 }
 
 const loadTrend = async (): Promise<void> => {
-  const trend: DashboardTrendItem[] = (await dashboardService.getAppointmentTrend(7)) ?? []
+  const trend: DashboardTrendItem[] = (await dashboardService.getAppointmentTrend(7, selectedClinicId.value)) ?? []
   const maxCount = Math.max(1, ...trend.map(item => item.count))
 
   appointmentTrend.value = trend.map(item => {
@@ -319,19 +352,19 @@ const loadTrend = async (): Promise<void> => {
 
 const loadBillingDistribution = async (): Promise<void> => {
   const paletteByStatus: Record<string, string> = {
-    UNBILLED: "rgb(96 165 250)",
-    PENDING: "rgb(251 191 36)",
-    PARTIAL: "rgb(251 146 60)",
-    PAID: "rgb(74 222 128)",
+    Unbilled: "rgb(96 165 250)",
+    Pending: "rgb(251 191 36)",
+    Partial: "rgb(251 146 60)",
+    Paid: "rgb(74 222 128)",
   }
-  const defaults = ["UNBILLED", "PENDING", "PARTIAL", "PAID"]
-  const distribution: DashboardDistributionItem[] = (await dashboardService.getBillingDistribution()) ?? []
+  const defaults = ["Unbilled", "Pending", "Partial", "Paid"]
+  const distribution: DashboardDistributionItem[] = (await dashboardService.getBillingDistribution(selectedClinicId.value)) ?? []
 
   const indexed = new Map(distribution.map(item => [item.label.toUpperCase(), item.count]))
   const normalized = defaults.map(label => ({
     label,
     color: paletteByStatus[label],
-    count: indexed.get(label) ?? 0,
+    count: indexed.get(label.toUpperCase()) ?? 0,
   }))
 
   const total = Math.max(1, normalized.reduce((sum, item) => sum + item.count, 0))
@@ -342,7 +375,7 @@ const loadBillingDistribution = async (): Promise<void> => {
 }
 
 const loadRecentAppointments = async (): Promise<void> => {
-  recentAppointments.value = (await dashboardService.getRecentAppointments(8)) ?? []
+  recentAppointments.value = (await dashboardService.getRecentAppointments(8, selectedClinicId.value)) ?? []
 }
 
 const refreshDashboard = async (): Promise<void> => {
@@ -350,6 +383,7 @@ const refreshDashboard = async (): Promise<void> => {
     isLoading.value = true
     const results = await Promise.allSettled([
       loadMetrics(),
+      loadConfidentialRevenue(),
       loadTrend(),
       loadBillingDistribution(),
       loadRecentAppointments(),
@@ -357,11 +391,22 @@ const refreshDashboard = async (): Promise<void> => {
       loadReferringDoctorSummary(),
     ])
 
+    const confidentialRevenueResult = results[1]
+    if (confidentialRevenueResult.status === "rejected") {
+      canViewConfidentialRevenueCards.value = false
+      metrics.value = {
+        ...metrics.value,
+        lguRevenue: 0,
+        onlineMarketingRevenue: 0,
+        directMarketingRevenue: 0,
+      }
+    }
+
     const failedResults = results.filter(result => result.status === 'rejected')
     if (failedResults.length > 0) {
       console.warn('Some dashboard data failed to load:', failedResults)
-      // Only show error for critical failures (metrics and trend are most important)
-      const criticalFailures = failedResults.filter((_, index) => index < 2) // loadMetrics and loadTrend
+      // Only show error for critical failures (metrics and trend are most important).
+      const criticalFailures = [results[0], results[2]].filter(result => result.status === "rejected")
       if (criticalFailures.length > 0) {
         errorToast(toast, "Failed to load some dashboard data")
       }
@@ -371,5 +416,17 @@ const refreshDashboard = async (): Promise<void> => {
   }
 }
 
-void refreshDashboard()
+onMounted(async () => {
+  try {
+    await globalClinicStore.loadClinics()
+  } catch {
+    errorToast(toast, "Failed to load clinic list")
+  }
+  void refreshDashboard()
+})
+
+// Refresh dashboard when clinic selection changes
+watch(selectedClinicId, () => {
+  void refreshDashboard()
+})
 </script>

@@ -374,7 +374,8 @@ import InputNumber from "primevue/inputnumber"
 import InputText from "primevue/inputtext"
 import Select from "primevue/select"
 import Tag from "primevue/tag"
-import { useConfirm, useToast } from "primevue"
+import { useConfirm } from "primevue/useconfirm"
+import { useToast } from "primevue/usetoast"
 import {authMeService} from "@/services/auth-me.service"
 import { hmoMachineRateService } from "@/services/hmo-machine-rate.service"
 import { hmoService } from "@/services/hmo.service"
@@ -540,6 +541,8 @@ const ensureConfidentialAccess = (): boolean => {
 }
 
 const typeOptions = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
   { label: "Evaluations", value: "evaluation" },
   { label: "Add-Ons", value: "add-on-machine" }
 ]
@@ -1042,10 +1045,6 @@ const openEditDialog = (service: HmoService): void => {
 
 const saveService = (): void => {
   if (!ensureConfidentialAccess()) return
-  if (formData.type === "machine" || formData.type === "technique") {
-    errorToast(toast, "Machines and techniques are managed from their dedicated modules.")
-    return
-  }
 
   if (!formData.name.trim()) {
     errorToast(toast, "Service name is required")

@@ -2,13 +2,13 @@
   <main class="app-page-shell space-y-5">
     <section
       v-if="canSeeOperationsSetup"
-      class="rounded-3xl border border-[#A91D8B]/20 bg-[linear-gradient(120deg,rgba(36,39,87,0.12),rgba(94,24,105,0.08),rgba(169,29,139,0.12))] p-5 shadow-[0_18px_40px_rgba(36,39,87,0.08)]"
+      class="app-hero-banner"
     >
       <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div class="space-y-2">
-          <div class="text-lg font-semibold tracking-tight">Clinic Setup Center</div>
+          <div class="text-lg font-semibold tracking-tight">PT Team Setup</div>
           <p class="max-w-3xl text-sm text-[rgb(var(--app-fg))]/70">
-            Use one guided page to set up job titles, specialties, PTs, and clinic rooms without needing technical help.
+            Manage your PT team members, specialties, and clinic rooms. Job titles and access are pre-configured for standard PT workflows.
           </p>
           <div class="flex flex-wrap gap-2 text-xs text-[rgb(var(--app-fg))]/65">
             <span class="rounded-full border border-white/40 bg-white/60 px-3 py-1">
@@ -143,321 +143,246 @@
     </Message>
 
     <template v-if="canSeeOperationsSetup">
-      <section v-if="canSeeSetupGuide" class="app-section-card-comfy space-y-4" id="settings-setup-guide">
-        <div>
-          <h3 class="app-section-title">Start Here: Setup Flow</h3>
-          <p class="text-sm opacity-70">
-            Follow this order when setting up a new branch or refreshing your clinic workflow. Each step below turns complete once the required setup is available.
-          </p>
-        </div>
-
-        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4">
-          <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div class="text-xs uppercase tracking-wide opacity-60">Overall Progress</div>
-              <div class="mt-1 text-sm font-medium">{{ completedSetupSteps }}/3 setup steps completed</div>
-            </div>
-            <div class="w-full max-w-xl rounded-full bg-[rgb(var(--app-bg))] p-1">
-              <div
-                class="h-2 rounded-full bg-[linear-gradient(90deg,#0ea5e9,#10b981)] transition-all duration-300"
-                :style="{ width: `${setupProgressPercent}%` }"
-              />
-            </div>
-          </div>
-          <div class="mt-3 text-sm">
-            <span class="font-semibold">Next best action:</span>
-            <span>{{ nextSetupActionLabel }}</span>
-          </div>
-        </div>
-
-        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <article class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
-            <div class="text-xs uppercase tracking-wide opacity-55">Step 1</div>
-            <div class="mt-2 font-semibold">Set Job Titles and Access</div>
-            <p class="mt-1 text-sm opacity-70">
-              Decide which positions exist in the clinic and what each one is allowed to do.
-            </p>
-            <Tag class="mt-3" :value="setupStepStatusLabels.roles" :severity="setupStepStatusSeverities.roles" />
-          </article>
-
-          <article class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
-            <div class="text-xs uppercase tracking-wide opacity-55">Step 2</div>
-            <div class="mt-2 font-semibold">Add Specialties</div>
-            <p class="mt-1 text-sm opacity-70">
-              Create specialties like Neuro, Pediatric, Sports Rehab, or any branch-specific focus area.
-            </p>
-            <Tag class="mt-3" :value="setupStepStatusLabels.specialties" :severity="setupStepStatusSeverities.specialties" />
-          </article>
-
-          <article class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
-            <div class="text-xs uppercase tracking-wide opacity-55">Step 3</div>
-            <div class="mt-2 font-semibold">Assign PT Team Members</div>
-            <p class="mt-1 text-sm opacity-70">
-              Add PT staff, choose their job title, and assign their specialty so appointments are easier to book.
-            </p>
-            <Tag class="mt-3" :value="setupStepStatusLabels.staff" :severity="setupStepStatusSeverities.staff" />
-          </article>
-
-          <article class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
-            <div class="text-xs uppercase tracking-wide opacity-55">Step 4</div>
-            <div class="mt-2 font-semibold">Set Clinic Rooms</div>
-            <p class="mt-1 text-sm opacity-70">
-              Add the treatment areas or rooms available in each branch so appointments can be assigned correctly.
-            </p>
-          </article>
-        </div>
-
-        <div class="flex flex-wrap gap-2">
-          <Button
-            label="Open Step 1: Job Titles"
-            icon="pi pi-shield"
-            outlined
-            :pt="ptOutlinedBtn"
-            :disabled="!canManageRoleAccess"
-            @click="openRoleManager"
-          />
-          <Button
-            label="Open Step 2: Specialties"
-            icon="pi pi-bookmark"
-            outlined
-            :pt="ptOutlinedBtn"
-            :disabled="!canManageSpecialties"
-            @click="openSpecialtyManager"
-          />
-          <Button
-            label="Open Step 3: Add PT"
-            icon="pi pi-user-plus"
-            :pt="ptPrimaryBtn"
-            :disabled="!canManageStaff || !activePtRoles.length"
-            @click="openCreatePt"
-          />
-        </div>
-
-        <Message severity="info" :closable="false">
-          Highest-position accounts stay protected. Only an existing Owner can view, add, or update another Owner account. Use the Staffs page only when you need to manage Owner accounts.
-        </Message>
-      </section>
-
-      <section v-if="canSeeBranchScopeSection" class="app-section-card-comfy space-y-4" id="settings-branch-scope">
-        <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h3 class="app-section-title">Branch Scope</h3>
-            <p class="text-sm opacity-70">
-              Choose the clinic branch you want to work on before editing PTs and clinic rooms. Job titles and specialties can be reused across branches.
-            </p>
-          </div>
-
-          <div class="flex flex-wrap items-end gap-2">
-            <IftaLabel class="min-w-[280px]">
-              <Select
-                v-model="selectedClinicId"
-                :options="clinics"
-                optionLabel="name"
-                optionValue="id"
-                filter
-                fluid
-                placeholder="Select clinic"
-                :disabled="isInitializing || !clinics.length"
-                :pt="ptSelect"
-              />
-              <label>Clinic Branch</label>
-            </IftaLabel>
-            <Button label="Refresh" icon="pi pi-refresh" outlined :pt="ptOutlinedBtn" :loading="isRefreshing" @click="refreshAll" />
-          </div>
-        </div>
-      </section>
-
       <div class="space-y-5">
-        <section v-if="canSeeRoleAccessSection" class="app-section-card-comfy space-y-4" id="settings-step-roles">
-          <div>
-            <h3 class="app-section-title">Step 1: Job Titles and Access</h3>
-            <p class="text-sm opacity-70">
-              Create plain-language job titles, decide whether they are used in appointments, and choose whether that title requires a specialty.
-            </p>
-          </div>
-
-          <div class="space-y-3">
-            <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
-              <div class="text-xs uppercase tracking-wide opacity-60">Current Job Titles</div>
-              <div class="mt-3 space-y-2">
-                <div
-                  v-for="role in orderedRoles"
-                  :key="role.id"
-                  class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-3 py-2"
-                >
-                  <div class="flex flex-wrap items-start justify-between gap-2">
-                    <div class="font-medium">{{ role.name }}</div>
-                    <div class="flex flex-wrap gap-2">
-                      <Tag :value="roleAppointmentUsageLabel(role)" :severity="roleAppointmentUsageSeverity(role)" />
-                      <Tag :value="roleSpecialtyLabel(role)" :severity="roleSpecialtySeverity(role)" />
-                      <Tag :value="roleStatusLabel(role)" :severity="roleStatusSeverity(role)" />
-                    </div>
-                  </div>
-                  <div class="mt-1 text-xs opacity-65">
-                    {{ roleAppointmentHelpText(role) }}
-                  </div>
-                </div>
-                <div v-if="!orderedRoles.length" class="text-sm opacity-70">
-                  No job titles configured yet.
-                </div>
-              </div>
-            </div>
-
-            <Button
-              label="Open Job Titles and Access"
-              icon="pi pi-shield"
-              :pt="ptPrimaryBtn"
-              :disabled="!canManageRoleAccess"
-              @click="openRoleManager"
-            />
-          </div>
-
-          <Message v-if="!canManageRoleAccess" severity="info" :closable="false">
-            Only roles with job-title and access permissions can change these setup rules.
-          </Message>
-        </section>
-
-        <section v-if="canSeeSpecialtiesSection" class="app-section-card-comfy space-y-4" id="settings-step-specialties">
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <section v-if="canSeePtDirectorySection" class="app-section-card-comfy space-y-4" id="settings-pt-directory">
+          <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <h3 class="app-section-title">Step 2: Specialty Directory</h3>
+              <h3 class="app-section-title">PT Team Directory</h3>
               <p class="text-sm opacity-70">
-                Maintain specialties used by PTs and appointment booking, such as Neuro, Pediatric, and Sports Rehab.
+                Add and maintain physical therapists for the selected clinic. Specialty assignments here will appear in appointment booking.
               </p>
             </div>
-            <Button
-              label="Manage Specialties"
-              icon="pi pi-bookmark"
-              outlined
-              :pt="ptOutlinedBtn"
-              :disabled="!canManageSpecialties"
-              @click="openSpecialtyManager"
-            />
-          </div>
-
-          <div class="flex flex-wrap gap-2 text-xs">
-            <span class="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-800">
-              Active: {{ specialtySummary.active }}
-            </span>
-            <span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
-              Inactive: {{ specialtySummary.inactive }}
-            </span>
-          </div>
-
-          <div class="space-y-2">
-            <div
-              v-for="specialty in orderedSpecialties"
-              :key="specialty.id"
-              class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-3 py-2"
-            >
-              <div class="flex items-center justify-between gap-2">
-                <div class="font-medium">{{ specialty.name }}</div>
-                <Tag :value="specialtyStatusLabel(specialty)" :severity="specialtyStatusSeverity(specialty)" />
-              </div>
+            <div class="flex flex-wrap gap-2">
+              <Button
+                label="Add PT"
+                icon="pi pi-plus"
+                :pt="ptPrimaryBtn"
+                :disabled="!canManageStaff || !activePtRoles.length"
+                @click="openCreatePt"
+              />
             </div>
-            <span v-if="!orderedSpecialties.length" class="text-sm opacity-70">No specialties configured yet.</span>
           </div>
 
-          <Message v-if="!canManageSpecialties" severity="info" :closable="false">
-            Specialty updates are locked until this role is granted reference create or update permission.
+          <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+            <IftaLabel>
+              <InputText
+                v-model="ptSearch"
+                fluid
+                placeholder="Search PT by name, email, specialty, or job title"
+                :pt="ptInputText"
+              />
+              <label>Search PTs</label>
+            </IftaLabel>
+            <IftaLabel>
+              <Select
+                v-model="ptStatusFilter"
+                :options="ptStatusOptions"
+                optionLabel="label"
+                optionValue="value"
+                fluid
+                :pt="ptSelect"
+              />
+              <label>Status</label>
+            </IftaLabel>
+          </div>
+
+          <DataTable
+            :value="filteredPtStaffs"
+            :loading="isStaffLoading"
+            dataKey="id"
+            size="small"
+            scrollable
+            scrollHeight="420px"
+          >
+            <template #empty>
+              <div class="py-8 text-center text-sm opacity-70">
+                No physical therapist records match this branch and filter.
+              </div>
+            </template>
+            <Column field="name" header="PT Name" />
+            <Column field="email" header="Email" />
+            <Column field="role_name" header="Job Title">
+              <template #body="{ data }">
+                {{ resolvePtRoleName(data) }}
+              </template>
+            </Column>
+            <Column field="specialty_tag_name" header="Specialty">
+              <template #body="{ data }">
+                {{ resolvePtSpecialtyName(data) }}
+              </template>
+            </Column>
+            <Column field="is_active" header="Status">
+              <template #body="{ data }">
+                <Tag :value="data.is_active ? 'Active' : 'Inactive'" :severity="data.is_active ? 'success' : 'secondary'" />
+              </template>
+            </Column>
+            <Column v-if="canManageStaff" header="Actions">
+              <template #body="{ data }">
+                <div class="flex flex-wrap gap-2">
+                  <Button size="small" text icon="pi pi-pencil" label="Edit" @click="openEditPt(data)" />
+                  <Button
+                    size="small"
+                    text
+                    :severity="data.is_active ? 'danger' : 'success'"
+                    :icon="data.is_active ? 'pi pi-times-circle' : 'pi pi-refresh'"
+                    :label="data.is_active ? 'Deactivate' : 'Activate'"
+                    @click="confirmTogglePtStatus(data)"
+                  />
+                </div>
+              </template>
+            </Column>
+          </DataTable>
+
+          <Message v-if="!canManageStaff" severity="info" :closable="false">
+            PT records are visible here, but your account does not currently have staff create or update permission.
+          </Message>
+          <Message v-else-if="!activePtRoles.length" severity="warn" :closable="false">
+            No active PT job title found. Set up at least one in the PT Job Titles section below.
           </Message>
         </section>
 
-        <section v-if="canSeePtDirectorySection" class="app-section-card-comfy space-y-4" id="settings-step-staff">
-            <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div v-if="canSeeSpecialtiesSection || canSeeRoleAccessSection" class="grid gap-5 xl:grid-cols-2">
+          <section v-if="canSeeSpecialtiesSection" class="app-section-card-comfy space-y-3" id="settings-specialties">
+            <div class="flex items-center justify-between gap-2">
               <div>
-                <h3 class="app-section-title">Step 3: PT Team Directory</h3>
-                <p class="text-sm opacity-70">
-                  Add and maintain physical therapists for the selected clinic. Specialty assignments here will appear in appointment booking.
-                </p>
+                <h3 class="app-section-title">Specialties</h3>
+                <p class="text-sm opacity-70">Used for PT assignments and appointment booking.</p>
               </div>
+              <Button
+                label="Manage"
+                icon="pi pi-bookmark"
+                size="small"
+                outlined
+                :pt="ptOutlinedBtn"
+                :disabled="!canManageSpecialties"
+                @click="openSpecialtyManager"
+              />
+            </div>
 
-              <div class="flex flex-wrap gap-2">
+            <div v-if="canManageSpecialties" class="space-y-2">
+              <div class="flex gap-2">
+                <InputText
+                  v-model="inlineSpecialtyName"
+                  placeholder="Add specialty and press Enter..."
+                  class="flex-1"
+                  :pt="ptInputText"
+                  @keydown.enter="quickAddSpecialty(inlineSpecialtyName)"
+                />
                 <Button
-                  label="Add PT"
                   icon="pi pi-plus"
                   :pt="ptPrimaryBtn"
-                  :disabled="!canManageStaff || !activePtRoles.length"
-                  @click="openCreatePt"
+                  :loading="isAddingSpecialty"
+                  :disabled="!inlineSpecialtyName.trim() || isAddingSpecialty"
+                  @click="quickAddSpecialty(inlineSpecialtyName)"
                 />
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-xs opacity-55">Quick add:</span>
+                <button
+                  v-for="preset in COMMON_SPECIALTY_PRESETS"
+                  :key="preset"
+                  :disabled="isAddingSpecialty || orderedSpecialties.some(s => s.name.toLowerCase() === preset.toLowerCase())"
+                  class="rounded-full border border-[rgb(var(--app-border))] bg-white/70 px-3 py-1 text-xs transition-colors hover:bg-[#A91D8B]/10 hover:border-[#A91D8B]/40 disabled:opacity-40 disabled:cursor-not-allowed dark:bg-white/10"
+                  @click="quickAddSpecialty(preset)"
+                >
+                  <span v-if="orderedSpecialties.some(s => s.name.toLowerCase() === preset.toLowerCase())" class="mr-1 text-xs text-emerald-500">✓</span>{{ preset }}
+                </button>
               </div>
             </div>
 
-            <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
-              <IftaLabel>
-                <InputText
-                  v-model="ptSearch"
-                  fluid
-                  placeholder="Search PT by name, email, specialty, or job title"
-                  :pt="ptInputText"
-                />
-                <label>Search PTs</label>
-              </IftaLabel>
-
-              <IftaLabel>
-                <Select
-                  v-model="ptStatusFilter"
-                  :options="ptStatusOptions"
-                  optionLabel="label"
-                  optionValue="value"
-                  fluid
-                  :pt="ptSelect"
-                />
-                <label>Status</label>
-              </IftaLabel>
+            <div class="flex flex-wrap gap-2 text-xs">
+              <span class="app-pill-active">Active: {{ specialtySummary.active }}</span>
+              <span class="app-pill-inactive">Inactive: {{ specialtySummary.inactive }}</span>
             </div>
 
-            <DataTable
-              :value="filteredPtStaffs"
-              :loading="isStaffLoading"
-              dataKey="id"
-              size="small"
-              scrollable
-              scrollHeight="420px"
-            >
-              <template #empty>
-                <div class="py-8 text-center text-sm opacity-70">
-                  No physical therapist records match this branch and filter.
+            <div class="flex items-center gap-2 text-xs">
+              <span class="opacity-60">Show:</span>
+              <Button
+                label="Active"
+                size="small"
+                :severity="specialtyDisplayFilter === 'ACTIVE' ? 'success' : 'secondary'"
+                :outlined="specialtyDisplayFilter !== 'ACTIVE'"
+                @click="specialtyDisplayFilter = 'ACTIVE'"
+              />
+              <Button
+                label="All"
+                size="small"
+                :severity="specialtyDisplayFilter === 'ALL' ? 'info' : 'secondary'"
+                :outlined="specialtyDisplayFilter !== 'ALL'"
+                @click="specialtyDisplayFilter = 'ALL'"
+              />
+            </div>
+
+            <div class="max-h-52 overflow-y-auto space-y-1 pr-1">
+              <div
+                v-for="specialty in visibleSpecialties"
+                :key="specialty.id"
+                class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-3 py-2"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <div class="text-sm font-medium">{{ specialty.name }}</div>
+                  <Tag :value="specialtyStatusLabel(specialty)" :severity="specialtyStatusSeverity(specialty)" />
                 </div>
-              </template>
+              </div>
+              <span v-if="!visibleSpecialties.length" class="text-sm opacity-70">No specialties for this filter yet.</span>
+            </div>
 
-              <Column field="name" header="PT Name" />
-              <Column field="email" header="Email" />
-              <Column field="role_name" header="Job Title" />
-              <Column field="specialty_tag_name" header="Specialty">
-                <template #body="{ data }">
-                  {{ data.specialty_tag_name || "Not assigned" }}
-                </template>
-              </Column>
-              <Column field="is_active" header="Status">
-                <template #body="{ data }">
-                  <Tag :value="data.is_active ? 'Active' : 'Inactive'" :severity="data.is_active ? 'success' : 'secondary'" />
-                </template>
-              </Column>
-              <Column v-if="canManageStaff" header="Actions">
-                <template #body="{ data }">
-                  <div class="flex flex-wrap gap-2">
-                    <Button size="small" text icon="pi pi-pencil" label="Edit" @click="openEditPt(data)" />
-                    <Button
-                      size="small"
-                      text
-                      :severity="data.is_active ? 'danger' : 'success'"
-                      :icon="data.is_active ? 'pi pi-times-circle' : 'pi pi-refresh'"
-                      :label="data.is_active ? 'Deactivate' : 'Activate'"
-                      @click="confirmTogglePtStatus(data)"
-                    />
+            <Message v-if="!canManageSpecialties" severity="info" :closable="false">
+              Specialty updates are locked until this role is granted reference create or update permission.
+            </Message>
+          </section>
+
+          <section v-if="canSeeRoleAccessSection" class="app-section-card-comfy space-y-3" id="settings-job-titles">
+            <div class="flex items-center justify-between gap-2">
+              <div>
+                <h3 class="app-section-title">PT Job Titles</h3>
+                <p class="text-sm opacity-70">Define PT roles. Access is pre-configured for standard PT work.</p>
+              </div>
+              <Button
+                label="Configure"
+                icon="pi pi-shield"
+                size="small"
+                outlined
+                :pt="ptOutlinedBtn"
+                :disabled="!canManageRoleAccess"
+                @click="openRoleManager"
+              />
+            </div>
+
+            <Button
+              v-if="canManageRoleAccess && hasMissingStandardPtRoles"
+              :label="`Quick Setup: Add ${missingStandardPtProviderTypes.length} standard PT role${missingStandardPtProviderTypes.length > 1 ? 's' : ''}`"
+              icon="pi pi-bolt"
+              :pt="ptPrimaryBtn"
+              :loading="isQuickSetupBusy"
+              :disabled="isQuickSetupBusy"
+              class="w-full"
+              @click="quickSetupStandardRoles"
+            />
+
+            <div class="max-h-52 overflow-y-auto space-y-1 pr-1">
+              <div
+                v-for="role in orderedRoles"
+                :key="role.id"
+                class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-3 py-2"
+              >
+                <div class="flex flex-wrap items-start justify-between gap-2">
+                  <div class="text-sm font-medium">{{ role.name }}</div>
+                  <div class="flex flex-wrap gap-1">
+                    <Tag :value="roleAppointmentUsageLabel(role)" :severity="roleAppointmentUsageSeverity(role)" />
+                    <Tag :value="roleStatusLabel(role)" :severity="roleStatusSeverity(role)" />
                   </div>
-                </template>
-              </Column>
-            </DataTable>
+                </div>
+              </div>
+              <div v-if="!orderedRoles.length" class="text-sm opacity-70">No job titles yet.</div>
+            </div>
 
-            <Message v-if="!canManageStaff" severity="info" :closable="false">
-              PT records are visible here, but your account does not currently have staff create or update permission.
+            <Message v-if="!canManageRoleAccess" severity="info" :closable="false">
+              Only roles with job-title and access permissions can change these setup rules.
             </Message>
-            <Message v-else-if="!activePtRoles.length" severity="warn" :closable="false">
-              No active job title is currently marked as Physical Therapist. Open Job Titles and Access first, then activate at least one PT job title.
-            </Message>
-        </section>
+          </section>
+        </div>
+
         <ClinicTreatmentAreasCard
           v-if="canSeeTreatmentAreasSection"
           :selectedClinic="selectedClinic"
@@ -468,19 +393,28 @@
 
     <StaffEditorDialog
       ref="staffEditor"
+      formMode="PT"
       :roles="activePtRoles"
+      :ptRoles="activePtRoles"
       :clinics="clinicLookups"
       :specialties="activeSpecialties"
       :isLoading="isModalBusy"
       @saved="handleStaffSaved"
+      @specialty-created="fetchReferences"
     />
     <SpecialtyManagerDialog ref="specialtyManager" @specialtiesUpdated="handleSpecialtiesUpdated" />
-    <RoleAccessManagerDialog ref="roleManager" @rolesUpdated="handleRolesUpdated" />
+    <RoleAccessManagerDialog
+      ref="roleManager"
+      providerScope="PT"
+      dialogTitle="PT Job Titles and Permissions"
+      @rolesUpdated="handleRolesUpdated"
+    />
   </main>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue"
+import { storeToRefs } from "pinia"
 import { useRoute } from "vue-router"
 import Button from "primevue/button"
 import Column from "primevue/column"
@@ -490,13 +424,13 @@ import InputText from "primevue/inputtext"
 import Message from "primevue/message"
 import Select from "primevue/select"
 import Tag from "primevue/tag"
-import { useConfirm, useToast } from "primevue"
+import { useConfirm } from "primevue/useconfirm"
+import { useToast } from "primevue/usetoast"
 
 import ClinicTreatmentAreasCard from "@/features/clinics/components/ClinicTreatmentAreasCard.vue"
 import RoleAccessManagerDialog from "@/features/staff/components/RoleAccessManagerDialog.vue"
 import SpecialtyManagerDialog from "@/features/staff/components/SpecialtyManagerDialog.vue"
 import StaffEditorDialog from "@/features/staff/components/StaffEditorDialog.vue"
-import { clinicService } from "@/features/clinics/api/clinic.service"
 import { staffService } from "@/features/staff/api/staff.service"
 import { authMeService, type AuthMe } from "@/services/auth-me.service"
 import {
@@ -514,12 +448,16 @@ import type { Role, SpecialtyTag } from "@/models/reference"
 import type { Staff } from "@/features/staff/types/staff"
 import { errorToast, successToast } from "@/utils/toast.util"
 import { ptInputText, ptOutlinedBtn, ptPrimaryBtn, ptSelect } from "@/features/shared/table-header.styles"
+import { clinicStore } from "@/stores/clinic.store"
 
-type StatusFilterValue = "ALL" | "ACTIVE" | "INACTIVE"
+type StatusFilterValue = "ACTIVE" | "INACTIVE"
+type SpecialtyDisplayFilter = "ACTIVE" | "ALL"
 
 const toast = useToast()
 const confirm = useConfirm()
 const route = useRoute()
+const globalClinicStore = clinicStore()
+const { clinicOptions: clinics, selectedClinicId, selectedClinic } = storeToRefs(globalClinicStore)
 
 const currentUser = ref<AuthMe>()
 const calendarSyncStatus = ref<GoogleCalendarSyncStatus>()
@@ -530,18 +468,53 @@ const isStaffLoading = ref(false)
 const isReferenceLoading = ref(false)
 const isCalendarSyncBusy = ref(false)
 
-const clinics = ref<Clinic[]>([])
 const roles = ref<Role[]>([])
 const specialties = ref<SpecialtyTag[]>([])
 const staffs = ref<Staff[]>([])
 
-const selectedClinicId = ref<number>()
 const ptSearch = ref("")
-const ptStatusFilter = ref<StatusFilterValue>("ALL")
+const ptStatusFilter = ref<StatusFilterValue>("ACTIVE")
+const specialtyDisplayFilter = ref<SpecialtyDisplayFilter>("ACTIVE")
 
 const staffEditor = ref<InstanceType<typeof StaffEditorDialog> | null>(null)
 const specialtyManager = ref<InstanceType<typeof SpecialtyManagerDialog> | null>(null)
 const roleManager = ref<InstanceType<typeof RoleAccessManagerDialog> | null>(null)
+
+const isQuickSetupBusy = ref(false)
+const inlineSpecialtyName = ref("")
+const isAddingSpecialty = ref(false)
+
+const STANDARD_PT_ROLES = [
+  { name: "Physical Therapist", appointment_provider_type: "PHYSICAL_THERAPIST" as const, requires_specialty_tag: true },
+  { name: "PT Assistant", appointment_provider_type: "PT_ASSISTANT" as const, requires_specialty_tag: false },
+  { name: "Intern", appointment_provider_type: "INTERN" as const, requires_specialty_tag: false },
+]
+
+const PT_DEFAULT_PERMISSION_NAMES = new Set([
+  "Patient::LOOKUP",
+  "Patient::READ",
+  "Patient::CREATE",
+  "Patient::UPDATE",
+  "Patient::DELETE",
+  "Appointment::READ",
+  "Appointment::LOOKUP",
+  "Appointment::CREATE",
+  "Appointment::UPDATE",
+  "Appointment::DELETE",
+  "Appointment::MANAGE_STATUS",
+  "Dashboard::READ",
+])
+
+const COMMON_SPECIALTY_PRESETS = [
+  "Neuro",
+  "Orthopedic",
+  "Pediatric",
+  "Sports Rehab",
+  "Geriatric",
+  "Musculoskeletal",
+  "Cardiopulmonary",
+  "Burns & Wound Care",
+]
 
 const permissionSet = computed(() => new Set(currentUser.value?.permissions ?? []))
 const hasAnyPermission = (...permissions: string[]): boolean =>
@@ -570,13 +543,12 @@ const canSeeOperationsSetup = computed(() =>
   || canSeeSpecialtiesSection.value
   || canSeeRoleAccessSection.value
 )
-const canSeeSetupGuide = computed(() => canSeeOperationsSetup.value)
 const canSeeBranchScopeSection = computed(() =>
   canSeePtDirectorySection.value || canSeeTreatmentAreasSection.value
 )
 const isMobileCalendarEligibleRole = computed(() => {
   const providerType = String(currentUser.value?.appointment_provider_type ?? "").trim().toUpperCase()
-  return providerType === "PHYSICAL_THERAPIST" || providerType === "PT_ASSISTANT"
+  return providerType === "PHYSICAL_THERAPIST" || providerType === "PT_ASSISTANT" || providerType === "INTERN"
 })
 const canSeeMobileCalendarSection = computed(() =>
   isMobileCalendarEligibleRole.value
@@ -618,20 +590,21 @@ const isModalBusy = computed(() =>
   isInitializing.value || isStaffLoading.value || isReferenceLoading.value
 )
 
-const selectedClinic = computed(() =>
-  clinics.value.find(clinic => clinic.id === selectedClinicId.value)
-)
 const clinicLookups = computed<Lookup[]>(() =>
   clinics.value.map(clinic => ({ id: clinic.id, name: clinic.name }))
 )
 const ptRoles = computed(() =>
-  roles.value.filter(role => role.appointment_provider_type === "PHYSICAL_THERAPIST")
+  roles.value.filter(role =>
+    role.appointment_provider_type === "PHYSICAL_THERAPIST"
+    || role.appointment_provider_type === "PT_ASSISTANT"
+    || role.appointment_provider_type === "INTERN"
+  )
 )
 const activePtRoles = computed(() =>
   ptRoles.value.filter(role => role.is_active)
 )
 const orderedRoles = computed(() =>
-  [...roles.value].sort((left, right) => left.name.localeCompare(right.name))
+  [...ptRoles.value].sort((left, right) => left.name.localeCompare(right.name))
 )
 const orderedSpecialties = computed(() =>
   [...specialties.value].sort((left, right) => left.name.localeCompare(right.name))
@@ -639,49 +612,34 @@ const orderedSpecialties = computed(() =>
 const activeSpecialties = computed(() =>
   specialties.value.filter(specialty => specialty.is_active)
 )
-const hasConfiguredPtRole = computed(() =>
-  activePtRoles.value.length > 0
+const visibleSpecialties = computed(() =>
+  specialtyDisplayFilter.value === "ACTIVE"
+    ? orderedSpecialties.value.filter(specialty => specialty.is_active)
+    : orderedSpecialties.value
 )
-const hasConfiguredSpecialties = computed(() =>
-  activeSpecialties.value.length > 0
-)
-const hasConfiguredPtStaff = computed(() =>
-  ptStaffs.value.length > 0
-)
-const completedSetupSteps = computed(() =>
-  [hasConfiguredPtRole.value, hasConfiguredSpecialties.value, hasConfiguredPtStaff.value].filter(Boolean).length
-)
-const setupProgressPercent = computed(() =>
-  Math.round((completedSetupSteps.value / 3) * 100)
-)
-const setupStepStatusLabels = computed(() => ({
-  roles: hasConfiguredPtRole.value ? "Ready" : "Needs setup",
-  specialties: hasConfiguredSpecialties.value ? "Ready" : "Needs setup",
-  staff: hasConfiguredPtStaff.value ? "Ready" : "Needs setup"
-}))
-const setupStepStatusSeverities = computed(() => ({
-  roles: hasConfiguredPtRole.value ? "success" : "warn",
-  specialties: hasConfiguredSpecialties.value ? "success" : "warn",
-  staff: hasConfiguredPtStaff.value ? "success" : "warn"
-}))
-const nextSetupActionLabel = computed(() => {
-  if (!hasConfiguredPtRole.value) {
-    return "Create and activate at least one Physical Therapist job title in Step 1."
-  }
-  if (!hasConfiguredSpecialties.value) {
-    return "Add at least one active specialty in Step 2."
-  }
-  if (!hasConfiguredPtStaff.value) {
-    return "Add your first PT staff profile in Step 3."
-  }
-  return "Core setup is complete. You can now maintain PTs and clinic rooms for each branch."
+const missingStandardPtProviderTypes = computed(() => {
+  const existing = new Set(ptRoles.value.map(r => r.appointment_provider_type))
+  return STANDARD_PT_ROLES.filter(t => !existing.has(t.appointment_provider_type))
 })
+const hasMissingStandardPtRoles = computed(() => missingStandardPtProviderTypes.value.length > 0)
+
 const specialtySummary = computed(() => ({
   active: specialties.value.filter(specialty => specialty.is_active).length,
   inactive: specialties.value.filter(specialty => !specialty.is_active).length
 }))
+const isPtProviderType = (providerType?: string | null): boolean =>
+  providerType === "PHYSICAL_THERAPIST" || providerType === "PT_ASSISTANT" || providerType === "INTERN"
+const resolvePtRoleName = (staff: Staff): string =>
+  isPtProviderType(staff.appointment_provider_type)
+    ? staff.role_name
+    : (staff.secondary_role_name || staff.role_name)
+const resolvePtSpecialtyName = (staff: Staff): string =>
+  staff.specialty_tag_name || "Not assigned"
 const ptStaffs = computed(() =>
-  staffs.value.filter(staff => staff.appointment_provider_type === "PHYSICAL_THERAPIST")
+  staffs.value.filter(staff =>
+    isPtProviderType(staff.appointment_provider_type)
+    || isPtProviderType(staff.secondary_appointment_provider_type)
+  )
 )
 const filteredPtStaffs = computed(() => {
   const query = ptSearch.value.trim().toLowerCase()
@@ -696,8 +654,8 @@ const filteredPtStaffs = computed(() => {
     const haystack = [
       staff.name,
       staff.email,
-      staff.role_name,
-      staff.specialty_tag_name ?? "",
+      resolvePtRoleName(staff),
+      resolvePtSpecialtyName(staff),
       staff.clinic_name
     ]
       .join(" ")
@@ -708,15 +666,15 @@ const filteredPtStaffs = computed(() => {
 })
 
 const ptStatusOptions: Array<{ label: string; value: StatusFilterValue }> = [
-  { label: "All PTs", value: "ALL" },
-  { label: "Active only", value: "ACTIVE" },
-  { label: "Inactive only", value: "INACTIVE" }
+  { label: "Active", value: "ACTIVE" },
+  { label: "Inactive", value: "INACTIVE" }
 ]
 
 const roleAppointmentUsageLabel = (role: Role): string => {
   if (role.appointment_provider_type === "PHYSICAL_THERAPIST") return "Used as PT"
   if (role.appointment_provider_type === "DOCTOR_CONSULTANT") return "Used as Doctor"
   if (role.appointment_provider_type === "PT_ASSISTANT") return "Used as PT Assistant"
+  if (role.appointment_provider_type === "INTERN") return "Used as Intern"
   return "Not used in appointments"
 }
 
@@ -724,6 +682,7 @@ const roleAppointmentUsageSeverity = (role: Role): "success" | "info" | "warn" |
   if (role.appointment_provider_type === "PHYSICAL_THERAPIST") return "success"
   if (role.appointment_provider_type === "DOCTOR_CONSULTANT") return "info"
   if (role.appointment_provider_type === "PT_ASSISTANT") return "warn"
+  if (role.appointment_provider_type === "INTERN") return "warn"
   return "secondary"
 }
 
@@ -757,7 +716,10 @@ const roleAppointmentHelpText = (role: Role): string => {
     return "This job title can be selected as a doctor consultant during appointment booking."
   }
   if (role.appointment_provider_type === "PT_ASSISTANT") {
-    return "This job title can be selected as supporting PT/Intern during appointment booking."
+    return "This job title can be selected as PT Assistant during appointment booking."
+  }
+  if (role.appointment_provider_type === "INTERN") {
+    return "This job title can be selected as Intern during appointment booking."
   }
   return "This job title is for staff access and reporting only, not for appointment provider selection."
 }
@@ -797,22 +759,9 @@ const fetchCalendarSyncStatus = async (): Promise<void> => {
 
 const fetchClinics = async (): Promise<void> => {
   if (!canReadClinics.value) {
-    clinics.value = []
-    selectedClinicId.value = undefined
     return
   }
-
-  const response = await clinicService.getAll({
-    page: defaultPage,
-    size: 200,
-    status: Status.ACTIVE,
-    name: undefined
-  })
-
-  clinics.value = response?.content ?? []
-  if (!selectedClinicId.value || !clinics.value.some(clinic => clinic.id === selectedClinicId.value)) {
-    selectedClinicId.value = clinics.value[0]?.id
-  }
+  await globalClinicStore.loadClinics()
 }
 
 const fetchReferences = async (): Promise<void> => {
@@ -855,7 +804,8 @@ const fetchStaffs = async (): Promise<void> => {
         size: 300,
         status: Status.ALL,
         name: undefined
-      }
+      },
+      staff_scope: "PT"
     })
     staffs.value = response?.content ?? []
   } finally {
@@ -927,6 +877,83 @@ const confirmTogglePtStatus = (staff: Staff): void => {
 const openSpecialtyManager = async (): Promise<void> => {
   if (!canManageSpecialties.value) return
   await specialtyManager.value?.open()
+}
+
+const quickSetupStandardRoles = async (): Promise<void> => {
+  if (!canManageRoleAccess.value || isQuickSetupBusy.value) return
+  isQuickSetupBusy.value = true
+  loadError.value = ""
+  try {
+    const toCreate = missingStandardPtProviderTypes.value
+    if (!toCreate.length) {
+      toast.add({ severity: "info", summary: "Already set up", detail: "All standard PT job titles already exist.", life: 3000 })
+      return
+    }
+
+    await Promise.all(
+      toCreate.map(template =>
+        pamsAPI.post("/references/roles", {
+          name: template.name,
+          appointment_provider_type: template.appointment_provider_type,
+          requires_specialty_tag: template.requires_specialty_tag,
+        })
+      )
+    )
+
+    await fetchReferences()
+
+    const newRoles = ptRoles.value.filter(role =>
+      toCreate.some(t => t.appointment_provider_type === role.appointment_provider_type)
+    )
+
+    await Promise.all(
+      newRoles.map(async (role) => {
+        const { data } = await pamsAPI.get<Pageable<{ id: number; name: string }>>("/references/permissions/unassigned", {
+          params: { role_id: role.id, page: 1, size: 500, status: "ACTIVE" }
+        })
+        const ptPermissionIds = (data?.content ?? [])
+          .filter((p) => PT_DEFAULT_PERMISSION_NAMES.has(p.name))
+          .map((p) => p.id)
+
+        await Promise.all(
+          ptPermissionIds.map((permissionId) =>
+            pamsAPI.post("/access-matrix", null, {
+              params: { role_id: role.id, permission_id: permissionId }
+            })
+          )
+        )
+      })
+    )
+
+    await fetchReferences()
+    successToast(toast, `${toCreate.length} standard PT job title${toCreate.length > 1 ? "s" : ""} created with default access`)
+  } catch (error: unknown) {
+    errorToast(toast, extractApiErrorMessage(error, "Failed to create standard PT job titles"))
+  } finally {
+    isQuickSetupBusy.value = false
+  }
+}
+
+const quickAddSpecialty = async (name: string): Promise<void> => {
+  const trimmed = name.trim()
+  if (!trimmed || isAddingSpecialty.value) return
+  if (orderedSpecialties.value.some(s => s.name.toLowerCase() === trimmed.toLowerCase())) {
+    toast.add({ severity: "info", summary: "Already exists", detail: `"${trimmed}" is already in the specialty list.`, life: 2500 })
+    inlineSpecialtyName.value = ""
+    return
+  }
+
+  isAddingSpecialty.value = true
+  try {
+    await pamsAPI.post("/references/specialty-tags", { name: trimmed })
+    successToast(toast, `"${trimmed}" added to specialties`)
+    inlineSpecialtyName.value = ""
+    await fetchReferences()
+  } catch (error: unknown) {
+    errorToast(toast, extractApiErrorMessage(error, "Failed to add specialty"))
+  } finally {
+    isAddingSpecialty.value = false
+  }
 }
 
 const openRoleManager = async (): Promise<void> => {

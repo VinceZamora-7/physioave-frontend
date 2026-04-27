@@ -1,6 +1,6 @@
 <template>
   <main class="app-page-shell space-y-5">
-    <section class="rounded-3xl border border-[#A91D8B]/20 bg-[linear-gradient(120deg,rgba(36,39,87,0.12),rgba(94,24,105,0.08),rgba(169,29,139,0.12))] p-5 shadow-[0_18px_40px_rgba(36,39,87,0.08)]">
+    <section class="app-hero-banner">
       <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div class="space-y-2">
           <div class="text-lg font-semibold tracking-tight">My Schedule</div>
@@ -18,7 +18,7 @@
         </div>
 
         <div class="flex flex-wrap gap-2">
-          <Button label="Refresh" icon="pi pi-refresh" outlined :pt="ptOutlinedBtn" :loading="isLoading" @click="refreshSchedule" />
+          <Button label="Refresh" icon="pi pi-refresh" severity="secondary" outlined :pt="ptOutlinedBtn" :loading="isLoading" @click="refreshSchedule" />
         </div>
       </div>
     </section>
@@ -355,7 +355,7 @@
 
 <script setup lang="ts">
 import {computed, onMounted, ref} from "vue"
-import {useToast} from "primevue"
+import {useToast} from "primevue/usetoast"
 import Button from "primevue/button"
 import DatePicker from "primevue/datepicker"
 import Dialog from "primevue/dialog"

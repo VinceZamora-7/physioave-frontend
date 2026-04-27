@@ -1,4 +1,4 @@
-import type {ButtonProps} from "primevue";
+import type {ButtonProps} from "primevue/button";
 import type {FormSubmitEvent} from "@primevue/forms";
 import type {OfferFormState} from "@/features/offers/schema/offer.schema";
 

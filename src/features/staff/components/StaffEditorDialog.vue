@@ -1,10 +1,11 @@
 <template>
-  <StaffForm ref="formRef" v-bind="staffFormProps" @on-submit="onSubmit" />
+  <StaffForm ref="formRef" v-bind="staffFormProps" @on-submit="onSubmit" @specialty-created="emit('specialtyCreated')" />
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from "vue"
-import { useConfirm, useToast } from "primevue"
+import { useConfirm } from "primevue/useconfirm"
+import { useToast } from "primevue/usetoast"
 import { useQueryClient } from "@tanstack/vue-query"
 import type { FormSubmitEvent } from "@primevue/forms"
 
@@ -22,15 +23,22 @@ import { IndexedDBKey } from "@/utils/keys/indexeddb-key"
 import { StaffTanstackKey } from "@/utils/keys/tanstack-key"
 import { errorToast, successToast } from "@/utils/toast.util"
 
+const isPtProviderType = (providerType?: string | null): boolean =>
+  providerType === "PHYSICAL_THERAPIST" || providerType === "PT_ASSISTANT" || providerType === "INTERN"
+
 const props = defineProps<{
   roles: Role[]
+  ptRoles: Role[]
   clinics: Lookup[]
   specialties: SpecialtyTag[]
   isLoading: boolean
+  formMode?: "ADMIN" | "PT"
   canManageHighestRole?: boolean
+  highestRoleIds?: number[]
 }>()
 const emit = defineEmits<{
   (e: "saved"): void
+  (e: "specialtyCreated"): void
 }>()
 
 const toast = useToast()
@@ -52,13 +60,18 @@ const staffFormProps = computed(
       selectedStaff: selectedStaff.value,
       isLoading: busy.value,
       buttonProps: {
-        label: selectedStaff.value ? `Edit ${selectedStaff.value.name}` : "Save Staff",
+        label: selectedStaff.value
+          ? `Edit ${selectedStaff.value.name}`
+          : (props.formMode === "PT" ? "Save PT Staff" : "Save Admin Staff"),
         icon: selectedStaff.value ? "pi pi-pen-to-square" : "pi pi-save",
         severity: selectedStaff.value ? "success" : "info",
       },
       draftService,
+      formMode: props.formMode ?? "ADMIN",
       canManageHighestRole: props.canManageHighestRole,
+      highestRoleIds: props.highestRoleIds ?? [],
       roles: props.roles,
+      ptRoles: props.ptRoles,
       clinics: props.clinics,
       specialties: props.specialties,
     }) satisfies StaffFormProps
@@ -102,12 +115,27 @@ const onSubmit = (event: FormSubmitEvent) => {
       loading: busy.value,
     },
     accept: () => {
+      const isPtMode = (props.formMode ?? "ADMIN") === "PT"
+      const existingStaff = selectedStaff.value
+      const editingDualRolePt = Boolean(
+        isPtMode
+        && existingStaff
+        && !isPtProviderType(existingStaff.appointment_provider_type)
+        && isPtProviderType(existingStaff.secondary_appointment_provider_type)
+      )
+      const selectedProviderRole = isPtMode
+        ? event.values.role
+        : (event.values.also_pt ? event.values.secondary_role : event.values.role)
       const body: StaffRequestBody = {
         name: event.values.name,
         email: event.values.email,
         clinic_id: event.values.clinic?.id,
-        role_id: event.values.role?.id,
-        specialty_tag_id: event.values.role?.appointment_provider_type !== "NONE" ? event.values.specialty?.id : undefined,
+        role_id: editingDualRolePt ? (existingStaff?.role_id ?? event.values.role?.id) : event.values.role?.id,
+        can_view_all_branches: Boolean(event.values.can_view_all_branches),
+        secondary_role_id: isPtMode
+          ? (editingDualRolePt ? event.values.role?.id : undefined)
+          : (event.values.also_pt ? event.values.secondary_role?.id : undefined),
+        specialty_tag_id: selectedProviderRole?.appointment_provider_type !== "NONE" ? event.values.specialty?.id : undefined,
       }
 
       if (selectedStaff.value?.id) {

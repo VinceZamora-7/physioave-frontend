@@ -94,7 +94,7 @@ import Dialog from "primevue/dialog"
 import FileUpload from "primevue/fileupload"
 import IftaLabel from "primevue/iftalabel"
 import Select from "primevue/select"
-import { useToast } from "primevue"
+import { useToast } from "primevue/usetoast"
 import { ref, toRefs, watch } from "vue"
 import { useToggle } from "@vueuse/core"
 import type {

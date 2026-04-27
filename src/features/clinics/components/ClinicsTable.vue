@@ -49,7 +49,7 @@
       </template>
     </Column>
 
-    <Column header="Start time" field="start_time">
+    <Column header="Start Time" field="start_time">
       <template #body="slotProps">
         <SkeletonLoader :loading="isLoading">
           {{ slotProps.data?.start_time_formatted }}
@@ -57,7 +57,7 @@
       </template>
     </Column>
 
-    <Column header="End time" field="end_time">
+    <Column header="End Time" field="end_time">
       <template #body="slotProps">
         <SkeletonLoader :loading="isLoading">
           {{ slotProps.data?.end_time_formatted }}
@@ -70,7 +70,7 @@
         <SkeletonLoader :loading="isLoading">
           <Tag
             :severity="slotProps.data.is_active ? 'success' : 'danger'"
-            :value="slotProps.data.is_active ? 'Operational' : 'Non operational'"
+            :value="slotProps.data.is_active ? 'Operational' : 'Non-Operational'"
           />
         </SkeletonLoader>
       </template>
@@ -109,7 +109,7 @@
 import DataTable from "primevue/datatable"
 import Column from "primevue/column"
 import Tag from "primevue/tag"
-import { Paginator } from "primevue"
+import Paginator from "primevue/paginator"
 import SkeletonLoader from "@/composables/SkeletonLoader.vue"
 import type { Pageable } from "@/models/paging"
 import type { Clinic } from "@/features/clinics/types/clinic"

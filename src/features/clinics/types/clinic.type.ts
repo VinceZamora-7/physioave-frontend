@@ -1,6 +1,6 @@
 import type {FormSubmitEvent} from "@primevue/forms";
 import type {Clinic} from "@/features/clinics/types/clinic";
-import type {ButtonProps} from "primevue";
+import type {ButtonProps} from "primevue/button";
 import type {DraftService} from "@/services/draft.service.ts";
 import type {ClinicFormState} from "@/features/clinics/schema/clinic.schema";
 

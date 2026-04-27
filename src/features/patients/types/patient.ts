@@ -33,6 +33,7 @@ export interface BasePatient {
 
   details?: string
   folder: UUID
+  profile_image_file_id?: string
 }
 
 export interface Patient extends BasePatient {

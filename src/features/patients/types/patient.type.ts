@@ -1,5 +1,5 @@
 import type {Patient} from "@/features/patients/types/patient";
-import type {ButtonProps} from "primevue";
+import type {ButtonProps} from "primevue/button";
 import type {FormSubmitEvent} from "@primevue/forms";
 import type {
   CivilStatus,

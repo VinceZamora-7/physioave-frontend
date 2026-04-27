@@ -11,6 +11,7 @@ export interface InvoiceDetailRow {
 
 export interface InvoiceLayoutInput {
   title?: string
+  headerTitle?: string
   fileName: string
   billingDate?: string
   referenceNumber: string
@@ -37,6 +38,7 @@ export interface InvoiceLayoutInput {
   maxWidthPx?: number
   renderErrorMessage: string
   autoPrint?: boolean
+  hideFinancialSummary?: boolean
 }
 
 const WEBSITE_LABEL = "www.physioave.com"
@@ -333,7 +335,7 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
           <div class="top">
             <div>
               <img class="logo" src="/app-logo.png" alt="PhysioAve" />
-              <h1 class="invoice-title"><span>INVOICE BILLING</span></h1>
+              <h1 class="invoice-title"><span>${escapeHtml(invoice.headerTitle || "INVOICE BILLING")}</span></h1>
             </div>
             <div class="meta-grid">
               <strong>BILLING DATE:</strong><span>${escapeHtml(formatDate(invoice.billingDate))}</span>
@@ -368,13 +370,15 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
             </tbody>
           </table>
 
-          <div class="totals">
-            <div class="totals-row"><span>Discount:</span><span>${escapeHtml(asCurrency(invoice.discount))}</span></div>
-            ${Number(invoice.surchargeAmount ?? 0) > 0
-              ? `<div class="totals-row"><span>${escapeHtml(invoice.surchargeLabel || "Surcharge")}:</span><span>${escapeHtml(asCurrency(Number(invoice.surchargeAmount ?? 0)))}</span></div>`
-              : ""}
-            <div class="totals-row grand-total"><span>Grand Total:</span><span>${escapeHtml(asCurrency(invoice.grandTotal))}</span></div>
-          </div>
+          ${invoice.hideFinancialSummary
+            ? ""
+            : `<div class="totals">
+                <div class="totals-row"><span>Discount:</span><span>${escapeHtml(asCurrency(invoice.discount))}</span></div>
+                ${Number(invoice.surchargeAmount ?? 0) > 0
+                  ? `<div class="totals-row"><span>${escapeHtml(invoice.surchargeLabel || "Surcharge")}:</span><span>${escapeHtml(asCurrency(Number(invoice.surchargeAmount ?? 0)))}</span></div>`
+                  : ""}
+                <div class="totals-row grand-total"><span>Grand Total:</span><span>${escapeHtml(asCurrency(invoice.grandTotal))}</span></div>
+              </div>`}
 
           <div class="bottom">
             <section class="payment-box">

@@ -33,32 +33,8 @@
           <label for="patientStatus" class="opacity-70">Status</label>
         </IftaLabel>
 
-        <IftaLabel class="w-full sm:w-72">
-          <Select
-            v-model="modelClinic"
-            input-id="patientClinic"
-            :show-clear="true"
-            :options="clinics"
-            option-label="name"
-            :loading="isLoading"
-            filter
-            :filter-fields="['name']"
-            class="w-full"
-            :pt="ptSelect"
-          >
-            <template #value="slotProps">
-              <span v-if="slotProps.value" class="truncate">{{ slotProps.value?.name }}</span>
-              <span v-else class="opacity-70">Select clinic</span>
-            </template>
-            <template #option="slotProps">
-              <span class="truncate">{{ slotProps.option?.name }}</span>
-            </template>
-          </Select>
-          <label for="patientClinic" class="opacity-70">Clinic</label>
-        </IftaLabel>
-
         <Button
-          label="Reset filters"
+          label="Reset Filters"
           icon="pi pi-filter-slash"
           variant="outlined"
           :loading="isLoading"
@@ -106,23 +82,19 @@ import InputText from "primevue/inputtext"
 import Select from "primevue/select"
 import {ptInputText, ptOutlinedBtn, ptPrimaryBtn, ptSelect} from "@/features/shared/table-header.styles"
 
-import type { Lookup } from "@/models/global.model"
 import type { Status } from "@/utils/global.type"
 
 const props = defineProps<{
   statuses: Status[]
-  clinics: Lookup[]
   isLoading: boolean
   isExportLoading: boolean
   selectedSearch?: string
   selectedStatus: Status
-  selectedClinic?: Lookup
 }>()
 
 const emit = defineEmits<{
   (e: "update:selectedSearch", v: string | undefined): void
   (e: "update:selectedStatus", v: Status): void
-  (e: "update:selectedClinic", v: Lookup | undefined): void
   (e: "reset"): void
   (e: "save"): void
   (e: "export"): void
@@ -130,6 +102,5 @@ const emit = defineEmits<{
 
 const modelSearch = computed({ get: () => props.selectedSearch, set: (v) => emit("update:selectedSearch", v) })
 const modelStatus = computed({ get: () => props.selectedStatus, set: (v) => emit("update:selectedStatus", v) })
-const modelClinic = computed({ get: () => props.selectedClinic, set: (v) => emit("update:selectedClinic", v) })
 
 </script>

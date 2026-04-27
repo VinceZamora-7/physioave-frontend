@@ -2,7 +2,7 @@
   <Dialog
     v-model:visible="visible"
     modal
-    header="Job Titles and Permissions"
+    :header="dialogTitleResolved"
     :style="{ width: '1120px' }"
     :breakpoints="{ '1280px': '96vw', '768px': '100vw' }"
   >
@@ -92,7 +92,7 @@
             />
           </div>
 
-          <Message v-if="isSelectedRoleLocked" severity="warn" :closable="false" class="mt-4">
+          <Message v-if="isSelectedRoleLocked" severity="warn" :closable="false" class="mt-4 h-fit">
             The Owner job title is locked for safety. Create a new job title instead.
           </Message>
 
@@ -110,7 +110,7 @@
             <IftaLabel>
               <Select
                 v-model="roleForm.appointment_provider_type"
-                :options="providerTypeOptions"
+                :options="filteredProviderTypeOptions"
                 optionLabel="label"
                 optionValue="value"
                 fluid
@@ -129,6 +129,21 @@
             >
             <span class="text-sm text-[rgb(var(--app-fg))]">
               People with this job title must have a specialty, such as Neuro or Pediatric.
+            </span>
+          </label>
+
+          <label
+            v-if="canCreateOwnerEquivalent"
+            class="mt-3 flex items-start gap-3 rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-4 py-3"
+          >
+            <input
+              v-model="createAsOwnerEquivalent"
+              type="checkbox"
+              class="mt-1 h-4 w-4"
+              :disabled="!isCreateMode || isBusy"
+            >
+            <span class="text-sm text-[rgb(var(--app-fg))]">
+              Give this role full administrative access, allowing you to use your preferred top-level title.
             </span>
           </label>
 
@@ -170,16 +185,17 @@
             <Tag :value="`${selectedSidebarAccess.length} tabs selected`" severity="info" />
           </div>
 
-          <Message v-if="isCreateMode" severity="info" :closable="false" class="mt-4">
+          <Message v-if="isCreateMode" severity="info" :closable="false" class="mt-4 h-fit">
             Save this job title first, then set its sidebar access.
           </Message>
-          <Message v-else-if="isSelectedRoleLocked" severity="warn" :closable="false" class="mt-4">
+          <Message v-else-if="isSelectedRoleLocked" severity="warn" :closable="false" class="mt-4 h-fit">
             The Owner job title permissions are locked here to keep the top-level account safe.
           </Message>
 
           <div v-else class="mt-4 space-y-4">
             <div class="flex flex-wrap gap-2">
               <Button
+                v-if="props.providerScope !== 'ADMIN'"
                 label="Apply PT Defaults"
                 icon="pi pi-user"
                 size="small"
@@ -207,7 +223,7 @@
 
             <div class="grid gap-3 md:grid-cols-2">
               <div
-                v-for="option in sidebarAccessOptions"
+                v-for="option in visibleSidebarAccessOptions"
                 :key="option.key"
                 class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-4 py-3"
               >
@@ -338,6 +354,8 @@ import { getApiErrorMessage } from "@/utils/actionable-error.util"
 import { errorToast, successToast } from "@/utils/toast.util"
 import { Status } from "@/utils/global.type"
 
+type ProviderScope = "ALL" | "ADMIN" | "PT"
+
 type RoleFormState = {
   name: string
   appointment_provider_type: AppointmentProviderType
@@ -364,11 +382,19 @@ type SidebarAccessOption = {
 }
 
 type PermissionLevel = "read" | "edit"
-type PermissionLevelKey = "patients" | "appointments" | "billing"
+type PermissionLevelKey = "patients" | "appointments" | "billing" | "offers-promotions"
 
 const emit = defineEmits<{
   (e: "rolesUpdated"): void
 }>()
+
+const props = withDefaults(defineProps<{
+  providerScope?: ProviderScope
+  dialogTitle?: string
+}>(), {
+  providerScope: "ALL",
+  dialogTitle: "Job Titles and Permissions"
+})
 
 const toast = useToast()
 
@@ -386,6 +412,7 @@ const isRoleLoading = ref(false)
 const isPermissionLoading = ref(false)
 const isSavingRole = ref(false)
 const isPermissionSaving = ref(false)
+const createAsOwnerEquivalent = ref(false)
 
 const roleForm = ref<RoleFormState>({
   name: "",
@@ -397,8 +424,25 @@ const providerTypeOptions: Array<{ label: string; value: AppointmentProviderType
   { label: "Not used in appointments", value: "NONE" },
   { label: "Doctor Consultant", value: "DOCTOR_CONSULTANT" },
   { label: "Physical Therapist", value: "PHYSICAL_THERAPIST" },
-  { label: "PT Assistant / Intern", value: "PT_ASSISTANT" }
+  { label: "PT Assistant", value: "PT_ASSISTANT" },
+  { label: "Intern", value: "INTERN" }
 ]
+
+const roleMatchesScope = (providerType: AppointmentProviderType): boolean => {
+  if (props.providerScope === "PT") {
+    return providerType === "PHYSICAL_THERAPIST" || providerType === "PT_ASSISTANT" || providerType === "INTERN"
+  }
+  if (props.providerScope === "ADMIN") {
+    return providerType === "NONE" || providerType === "DOCTOR_CONSULTANT"
+  }
+  return true
+}
+
+const filteredProviderTypeOptions = computed(() =>
+  providerTypeOptions.filter(option => roleMatchesScope(option.value))
+)
+
+const dialogTitleResolved = computed(() => props.dialogTitle)
 const statusFilterOptions = [
   { label: "All", value: Status.ALL },
   { label: "Active", value: Status.ACTIVE },
@@ -470,8 +514,8 @@ const sidebarAccessOptions: SidebarAccessOption[] = [
   },
   {
     key: "settings",
-    label: "Settings",
-    description: "Branch setup, specialties, and role access setup.",
+    label: "PT Team Setup",
+    description: "Branch setup, specialties, and PT role access setup.",
     // Unique: AccessMatrix::* is exclusively for settings — Clinic/Staff/Reference now belong to their own tabs
     matcher: permission => permission.name.startsWith("AccessMatrix::")
   },
@@ -484,15 +528,23 @@ const sidebarAccessOptions: SidebarAccessOption[] = [
   },
   {
     key: "staffs",
-    label: "Staff",
-    description: "Staff directory and account maintenance.",
+    label: "Admin Setup",
+    description: "Admin staff directory and account maintenance.",
     // Unique: Staff::* only belongs to this tab
     matcher: permission => permission.name.startsWith("Staff::")
   }
 ]
 
+const PT_SIDEBAR_KEYS = new Set<SidebarAccessKey>(["dashboard", "patients", "appointments", "patient-daily-log"])
+
+const visibleSidebarAccessOptions = computed<SidebarAccessOption[]>(() => {
+  if (props.providerScope !== "PT") return sidebarAccessOptions
+  return sidebarAccessOptions.filter(option => PT_SIDEBAR_KEYS.has(option.key))
+})
+
 const selectedRole = computed(() => roles.value.find(role => role.id === selectedRoleId.value))
 const isCreateMode = computed(() => selectedRoleId.value == null)
+const canCreateOwnerEquivalent = computed(() => props.providerScope === "ADMIN")
 const isSelectedRoleLocked = computed(() => selectedRole.value?.name === "Owner")
 const isSpecialtyToggleDisabled = computed(() =>
   roleForm.value.appointment_provider_type === "NONE" || isSelectedRoleLocked.value
@@ -520,6 +572,7 @@ const managedPermissionIds = computed(() => {
 })
 const filteredRoles = computed(() => {
   return roles.value.filter(role => {
+    if (!roleMatchesScope(role.appointment_provider_type)) return false
     if (statusFilter.value === Status.ACTIVE) return role.is_active
     if (statusFilter.value === Status.INACTIVE) return !role.is_active
     return true
@@ -540,7 +593,7 @@ const hasMappedPermissions = (key: SidebarAccessKey): boolean => mappedPermissio
 const getMappedPermissionIds = (key: SidebarAccessKey): number[] =>
   getPermissionsForSidebarAccess(key).map(permission => permission.id)
 
-const permissionLevelKeys: PermissionLevelKey[] = ["patients", "appointments", "billing"]
+const permissionLevelKeys: PermissionLevelKey[] = ["patients", "appointments", "billing", "offers-promotions"]
 
 const isPermissionLevelSupported = (key: SidebarAccessKey): key is PermissionLevelKey =>
   permissionLevelKeys.includes(key as PermissionLevelKey)
@@ -563,6 +616,10 @@ const getPermissionIdsByPrefix = (key: SidebarAccessKey, prefixes: string[]): nu
     .map(permission => permission.id)
 
 const getReadPermissionIdsForTab = (key: PermissionLevelKey): number[] => {
+  if (key === "offers-promotions") {
+    return getPermissionIdsByNames(key, ["Reference::LOOKUP", "Reference::READ"])
+  }
+
   if (key === "patients") {
     return getPermissionIdsByNames(key, ["Patient::READ", "Patient::LOOKUP"])
   }
@@ -580,6 +637,13 @@ const getReadPermissionIdsForTab = (key: PermissionLevelKey): number[] => {
 }
 
 const getEditPermissionIdsForTab = (key: PermissionLevelKey): number[] => {
+  if (key === "offers-promotions") {
+    return [
+      ...getReadPermissionIdsForTab(key),
+      ...getPermissionIdsByNames(key, ["Reference::CREATE", "Reference::UPDATE"])
+    ]
+  }
+
   if (key === "patients") {
     return [
       ...getReadPermissionIdsForTab(key),
@@ -766,7 +830,7 @@ const toggleSidebarAccess = (key: SidebarAccessKey): void => {
 }
 
 const selectAllSidebarTabs = (): void => {
-  selectedSidebarAccess.value = sidebarAccessOptions
+  selectedSidebarAccess.value = visibleSidebarAccessOptions.value
     .filter(option => hasMappedPermissions(option.key))
     .map(option => option.key)
 
@@ -790,16 +854,9 @@ const applyPhysicalTherapistDefaults = (): void => {
 function formatProviderType(providerType: AppointmentProviderType): string {
   if (providerType === "DOCTOR_CONSULTANT") return "Doctor Consultant"
   if (providerType === "PHYSICAL_THERAPIST") return "Physical Therapist"
-  if (providerType === "PT_ASSISTANT") return "PT Assistant / Intern"
+  if (providerType === "PT_ASSISTANT") return "PT Assistant"
+  if (providerType === "INTERN") return "Intern"
   return "Not used in appointments"
-}
-
-function getPermissionTitle(permission: Permission): string {
-  return permission.description?.trim() || permission.name
-}
-
-function getPermissionSubtitle(permission: Permission): string {
-  return permission.description?.trim() ? `System code: ${permission.name}` : "System permission"
 }
 
 function extractApiErrorMessage(error: unknown, fallback: string): string {
@@ -820,7 +877,7 @@ function applyRoleToForm(role?: Role): void {
       }
     : {
         name: "",
-        appointment_provider_type: "NONE",
+        appointment_provider_type: filteredProviderTypeOptions.value[0]?.value ?? "NONE",
         requires_specialty_tag: false
       }
 }
@@ -828,15 +885,17 @@ function applyRoleToForm(role?: Role): void {
 async function fetchRoles(preferredRoleId?: number | null): Promise<void> {
   isRoleLoading.value = true
   try {
+    const roleScopeParam = props.providerScope === "ALL" ? undefined : props.providerScope
     const { data } = await pamsAPI.get<Pageable<Role>>("/references/roles", {
-      params: { page: 1, size: 500, status: "ALL" }
+      params: { page: 1, size: 500, status: "ALL", ...(roleScopeParam ? { role_scope: roleScopeParam } : {}) }
     })
 
     roles.value = data?.content ?? []
+    const scopedRoles = roles.value.filter(role => roleMatchesScope(role.appointment_provider_type))
     const nextRole =
-      roles.value.find(role => role.id === preferredRoleId) ??
-      roles.value.find(role => role.id === selectedRoleId.value) ??
-      roles.value[0]
+      scopedRoles.find(role => role.id === preferredRoleId) ??
+      scopedRoles.find(role => role.id === selectedRoleId.value) ??
+      scopedRoles[0]
 
     if (nextRole) {
       await selectRole(nextRole)
@@ -895,6 +954,34 @@ async function fetchPermissions(roleId: number): Promise<void> {
   }
 }
 
+async function fetchAssignedPermissionIds(roleId: number): Promise<number[]> {
+  const params = { role_id: roleId, page: 1, size: 500, status: "ACTIVE" }
+  const { data } = await pamsAPI.get<Pageable<Permission>>("/references/permissions/assigned", { params })
+  return (data?.content ?? []).map(permission => permission.id)
+}
+
+async function cloneOwnerPermissionsToRole(targetRoleId: number): Promise<void> {
+  const ownerRole = roles.value.find(role => role.name === "Owner")
+  if (!ownerRole?.id) {
+    throw new Error("Owner role not found")
+  }
+
+  const ownerPermissionIds = await fetchAssignedPermissionIds(ownerRole.id)
+  if (!ownerPermissionIds.length) return
+
+  const existingPermissionIds = new Set(await fetchAssignedPermissionIds(targetRoleId))
+  const toGrant = ownerPermissionIds.filter(permissionId => !existingPermissionIds.has(permissionId))
+  if (!toGrant.length) return
+
+  await Promise.all(
+    toGrant.map(permissionId =>
+      pamsAPI.post("/access-matrix", null, {
+        params: { role_id: targetRoleId, permission_id: permissionId }
+      })
+    )
+  )
+}
+
 async function selectRole(role: Role): Promise<void> {
   selectedRoleId.value = role.id
   applyRoleToForm(role)
@@ -903,6 +990,7 @@ async function selectRole(role: Role): Promise<void> {
 
 function startCreateRole(): void {
   selectedRoleId.value = null
+  createAsOwnerEquivalent.value = false
   assignedPermissions.value = []
   availablePermissions.value = []
   selectedSidebarAccess.value = []
@@ -911,9 +999,14 @@ function startCreateRole(): void {
   permissionLevelByTab.value = {
     patients: "edit",
     appointments: "edit",
-    billing: "edit"
+    billing: "edit",
+    "offers-promotions": "edit"
   }
   applyRoleToForm()
+
+  if (props.providerScope === "PT") {
+    applyPhysicalTherapistDefaults()
+  }
 }
 
 function resetRoleForm(): void {
@@ -922,6 +1015,7 @@ function resetRoleForm(): void {
     return
   }
 
+  createAsOwnerEquivalent.value = false
   applyRoleToForm()
 }
 
@@ -933,6 +1027,7 @@ async function saveRole(): Promise<void> {
   }
 
   const wasCreating = isCreateMode.value
+  const shouldCreateOwnerEquivalent = wasCreating && canCreateOwnerEquivalent.value && createAsOwnerEquivalent.value
 
   const payload = {
     name,
@@ -951,14 +1046,21 @@ async function saveRole(): Promise<void> {
       successToast(toast, "Job title updated")
     }
 
-    emit("rolesUpdated")
     await fetchRoles(selectedRoleId.value)
     if (wasCreating) {
       const createdRole = roles.value.find(role => role.name.toLowerCase() === name.toLowerCase())
       if (createdRole) {
+        if (shouldCreateOwnerEquivalent) {
+          await cloneOwnerPermissionsToRole(createdRole.id)
+          successToast(toast, "Owner-equivalent access applied")
+          createAsOwnerEquivalent.value = false
+          await fetchRoles(createdRole.id)
+        }
         await selectRole(createdRole)
       }
     }
+
+    emit("rolesUpdated")
   } catch (error: unknown) {
     errorToast(toast, extractApiErrorMessage(error, "Failed to save job title"))
   } finally {

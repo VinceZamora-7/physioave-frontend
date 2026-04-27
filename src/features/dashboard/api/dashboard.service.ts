@@ -25,27 +25,44 @@ export interface DashboardRecentAppointment {
   billing_status: string
 }
 
-export const dashboardService = {
-  async getSummary(): Promise<DashboardSummary | undefined> {
-    const {data} = await pamsAPI.get<DashboardSummary>("/dashboard/summary")
-    return data
-  },
+export interface DashboardConfidentialRevenue {
+  lgu_revenue: number
+  online_marketing_revenue: number
+  direct_marketing_revenue: number
+}
 
-  async getAppointmentTrend(days = 7): Promise<DashboardTrendItem[] | undefined> {
-    const {data} = await pamsAPI.get<DashboardTrendItem[]>("/dashboard/appointments/trend", {
-      params: {days},
+export const dashboardService = {
+  async getSummary(clinicId?: number): Promise<DashboardSummary | undefined> {
+    const {data} = await pamsAPI.get<DashboardSummary>("/dashboard/summary", {
+      params: clinicId ? {clinic_id: clinicId} : undefined,
     })
     return data
   },
 
-  async getBillingDistribution(): Promise<DashboardDistributionItem[] | undefined> {
-    const {data} = await pamsAPI.get<DashboardDistributionItem[]>("/dashboard/billing/distribution")
+  async getAppointmentTrend(days = 7, clinicId?: number): Promise<DashboardTrendItem[] | undefined> {
+    const {data} = await pamsAPI.get<DashboardTrendItem[]>("/dashboard/appointments/trend", {
+      params: {days, ...(clinicId ? {clinic_id: clinicId} : {})},
+    })
     return data
   },
 
-  async getRecentAppointments(size = 8): Promise<DashboardRecentAppointment[] | undefined> {
+  async getBillingDistribution(clinicId?: number): Promise<DashboardDistributionItem[] | undefined> {
+    const {data} = await pamsAPI.get<DashboardDistributionItem[]>("/dashboard/billing/distribution", {
+      params: clinicId ? {clinic_id: clinicId} : undefined,
+    })
+    return data
+  },
+
+  async getRecentAppointments(size = 8, clinicId?: number): Promise<DashboardRecentAppointment[] | undefined> {
     const {data} = await pamsAPI.get<DashboardRecentAppointment[]>("/dashboard/appointments/recent", {
-      params: {size},
+      params: {size, ...(clinicId ? {clinic_id: clinicId} : {})},
+    })
+    return data
+  },
+
+  async getConfidentialRevenue(clinicId?: number): Promise<DashboardConfidentialRevenue | undefined> {
+    const {data} = await pamsAPI.get<DashboardConfidentialRevenue>("/dashboard/confidential-revenue", {
+      params: clinicId ? {clinic_id: clinicId} : undefined,
     })
     return data
   },

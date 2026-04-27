@@ -128,7 +128,8 @@ import ProgressBar from "primevue/progressbar";
 import {useToggle} from "@vueuse/core";
 import {fileSchema} from "@/schema/global.schema.ts";
 import {errorHandler, type APIError, zodErrorHandler} from "@/utils/error-handler.ts";
-import {useConfirm, useToast} from "primevue";
+import {useConfirm} from "primevue/useconfirm";
+import {useToast} from "primevue/usetoast";
 import type {
   PatientAttachmentDialogFormEmits,
   PatientAttachmentDialogFormProps

@@ -12,44 +12,71 @@
         sidebarCollapsed ? 'md:pl-[84px]' : 'md:pl-[260px]',
       ]"
     >
-      <!-- TOPBAR -->
-      <header
-        class="sticky top-0 z-30 border-b border-[rgb(var(--app-border))]
-               bg-[rgb(var(--app-card))] backdrop-blur"
-      >
-        <div class="flex items-center gap-3 px-4 py-3">
-          <!-- Mobile hamburger -->
-          <button
-            type="button"
-            class="md:hidden grid h-10 w-10 place-items-center rounded-2xl transition
-                   border border-[rgb(var(--app-border))]
-                   bg-[rgb(var(--app-bg))] text-[rgb(var(--app-fg))]
-                   hover:bg-[rgba(60,136,177,0.12)]"
-            aria-label="Open sidebar"
-            @click="sidebarRef?.toggleMobile()"
-          >
-            <i class="pi pi-bars text-[16px]" />
-          </button>
+<header
+  class="sticky top-0 z-30 border-b border-slate-200 dark:border-slate-700
+         bg-white/80 dark:bg-slate-900/80 backdrop-blur-md"
+>
+  <div class="flex items-center gap-4 px-4 py-3">
 
-          <!-- Title -->
-          <div class="min-w-0">
-            <p class="truncate text-sm font-semibold text-[rgb(var(--app-fg))]">
-              {{ pageTitle }}
-            </p>
-            <p class="truncate text-xs text-slate-500 dark:text-slate-400">
-              PhysioAve Management System
-            </p>
-          </div>
+    <!-- Mobile menu button -->
+    <button
+      type="button"
+      class="md:hidden grid h-10 w-10 place-items-center rounded-xl
+             border border-slate-200 dark:border-slate-700
+             bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300
+             hover:bg-slate-100 dark:hover:bg-slate-700 transition"
+      aria-label="Open sidebar"
+      @click="sidebarRef?.toggleMobile()"
+    >
+      <i class="pi pi-bars text-[18px]" />
+    </button>
 
-          <!-- Right actions -->
-          <div class="ml-auto flex items-center gap-3">
-            <span class="hidden sm:inline-flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-              <span class="h-2 w-2 rounded-full bg-[rgb(var(--app-accent))] opacity-70" />
-              Online
-            </span>
-          </div>
-        </div>
-      </header>
+    <!-- Title -->
+    <div class="flex flex-col">
+      <p class="truncate font-semibold text-[15px] text-slate-900 dark:text-slate-100">
+        {{ pageTitle }}
+      </p>
+      <p class="truncate text-xs text-slate-500 dark:text-slate-400 tracking-wide">
+        PhysioAve Management System
+      </p>
+    </div>
+
+    <!-- Right side -->
+    <div class="ml-auto flex items-center gap-4">
+
+      <!-- Branch selector -->
+<div class="hidden sm:block w-[220px]">
+  <label
+    class="block mb-1 text-xs font-medium text-slate-500 dark:text-slate-400"
+  >
+    Branch
+  </label>
+  <Select
+    v-model="selectedClinicId"
+    :options="clinicOptions"
+    optionLabel="name"
+    optionValue="id"
+    filter
+    fluid
+    size="small"
+    placeholder="Select branch"
+    :loading="isLoadingClinics"
+    :disabled="isLoadingClinics || !clinicOptions.length"
+    class="rounded-lg"
+  />
+</div>
+
+
+      <!-- Online indicator -->
+      <div class="hidden sm:flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+        <span class="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/40" />
+        Online
+      </div>
+    </div>
+
+  </div>
+</header>
+
 
       <!-- MAIN CONTENT (scrolls vertically) -->
       <main class="flex-1 overflow-y-auto">
@@ -62,14 +89,26 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue"
+import { computed, defineAsyncComponent, ref } from "vue"
 import { useRoute } from "vue-router"
-import SideBar from "@/app/layouts/SideBar.vue"
+import Select from "primevue/select"
+import { storeToRefs } from "pinia"
+import { clinicStore } from "@/stores/clinic.store"
 
-const sidebarRef = ref<InstanceType<typeof SideBar> | null>(null)
+type SideBarExpose = {
+  toggleMobile: () => void
+}
+
+const SideBar = defineAsyncComponent(() => import("@/app/layouts/SideBar.vue"))
+
+const sidebarRef = ref<SideBarExpose | null>(null)
 
 // ✅ parent-owned state (always reactive)
 const sidebarCollapsed = ref(true)
+
+// ── Clinic branch store ───────────────────────────────────────────────────
+const globalClinicStore = clinicStore()
+const { clinicOptions, isLoadingClinics, selectedClinicId } = storeToRefs(globalClinicStore)
 
 const route = useRoute()
 const pageTitle = computed(() => {

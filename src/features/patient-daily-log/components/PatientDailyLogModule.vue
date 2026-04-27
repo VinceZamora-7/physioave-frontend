@@ -1,6 +1,6 @@
 <template>
   <main class="app-page-shell space-y-5">
-    <section class="rounded-3xl border border-[#A91D8B]/25 bg-[linear-gradient(120deg,rgba(36,39,87,0.14),rgba(94,24,105,0.10),rgba(169,29,139,0.18))] p-5 shadow-[0_18px_40px_rgba(36,39,87,0.10)]">
+    <section class="app-hero-banner-vivid">
       <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div class="space-y-2">
           <div class="text-lg font-semibold tracking-tight">Patient Daily Log Dashboard</div>
@@ -22,7 +22,7 @@
 
         <div class="flex flex-wrap gap-2">
           <Button label="Today" icon="pi pi-calendar" outlined :pt="ptOutlinedBtn" @click="resetToToday" />
-          <Button label="Refresh" icon="pi pi-refresh" :loading="isLoading" :pt="ptPrimaryBtn" @click="refreshDailyLog" />
+          <Button label="Refresh" icon="pi pi-refresh" severity="secondary" outlined :loading="isLoading" :pt="ptOutlinedBtn" @click="refreshDailyLog" />
         </div>
       </div>
     </section>
@@ -42,16 +42,9 @@
 
         <div class="space-y-2">
           <label class="text-xs font-semibold uppercase tracking-wide opacity-60">Clinic Branch</label>
-          <Select
-            v-model="selectedClinicId"
-            :options="clinicFilterOptions"
-            optionLabel="label"
-            optionValue="value"
-            fluid
-            filter
-            placeholder="All clinics"
-            :pt="ptSelect"
-          />
+          <div class="h-[42px] rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] px-3 text-sm flex items-center">
+            {{ selectedClinicLabel }}
+          </div>
         </div>
 
         <div class="space-y-2">
@@ -406,7 +399,8 @@
 
 <script setup lang="ts">
 import {computed, onMounted, ref, watch} from "vue"
-import {useToast} from "primevue"
+import {storeToRefs} from "pinia"
+import {useToast} from "primevue/usetoast"
 import Button from "primevue/button"
 import Column from "primevue/column"
 import DataTable from "primevue/datatable"
@@ -415,6 +409,7 @@ import Dialog from "primevue/dialog"
 import InputText from "primevue/inputtext"
 import Select from "primevue/select"
 import Tag from "primevue/tag"
+import PatientSignaturePad from "@/features/appointments/components/PatientSignaturePad.vue"
 import {
   appointmentPhase1Service,
   type AppointmentDailyLogItem,
@@ -423,9 +418,7 @@ import {
   type AppointmentLocationContext,
   type AppointmentPhase
 } from "@/features/appointments/api/appointment-phase1.service"
-import PatientSignaturePad from "@/features/appointments/components/PatientSignaturePad.vue"
-import {clinicService} from "@/features/clinics/api/clinic.service"
-import type {Clinic} from "@/features/clinics/types/clinic"
+import {authMeService} from "@/services/auth-me.service"
 import {ptInputText, ptOutlinedBtn, ptPrimaryBtn, ptSelect} from "@/features/shared/table-header.styles"
 import {staffService} from "@/features/staff/api/staff.service"
 import type {Staff} from "@/features/staff/types/staff"
@@ -433,8 +426,11 @@ import {defaultPage} from "@/models/paging"
 import {getApiErrorMessage} from "@/utils/actionable-error.util"
 import {Status} from "@/utils/global.type"
 import {errorToast} from "@/utils/toast.util"
+import {clinicStore} from "@/stores/clinic.store"
 
 const toast = useToast()
+const useClinicStore = clinicStore()
+const {selectedClinicId, selectedClinic} = storeToRefs(useClinicStore)
 
 type SelectOption = {
   label: string
@@ -449,11 +445,9 @@ type SignaturePreviewState = {
 
 const isLoading = ref(false)
 const selectedDate = ref(new Date())
-const selectedClinicId = ref<number | null>(null)
 const selectedDoctorId = ref<number | null>(null)
 const searchText = ref("")
 const dailyLog = ref<AppointmentDailyLogResponse>()
-const clinics = ref<Clinic[]>([])
 const clinicalProviders = ref<Staff[]>([])
 const signaturePreviewVisible = ref(false)
 const signaturePreview = ref<SignaturePreviewState>()
@@ -475,22 +469,14 @@ const selectedDateLabel = computed(() =>
 )
 
 const selectedClinicLabel = computed(() => {
-  if (selectedClinicId.value == null) return "All clinics"
-  return clinics.value.find((clinic) => clinic.id === selectedClinicId.value)?.name || "Selected clinic"
+  if (selectedClinic.value?.name) return selectedClinic.value.name
+  return "No branch selected"
 })
 
 const selectedDoctorLabel = computed(() => {
   if (selectedDoctorId.value == null) return "All primary PT"
   return clinicalProviders.value.find((provider) => provider.id === selectedDoctorId.value)?.name || "Selected primary PT"
 })
-
-const clinicFilterOptions = computed<SelectOption[]>(() => [
-  {label: "All clinics", value: null},
-  ...clinics.value.map((clinic) => ({
-    label: clinic.name,
-    value: clinic.id
-  }))
-])
 
 const doctorFilterOptions = computed<SelectOption[]>(() => {
   const filteredProviders = selectedClinicId.value == null
@@ -661,13 +647,8 @@ const signatureStateSeverity = (state: AppointmentDailyLogSignatureState): "succ
 }
 
 const loadLookups = async (): Promise<void> => {
-  const [clinicsResponse, staffResponse] = await Promise.all([
-    clinicService.getAll({
-      page: defaultPage,
-      size: 100,
-      status: Status.ACTIVE,
-      name: undefined
-    }),
+  const [, staffResponse, me] = await Promise.all([
+    useClinicStore.loadClinics(),
     staffService.getAll({
       clinic_id: undefined,
       pageable_request: {
@@ -676,13 +657,17 @@ const loadLookups = async (): Promise<void> => {
         status: Status.ACTIVE,
         name: undefined
       }
-    })
+    }),
+    authMeService.get()
   ])
 
-  clinics.value = clinicsResponse?.content ?? []
   clinicalProviders.value = (staffResponse?.content ?? []).filter((staff) =>
     staff.appointment_provider_type === "PHYSICAL_THERAPIST" || staff.appointment_provider_type === "DOCTOR_CONSULTANT"
   )
+
+  if (selectedClinicId.value == null && me?.clinic_id != null) {
+    useClinicStore.setSelectedClinicId(me.clinic_id)
+  }
 }
 
 const refreshDailyLog = async (): Promise<void> => {
@@ -690,7 +675,7 @@ const refreshDailyLog = async (): Promise<void> => {
     isLoading.value = true
     dailyLog.value = await appointmentPhase1Service.getDailyLog({
       date: toDateParam(selectedDate.value),
-      clinic_id: selectedClinicId.value ?? undefined,
+      clinic_id: selectedClinicId.value,
       doctor_id: selectedDoctorId.value ?? undefined,
       search: searchText.value.trim() || undefined
     })
@@ -753,7 +738,6 @@ const submitPtCompletion = async (): Promise<void> => {
 }
 
 watch(selectedClinicId, (clinicId) => {
-  if (clinicId == null) return
   const providerExists = doctorFilterOptions.value.some((option) => option.value === selectedDoctorId.value)
   if (!providerExists) {
     selectedDoctorId.value = null

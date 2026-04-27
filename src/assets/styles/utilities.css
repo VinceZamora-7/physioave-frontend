@@ -64,3 +64,50 @@
   @apply h-px w-full opacity-80;
   background: rgb(var(--app-border));
 }
+
+/* ─── Hero banner variants ───────────────────────────────────────────────── */
+
+/* Standard hero section header (used by Settings, Staffs, PtSchedule, etc.) */
+.app-hero-banner {
+  @apply rounded-3xl border p-5 shadow-[0_18px_40px_rgba(36,39,87,0.08)];
+  border-color: rgba(169, 29, 139, 0.20);
+  background: linear-gradient(120deg, rgba(36,39,87,0.12), rgba(94,24,105,0.08), rgba(169,29,139,0.12));
+}
+
+/* Vivid hero section header (used by Appointments, Reports, PatientDailyLog) */
+.app-hero-banner-vivid {
+  @apply rounded-3xl border p-5 shadow-[0_18px_40px_rgba(36,39,87,0.10)];
+  border-color: rgba(169, 29, 139, 0.25);
+  background: linear-gradient(120deg, rgba(36,39,87,0.14), rgba(94,24,105,0.10), rgba(169,29,139,0.18));
+}
+
+/* Subtle inner panel gradient (used inside cards) */
+.app-hero-panel {
+  @apply rounded-2xl border p-4;
+  border-color: rgba(169, 29, 139, 0.20);
+  background: linear-gradient(120deg, rgba(36,39,87,0.08), rgba(94,24,105,0.06), rgba(169,29,139,0.10));
+}
+
+/* ─── Status summary pills ───────────────────────────────────────────────── */
+
+.app-pill-active {
+  @apply rounded-full border px-3 py-1 text-xs;
+  border-color: rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.10);
+  color: rgb(4, 120, 87);
+}
+
+.app-pill-inactive {
+  @apply rounded-full border px-3 py-1 text-xs;
+  border-color: rgba(var(--app-border));
+  background: rgba(var(--app-card));
+  color: rgba(var(--app-fg), 0.60);
+}
+
+html.dark .app-pill-active {
+  color: rgb(110, 231, 183);
+}
+
+html.dark .app-pill-inactive {
+  color: rgba(var(--app-fg), 0.55);
+}

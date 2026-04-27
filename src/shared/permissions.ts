@@ -3,6 +3,9 @@ export type RouteAccessRule = {
 }
 
 export const ROUTE_ACCESS_RULES: Record<string, RouteAccessRule> = {
+  dashboard: {
+    anyOf: ["Dashboard::READ"],
+  },
   patients: {
     anyOf: ["Patient::READ", "Patient::LOOKUP", "Patient::CREATE", "Patient::UPDATE"],
   },
@@ -19,36 +22,31 @@ export const ROUTE_ACCESS_RULES: Record<string, RouteAccessRule> = {
     anyOf: ["Appointment::READ", "Patient::READ", "Appointment::MANAGE_BILL", "Patient::MANAGE_BILLS"],
   },
   "promos-offers": {
-    anyOf: ["Reference::LOOKUP", "Reference::READ", "Reference::CREATE", "Reference::UPDATE"],
+    anyOf: ["Reference::READ", "Reference::CREATE", "Reference::UPDATE"],
   },
   "promos-offers-single-service": {
-    anyOf: ["Reference::LOOKUP", "Reference::READ", "Reference::CREATE", "Reference::UPDATE"],
+    anyOf: ["Reference::READ", "Reference::CREATE", "Reference::UPDATE"],
   },
   "promos-offers-package-service": {
-    anyOf: ["Reference::LOOKUP", "Reference::READ", "Reference::CREATE", "Reference::UPDATE"],
+    anyOf: ["Reference::READ", "Reference::CREATE", "Reference::UPDATE"],
   },
   "promos-offers-hmo": {
-    anyOf: ["Reference::LOOKUP", "Reference::READ", "Reference::CREATE", "Reference::UPDATE"],
+    anyOf: ["Reference::READ", "Reference::CREATE", "Reference::UPDATE"],
   },
   "promos-offers-lgu": {
-    anyOf: ["Reference::LOOKUP", "Reference::READ", "Reference::CREATE", "Reference::UPDATE"],
+    anyOf: ["Reference::READ", "Reference::CREATE", "Reference::UPDATE"],
   },
-  settings: {
-    anyOf: ["Clinic::READ", "Clinic::LOOKUP", "Staff::READ", "Staff::LOOKUP", "Reference::LOOKUP", "AccessMatrix::READ"],
+  "general-settings": {
+    anyOf: ["AccessMatrix::READ"],
+  },
+  "pt-team-setup": {
+    anyOf: ["AccessMatrix::READ"],
+  },
+  "admin-setup": {
+    anyOf: ["Staff::READ", "Staff::LOOKUP", "Staff::CREATE", "Staff::UPDATE"],
   },
   clinics: {
     anyOf: ["Clinic::READ", "Clinic::LOOKUP", "Clinic::CREATE", "Clinic::UPDATE"],
   },
-  staffs: {
-    anyOf: ["Staff::READ", "Staff::LOOKUP", "Staff::CREATE", "Staff::UPDATE"],
-  },
-}
 
-export const DASHBOARD_ROLES = new Set([
-  "Owner",
-  "Clinic Admin",
-  "Chief Operations Officer - COO (Admin 1 Account)",
-  "Operations Manager (Admin 2 Account)",
-  "Admin/Receptionist",
-  "Secretary"
-])
+}

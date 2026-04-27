@@ -28,9 +28,7 @@
           <PatientsTableHeader
             v-model:selectedSearch="selectedSearch"
             v-model:selectedStatus="selectedStatus"
-            v-model:selectedClinic="selectedClinic"
             :statuses="statuses"
-            :clinics="clinics"
             :isLoading="isFilterLoading"
             :isExportLoading="isPatientExportLoading"
             @reset="resetFilters"
@@ -60,18 +58,30 @@
         :draggable="false"
       >
         <div v-if="selectedPatientDetails" class="space-y-4">
-          <div class="rounded-2xl border border-[#A91D8B]/25 bg-[linear-gradient(120deg,rgba(36,39,87,0.14),rgba(94,24,105,0.10),rgba(169,29,139,0.18))] shadow-[0_18px_40px_rgba(36,39,87,0.12)] p-4">
+          <div class="app-hero-panel">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <div class="text-lg font-semibold tracking-tight">{{ selectedPatientDetails.full_name }}</div>
-                <div class="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                  {{ selectedPatientDetails.gender_name }} • {{ selectedPatientDetails.age }} years old
+              <div class="flex gap-4 items-start flex-1">
+                <div v-if="selectedPatientProfileImageUrl" class="shrink-0">
+                  <img
+                    :src="selectedPatientProfileImageUrl"
+                    :alt="`${selectedPatientDetails.full_name} profile`"
+                    class="h-20 w-20 rounded-full object-cover border-2 border-white/30"
+                  />
                 </div>
-                <div class="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Patient record: {{ selectedPatientDetails.public_id || "Pending patient record code" }}
+                <div v-else class="shrink-0 h-20 w-20 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 font-semibold text-lg">
+                  {{ getPatientInitials(selectedPatientDetails.full_name) }}
                 </div>
-                <div class="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Assigned clinic: {{ selectedPatientDetails.clinic_name }}
+                <div>
+                  <div class="text-lg font-semibold tracking-tight">{{ selectedPatientDetails.full_name }}</div>
+                  <div class="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                    {{ selectedPatientDetails.gender_name }} • {{ selectedPatientDetails.age }} years old
+                  </div>
+                  <div class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Patient record: {{ selectedPatientDetails.public_id || "Pending patient record code" }}
+                  </div>
+                  <div class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Assigned clinic: {{ selectedPatientDetails.clinic_name }}
+                  </div>
                 </div>
               </div>
               <Tag
@@ -116,6 +126,7 @@
               Keep static patient attachments limited to identification files. Visit-based clinical files are now handled under Evaluation Visit Log.
             </div>
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:max-w-xl">
+              <Button label="Profile Image" icon="pi pi-camera" severity="info" outlined @click="patientProfileImageDialog?.open()" />
               <Button label="Valid ID" icon="pi pi-paperclip" severity="secondary" outlined @click="openPatientAttachmentDialog('valid-id', selectedPatientDetails)" />
               <Button label="HMO ID" icon="pi pi-paperclip" severity="secondary" outlined @click="openPatientAttachmentDialog('hmo-id', selectedPatientDetails)" />
             </div>
@@ -170,17 +181,34 @@
       ref="patientHMOValidIdAttachmentDialog"
       v-bind="patientHMOValidIdAttachmentProps"/>
 
+    <PatientProfileImageDialog
+      ref="patientProfileImageDialog"
+      :patient="selectedPatientDetails"
+      @updated="void onPatientProfileImageUpdated()"
+    />
+
+    <PatientAppointmentsDialog
+      ref="patientAppointmentsDialog"
+      :patient="selectedPatient"
+    />
+
+    <PatientBillingsDialog
+      ref="patientBillingsDialog"
+      :patient="selectedPatient"
+    />
+
     </section>
   </main>
 </template>
 
 <script setup lang="ts">
 
-import {useConfirm, useToast} from "primevue";
+import {computed, defineAsyncComponent, onMounted, ref, useTemplateRef, watch} from "vue";
+import {storeToRefs} from "pinia";
+import {useConfirm} from "primevue/useconfirm";
+import {useToast} from "primevue/usetoast";
 import {useQueryClient} from "@tanstack/vue-query";
-import PatientForm from "@/components/PatientForm.vue";
-import {computed, onMounted, ref, useTemplateRef, watch} from "vue";
-import {useRoute, useRouter} from "vue-router";
+import {useRoute} from "vue-router";
 import type {
   Patient,
   PatientEditRequestPayload,
@@ -226,7 +254,7 @@ import Button from "primevue/button";
 import Menu from "primevue/menu";
 import type {MenuItem} from "primevue/menuitem";
 import { getApiErrorMessage } from "@/utils/actionable-error.util";
-import {errorToast, infoToast, successToast, warningToast} from "@/utils/toast.util.ts";
+import {errorToast, successToast, warningToast} from "@/utils/toast.util.ts";
 import type {APIError} from "@/utils/error-handler.ts";
 import {createDraftService} from "@/services/draft.service.ts";
 import type {
@@ -246,15 +274,9 @@ import type {Region, RegionRequestPayload} from "@/models/philippine-location.ts
 import {createReferenceQueryService} from "@/services/reference.tanstack.service.ts";
 import type {PatientFormState} from "@/features/patients/schema/patient.schema";
 import {clinicStore} from "@/stores/clinic.store.ts";
-import {appointmentStore} from "@/stores/appointment.store.ts";
 import {usePaginationDebounce} from "@/composables/pagination-debounce.composable.ts";
 import PatientsTable from "@/features/patients/components/PatientsTable.vue";
 import PatientsTableHeader from "@/features/patients/components/PatientsTableHeader.vue";
-import PatientMedicalCategoryDialog from "@/components/PatientMedicalCategoryDialog.vue";
-import PatientMedicalDiagnoseDialog from "@/components/PatientMedicalDiagnoseDialog.vue";
-import PatientMedicalHistoryDialog from "@/components/PatientMedicalHistoryDialog.vue";
-import {billStore} from "@/stores/bill.store.ts";
-import PatientMedicalImagingDialog from "@/components/PatientMedicalImagingDialog.vue";
 import {
   philippineLocationTanstackService
 } from "@/services/philippine-location.tanstack.service.ts";
@@ -271,28 +293,46 @@ import {
 import {IndexedDBKey} from "@/utils/keys/indexeddb-key.ts";
 import {patientTanstackService} from "@/features/patients/queries/patient.tanstack.service";
 import {fileServerTanstackService} from "@/services/file-server.tanstack.service.ts";
-import PatientAttachmentDialog from "@/components/PatientAttachmentDialog.vue";
-import PatientHMOInformationForm from "@/components/PatientHMOInformationForm.vue";
 import {hmoTanstackService} from "@/features/hmos/queries/hmo.tanstack.service";
 import {staffService} from "@/features/staff/api/staff.service";
 import {pamsAPI} from "@/utils/axios-interceptor.ts";
-import PatientEvaluationVisitLogSection from "@/features/patients/components/PatientEvaluationVisitLogSection.vue";
 
-const patientMedicalCategoryDialog = useTemplateRef<InstanceType<typeof PatientMedicalCategoryDialog>>('patientMedicalCategoryDialog')
-const patientMedicalDiagnoseDialog = useTemplateRef<InstanceType<typeof PatientMedicalDiagnoseDialog>>('patientMedicalDiagnoseDialog')
-const patientMedicalHistoryDialog = useTemplateRef<InstanceType<typeof PatientMedicalHistoryDialog>>('patientMedicalHistoryDialog')
-const patientMedicalImagingDialog = useTemplateRef<InstanceType<typeof PatientMedicalImagingDialog>>('patientMedicalImagingDialog')
+type ToggleDialogExpose = {
+  toggleDialog: () => void
+}
 
-const patientValidIdAttachmentDialog = useTemplateRef<InstanceType<typeof PatientAttachmentDialog>>('patientValidIdAttachmentDialog')
-const patientHMOValidIdAttachmentDialog = useTemplateRef<InstanceType<typeof PatientAttachmentDialog>>('patientHMOValidIdAttachmentDialog')
+type OpenDialogExpose = {
+  open: () => void
+}
 
-const patientForm = useTemplateRef<InstanceType<typeof PatientForm>>('patientForm')
-const patientHMOInformationForm = useTemplateRef<InstanceType<typeof PatientHMOInformationForm>>('patientHMOInformationForm')
+const PatientForm = defineAsyncComponent(() => import("@/components/PatientForm.vue"))
+const PatientHMOInformationForm = defineAsyncComponent(() => import("@/components/PatientHMOInformationForm.vue"))
+const PatientMedicalCategoryDialog = defineAsyncComponent(() => import("@/components/PatientMedicalCategoryDialog.vue"))
+const PatientMedicalDiagnoseDialog = defineAsyncComponent(() => import("@/components/PatientMedicalDiagnoseDialog.vue"))
+const PatientMedicalHistoryDialog = defineAsyncComponent(() => import("@/components/PatientMedicalHistoryDialog.vue"))
+const PatientMedicalImagingDialog = defineAsyncComponent(() => import("@/components/PatientMedicalImagingDialog.vue"))
+const PatientAttachmentDialog = defineAsyncComponent(() => import("@/components/PatientAttachmentDialog.vue"))
+const PatientProfileImageDialog = defineAsyncComponent(() => import("@/components/PatientProfileImageDialog.vue"))
+const PatientEvaluationVisitLogSection = defineAsyncComponent(() => import("@/features/patients/components/PatientEvaluationVisitLogSection.vue"))
+const PatientAppointmentsDialog = defineAsyncComponent(() => import("@/features/patients/components/PatientAppointmentsDialog.vue"))
+const PatientBillingsDialog = defineAsyncComponent(() => import("@/features/patients/components/PatientBillingsDialog.vue"))
+
+const patientMedicalCategoryDialog = useTemplateRef<ToggleDialogExpose>('patientMedicalCategoryDialog')
+const patientMedicalDiagnoseDialog = useTemplateRef<ToggleDialogExpose>('patientMedicalDiagnoseDialog')
+const patientMedicalHistoryDialog = useTemplateRef<ToggleDialogExpose>('patientMedicalHistoryDialog')
+const patientMedicalImagingDialog = useTemplateRef<ToggleDialogExpose>('patientMedicalImagingDialog')
+
+const patientValidIdAttachmentDialog = useTemplateRef<ToggleDialogExpose>('patientValidIdAttachmentDialog')
+const patientHMOValidIdAttachmentDialog = useTemplateRef<ToggleDialogExpose>('patientHMOValidIdAttachmentDialog')
+const patientProfileImageDialog = useTemplateRef<OpenDialogExpose>('patientProfileImageDialog')
+const patientAppointmentsDialog = useTemplateRef<OpenDialogExpose>('patientAppointmentsDialog')
+const patientBillingsDialog = useTemplateRef<OpenDialogExpose>('patientBillingsDialog')
+
+const patientForm = useTemplateRef<ToggleDialogExpose>('patientForm')
+const patientHMOInformationForm = useTemplateRef<ToggleDialogExpose>('patientHMOInformationForm')
 
 const useClinicStore = clinicStore()
-const useAppointmentStore = appointmentStore()
-const useBillStore = billStore()
-const router = useRouter()
+const { selectedClinicId } = storeToRefs(useClinicStore)
 const route = useRoute()
 
 const toast = useToast()
@@ -354,14 +394,62 @@ const draftService = createDraftService<PatientFormState>(IndexedDBKey.PATIENT)
 
 const selectedPatient = ref<Patient | undefined>()
 const selectedPatientDetails = ref<Patient | undefined>()
+const selectedPatientProfileImageUrl = ref<string>()
 const patientDetailsVisible = ref<boolean>(false)
 const pendingPatientDrillDownId = ref<number>()
 const pendingPatientDrillDownName = ref<string>()
 
+const revokeSelectedPatientProfileImageUrl = (): void => {
+  if (selectedPatientProfileImageUrl.value) {
+    URL.revokeObjectURL(selectedPatientProfileImageUrl.value)
+  }
+  selectedPatientProfileImageUrl.value = undefined
+}
+
+const loadSelectedPatientProfileImage = async (patientId?: number): Promise<void> => {
+  revokeSelectedPatientProfileImageUrl()
+  if (!patientId) return
+
+  try {
+    const response = await pamsAPI.get<Blob>(`/patients/${patientId}/profile-image/file?t=${Date.now()}`, {
+      responseType: 'blob'
+    })
+    selectedPatientProfileImageUrl.value = URL.createObjectURL(response.data)
+  } catch {
+    selectedPatientProfileImageUrl.value = undefined
+  }
+}
+
 const onPatientRowClick = (patient: Patient): void => {
   selectedPatientDetails.value = patient
   patientDetailsVisible.value = true
+  void loadSelectedPatientProfileImage(patient.id)
 }
+
+const getPatientInitials = (fullName?: string): string => {
+  if (!fullName?.trim()) {
+    return "NA"
+  }
+
+  const parts = fullName.trim().split(/\s+/).filter(Boolean)
+  const first = parts[0]?.[0] ?? ""
+  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : ""
+  return `${first}${last}`.toUpperCase() || "NA"
+}
+
+const onPatientProfileImageUpdated = async (): Promise<void> => {
+  await refetch()
+  if (!selectedPatientDetails.value?.id) return
+  const refreshed = await pamsAPI.get<Patient>(`/patients/${selectedPatientDetails.value.id}`)
+  selectedPatientDetails.value = refreshed.data
+  await loadSelectedPatientProfileImage(selectedPatientDetails.value.id)
+}
+
+watch(patientDetailsVisible, (visible) => {
+  if (!visible) {
+    revokeSelectedPatientProfileImageUrl()
+  }
+})
 
 const openPatientAttachmentDialog = (
   attachmentType: "valid-id" | "hmo-id",
@@ -434,7 +522,6 @@ const formatReferralChannel = (channel?: ReferralChannel): string => {
   return "N/A"
 }
 
-const selectedClinic = ref<Lookup | undefined>()
 const selectedSearch = ref<string | undefined>()
 const selectedStatus = ref<Status>(defaultStatus)
 const {
@@ -444,7 +531,7 @@ const {
 } = usePaginationDebounce<Pageable<Patient> | undefined>()
 
 watchDebounced(
-  [selectedClinic, selectedSearch, selectedStatus],
+  [selectedClinicId, selectedSearch, selectedStatus],
   (): void => {
     page.value = 1
     void refetch()
@@ -455,7 +542,6 @@ watchDebounced(
 const resetFilters = (): void => {
   selectedSearch.value = undefined
   selectedStatus.value = defaultStatus
-  selectedClinic.value = undefined
 }
 
 const genders = ref<Gender[]>([])
@@ -551,7 +637,7 @@ const requestParams = computed(() => ({
     name: selectedSearch.value?.trim() || undefined,
     status: selectedStatus.value
   },
-  clinic_id: selectedClinic.value?.id,
+  clinic_id: selectedClinicId.value,
 }) satisfies PatientRequestParams)
 
 const {
@@ -761,19 +847,17 @@ const menuButtons = (patient: Patient): MenuItem[] => {
     {
       label: `View Appointments`,
       icon: 'pi pi-calendar-clock',
-      command: async () => {
-        useAppointmentStore.patient = patient
-        infoToast(toast, `Viewing appointments for ${patient.full_name}`)
-        await router.push("/appointments")
+      command: () => {
+        selectedPatient.value = patient
+        patientAppointmentsDialog.value?.open()
       }
     },
     {
       label: `View Bills`,
       icon: 'pi pi-receipt',
-      command: async () => {
-        useBillStore.patient = patient
-        infoToast(toast, `Viewing bills for ${patient.full_name}`)
-        await router.push("/billing")
+      command: () => {
+        selectedPatient.value = patient
+        patientBillingsDialog.value?.open()
       },
     },
     {
@@ -792,7 +876,7 @@ const menuButtons = (patient: Patient): MenuItem[] => {
 
 const onExportToExcelThrottleFn = useThrottleFn(async (): Promise<void> => {
   const params: PatientExportRequestParams = {
-    clinic_id: selectedClinic.value?.id,
+    clinic_id: selectedClinicId.value,
     page_request: {
       name: selectedSearch.value?.trim() || undefined,
       status: selectedStatus.value
@@ -807,7 +891,7 @@ const onExportToExcelThrottleFn = useThrottleFn(async (): Promise<void> => {
 const onExportCsv = async (): Promise<void> => {
   const response: AxiosResponse<Blob> = await pamsAPI.get("/patients/export/csv", {
     params: {
-      clinic_id: selectedClinic.value?.id,
+      clinic_id: selectedClinicId.value,
       name: selectedSearch.value?.trim() || undefined,
       status: selectedStatus.value
     },
@@ -904,17 +988,8 @@ const resetQueries = async (): Promise<void> => {
   await queryClient.invalidateQueries({queryKey: [PatientTanstackKey.PATIENTS]})
 }
 
-const onClinicRedirect = async (): Promise<void> => {
-  const clinicFromStore: Lookup | undefined = useClinicStore.clinic
-  if (!clinicFromStore) return
-  selectedClinic.value = clinics.value.find(c => c.id === clinicFromStore.id)
-  useClinicStore.resetClinic()
-}
-
 onMounted(async (): Promise<void> => {
-  void initializeDropdowns().then(async () => {
-    await onClinicRedirect()
-  })
+  void initializeDropdowns()
   await applyAppointmentDrillDown()
 })
 

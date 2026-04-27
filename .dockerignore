@@ -1,7 +1,0 @@
-# Ignore everything
-*
-
-# Allow /build/libs
-!/build/libs
-!/docker
-!nginx.conf

@@ -1,6 +1,6 @@
 import {ref} from "vue";
 import {useDebounceFn} from "@vueuse/core";
-import type {PageState} from "primevue";
+import type {PageState} from "primevue/paginator";
 import type {QueryObserverResult, RefetchOptions} from "@tanstack/vue-query";
 
 export const usePaginationDebounce = <TData>(ms: number = 1000) => {

@@ -33,30 +33,6 @@
           <label for="staffStatus" class="opacity-70">Status</label>
         </IftaLabel>
 
-        <IftaLabel class="w-full sm:w-72">
-          <Select
-            v-model="modelClinic"
-            input-id="staffClinic"
-            :show-clear="true"
-            :options="clinics"
-            :loading="isLoading"
-            option-label="name"
-            filter
-            :filter-fields="['name']"
-            class="w-full"
-            :pt="ptSelect"
-          >
-            <template #value="slotProps">
-              <span v-if="slotProps.value" class="truncate">{{ slotProps.value?.name }}</span>
-              <span v-else class="opacity-70">Select clinic</span>
-            </template>
-            <template #option="slotProps">
-              <span class="truncate">{{ slotProps.option?.name }}</span>
-            </template>
-          </Select>
-          <label for="staffClinic" class="opacity-70">Clinic</label>
-        </IftaLabel>
-
         <Button
           label="Reset filters"
           icon="pi pi-filter-slash"
@@ -70,7 +46,7 @@
 
       <div class="app-table-header-actions">
         <Button
-          v-if="canManageRoles"
+          v-if="canManageSpecialties"
           label="Specialties"
           icon="pi pi-bookmark"
           severity="secondary"
@@ -131,25 +107,22 @@ import InputText from "primevue/inputtext"
 import Select from "primevue/select"
 import {ptInputText, ptOutlinedBtn, ptPrimaryBtn, ptSelect} from "@/features/shared/table-header.styles"
 
-import type { Lookup } from "@/models/global.model"
 import type { Status } from "@/utils/global.type"
 
 const props = defineProps<{
   statuses: Status[]
-  clinics: Lookup[]
   isLoading: boolean
   isExportLoading: boolean
   canCreateStaff: boolean
   canManageRoles: boolean
+  canManageSpecialties?: boolean
   selectedSearch?: string
   selectedStatus: Status
-  selectedClinic?: Lookup
 }>()
 
 const emit = defineEmits<{
   (e: "update:selectedSearch", v: string | undefined): void
   (e: "update:selectedStatus", v: Status): void
-  (e: "update:selectedClinic", v: Lookup | undefined): void
   (e: "reset"): void
   (e: "save"): void
   (e: "manageSpecialties"): void
@@ -165,11 +138,6 @@ const modelSearch = computed({
 const modelStatus = computed({
   get: () => props.selectedStatus,
   set: (v) => emit("update:selectedStatus", v),
-})
-
-const modelClinic = computed({
-  get: () => props.selectedClinic,
-  set: (v) => emit("update:selectedClinic", v),
 })
 
 </script>

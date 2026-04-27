@@ -1,7 +1,5 @@
 import {createRouter, createWebHistory} from 'vue-router'
-import LoginView from '../../features/auth/pages/LoginView.vue'
-import { authMeService } from '@/services/auth-me.service'
-import { ROUTE_ACCESS_RULES, type RouteAccessRule, DASHBOARD_ROLES } from '@/shared/permissions'
+import { ROUTE_ACCESS_RULES, type RouteAccessRule } from '@/shared/permissions'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -9,7 +7,7 @@ const router = createRouter({
     {
       path: '',
       name: 'login',
-      component: LoginView,
+      component: () => import('../../features/auth/pages/LoginView.vue'),
       meta: {
         requiresAuth: false
       }
@@ -47,8 +45,14 @@ const router = createRouter({
           meta: {requireAuth: true}
         },
         {
-          path: '/settings',
-          name: 'settings',
+          path: '/general-settings',
+          name: 'general-settings',
+          component: () => import('@/features/general-settings/pages/GeneralSettingsView.vue'),
+          meta: {requireAuth: true}
+        },
+        {
+          path: '/pt-team-setup',
+          name: 'pt-team-setup',
           component: () => import('@/features/settings/pages/SettingsView.vue'),
           meta: {requireAuth: true}
         },
@@ -65,8 +69,8 @@ const router = createRouter({
           meta: {requireAuth: true}
         },
         {
-          path: '/staffs',
-          name: 'staffs',
+          path: '/admin-setup',
+          name: 'admin-setup',
           component: () => import('@/features/staff/pages/StaffView.vue'),
           meta: {requireAuth: true}
         },
@@ -156,14 +160,23 @@ const router = createRouter({
 let userPermissions: string[] = []
 let userRole: string = ''
 
-const loadUserPermissions = async () => {
+const loadUserPermissions = async (): Promise<boolean> => {
   try {
+    const {authMeService} = await import('@/services/auth-me.service')
     const user = await authMeService.get()
+    if (!user) {
+      userPermissions = []
+      userRole = ''
+      return false
+    }
+
     userPermissions = user?.permissions ?? []
     userRole = user?.role_name ?? ''
+    return true
   } catch {
     userPermissions = []
     userRole = ''
+    return false
   }
 }
 
@@ -171,31 +184,37 @@ const hasAnyPermission = (permissions: string[]): boolean => {
   return permissions.some(permission => userPermissions.includes(permission))
 }
 
+const resolveFallbackRouteName = (blockedRouteName: string): string => {
+  if (hasAnyPermission(ROUTE_ACCESS_RULES.dashboard?.anyOf ?? [])) {
+    return 'dashboard'
+  }
+
+  const allowedEntry = Object.entries(ROUTE_ACCESS_RULES)
+    .find(([routeName, rule]) => routeName !== blockedRouteName && hasAnyPermission(rule.anyOf))
+
+  if (allowedEntry) {
+    return allowedEntry[0]
+  }
+
+  return 'pt-schedule'
+}
+
 router.beforeEach(async (to, from, next) => {
   if (to.meta.requiresAuth === false) {
     return next()
   }
 
-  // Load permissions if not loaded
-  if (userPermissions.length === 0) {
-    await loadUserPermissions()
+  const hasAuthContext = await loadUserPermissions()
+  if (!hasAuthContext) {
+    return next({name: 'login'})
   }
 
   const routeName = String(to.name ?? "")
-  
-  // Special handling for dashboard - role-based access
-  if (routeName === 'dashboard') {
-    if (DASHBOARD_ROLES.has(userRole)) {
-      return next()
-    } else {
-      return next({ name: 'dashboard' }) // Redirect to dashboard if not allowed
-    }
-  }
 
   const rule = ROUTE_ACCESS_RULES[routeName]
   if (rule) {
     if (!hasAnyPermission(rule.anyOf)) {
-      return next({ name: 'dashboard' }) // Redirect to dashboard if no access
+      return next({name: resolveFallbackRouteName(routeName)})
     }
   }
 

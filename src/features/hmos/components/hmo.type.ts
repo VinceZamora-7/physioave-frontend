@@ -1,5 +1,5 @@
 import type {HMO} from "@/features/hmos/types/hmo";
-import type {ButtonProps} from "primevue";
+import type {ButtonProps} from "primevue/button";
 import type {FormSubmitEvent} from "@primevue/forms";
 import type {StringSchemaFormState} from "@/schema/global.schema.ts";
 

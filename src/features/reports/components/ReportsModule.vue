@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import {computed, nextTick, onMounted, ref, watch} from "vue"
+import {storeToRefs} from "pinia"
 import {useRoute} from "vue-router"
-import {useConfirm, useToast} from "primevue"
+import {useConfirm} from "primevue/useconfirm"
+import {useToast} from "primevue/usetoast"
 import Button from "primevue/button"
 import Column from "primevue/column"
 import DataTable from "primevue/datatable"
@@ -9,7 +11,6 @@ import DatePicker from "primevue/datepicker"
 import Dialog from "primevue/dialog"
 import InputNumber from "primevue/inputnumber"
 import InputText from "primevue/inputtext"
-import Select from "primevue/select"
 import Tag from "primevue/tag"
 import {
   appointmentPhase1Service,
@@ -22,13 +23,11 @@ import {
   type DailyIncomeExpenseReport,
   type MonthlyIncomeExpenseReport
 } from "@/features/billing/api/billing-phase1.service"
-import {clinicService} from "@/features/clinics/api/clinic.service"
-import type {Clinic} from "@/features/clinics/types/clinic"
-import {defaultPage, defaultPageSize} from "@/models/paging"
 import {ptOutlinedBtn, ptPrimaryBtn} from "@/features/shared/table-header.styles"
 import {getApiErrorMessage} from "@/utils/actionable-error.util"
 import {errorToast, successToast} from "@/utils/toast.util"
 import {authMeService, type AuthMe} from "@/services/auth-me.service"
+import {clinicStore} from "@/stores/clinic.store"
 
 const toast = useToast()
 const confirm = useConfirm()
@@ -38,10 +37,9 @@ const isLoading = ref(false)
 const isSavingExpense = ref(false)
 const isEodLoading = ref(false)
 const isEodHistoryLoading = ref(false)
-const isClinicsLoading = ref(false)
 const selectedDate = ref(new Date())
-const clinics = ref<Clinic[]>([])
-const selectedClinicId = ref<number>()
+const globalClinicStore = clinicStore()
+const {selectedClinicId, selectedClinic} = storeToRefs(globalClinicStore)
 const report = ref<DailyIncomeExpenseReport>()
 const monthlyReport = ref<MonthlyIncomeExpenseReport>()
 const eodReport = ref<PtEndOfDayReport>()
@@ -93,12 +91,8 @@ const selectedMonthLabel = computed(() =>
   })
 )
 
-const selectedClinic = computed(() =>
-  clinics.value.find((clinic) => clinic.id === selectedClinicId.value)
-)
-
 const selectedClinicScheduleLabel = computed(() => {
-  if (!selectedClinic.value) return "Select a clinic to scope End-of-Day reports"
+  if (!selectedClinic.value) return "Select a branch in the sidebar to scope End-of-Day reports"
   return `${selectedClinic.value.start_day_name} to ${selectedClinic.value.end_day_name} · ${selectedClinic.value.start_time_formatted} - ${selectedClinic.value.end_time_formatted}`
 })
 
@@ -261,9 +255,10 @@ const refreshReport = async (): Promise<void> => {
   if (!canViewFinanceReports.value) return
   try {
     isLoading.value = true
+    const clinicId = selectedClinicId.value
     const [dailyReport, monthReport] = await Promise.all([
-      billingPhase1Service.getDailyIncomeExpense(toDateParam(selectedDate.value)),
-      billingPhase1Service.getMonthlyIncomeExpense(selectedMonthParam.value, toDateParam(selectedDate.value))
+      billingPhase1Service.getDailyIncomeExpense(toDateParam(selectedDate.value), clinicId),
+      billingPhase1Service.getMonthlyIncomeExpense(selectedMonthParam.value, toDateParam(selectedDate.value), clinicId)
     ])
     report.value = dailyReport
     monthlyReport.value = monthReport
@@ -348,9 +343,11 @@ const refreshDoctorSessionsReport = async (): Promise<void> => {
 
   try {
     isDoctorSessionsLoading.value = true
+    const clinicId = selectedClinicId.value
     doctorSessionsReport.value = await appointmentPhase1Service.getCompletedSessionsByReferringDoctor(
       toDateParam(fromDate),
-      toDateParam(toDate)
+      toDateParam(toDate),
+      clinicId
     )
   } catch (error: unknown) {
     errorToast(
@@ -392,6 +389,7 @@ const saveExpense = async (): Promise<void> => {
     isSavingExpense.value = true
     await billingPhase1Service.addDailyExpense({
       expense_date: toDateParam(selectedDate.value),
+      clinic_id: selectedClinicId.value,
       item_name: expenseForm.value.item_name.trim(),
       amount: Number(expenseForm.value.amount ?? 0),
       notes: expenseForm.value.notes.trim() || undefined
@@ -458,34 +456,6 @@ const openEodHistoryDetails = (item: EndOfDayHistoryItem): void => {
   eodHistoryDetailsVisible.value = true
 }
 
-const loadClinics = async (): Promise<void> => {
-  try {
-    isClinicsLoading.value = true
-    const paged = await clinicService.getAll({
-      page: defaultPage,
-      size: defaultPageSize,
-      name: undefined,
-      status: undefined
-    })
-    clinics.value = paged?.content ?? []
-
-    if (!selectedClinicId.value && clinics.value.length > 0) {
-      selectedClinicId.value = clinics.value[0]?.id
-    }
-  } catch (error: unknown) {
-    errorToast(
-      toast,
-      getApiErrorMessage(error, {
-        baseMessage: "Clinic list could not be loaded",
-        permissionHint: "Clinic access (Read or Lookup)",
-        retryHint: "Refresh this page or ask admin to grant Clinic access."
-      })
-    )
-  } finally {
-    isClinicsLoading.value = false
-  }
-}
-
 const refreshAllReports = async (): Promise<void> => {
   await Promise.all([
     refreshReport(),
@@ -548,8 +518,10 @@ watch(selectedDate, () => {
 })
 
 watch(selectedClinicId, () => {
+  void refreshReport()
   void refreshEodReport()
   void refreshEodHistory()
+  void refreshDoctorSessionsReport()
 })
 
 watch(() => route.query.section, () => {
@@ -563,16 +535,26 @@ onMounted(async () => {
     // Ignore
   }
   initializeDoctorSessionsDateRange()
-  void loadClinics()
-  void refreshReport()
-  void refreshDoctorSessionsReport()
+  try {
+    await globalClinicStore.loadClinics()
+  } catch (error: unknown) {
+    errorToast(
+      toast,
+      getApiErrorMessage(error, {
+        baseMessage: "Clinic list could not be loaded",
+        permissionHint: "Clinic access (Read or Lookup)",
+        retryHint: "Refresh this page or ask admin to grant Clinic access."
+      })
+    )
+  }
+  void refreshAllReports()
   void scrollToRequestedSection()
 })
 </script>
 
 <template>
   <main class="app-page-shell space-y-5">
-    <section class="rounded-3xl border border-[#A91D8B]/25 bg-[linear-gradient(120deg,rgba(36,39,87,0.14),rgba(94,24,105,0.10),rgba(169,29,139,0.18))] p-5 shadow-[0_18px_40px_rgba(36,39,87,0.10)]">
+    <section class="app-hero-banner-vivid">
       <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div class="space-y-2">
           <div class="text-lg font-semibold tracking-tight">Finance, Closeout &amp; Analytics</div>
@@ -600,7 +582,7 @@ onMounted(async () => {
 
         <div class="flex flex-wrap gap-2">
           <Button label="Today" icon="pi pi-calendar" outlined :pt="ptOutlinedBtn" @click="resetToToday" />
-          <Button label="Refresh" icon="pi pi-refresh" :loading="isLoading || isEodLoading || isDoctorSessionsLoading" :pt="ptPrimaryBtn" @click="refreshAllReports" />
+          <Button label="Refresh" icon="pi pi-refresh" severity="secondary" outlined :loading="isLoading || isEodLoading || isDoctorSessionsLoading" :pt="ptOutlinedBtn" @click="refreshAllReports" />
         </div>
       </div>
     </section>
@@ -622,22 +604,8 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div class="grid grid-cols-1 gap-3 md:grid-cols-[minmax(240px,320px)_1fr]">
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide opacity-60">Clinic (EOD Scope)</label>
-          <Select
-            v-model="selectedClinicId"
-            :options="clinics"
-            optionLabel="name"
-            optionValue="id"
-            :loading="isClinicsLoading"
-            placeholder="Select clinic"
-            class="w-full"
-          />
-        </div>
-        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 text-sm opacity-75">
-          {{ selectedClinicScheduleLabel }}
-        </div>
+      <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 text-sm opacity-75">
+        {{ selectedClinicScheduleLabel }}
       </div>
     </section>
 

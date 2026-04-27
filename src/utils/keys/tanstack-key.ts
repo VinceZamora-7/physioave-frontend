@@ -56,7 +56,8 @@ export enum PatientTanstackKey {
   PATIENT_MEDICAL_IMAGING = 'patientMedicalImaging',
   PATIENT_MEDICAL_IMAGING_EXPORT = 'patientMedicalImagingExport',
 
-  PATIENT_HMO_INFORMATION = 'patientHMOInformation'
+  PATIENT_HMO_INFORMATION = 'patientHMOInformation',
+  PATIENT_HMO_INFORMATION_HISTORY = 'patientHMOInformationHistory'
 }
 
 export enum PhilippineLocationTanstackKey {

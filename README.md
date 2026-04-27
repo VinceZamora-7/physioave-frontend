@@ -102,23 +102,6 @@ npm run lint
 - On successful login, backend sets secure cookies and redirects back to frontend.
 - Frontend then calls authenticated endpoints (for example `/auth/me`) using `withCredentials`.
 
-## Docker Deployment
-Build image:
-
-```bash
-docker build -t pams-frontend .
-```
-
-Run container:
-
-```bash
-docker run --rm -p 80:80 pams-frontend
-```
-
-Notes:
-- Multi-stage Dockerfile builds static assets with Node and serves them via Nginx.
-- `nginx.conf` is configured for SPA routing with `try_files $uri /index.html`.
-
 ## Routes (High Level)
 Primary app routes include:
 - `/` (login)

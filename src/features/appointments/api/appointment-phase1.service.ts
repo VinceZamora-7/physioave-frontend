@@ -472,25 +472,26 @@ export const appointmentPhase1Service = {
       return data
     })
   },
-  async getCompletedSessionsByReferringDoctor(from_date: string, to_date: string): Promise<ReferringDoctorCompletedSessionsReport | undefined> {
+  async getCompletedSessionsByReferringDoctor(from_date: string, to_date: string, clinic_id?: number): Promise<ReferringDoctorCompletedSessionsReport | undefined> {
     return await this.withRefreshRetry(async () => {
       const {data} = await pamsAPI.get<ReferringDoctorCompletedSessionsReport>(
         "/appointments/reports/referring-doctor-completed-sessions",
         {
           params: {
             from_date,
-            to_date
+            to_date,
+            ...(clinic_id ? {clinic_id} : {})
           }
         }
       )
       return data
     })
   },
-  async getCompletedSessionsByPt(from_date: string, to_date: string): Promise<PtCompletedSessionsReport | undefined> {
+  async getCompletedSessionsByPt(from_date: string, to_date: string, clinic_id?: number): Promise<PtCompletedSessionsReport | undefined> {
     return await this.withRefreshRetry(async () => {
       const {data} = await pamsAPI.get<PtCompletedSessionsReport>(
         "/appointments/reports/pt-completed-sessions",
-        {params: {from_date, to_date}}
+        {params: {from_date, to_date, ...(clinic_id ? {clinic_id} : {})}}
       )
       return data
     })

@@ -401,9 +401,32 @@ export interface LguMonthlyClaimResult {
 
 export interface DailyExpenseRequest {
   expense_date: string
+  clinic_id?: number
   item_name: string
   amount: number
   notes?: string
+}
+
+export interface BillingPaymentLogEntry {
+  id: number
+  billingId: number
+  amountApplied: number
+  amountTendered: number
+  changeGiven: number
+  paymentType: string
+  referenceNo: string | null
+  note: string | null
+  balanceBefore: number
+  balanceAfter: number
+  recordedBy: string
+  createdAt: string
+}
+
+export interface RecordPaymentRequest {
+  amountTendered: number
+  paymentType: string
+  referenceNo?: string
+  note?: string
 }
 
 export const billingPhase1Service = {
@@ -421,6 +444,13 @@ export const billingPhase1Service = {
   },
   async update(id: number, payload: BillingRequest): Promise<void> {
     await pamsAPI.put(`/billings/${id}`, payload)
+  },
+  async getPaymentLog(id: number): Promise<BillingPaymentLogEntry[]> {
+    const {data} = await pamsAPI.get<BillingPaymentLogEntry[]>(`/billings/${id}/payment-log`)
+    return data ?? []
+  },
+  async recordPayment(id: number, payload: RecordPaymentRequest): Promise<void> {
+    await pamsAPI.post(`/billings/${id}/payment-log`, payload)
   },
   async delete(id: number): Promise<void> {
     await pamsAPI.delete(`/billings/${id}`)
@@ -497,15 +527,15 @@ export const billingPhase1Service = {
       })
       return data
     },
-  async getDailyIncomeExpense(date?: string): Promise<DailyIncomeExpenseReport | undefined> {
+  async getDailyIncomeExpense(date?: string, clinic_id?: number): Promise<DailyIncomeExpenseReport | undefined> {
     const {data} = await pamsAPI.get<DailyIncomeExpenseReport>("/billings/daily-income-expense", {
-      params: {date}
+      params: {date, ...(clinic_id ? {clinic_id} : {})}
     })
     return data
   },
-  async getMonthlyIncomeExpense(month?: string, date?: string): Promise<MonthlyIncomeExpenseReport | undefined> {
+  async getMonthlyIncomeExpense(month?: string, date?: string, clinic_id?: number): Promise<MonthlyIncomeExpenseReport | undefined> {
     const {data} = await pamsAPI.get<MonthlyIncomeExpenseReport>("/billings/monthly-income-expense", {
-      params: {month, date}
+      params: {month, date, ...(clinic_id ? {clinic_id} : {})}
     })
     return data
   },

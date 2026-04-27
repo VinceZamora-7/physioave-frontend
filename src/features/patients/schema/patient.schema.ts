@@ -82,13 +82,27 @@ export const patientSchema = z.strictObject({
 })
 export type PatientFormState = z.infer<typeof patientSchema>
 
+export const FIRST_DEGREE_FAMILY_RELATIONSHIPS = [
+  "Father",
+  "Mother",
+  "Son",
+  "Daughter",
+  "Brother",
+  "Sister"
+] as const
+
 export const patientHMOInformationSchema = z.strictObject({
   company_name: z.string("Company name is required").max(100, "Company name must be 100 characters and below only"),
   member_id: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().max(100).optional()),
   card_number: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().max(100).optional()),
   plan_name: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().max(100).optional()),
   principal_name: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().max(100).optional()),
-  relationship_to_principal: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().max(100).optional()),
+  relationship_to_principal: z.preprocess(
+    value => value === "" || value == null ? undefined : value,
+    z.enum(FIRST_DEGREE_FAMILY_RELATIONSHIPS, {
+      error: "Relationship must be a first-degree family member"
+    }).optional()
+  ),
   approval_code: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().max(100).optional()),
   validity_start_date: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD format").optional()),
   validity_end_date: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD format").optional()),

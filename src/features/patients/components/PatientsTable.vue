@@ -19,7 +19,7 @@
       </div>
     </template>
 
-    <Column :sortable="true" header="Full name" field="full_name">
+    <Column :sortable="true" header="Full Name" field="full_name">
       <template #body="slotProps">
         <SkeletonLoader :loading="isLoading">
           <div class="space-y-1">
@@ -42,7 +42,7 @@
       <template #body="slotProps"><SkeletonLoader :loading="isLoading">{{ slotProps.data?.clinic_name }}</SkeletonLoader></template>
     </Column>
 
-    <Column :sortable="true" header="Phone number" field="phone_number">
+    <Column :sortable="true" header="Phone Number" field="phone_number">
       <template #body="slotProps">
         <SkeletonLoader :loading="isLoading">
           <span
@@ -87,7 +87,7 @@
 import { useClipboard } from "@vueuse/core"
 import DataTable from "primevue/datatable"
 import Column from "primevue/column"
-import { Paginator } from "primevue"
+import Paginator from "primevue/paginator"
 
 import SkeletonLoader from "@/composables/SkeletonLoader.vue"
 import type { Pageable } from "@/models/paging"

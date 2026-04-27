@@ -1,7 +1,7 @@
 import axios from 'axios'
 import {ZodError} from "zod";
 import {warningToast} from "@/utils/toast.util.ts";
-import type {ToastServiceMethods} from "primevue";
+import type {ToastServiceMethods} from "primevue/toastservice";
 
 export class APIError extends Error {
   status?: number

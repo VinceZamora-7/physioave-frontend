@@ -1,11 +1,11 @@
 <template>
   <main class="app-page-shell space-y-5">
-    <section class="rounded-3xl border border-[#A91D8B]/25 bg-[linear-gradient(120deg,rgba(36,39,87,0.14),rgba(94,24,105,0.10),rgba(169,29,139,0.18))] shadow-[0_18px_40px_rgba(36,39,87,0.12)] p-4 sm:p-5">
+    <section class="app-hero-banner-vivid p-4 sm:p-5">
       <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div class="space-y-2">
-          <div class="text-lg font-semibold tracking-tight">Appointments Daily Deck</div>
+          <div class="text-lg font-semibold tracking-tight">Appointments Overview</div>
           <p class="max-w-2xl text-sm text-slate-600 dark:text-slate-300">
-            Run the clinic's day from the primary Appointments view, then use the table below only for secondary filtering, export, and reporting support.
+            Manage the clinic's day from the primary Appointments view, then use the table below for filtering, export, and reporting support.
           </p>
           <div class="flex flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-300">
             <span class="rounded-full border border-white/40 bg-white/55 px-3 py-1 dark:border-white/10 dark:bg-white/10">
@@ -17,23 +17,26 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <article class="rounded-2xl border border-white/40 bg-white/60 p-3 dark:border-white/10 dark:bg-white/10">
-            <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Daily Deck</div>
+        <div class="flex flex-col items-stretch gap-3 lg:items-end">
+          <Button label="Add Appointment" icon="pi pi-plus" :pt="ptPrimaryBtn" @click="openCreateDialog" />
+          <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <article class="rounded-2xl border border-white/40 bg-white/60 p-3 dark:border-white/10 dark:bg-white/10">
+            <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Visible Appointments</div>
             <div class="mt-1 text-2xl font-semibold">{{ dayBookings.length }}</div>
-          </article>
-          <article class="rounded-2xl border border-white/40 bg-white/60 p-3 dark:border-white/10 dark:bg-white/10">
+            </article>
+            <article class="rounded-2xl border border-white/40 bg-white/60 p-3 dark:border-white/10 dark:bg-white/10">
             <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Filtered Table</div>
             <div class="mt-1 text-2xl font-semibold">{{ totalElements }}</div>
-          </article>
-          <article class="rounded-2xl border border-white/40 bg-white/60 p-3 dark:border-white/10 dark:bg-white/10">
+            </article>
+            <article class="rounded-2xl border border-white/40 bg-white/60 p-3 dark:border-white/10 dark:bg-white/10">
             <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Rescheduled Today</div>
             <div class="mt-1 text-2xl font-semibold">{{ rescheduledAppointmentsCount }}</div>
-          </article>
-          <article class="rounded-2xl border border-white/40 bg-white/60 p-3 dark:border-white/10 dark:bg-white/10">
+            </article>
+            <article class="rounded-2xl border border-white/40 bg-white/60 p-3 dark:border-white/10 dark:bg-white/10">
             <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Needs Billing</div>
             <div class="mt-1 text-2xl font-semibold">{{ billingAttentionCount }}</div>
-          </article>
+            </article>
+          </div>
         </div>
       </div>
     </section>
@@ -42,22 +45,12 @@
       <div class="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h3 :class="sectionTitleClass">Clinic Calendar</h3>
-          <p class="text-sm opacity-70">Pick a clinic schedule first to see valid booking days and the day status colors for the month.</p>
+          <p class="text-sm opacity-70">Uses the global branch selection to show valid booking days and day-status colors for the month.</p>
           <span class="text-sm opacity-70">Selected: {{ selectedDateLabel }}</span>
         </div>
-        <IftaLabel class="min-w-[260px]">
-          <Select
-            v-model="selectedClinicId"
-            :options="clinicOptions"
-            optionLabel="name"
-            optionValue="id"
-            fluid
-            filter
-            placeholder="Select clinic schedule"
-            :pt="ptSelect"
-          />
-          <label>Clinic Schedule</label>
-        </IftaLabel>
+        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] px-3 py-2 text-xs opacity-80">
+          Branch: {{ selectedClinic?.name || "Select a branch in the sidebar" }}
+        </div>
       </div>
       <small v-if="selectedClinicScheduleLabel" class="opacity-70">{{ selectedClinicScheduleLabel }}</small>
       <div class="flex flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-300">
@@ -102,21 +95,16 @@
           </div>
         </template>
       </DatePicker>
-    </section>
-
-    <section :class="sectionCardClass">
-      <AppointmentPtDeck
-        :groups="visiblePtDeckGroups"
-        :selected-appointment-id="selectedDetail?.id"
-        :can-delete-appointments="canDeleteAppointments"
-        :is-loading="isPtDeckLoading"
-        @create="openCreateDialog"
-        @refresh="refreshAll"
-        @select="selectAppointment"
-        @billing="goToBillingForAppointment"
-        @reschedule="openReschedule"
-        @delete="confirmDeleteAppointment"
-      />
+      <div class="flex justify-end pt-1">
+        <Button
+          label="Add Appointment"
+          icon="pi pi-plus"
+          size="small"
+          outlined
+          :pt="ptPrimaryBtn"
+          @click="openCreateDialog"
+        />
+      </div>
     </section>
 
     <section :class="sectionCardClass">
@@ -134,7 +122,7 @@
             placeholder="Search patient or record ID"
             :pt="ptInputText"
           />
-          <label>Record search</label>
+          <label>Record Search</label>
         </IftaLabel>
         <IftaLabel>
           <Select
@@ -145,7 +133,7 @@
             placeholder="All statuses"
             :pt="ptSelect"
           />
-          <label>Status filter</label>
+          <label>Status Filter</label>
         </IftaLabel>
         <IftaLabel>
           <Select
@@ -158,7 +146,7 @@
             placeholder="All phases"
             :pt="ptSelect"
           />
-          <label>Phase filter</label>
+          <label>Phase Filter</label>
         </IftaLabel>
         <IftaLabel>
           <Select
@@ -169,17 +157,17 @@
             showClear
             filter
             fluid
-            placeholder="All providers"
+            placeholder="All assigned PTs"
             :pt="ptSelect"
           />
-          <label>Provider filter</label>
+          <label>Assigned PT Filter</label>
         </IftaLabel>
         <div class="flex flex-wrap items-end gap-2 md:col-span-2 xl:col-span-2">
-          <Button label="Refresh Table" icon="pi pi-refresh" outlined :pt="ptOutlinedBtn" @click="refreshAll" />
+          <Button label="Refresh" icon="pi pi-refresh" severity="secondary" outlined :pt="ptOutlinedBtn" @click="refreshAll" />
           <Button label="Export CSV" icon="pi pi-download" severity="secondary" outlined :pt="ptOutlinedBtn" @click="onExportCsv" />
         </div>
         <p v-if="recordFilter.trim()" class="text-xs opacity-60 md:col-span-2 xl:col-span-6">
-          Record searches look across clinics, providers, statuses, and dates. Clear the search to return to the selected table filters.
+          Record searches look across clinics, assigned PTs, statuses, and dates. Clear the search to return to the selected table filters.
         </p>
       </div>
 
@@ -192,10 +180,15 @@
           :first="(page - 1) * pageSize"
           :totalRecords="totalElements"
           :loading="isLoading"
-          size="small"
           @page="onPage"
           selectionMode="single"
           @rowSelect="onSelectRow"
+          :pt="{
+            column: {
+              headerCell: { class: 'px-4 py-3' },
+              bodyCell: { class: 'px-4 py-3' }
+            }
+          }"
         >
           <template #empty>
             <div class="py-8 text-center text-sm opacity-70">
@@ -203,11 +196,11 @@
             </div>
           </template>
           <Column field="patient_name" header="Patient" />
-          <Column field="doctor_name" header="Doctor" />
+          <Column field="doctor_name" header="Assigned PT" />
           <Column field="starts_at" header="Start">
             <template #body="{data}">{{ formatDateTime(data.starts_at) }}</template>
           </Column>
-          <Column field="appointment_status" header="Appt Status">
+          <Column field="appointment_status" header="Appointment Status">
             <template #body="{data}">
               <Tag :value="displayAppointmentStatus(data.appointment_status)" :severity="appointmentSeverity(data.appointment_status)" />
             </template>
@@ -228,7 +221,7 @@
                 <div>{{ data.specialty_tag_name || "N/A" }}</div>
                 <Tag
                   v-if="data.specialty_tag_name && data.specialty_tag_is_active === false"
-                  value="Inactive specialty"
+                  value="Inactive Specialty"
                   severity="secondary"
                   class="text-xs"
                 />
@@ -241,7 +234,7 @@
                 <TreatmentAreaChip :name="data.treatment_area_name" :color="data.treatment_area_color" />
                 <Tag
                   v-if="data.treatment_area_name && data.treatment_area_is_active === false"
-                  value="Inactive room"
+                  value="Inactive Room"
                   severity="secondary"
                   class="text-xs"
                 />
@@ -287,55 +280,121 @@
       @hide="closeDetailPanel"
     >
       <div v-if="selectedDetail" class="space-y-4">
-        <div class="rounded-2xl border border-[#A91D8B]/20 bg-[linear-gradient(120deg,rgba(36,39,87,0.08),rgba(94,24,105,0.06),rgba(169,29,139,0.10))] p-4">
-          <div class="text-xs uppercase tracking-wide opacity-70">Patient</div>
+        <div class="app-hero-panel">
+          <div class="text-xs uppercase tracking-wide opacity-70">Checkout For</div>
           <div class="mt-1 text-lg font-semibold">{{ selectedDetail.patient_name }}</div>
-          <div class="mt-3 grid gap-3">
-            <div
-              :class="hasPatientWalletAmountToCollect
-                ? 'rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-red-900 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200'
-                : 'rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200'"
-            >
-              <div class="text-xs uppercase tracking-wide opacity-75">Wallet 1 - Patient Responsibility</div>
-              <template v-if="hasPatientWalletAmountToCollect">
-                <div class="mt-2 text-sm font-medium">Collect this out-of-pocket balance before checkout clears.</div>
-                <div class="mt-1 text-2xl font-semibold">{{ asCurrency(patientWalletAmountToCollect) }}</div>
-              </template>
-              <div v-else class="mt-2 text-sm font-medium">No out-of-pocket cash due right now.</div>
-            </div>
+          <div class="mt-1 text-xs opacity-70">
+            {{ selectedDetail.public_id || "Pending appointment record code" }} · {{ formatDateTime(selectedDetail.starts_at) }}
+          </div>
+          <div class="mt-3 rounded-xl border border-white/50 bg-white/70 px-3 py-2 text-xs opacity-80 dark:border-white/10 dark:bg-white/10">
+            Follow this order: 1) verify payment responsibility, 2) open/create billing, 3) finalize sign-off slip.
+          </div>
+        </div>
 
-            <div class="rounded-2xl border border-white/50 bg-white/70 px-4 py-3 dark:border-white/10 dark:bg-white/10">
-              <div class="flex items-start justify-between gap-3">
-                <div>
-                  <div class="text-xs uppercase tracking-wide opacity-60">Wallet 2 - Third-Party / Packages</div>
-                  <div class="mt-2 text-sm font-medium">
-                    {{ sponsorWalletSummary?.display_text || "No HMO/LGU authorization attached to this appointment." }}
-                  </div>
-                  <div v-if="sponsorWalletSummary" class="mt-1 text-xs opacity-60">
-                    Sponsor balances stay hidden here. Only authorization and session usage are shown.
-                  </div>
+        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 space-y-3">
+          <div class="text-xs uppercase tracking-wide opacity-70">Step 1 · Verify Payment Responsibility</div>
+          <div
+            :class="hasPatientWalletAmountToCollect
+              ? 'rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-red-900 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200'
+              : 'rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200'"
+          >
+            <div class="text-xs uppercase tracking-wide opacity-75">Wallet 1 - Patient Responsibility</div>
+            <template v-if="hasPatientWalletAmountToCollect">
+              <div class="mt-2 text-sm font-medium">Collect this out-of-pocket balance before checkout clears.</div>
+              <div class="mt-1 text-2xl font-semibold">{{ asCurrency(patientWalletAmountToCollect) }}</div>
+            </template>
+            <div v-else class="mt-2 text-sm font-medium">No out-of-pocket cash due right now.</div>
+          </div>
+
+          <div class="rounded-2xl border border-white/50 bg-white/70 px-4 py-3 dark:border-white/10 dark:bg-white/10">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <div class="text-xs uppercase tracking-wide opacity-60">Wallet 2 - Third-Party / Packages</div>
+                <div class="mt-2 text-sm font-medium">
+                  {{ sponsorWalletSummary?.display_text || "No HMO/LGU authorization attached to this appointment." }}
                 </div>
-                <Tag
-                  v-if="sponsorWalletSummary"
-                  :value="sponsorWalletSummary.sponsor_type"
-                  severity="info"
-                  class="shrink-0"
-                />
+                <div v-if="sponsorWalletSummary" class="mt-1 text-xs opacity-60">
+                  Sponsor balances stay hidden here. Only authorization and session usage are shown.
+                </div>
               </div>
+              <Tag
+                v-if="sponsorWalletSummary"
+                :value="sponsorWalletSummary.sponsor_type"
+                severity="info"
+                class="shrink-0"
+              />
             </div>
           </div>
         </div>
 
-        <div class="flex flex-wrap gap-2">
+        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 space-y-3">
+          <div class="text-xs uppercase tracking-wide opacity-70">Step 2 · Open Billing and Collect Payment</div>
+          <div class="flex flex-wrap gap-2">
+            <Button label="Open Patient Record" icon="pi pi-user" outlined :pt="ptOutlinedBtn" class="min-w-[180px]" @click="goToPatients" />
+            <Button
+              v-if="selectedDetail.billing_id"
+              label="Open Billing / Tender Payment"
+              icon="pi pi-wallet"
+              :pt="ptPrimaryBtn"
+              class="min-w-[180px]"
+              @click="openTenderPaymentDrawer"
+            />
+            <Button
+              v-if="!selectedDetail.billing_id"
+              label="Create Billing"
+              icon="pi pi-plus"
+              severity="secondary"
+              outlined
+              :pt="ptOutlinedBtn"
+              class="min-w-[180px]"
+              @click="goToBilling"
+            />
+          </div>
+          <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-3 py-2 text-xs opacity-70">
+            Billing Record ID: {{ selectedDetail.billing_public_id || "No billing linked yet" }}
+          </div>
+        </div>
+
+        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 space-y-3">
+          <div class="text-xs uppercase tracking-wide opacity-70">Step 3 · Finalize Attendance Sign-Off</div>
+          <Button
+            :label="encounterTicketButtonLabel"
+            icon="pi pi-receipt"
+            :pt="ptPrimaryBtn"
+            class="w-full"
+            :disabled="!canProcessEncounterTicket"
+            @click="openEncounterTicketDialog"
+          />
+          <Button
+            v-if="isSelectedEncounterTicketLocked"
+            label="Export Ticket PDF"
+            icon="pi pi-file-pdf"
+            outlined
+            class="w-full"
+            @click="exportSelectedEncounterTicketPdf"
+          />
+          <p v-if="!canProcessEncounterTicket" class="text-xs opacity-70">
+            Create or open the billing record first so the signed ticket can be permanently attached to the patient’s billing profile.
+          </p>
+        </div>
+
+        <div class="rounded-xl border border-dashed border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-3 py-2">
+          <div class="text-[11px] uppercase tracking-wide opacity-60">Reference Section</div>
+          <p class="mt-1 text-xs opacity-70">
+            The tags and additional details below are read-only appointment context for audit and review.
+          </p>
+        </div>
+
+        <div class="flex flex-wrap gap-2 pt-2 border-t border-[rgb(var(--app-border))]">
           <Tag v-if="selectedDetail.specialty_tag_name" :value="selectedDetail.specialty_tag_name" severity="info" />
           <Tag
             v-if="selectedDetail.specialty_tag_name && selectedDetail.specialty_tag_is_active === false"
-            value="Inactive specialty"
+            value="Inactive Specialty"
             severity="secondary"
           />
           <Tag
             v-if="selectedDetail.treatment_area_name && selectedDetail.treatment_area_is_active === false"
-            value="Inactive room"
+            value="Inactive Room"
             severity="secondary"
           />
           <Tag
@@ -350,7 +409,9 @@
           <Tag :value="encounterAttendanceLabel" :severity="selectedEncounterTicket ? 'success' : 'warn'" />
         </div>
 
-        <div class="grid grid-cols-1 gap-3 text-sm">
+        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 mt-1">
+          <div class="text-xs uppercase tracking-wide opacity-70">Additional Details</div>
+          <div class="mt-3 grid grid-cols-1 gap-3 text-sm">
           <div :class="detailCardClass">
             <div class="text-xs uppercase tracking-wide opacity-70">Clinic</div>
             <div class="font-medium">{{ selectedDetail.clinic_name }}</div>
@@ -368,7 +429,7 @@
             <div class="font-medium">{{ selectedDetail.billing_public_id || "No billing linked yet" }}</div>
           </div>
           <div :class="detailCardClass">
-            <div class="text-xs uppercase tracking-wide opacity-70">Assigned Provider</div>
+            <div class="text-xs uppercase tracking-wide opacity-70">Assigned PT</div>
             <div class="font-medium">{{ selectedDetail.doctor_name || "N/A" }}</div>
           </div>
             <div :class="detailCardClass">
@@ -484,6 +545,7 @@
               />
             </div>
           </div>
+          </div>
         </div>
 
         <div
@@ -542,49 +604,6 @@
           </div>
         </div>
 
-        <div class="flex flex-wrap gap-2 pt-1">
-          <Button label="Open Patient Record" icon="pi pi-user" outlined :pt="ptOutlinedBtn" class="min-w-[180px]" @click="goToPatients" />
-          <Button
-            v-if="selectedDetail.billing_id"
-            label="Open Billing Record"
-            icon="pi pi-receipt"
-            severity="secondary"
-            outlined
-            :pt="ptOutlinedBtn"
-            class="min-w-[180px]"
-            @click="openBillingViewDrawer"
-          />
-          <Button
-            v-if="!selectedDetail.billing_id"
-            label="Create Billing"
-            icon="pi pi-plus"
-            severity="secondary"
-            outlined
-            :pt="ptOutlinedBtn"
-            class="min-w-[180px]"
-            @click="goToBilling"
-          />
-        </div>
-
-        <Button
-          :label="encounterTicketButtonLabel"
-          icon="pi pi-receipt"
-          :pt="ptPrimaryBtn"
-          class="w-full"
-          :disabled="!canProcessEncounterTicket"
-          @click="openEncounterTicketDialog"
-        />
-        <Button
-          v-if="isSelectedEncounterTicketLocked"
-          label="Export Ticket PDF"
-          icon="pi pi-file-pdf"
-          outlined
-          class="w-full"
-          @click="exportSelectedEncounterTicketPdf"
-        />
-        <p v-if="!canProcessEncounterTicket" class="text-xs opacity-70">
-          Create or open the billing record first so the signed ticket can be permanently attached to the patient’s billing profile.
-        </p>
       </div>
     </Dialog>
 
@@ -1037,15 +1056,15 @@
                 optionValue="id"
                 showClear filter fluid
                 :disabled="isCreateSpecialtyLockedByProvider"
-                :placeholder="isCreateSpecialtyLockedByProvider ? 'Provider specialty applied automatically' : 'Select specialty (optional)'"
+                :placeholder="isCreateSpecialtyLockedByProvider ? 'Assigned PT specialty applied automatically' : 'Select specialty (optional)'"
                 :pt="ptSelect"
               />
               <p v-if="selectedCreateProviderHasSpecialty || selectedCreateProviderRequiresSpecialty" class="px-1 text-xs text-[rgb(var(--app-fg))]/50">
                 {{ selectedCreateProviderSpecialtyLabel
                   ? (selectedCreateProviderRequiresSpecialty
-                    ? `This provider role requires a specialty, so ${selectedCreateProviderSpecialtyLabel} is applied automatically.`
-                    : `${selectedCreateProviderSpecialtyLabel} is suggested from the selected provider and can still be changed.`)
-                  : 'This provider role requires a specialty. Assign it on Staffs or choose one here before saving.' }}
+                    ? `This assigned PT role requires a specialty, so ${selectedCreateProviderSpecialtyLabel} is applied automatically.`
+                    : `${selectedCreateProviderSpecialtyLabel} is suggested from the selected PT and can still be changed.`)
+                  : 'This assigned PT role requires a specialty. Assign it on Staffs or choose one here before saving.' }}
               </p>
             </div>
 
@@ -1479,33 +1498,30 @@
 </template>
 
 <script setup lang="ts">
-import {computed, onMounted, ref, watch} from "vue";
+import {computed, defineAsyncComponent, onMounted, ref, watch} from "vue";
+import {storeToRefs} from "pinia";
 import {useRouter} from "vue-router";
-import {useConfirm, useToast} from "primevue";
-import axios from "axios";
+import {useConfirm} from "primevue/useconfirm";
+import {useToast} from "primevue/usetoast";
 import Button from "primevue/button";
 import Column from "primevue/column";
 import DataTable, {type DataTablePageEvent} from "primevue/datatable";
 import DatePicker from "primevue/datepicker";
 import Dialog from "primevue/dialog";
 import IftaLabel from "primevue/iftalabel";
-import InputNumber from "primevue/inputnumber";
 import InputText from "primevue/inputtext";
 import Message from "primevue/message";
 import Select from "primevue/select";
 import SelectButton from "primevue/selectbutton";
 import Tag from "primevue/tag";
-import AppointmentPtDeck from "@/features/appointments/components/AppointmentPtDeck.vue";
 import PatientSignaturePad from "@/features/appointments/components/PatientSignaturePad.vue";
 import TreatmentAreaChip from "@/features/appointments/components/TreatmentAreaChip.vue";
-import BillingModule from "@/features/billing/components/BillingModule.vue";
 import {billingPhase1Service} from "@/features/billing/api/billing-phase1.service";
 import {
   appointmentPhase1Service,
   type AppointmentEncounterTicket,
   type AppointmentEncounterTicketPayload,
   type AppointmentDetail,
-  type DailyPtDeckGroup,
   type AppointmentListItem,
   type AppointmentLocationContext,
   type AppointmentPhase
@@ -1517,11 +1533,9 @@ import {
 } from "@/utils/encounter-ticket-pdf.util";
 import {getApiErrorMessage} from "@/utils/actionable-error.util";
 import {errorToast, successToast} from "@/utils/toast.util";
-import type {Lookup} from "@/models/global.model";
 import {patientService} from "@/features/patients/api/patient.service";
-import {defaultPage, defaultPageSize} from "@/models/paging";
+import {defaultPage} from "@/models/paging";
 import {Status} from "@/utils/global.type";
-import type {Clinic} from "@/features/clinics/types/clinic";
 import type {Patient} from "@/features/patients/types/patient";
 import type {Staff} from "@/features/staff/types/staff";
 import {pamsAPI} from "@/utils/axios-interceptor";
@@ -1537,6 +1551,10 @@ import {createReferenceService} from "@/services/reference.service";
 import {ReferenceTanstackKey} from "@/utils/keys/tanstack-key";
 import type {AppointmentProviderType, SpecialtyTag, TreatmentArea} from "@/models/reference";
 import { ptInputText, ptModalPrimaryBtn, ptOutlinedBtn, ptPrimaryBtn, ptSelect } from "@/features/shared/table-header.styles";
+import { hasAnyStoredPermission, readStoredAuthSnapshot } from "@/utils/auth-user.util"
+import {clinicStore} from "@/stores/clinic.store"
+
+const BillingModule = defineAsyncComponent(() => import("@/features/billing/components/BillingModule.vue"))
 
 interface BillingPickerLookup {
   id: string | number
@@ -1547,10 +1565,12 @@ interface BillingPickerLookup {
 const router = useRouter()
 const toast = useToast()
 const confirm = useConfirm()
+const globalClinicStore = clinicStore()
+const {clinicOptions, selectedClinicId} = storeToRefs(globalClinicStore)
 const roleName = ref("")
+const permissionSet = ref<Set<string>>(new Set())
 
 const appointments = ref<AppointmentListItem[]>([])
-const dailyPtDeckGroups = ref<DailyPtDeckGroup[]>([])
 const selectedDetail = ref<AppointmentDetail>()
 const detailPanelVisible = ref(false)
 const billingOverlayVisible = ref(false)
@@ -1564,7 +1584,6 @@ const lguMonthlyClaimMonth = ref("")
 const isLguMonthlyClaimSaving = ref(false)
 const lguMonthlyClaimSummary = ref<{ consumed_count: number; billing_month: string } | null>(null)
 const isLoading = ref(false)
-const isPtDeckLoading = ref(false)
 const slotMinuteStep = 15
 type SlotDurationMinutes = 30 | 60 | 75
 type DoctorConsultantFilterValue = number | "UNASSIGNED"
@@ -1663,7 +1682,6 @@ const patientOptions = ref<AppointmentPersonOption[]>([])
 const doctorOptions = ref<AppointmentPersonOption[]>([])
 const referringDoctorOptions = ref<AppointmentPersonOption[]>([])
 const supportStaffOptions = ref<AppointmentPersonOption[]>([])
-const clinicOptions = ref<Clinic[]>([])
 const specialtyTagOptions = ref<SpecialtyTag[]>([])
 const treatmentAreaOptions = ref<TreatmentArea[]>([])
 const sessionServices = ref<BillingPickerLookup[]>([])
@@ -1683,7 +1701,6 @@ const appointmentLocationContextOptions: Array<{label: string; value: Appointmen
   {label: "Home Care", value: "HOME_CARE"},
 ]
 const appointmentStatusOptions = ["Pending", "Rescheduled", "No show", "Cancelled", "Completed"]
-const selectedClinicId = ref<number>()
 const createPatient = ref<number>()
 const createDoctor = ref<number>()
 const createReferringDoctor = ref<number>()
@@ -1757,7 +1774,7 @@ const visibleMonth = ref<number>(new Date().getMonth())
 const visibleYear = ref<number>(new Date().getFullYear())
 
 const needsOverrideReason = computed(() => (activeAppointment.value?.reschedule_count ?? 0) >= 3)
-const canDeleteAppointments = computed(() => roleName.value === "Owner")
+const canDeleteAppointments = computed(() => hasAnyStoredPermission(permissionSet.value, "Appointment::DELETE"))
 const specialtyTagReferenceService = createReferenceService<SpecialtyTag>(ReferenceTanstackKey.SPECIALTY_TAGS)
 const treatmentAreaReferenceService = createReferenceService<TreatmentArea>(ReferenceTanstackKey.TREATMENT_AREAS)
 
@@ -1794,17 +1811,30 @@ const addOnTypeOptions = [
 const normalizeAppointmentProviderType = (
   providerType?: AppointmentProviderType | null
 ): AppointmentProviderType => {
-  if (providerType === "DOCTOR_CONSULTANT" || providerType === "PHYSICAL_THERAPIST" || providerType === "PT_ASSISTANT") return providerType
+  if (providerType === "DOCTOR_CONSULTANT" || providerType === "PHYSICAL_THERAPIST" || providerType === "PT_ASSISTANT" || providerType === "INTERN") return providerType
   return "NONE"
 }
-const isClinicalProviderType = (providerType?: AppointmentProviderType | null): boolean =>
-  normalizeAppointmentProviderType(providerType) !== "NONE"
 const isPhysicalTherapistProviderType = (providerType?: AppointmentProviderType | null): boolean =>
   normalizeAppointmentProviderType(providerType) === "PHYSICAL_THERAPIST"
 const isDoctorConsultantProviderType = (providerType?: AppointmentProviderType | null): boolean =>
   normalizeAppointmentProviderType(providerType) === "DOCTOR_CONSULTANT"
 const isSupportStaffProviderType = (providerType?: AppointmentProviderType | null): boolean =>
   normalizeAppointmentProviderType(providerType) === "PT_ASSISTANT"
+  || normalizeAppointmentProviderType(providerType) === "INTERN"
+const resolveAppointmentStaffProviderType = (staff: Staff): AppointmentProviderType => {
+  const primaryProviderType = normalizeAppointmentProviderType(staff.appointment_provider_type)
+  if (primaryProviderType !== "NONE") {
+    return primaryProviderType
+  }
+  return normalizeAppointmentProviderType(staff.secondary_appointment_provider_type)
+}
+const resolveAppointmentStaffRoleName = (staff: Staff): string => {
+  const primaryProviderType = normalizeAppointmentProviderType(staff.appointment_provider_type)
+  if (primaryProviderType !== "NONE") {
+    return staff.role_name
+  }
+  return staff.secondary_role_name || staff.role_name
+}
 const formatAppointmentProviderLabel = (staff: {
   name: string
   role_name?: string
@@ -2301,24 +2331,6 @@ const activePackageServiceOffers = computed(() =>
   allPackageServiceOffers.value.filter(p => p.status !== "Inactive")
 )
 
-const availableServiceCategories = computed(() => {
-  const categories = [
-    { type: "machine", label: "Machines", services: filterServicesByHmoIds(allSinglePayServices.value.filter(s => s.type === "machine"), createHmoMachineIds.value) },
-    { type: "technique", label: "Techniques", services: filterServicesByHmoIds(allSinglePayServices.value.filter(s => s.type === "technique"), createHmoTechniqueIds.value) },
-    { type: "evaluation", label: "Evaluations", services: filterServicesByHmoIds(allSinglePayServices.value.filter(s => s.type === "evaluation"), createHmoEvaluationIds.value) },
-    {
-      type: "add-on-machine",
-      label: "Add-ons",
-      services: [
-        ...filterServicesByHmoIds(allSinglePayServices.value.filter(s => s.type === "add-on-machine"), createHmoAddOnMachineIds.value),
-        ...filterServicesByHmoIds(allSinglePayServices.value.filter(s => s.type === "add-on-technique"), createHmoAddOnTechniqueIds.value)
-      ]
-    },
-    { type: "add-on-home-service", label: "Add-on (Home Service)", services: filterServicesByHmoIds(allSinglePayServices.value.filter(s => s.type === "add-on-home-service"), createHmoAddOnHomeServiceIds.value) },
-  ]
-  return categories.filter(cat => cat.services.length > 0)
-})
-
 const formatLocalDateKey = (date: Date): string => {
   const yyyy = String(date.getFullYear())
   const mm = String(date.getMonth() + 1).padStart(2, "0")
@@ -2527,7 +2539,7 @@ const sanitizeLguMonthInput = (): void => {
   const value = lguMonthlyClaimMonth.value
   const sanitized = value.replace(/[^\d-]/g, "").substring(0, 7)
   lguMonthlyClaimMonth.value = sanitized
-  
+
   // Auto-format as user types
   if (sanitized.length >= 4 && sanitized[4] !== "-") {
     lguMonthlyClaimMonth.value = `${sanitized.substring(0, 4)}-${sanitized.substring(4)}`
@@ -2536,7 +2548,7 @@ const sanitizeLguMonthInput = (): void => {
 
 const submitLguMonthlyClaim = async (): Promise<void> => {
   if (!selectedDetail.value?.id || !lguMonthlyClaimMonth.value?.trim()) return
-  
+
   // Validate month format YYYY-MM
   const monthRegex = /^\d{4}-\d{2}$/
   if (!monthRegex.test(lguMonthlyClaimMonth.value)) {
@@ -2568,32 +2580,7 @@ const submitLguMonthlyClaim = async (): Promise<void> => {
   }
 }
 
-const visiblePtDeckGroups = computed<DailyPtDeckGroup[]>(() => {
-  const groups: DailyPtDeckGroup[] = []
-
-  for (const group of dailyPtDeckGroups.value) {
-    const appointments = phaseFilter.value
-      ? group.appointments.filter(appointment => appointment.phase === phaseFilter.value || appointment.appointment_phase === phaseFilter.value)
-      : [...group.appointments]
-    if (!appointments.length) continue
-
-    const earliestAppointment = [...appointments].sort((left, right) => new Date(left.start).getTime() - new Date(right.start).getTime())[0]
-    groups.push({
-      ...group,
-      appointments,
-      appointment_count: appointments.length,
-      pending_count: appointments.filter(appointment => normalizeAppointmentStatus(appointment.status) === "PENDING").length,
-      completed_count: appointments.filter(appointment => normalizeAppointmentStatus(appointment.status) === "COMPLETED").length,
-      needs_billing_count: appointments.filter(appointment => needsBillingAttention(appointment.billing_status)).length,
-      earliest_starts_at: earliestAppointment?.start
-    })
-  }
-
-  return groups
-})
-const dayBookings = computed<AppointmentListItem[]>(() =>
-  visiblePtDeckGroups.value.flatMap(group => group.appointments)
-)
+const dayBookings = computed<AppointmentListItem[]>(() => appointments.value)
 const rescheduledAppointmentsCount = computed(() => dayBookings.value.filter(item => Number(item.reschedule_count ?? 0) > 0).length)
 const billingAttentionCount = computed(() =>
   dayBookings.value.filter(item => {
@@ -2623,7 +2610,7 @@ const ptFilterOptions = computed(() =>
   [
     {label: "Unassigned", value: "UNASSIGNED" as const},
     ...doctorOptions.value
-      .filter(option => isDoctorConsultantProviderType(option.appointment_provider_type))
+      .filter(option => isPhysicalTherapistProviderType(option.appointment_provider_type))
       .map(option => ({label: option.label, value: option.id}))
   ]
 )
@@ -2642,12 +2629,6 @@ const selectedDateLabel = computed(() =>
 const selectedClinicScheduleLabel = computed(() => {
   if (!selectedClinic.value) return ""
   return `${selectedClinic.value.name}: ${selectedClinic.value.start_day_name} to ${selectedClinic.value.end_day_name}, ${selectedClinic.value.start_time_formatted} - ${selectedClinic.value.end_time_formatted}`
-})
-const isOvernightClinicSchedule = computed(() => {
-  const start = getClinicStartMinutes()
-  const end = getClinicEndMinutes()
-  if (start == null || end == null) return false
-  return end < start
 })
 const calendarDisabledDays = computed<number[]>(() => {
   if (!selectedClinic.value) return []
@@ -3007,7 +2988,6 @@ const addSelectedBundle = (): void => {
 
 const addServiceLine = (type: string): void => {
   let serviceId: string | undefined
-  let service: SingleService | undefined
 
   if (type === "machine") {
     serviceId = selectedMachineId.value
@@ -3021,7 +3001,7 @@ const addServiceLine = (type: string): void => {
 
   if (!serviceId) return
 
-  service = allSinglePayServices.value.find(s => s.id === serviceId)
+  const service = allSinglePayServices.value.find(s => s.id === serviceId)
   if (!service) return
 
   if (service.type === "add-on-home-service") {
@@ -3122,10 +3102,6 @@ const getBookedDateCandidateKeys = (date: CalendarSlotDate): string[] => {
   }
 
   return [...candidateKeys]
-}
-
-const hasBookedDate = (date: CalendarSlotDate): boolean => {
-  return getBookedDateCandidateKeys(date).some(candidateKey => calendarDayStatusMap.value.has(candidateKey))
 }
 
 const getCalendarDayStatus = (date: CalendarSlotDate): CalendarDayStatus | null => {
@@ -3374,28 +3350,10 @@ const fetchAppointments = async (): Promise<void> => {
   }
 }
 
-const fetchDailyPtDeck = async (): Promise<void> => {
-  if (!selectedClinicId.value) {
-    dailyPtDeckGroups.value = []
-    return
-  }
-
-  try {
-    isPtDeckLoading.value = true
-    dailyPtDeckGroups.value = await appointmentPhase1Service.getDailyPtDeck(selectedDateIso.value, selectedClinicId.value) ?? []
-  } catch (error: unknown) {
-    dailyPtDeckGroups.value = []
-  } finally {
-    isPtDeckLoading.value = false
-  }
-}
-
 const refreshAll = async (): Promise<void> => {
   await fetchAppointments()
-  await fetchDailyPtDeck()
   if (selectedDetail.value) {
     const isStillVisible = appointments.value.some(appointment => appointment.id === selectedDetail.value?.id)
-      || dayBookings.value.some(appointment => appointment.id === selectedDetail.value?.id)
     if (!isStillVisible) {
       closeDetailPanel()
     }
@@ -3403,7 +3361,7 @@ const refreshAll = async (): Promise<void> => {
 }
 
 const loadCreateLookups = async (): Promise<void> => {
-  const [patientsPage, staffLookupPage, clinicLookupPage, specialtyTags, sessionLookupPage] = await Promise.all([
+  const [patientsPage, staffLookupPage, specialtyTags, sessionLookupPage] = await Promise.all([
     patientService.getAll({
       clinic_id: undefined,
       pageable_request: {
@@ -3414,14 +3372,6 @@ const loadCreateLookups = async (): Promise<void> => {
       }
     }),
     pamsAPI.get<Pageable<Staff>>("/staffs/lookup", {
-      params: {
-        page: defaultPage,
-        size: 100,
-        status: Status.ACTIVE,
-        name: undefined
-      }
-    }),
-    pamsAPI.get<Pageable<Clinic>>("/clinics/lookup", {
       params: {
         page: defaultPage,
         size: 100,
@@ -3450,36 +3400,31 @@ const loadCreateLookups = async (): Promise<void> => {
       .join(" "),
     clinic_id: patient.clinic_id
   }))
-  doctorOptions.value = (staffLookupPage.data?.content ?? []).map((doctor: Staff) => ({
+  const allStaffMapped = (staffLookupPage.data?.content ?? []).map((doctor: Staff) => ({
     id: doctor.id,
     name: doctor.name,
-    label: formatAppointmentProviderLabel(doctor),
+    label: formatAppointmentProviderLabel({
+      name: doctor.name,
+      role_name: resolveAppointmentStaffRoleName(doctor),
+      specialty_tag_name: doctor.specialty_tag_name
+    }),
     clinic_id: doctor.clinic_id,
-    role_name: doctor.role_name,
-    appointment_provider_type: normalizeAppointmentProviderType(doctor.appointment_provider_type),
-    requires_specialty_tag: doctor.requires_specialty_tag,
+    role_name: resolveAppointmentStaffRoleName(doctor),
+    appointment_provider_type: resolveAppointmentStaffProviderType(doctor),
+    requires_specialty_tag: isPhysicalTherapistProviderType(resolveAppointmentStaffProviderType(doctor))
+      ? Boolean(doctor.requires_specialty_tag || doctor.secondary_appointment_provider_type === "PHYSICAL_THERAPIST")
+      : doctor.requires_specialty_tag,
     specialty_tag_id: doctor.specialty_tag_id,
     specialty_tag_name: doctor.specialty_tag_name
   }))
-    .filter((doctor) => isPhysicalTherapistProviderType(doctor.appointment_provider_type))
-    const allStaffMapped = (staffLookupPage.data?.content ?? []).map((doctor: Staff) => ({
-      id: doctor.id,
-      name: doctor.name,
-      label: formatAppointmentProviderLabel(doctor),
-      clinic_id: doctor.clinic_id,
-      role_name: doctor.role_name,
-      appointment_provider_type: normalizeAppointmentProviderType(doctor.appointment_provider_type),
-      requires_specialty_tag: doctor.requires_specialty_tag,
-      specialty_tag_id: doctor.specialty_tag_id,
-      specialty_tag_name: doctor.specialty_tag_name
-    }))
-    referringDoctorOptions.value = allStaffMapped.filter((s) => isDoctorConsultantProviderType(s.appointment_provider_type))
-    supportStaffOptions.value = allStaffMapped.filter((s) => isSupportStaffProviderType(s.appointment_provider_type))
-  clinicOptions.value = clinicLookupPage.data?.content ?? []
+  doctorOptions.value = allStaffMapped.filter((staff) => isPhysicalTherapistProviderType(staff.appointment_provider_type))
+  referringDoctorOptions.value = allStaffMapped.filter((staff) => isDoctorConsultantProviderType(staff.appointment_provider_type))
+  supportStaffOptions.value = allStaffMapped.filter((staff) => isSupportStaffProviderType(staff.appointment_provider_type))
+  await globalClinicStore.loadClinics()
   specialtyTagOptions.value = specialtyTags?.content ?? []
   sessionServices.value = sessionLookupPage.data?.content ?? []
   if (!selectedClinicId.value && clinicOptions.value.length) {
-    selectedClinicId.value = clinicOptions.value[0].id
+    globalClinicStore.setSelectedClinicId(clinicOptions.value[0].id)
   }
   await loadTreatmentAreaOptions()
 
@@ -3828,22 +3773,9 @@ const onExportCsv = async (): Promise<void> => {
 }
 
 const syncRoleFromStorage = () => {
-  const candidateKeys = ["auth_user", "currentUser", "user", "profile", "loggedInUser"]
-  for (const key of candidateKeys) {
-    const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key)
-    if (!raw) continue
-    try {
-      const parsed = JSON.parse(raw) as Record<string, unknown>
-      const role = parsed.role_name ?? parsed.role ?? parsed.userRole ?? parsed.primaryRole
-      if (typeof role === "string" && role.trim()) {
-        roleName.value = role.trim()
-        return
-      }
-    } catch {
-      // ignore malformed value
-    }
-  }
-  roleName.value = ""
+  const snapshot = readStoredAuthSnapshot()
+  roleName.value = snapshot.roleName
+  permissionSet.value = snapshot.permissions
 }
 
 const confirmDeleteAppointment = (appointment: AppointmentListItem): void => {
@@ -3900,37 +3832,15 @@ const goToBilling = async (): Promise<void> => {
   })
 }
 
-const goToBillingForAppointment = async (appointment: AppointmentListItem): Promise<void> => {
-  if (appointment.billing_id) {
-    billingOverlayMode.value = 'detail'
-    await router.replace({
-      query: {
-        patientId: String(appointment.patient_id),
-        appointmentId: String(appointment.id),
-        billingId: String(appointment.billing_id)
-      }
-    })
-    billingOverlayVisible.value = true
-    return
-  }
-
-  await router.push({
-    path: "/billing",
-    query: {
-      patientId: String(appointment.patient_id),
-      appointmentId: String(appointment.id)
-    }
-  })
-}
-
-const openBillingViewDrawer = async (): Promise<void> => {
-  if (!selectedDetail.value) return
+const openTenderPaymentDrawer = async (): Promise<void> => {
+  if (!selectedDetail.value?.billing_id) return
   billingOverlayMode.value = 'detail'
   await router.replace({
     query: {
       patientId: String(selectedDetail.value.patient_id),
       appointmentId: String(selectedDetail.value.id),
-      ...(selectedDetail.value.billing_id ? {billingId: String(selectedDetail.value.billing_id)} : {})
+      billingId: String(selectedDetail.value.billing_id),
+      openMode: 'tender'
     }
   })
   billingOverlayVisible.value = true

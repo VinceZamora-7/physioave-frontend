@@ -141,7 +141,7 @@ import IftaLabel from "primevue/iftalabel"
 import InputText from "primevue/inputtext"
 import SelectButton from "primevue/selectbutton"
 import Tag from "primevue/tag"
-import { useToast } from "primevue"
+import { useToast } from "primevue/usetoast"
 
 import type { Pageable } from "@/models/paging"
 import type { SpecialtyTag } from "@/models/reference"

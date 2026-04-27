@@ -12,7 +12,7 @@
       <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
         <Tag :value="visitCountLabel" severity="secondary" />
         <Button
-          :label="isExpanded ? 'Hide Visit Log' : '(+) Evaluation Visit Log'"
+          :label="isExpanded ? 'Hide Visit Log' : 'Show Visit Log'"
           :icon="isExpanded ? 'pi pi-minus' : 'pi pi-plus'"
           severity="secondary"
           outlined
@@ -85,7 +85,7 @@
               <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3">
                 <div class="mb-2 flex items-center justify-between gap-2">
                   <span class="font-medium">Ancillary Medical Record</span>
-                  <Tag :value="data.ancillary_attachment ? 'PDF attached' : 'No file'" :severity="data.ancillary_attachment ? 'info' : 'secondary'" />
+                  <Tag :value="data.ancillary_attachment ? 'PDF Attached' : 'No File'" :severity="data.ancillary_attachment ? 'info' : 'secondary'" />
                 </div>
                 <div class="text-xs text-slate-500 dark:text-slate-400">Type: {{ data.ancillary_record_type || 'Not set' }}</div>
                 <Button
@@ -102,7 +102,7 @@
               <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3">
                 <div class="mb-2 flex items-center justify-between gap-2">
                   <span class="font-medium">Digital Posture & ROM</span>
-                  <Tag :value="data.digital_posture_attachment ? 'PDF attached' : 'No file'" :severity="data.digital_posture_attachment ? 'info' : 'secondary'" />
+                  <Tag :value="data.digital_posture_attachment ? 'PDF Attached' : 'No File'" :severity="data.digital_posture_attachment ? 'info' : 'secondary'" />
                 </div>
                 <Button
                   v-if="data.digital_posture_attachment"
@@ -287,7 +287,8 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
-import { useConfirm, useToast } from "primevue"
+import { useConfirm } from "primevue/useconfirm"
+import { useToast } from "primevue/usetoast"
 import Button from "primevue/button"
 import Column from "primevue/column"
 import DataTable from "primevue/datatable"

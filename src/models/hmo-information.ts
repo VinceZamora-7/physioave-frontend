@@ -18,6 +18,11 @@ export interface PatientHMOInformation extends PatientHMOInformationRequest {
   hmo_type_name: string
 }
 
+export interface PatientHMOInformationHistoryEntry extends PatientHMOInformation {
+  id: number
+  archived_at: string
+}
+
 export interface PatientHMOInformationPayload extends PatientHMOInformationRequest{
   patient_id: number
 }

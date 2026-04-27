@@ -6,6 +6,8 @@ export interface BaseStaff {
   email: string
   clinic_id: number
   role_id: number
+  can_view_all_branches?: boolean
+  secondary_role_id?: number
   specialty_tag_id?: number
 }
 
@@ -15,7 +17,11 @@ export interface Staff extends BaseStaff {
   role_name: string
   appointment_provider_type: AppointmentProviderType
   requires_specialty_tag: boolean
+  secondary_role_id?: number
+  secondary_role_name?: string
+  secondary_appointment_provider_type?: AppointmentProviderType
   specialty_tag_name?: string
+  can_view_all_branches?: boolean
   is_active: boolean
 }
 
@@ -30,10 +36,12 @@ export interface StaffRequestParams {
   pageable_request: PageableRequest
   clinic_id: number | undefined
   highest_only?: boolean
+  staff_scope?: "ALL" | "PT" | "ADMIN"
 }
 
 export interface StaffExportRequestParams {
   clinic_id: number | undefined,
   page_request: PageRequestWithNameAndStatus
   highest_only?: boolean
+  staff_scope?: "ALL" | "PT" | "ADMIN"
 }

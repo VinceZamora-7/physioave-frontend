@@ -9,7 +9,8 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue"
-import { useConfirm, useToast } from "primevue"
+import { useConfirm } from "primevue/useconfirm"
+import { useToast } from "primevue/usetoast"
 import { DateTime } from "luxon"
 import { useQueryClient } from "@tanstack/vue-query"
 

@@ -25,6 +25,12 @@ interface PatientService {
   update(payload: PatientEditRequestPayload): Promise<void | undefined>
 
   toggleStatus(id: number): Promise<void | undefined>
+
+  getById(id: number): Promise<Patient | undefined>
+
+  uploadProfileImage(id: number, payload: {file_name: string, media_type: string, content_base64: string}): Promise<void | undefined>
+
+  deleteProfileImage(id: number): Promise<void | undefined>
 }
 
 export const patientService: PatientService = {
@@ -97,6 +103,33 @@ export const patientService: PatientService = {
     try {
       const {id, ...rest} = payload
       const {data: response} = await pamsAPI.put<void, AxiosResponse<void>, PatientRequestBody>(`${ResourceKey.PATIENTS}/${id}`, rest)
+      return response
+    } catch (error: unknown) {
+      errorHandler(error)
+    }
+  },
+
+  async getById(id: number): Promise<Patient | undefined> {
+    try {
+      const {data: patient} = await pamsAPI.get<Patient>(`${ResourceKey.PATIENTS}/${id}`)
+      return patient
+    } catch (error: unknown) {
+      errorHandler(error)
+    }
+  },
+
+  async uploadProfileImage(id: number, payload: {file_name: string, media_type: string, content_base64: string}): Promise<void | undefined> {
+    try {
+      const {data: response} = await pamsAPI.post<void>(`${ResourceKey.PATIENTS}/${id}/profile-image`, payload)
+      return response
+    } catch (error: unknown) {
+      errorHandler(error)
+    }
+  },
+
+  async deleteProfileImage(id: number): Promise<void | undefined> {
+    try {
+      const {data: response} = await pamsAPI.delete<void>(`${ResourceKey.PATIENTS}/${id}/profile-image`)
       return response
     } catch (error: unknown) {
       errorHandler(error)

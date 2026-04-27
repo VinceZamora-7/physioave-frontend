@@ -57,7 +57,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
 import Message from "primevue/message"
-import { useConfirm, useToast } from "primevue"
+import { useConfirm } from "primevue/useconfirm"
+import { useToast } from "primevue/usetoast"
 import { useQueryClient } from "@tanstack/vue-query"
 import { useThrottleFn, watchDebounced } from "@vueuse/core"
 import type { AxiosResponse } from "axios"
@@ -93,6 +94,7 @@ import {
 import type { Clinic } from "@/features/clinics/types/clinic"
 import { ClinicTanstackKey } from "@/utils/keys/tanstack-key"
 import { clinicStore } from "@/stores/clinic.store"
+import { hasAnyStoredPermission, readStoredAuthSnapshot } from "@/utils/auth-user.util"
 
 const router = useRouter()
 const toast = useToast()
@@ -103,6 +105,7 @@ const useClinicStore = clinicStore()
 const editor = ref<InstanceType<typeof ClinicEditorDialog> | null>(null)
 const selectedClinic = ref<Clinic>()
 const roleName = ref("")
+const permissionSet = ref<Set<string>>(new Set())
 
 // loading states
 const isExportLoading = useIsLoading(ClinicTanstackKey.CLINICS_EXPORT)
@@ -126,7 +129,9 @@ const requestParams = computed(
     }) satisfies PageableRequest
 )
 
-const canManageTreatmentAreas = computed(() => roleName.value === "Owner")
+const canManageTreatmentAreas = computed(() =>
+  hasAnyStoredPermission(permissionSet.value, "Clinic::UPDATE", "Clinic::CREATE")
+)
 
 // query
 const { data: clinics, isError, error, refetch } = clinicTanstackService.getAll(requestParams)
@@ -148,22 +153,9 @@ const resetFilters = () => {
 }
 
 const syncRoleFromStorage = () => {
-  const candidateKeys = ["auth_user", "currentUser", "user", "profile", "loggedInUser"]
-  for (const key of candidateKeys) {
-    const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key)
-    if (!raw) continue
-    try {
-      const parsed = JSON.parse(raw) as Record<string, unknown>
-      const role = parsed.role_name ?? parsed.role ?? parsed.userRole ?? parsed.primaryRole
-      if (typeof role === "string" && role.trim()) {
-        roleName.value = role.trim()
-        return
-      }
-    } catch {
-      // ignore malformed storage value
-    }
-  }
-  roleName.value = ""
+  const snapshot = readStoredAuthSnapshot()
+  roleName.value = snapshot.roleName
+  permissionSet.value = snapshot.permissions
 }
 
 // open dialog
@@ -217,13 +209,13 @@ const confirmToggleStatus = (clinic: Clinic) => {
 }
 
 const managePatients = async (clinic: Clinic) => {
-  useClinicStore.clinic = clinic
+  useClinicStore.setSelectedClinicId(clinic.id)
   await router.push("/patients")
 }
 
 const manageStaffs = async (clinic: Clinic) => {
-  useClinicStore.clinic = clinic
-  await router.push("/staffs")
+  useClinicStore.setSelectedClinicId(clinic.id)
+  await router.push("/admin-setup")
 }
 
 const onExportToExcelThrottleFn = useThrottleFn(async () => {

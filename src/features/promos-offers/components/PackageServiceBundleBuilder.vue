@@ -511,7 +511,8 @@ import MultiSelect from "primevue/multiselect"
 import Select from "primevue/select"
 import Tag from "primevue/tag"
 import axios, {HttpStatusCode} from "axios"
-import {useConfirm, useToast} from "primevue"
+import {useConfirm} from "primevue/useconfirm"
+import {useToast} from "primevue/usetoast"
 import type {Pageable} from "@/models/paging.ts"
 import type {OfferLookupDTO} from "@/models/global.model.ts"
 import {pamsAPI} from "@/utils/axios-interceptor"
@@ -657,6 +658,8 @@ const withRefreshRetry = async <T>(operation: () => Promise<T>): Promise<T> => {
 }
 
 const typeOptions = [
+  {label: "Machine", value: "machine"},
+  {label: "Technique", value: "technique"},
   {label: "Evaluations", value: "evaluation"},
   {label: "Add-Ons", value: "add-on-machine"}
 ]
@@ -1062,11 +1065,6 @@ const openEditDialog = (service: SingleService): void => {
 }
 
 const saveService = (): void => {
-  if (formData.type === "machine" || formData.type === "technique") {
-    errorToast(toast, "Machines and techniques are managed from their dedicated modules.")
-    return
-  }
-
   if (!formData.name.trim()) {
     errorToast(toast, "Service name is required")
     return

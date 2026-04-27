@@ -137,15 +137,40 @@
           </IftaLabel>
         </FormField>
 
-        <FormField v-slot="$field" name="relationship_to_principal">
-          <IftaLabel>
-            <InputText id="relationship_to_principal" v-model="$field.value" :disabled="isReadOnly || isLoading" fluid placeholder="Enter relationship" />
-            <label for="relationship_to_principal">Relationship To Principal</label>
-            <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
-              {{ $field.error.message }}
-            </Message>
-          </IftaLabel>
-        </FormField>
+<FormField v-slot="$field" name="relationship_to_principal">
+  <div class="flex flex-col gap-1">
+
+    <label
+      for="relationship_to_principal"
+      class="text-xs text-surface-500"
+    >
+      Relationship to Principal (First-degree only)
+    </label>
+
+    <Select
+      id="relationship_to_principal"
+      v-model="$field.value"
+      :options="firstDegreeFamilyRelationshipOptions"
+      optionLabel="label"
+      optionValue="value"
+      placeholder="Select relationship"
+      :disabled="isReadOnly || isLoading"
+      showClear
+      filter
+      class="w-full"
+    />
+
+    <Message
+      v-if="$field?.invalid"
+      severity="error"
+      size="small"
+      variant="simple"
+    >
+      {{ $field.error.message }}
+    </Message>
+
+  </div>
+</FormField>
 
         <FormField v-slot="$field" name="approval_code">
           <IftaLabel>
@@ -188,6 +213,50 @@
         </IftaLabel>
       </FormField>
 
+      <section class="mt-4 rounded-xl border border-surface-200 bg-surface-50 p-4">
+        <div class="mb-3 flex items-center justify-between gap-2">
+          <div>
+            <div class="text-sm font-semibold text-surface-900">Previous HMO Details</div>
+            <div class="text-xs text-surface-500">Older HMO details stay visible here whenever the current HMO record is changed.</div>
+          </div>
+          <span class="rounded-full bg-surface-200 px-2 py-1 text-xs font-medium text-surface-700">
+            {{ patientHMOHistoryEntries.length }} {{ patientHMOHistoryEntries.length > 1 ? 'records' : 'record' }}
+          </span>
+        </div>
+
+        <Message v-if="historyLoadError" severity="warn" size="small" variant="simple" class="mb-2">
+          {{ historyLoadError }}
+        </Message>
+
+        <div v-if="!patientHMOHistoryEntries.length" class="rounded-lg border border-dashed border-surface-300 bg-white p-4 text-sm text-surface-600">
+          No previous HMO records yet. Once this patient's current HMO details are updated, the older HMO details will appear here.
+        </div>
+
+        <div v-else class="max-h-72 space-y-3 overflow-y-auto pr-1">
+          <article
+            v-for="history in patientHMOHistoryEntries"
+            :key="history.id"
+            class="rounded-lg border border-surface-200 bg-white p-3 shadow-sm"
+          >
+            <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <div class="font-medium text-surface-900">{{ history.hmo_name }} • {{ history.hmo_type_name }}</div>
+              <span class="text-xs text-surface-500">Archived {{ formatDateTime(history.archived_at) }}</span>
+            </div>
+            <div class="grid grid-cols-1 gap-2 text-sm text-surface-700 md:grid-cols-2">
+              <div><span class="font-medium text-surface-900">Company:</span> {{ history.company_name || 'N/A' }}</div>
+              <div><span class="font-medium text-surface-900">Member ID:</span> {{ history.member_id || 'N/A' }}</div>
+              <div><span class="font-medium text-surface-900">Card Number:</span> {{ history.card_number || 'N/A' }}</div>
+              <div><span class="font-medium text-surface-900">Plan Name:</span> {{ history.plan_name || 'N/A' }}</div>
+              <div><span class="font-medium text-surface-900">Principal:</span> {{ history.principal_name || 'N/A' }}</div>
+              <div><span class="font-medium text-surface-900">Relationship:</span> {{ history.relationship_to_principal || 'N/A' }}</div>
+              <div><span class="font-medium text-surface-900">Approval Code:</span> {{ history.approval_code || 'N/A' }}</div>
+              <div><span class="font-medium text-surface-900">Validity:</span> {{ formatDateRange(history.validity_start_date, history.validity_end_date) }}</div>
+              <div class="md:col-span-2"><span class="font-medium text-surface-900">Notes:</span> {{ history.notes || 'N/A' }}</div>
+            </div>
+          </article>
+        </div>
+      </section>
+
       <div class="flex justify-end gap-2 mt-4">
         <Button :loading="isLoading" :label="isReadOnly ? 'Close' : 'Cancel'" type="button" @click="onClose"/>
         <Button
@@ -225,7 +294,7 @@ import type {
   PatientHMOInformationFormProps
 } from "@/components/patient.type.ts";
 import {Form, FormField, type FormInstance, type FormSubmitEvent} from "@primevue/forms";
-import {computed, ref, toRefs, useTemplateRef} from "vue";
+import {computed, nextTick, ref, toRefs, useTemplateRef, watch} from "vue";
 import Button from "primevue/button";
 import { ptModalPrimaryBtn } from "@/features/shared/table-header.styles";
 import {zodResolver} from "@primevue/forms/resolvers/zod";
@@ -236,21 +305,27 @@ import {
 import {
   patientHmoInformationTanstackService
 } from "@/services/patient-hmo-information.tanstack.service.ts";
+import {patientHMOInformationService} from "@/services/patient-hmo-information.service.ts";
 import {useRefreshToken} from "@/composables/refresh-token.composable.ts";
 import type {
   PatientHMOInformation,
+  PatientHMOInformationHistoryEntry,
   PatientHMOInformationPayload
 } from "@/models/hmo-information.ts";
 import Message from "primevue/message";
 import {useIsLoading} from "@/composables/tanstack-loader.composable.ts";
 import {PatientTanstackKey} from "@/utils/keys/tanstack-key.ts";
-import {type ButtonProps, useConfirm, useToast} from "primevue";
+import type {ButtonProps} from "primevue/button";
+import {useConfirm} from "primevue/useconfirm";
+import {useToast} from "primevue/usetoast";
 import InputText from "primevue/inputtext";
 import IftaLabel from "primevue/iftalabel";
 import Select from "primevue/select";
+import SelectButton from "primevue/selectbutton";
 import {useQueryClient} from "@tanstack/vue-query";
 import { getApiErrorMessage } from "@/utils/actionable-error.util";
 import {errorToast, successToast} from "@/utils/toast.util.ts";
+import { FIRST_DEGREE_FAMILY_RELATIONSHIPS } from "@/schema/patient.schema";
 
 const toast = useToast()
 const confirm = useConfirm()
@@ -262,7 +337,8 @@ const props = defineProps<PatientHMOInformationFormProps>()
 const {patient, hmoTypes, hmos, isLoading: isParentLoading} = toRefs(props)
 
 const isPatientHMOInformationLoading = useIsLoading(PatientTanstackKey.PATIENT_HMO_INFORMATION)
-const isLoading = computed<boolean>(() => isParentLoading.value || isPatientHMOInformationLoading.value)
+const isPatientHMOHistoryLoading = useIsLoading(PatientTanstackKey.PATIENT_HMO_INFORMATION_HISTORY)
+const isLoading = computed<boolean>(() => isParentLoading.value || isPatientHMOInformationLoading.value || isPatientHMOHistoryLoading.value)
 
 const header = computed<string>(() => patientHMOInformation.value ? `Edit ${patient.value?.full_name} HMO Information` : `Save ${patient.value?.full_name} HMO Information`)
 const buttonProps = computed<ButtonProps>(() => ({
@@ -283,6 +359,12 @@ const {
 useRefreshToken<PatientHMOInformation | undefined>(error, refetch)
 
 const {
+  data: patientHMOHistory,
+} = patientHmoInformationTanstackService.getHistoryByPatientId(patientId)
+const patientHMOHistoryEntries = ref<PatientHMOInformationHistoryEntry[]>(patientHMOHistory.value ?? [])
+const historyLoadError = ref<string>("")
+
+const {
   mutate: saveMutation
 } = patientHmoInformationTanstackService.save()
 
@@ -296,6 +378,84 @@ const editEnabled = ref(false)
 const isReadOnly = computed<boolean>(() => isEditing.value && !editEnabled.value)
 
 const resolver = ref(zodResolver(patientHMOInformationSchema))
+
+const firstDegreeFamilyRelationshipOptions = FIRST_DEGREE_FAMILY_RELATIONSHIPS.map((relationship) => ({
+  label: relationship,
+  value: relationship
+}))
+
+type FirstDegreeFamilyRelationship = typeof FIRST_DEGREE_FAMILY_RELATIONSHIPS[number]
+
+const relationshipToPrincipalMap = new Map<string, FirstDegreeFamilyRelationship>(
+  FIRST_DEGREE_FAMILY_RELATIONSHIPS.map((relationship) => [relationship.toLowerCase(), relationship])
+)
+
+const normalizeRelationshipToPrincipal = (value?: string | null): FirstDegreeFamilyRelationship | undefined => {
+  if (!value) return undefined
+  const normalizedKey = value.trim().toLowerCase()
+  return relationshipToPrincipalMap.get(normalizedKey)
+}
+
+const formatDate = (value?: string | null): string => {
+  if (!value) return 'N/A'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleDateString('en-PH', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  })
+}
+
+const formatDateTime = (value?: string | null): string => {
+  if (!value) return 'N/A'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString('en-PH', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  })
+}
+
+const formatDateRange = (start?: string | null, end?: string | null): string => {
+  if (!start && !end) return 'N/A'
+  return `${formatDate(start)} - ${formatDate(end)}`
+}
+
+const loadDialogData = async (): Promise<void> => {
+  historyLoadError.value = ""
+  await nextTick()
+
+  if (patientId.value <= 0) {
+    patientHMOHistoryEntries.value = []
+    historyLoadError.value = "Unable to resolve selected patient for HMO history. Please close and reopen this dialog from the patient row."
+    form.value?.setValues({})
+    return
+  }
+
+  try {
+    const [hmoResponse, historyResponse] = await Promise.all([
+      refetch(),
+      patientHMOInformationService.getHistoryByPatientId(patientId.value)
+    ])
+
+    patientHMOHistoryEntries.value = historyResponse ?? []
+
+    if (!hmoResponse.data) {
+      form.value?.setValues({})
+      return
+    }
+  } catch (error: unknown) {
+    patientHMOHistoryEntries.value = []
+    historyLoadError.value = getApiErrorMessage(error, {
+      baseMessage: "Unable to load HMO history",
+      retryHint: "Please close and reopen this dialog."
+    })
+  }
+}
 
 const onSubmit = (event: FormSubmitEvent) => {
   if (isReadOnly.value) return
@@ -378,7 +538,7 @@ const onSubmit = (event: FormSubmitEvent) => {
 
 const onShow = async (): Promise<void> => {
   editEnabled.value = false
-  await refetch()
+  await loadDialogData()
 
   if (!isEditing.value) {
     form.value?.setValues({})
@@ -391,7 +551,7 @@ const onShow = async (): Promise<void> => {
     card_number: patientHMOInformation.value?.card_number,
     plan_name: patientHMOInformation.value?.plan_name,
     principal_name: patientHMOInformation.value?.principal_name,
-    relationship_to_principal: patientHMOInformation.value?.relationship_to_principal,
+    relationship_to_principal: normalizeRelationshipToPrincipal(patientHMOInformation.value?.relationship_to_principal),
     approval_code: patientHMOInformation.value?.approval_code,
     validity_start_date: patientHMOInformation.value?.validity_start_date,
     validity_end_date: patientHMOInformation.value?.validity_end_date,
@@ -411,8 +571,16 @@ const onClose = (): void => {
   emit('onClose')
 }
 
+watch(patientId, () => {
+  if (!visible.value) return
+  void loadDialogData()
+})
+
 const resetQueries = async (): Promise<void> => {
-  await queryClient.prefetchQuery({queryKey: [PatientTanstackKey.PATIENT_HMO_INFORMATION]})
+  await Promise.all([
+    queryClient.invalidateQueries({queryKey: [PatientTanstackKey.PATIENT_HMO_INFORMATION]}),
+    queryClient.invalidateQueries({queryKey: [PatientTanstackKey.PATIENT_HMO_INFORMATION_HISTORY]})
+  ])
 }
 
 defineExpose<DialogExpose>({

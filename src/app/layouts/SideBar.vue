@@ -71,7 +71,7 @@
             type="button"
             class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
           >
-            <span v-if="!collapsed">MY WORK</span>
+            <span v-if="!collapsed">My Work</span>
           </button>
 
           <ul class="mt-2 space-y-1">
@@ -136,7 +136,7 @@
             type="button"
             class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
           >
-            <span v-if="!collapsed">OVERVIEW</span>
+            <span v-if="!collapsed">Overview</span>
           </button>
 
           <ul class="mt-2 space-y-1">
@@ -162,7 +162,7 @@
             class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
             @click="patientCareOpen = !patientCareOpen"
           >
-            <span v-if="!collapsed">PATIENT CARE</span>
+            <span v-if="!collapsed">Patient Care</span>
             <i class="pi text-[11px]" :class="patientCareOpen ? 'pi-chevron-down' : 'pi-chevron-right'" />
           </button>
 
@@ -218,7 +218,7 @@
             class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
             @click="billingOpen = !billingOpen"
           >
-            <span v-if="!collapsed">FINANCE &amp; CLOSEOUT</span>
+            <span v-if="!collapsed">Finance &amp; Closeout</span>
             <i class="pi text-[11px]" :class="billingOpen ? 'pi-chevron-down' : 'pi-chevron-right'" />
           </button>
 
@@ -257,7 +257,7 @@
             class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
             @click="promosOffersOpen = !promosOffersOpen"
           >
-            <span v-if="!collapsed">OFFERS &amp; COVERAGE</span>
+            <span v-if="!collapsed">Offers &amp; Coverage</span>
             <i class="pi text-[11px]" :class="promosOffersOpen ? 'pi-chevron-down' : 'pi-chevron-right'" />
           </button>
 
@@ -335,21 +335,47 @@
             class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
             @click="operationsOpen = !operationsOpen"
           >
-            <span v-if="!collapsed">ADMINISTRATION</span>
+            <span v-if="!collapsed">Administration</span>
             <i class="pi text-[11px]" :class="operationsOpen ? 'pi-chevron-down' : 'pi-chevron-right'" />
           </button>
 
           <ul v-show="operationsOpen" class="mt-2 space-y-1">
-            <li v-if="canAccessRoute('settings')">
+            <li v-if="canAccessRoute('general-settings')">
               <button
                 type="button"
-                @click="goToAndClose('settings')"
-                :class="itemClass('settings')"
-                aria-label="Settings"
-                title="Settings"
+                @click="goToAndClose('general-settings')"
+                :class="itemClass('general-settings')"
+                aria-label="General Settings"
+                title="General Settings"
               >
-                <span :class="iconWrapClass('settings')"><i class="pi pi-sliders-h text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">Settings</span>
+                <span :class="iconWrapClass('general-settings')"><i class="pi pi-cog text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">General Settings</span>
+              </button>
+            </li>
+
+            <li v-if="canAccessRoute('admin-setup')">
+              <button
+                type="button"
+                @click="goToAndClose('admin-setup')"
+                :class="itemClass('admin-setup')"
+                aria-label="Admin Setup"
+                title="Admin Setup"
+              >
+                <span :class="iconWrapClass('admin-setup')"><i class="pi pi-users text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">Admin Setup</span>
+              </button>
+            </li>
+
+            <li v-if="canAccessRoute('pt-team-setup')">
+              <button
+                type="button"
+                @click="goToAndClose('pt-team-setup')"
+                :class="itemClass('pt-team-setup')"
+                aria-label="PT Team Setup"
+                title="PT Team Setup"
+              >
+                <span :class="iconWrapClass('pt-team-setup')"><i class="pi pi-sliders-h text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">PT Team Setup</span>
               </button>
             </li>
 
@@ -363,19 +389,6 @@
               >
                 <span :class="iconWrapClass('clinics')"><i class="pi pi-map-marker text-[16px]" /></span>
                 <span v-if="!collapsed" class="truncate">Clinic</span>
-              </button>
-            </li>
-
-            <li v-if="canAccessRoute('staffs')">
-              <button
-                type="button"
-                @click="goToAndClose('staffs')"
-                :class="itemClass('staffs')"
-                aria-label="Staff"
-                title="Staff"
-              >
-                <span :class="iconWrapClass('staffs')"><i class="pi pi-users text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">Staff</span>
               </button>
             </li>
 
@@ -458,9 +471,12 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
-import { useConfirm } from "primevue"
-import { authMeService } from "@/services/auth-me.service"
+import IftaLabel from "primevue/iftalabel"
+import Select from "primevue/select"
+import { storeToRefs } from "pinia"
+import { useConfirm } from "primevue/useconfirm"
 import { useLogout } from "@/services/logout-tanstack.service"
+import { clinicStore } from "@/stores/clinic.store"
 
 const props = defineProps<{
   collapsed?: boolean
@@ -474,6 +490,8 @@ const router = useRouter()
 const route = useRoute()
 const confirm = useConfirm()
 const { mutate, isPending } = useLogout()
+const globalClinicStore = clinicStore()
+const { clinicOptions, isLoadingClinics, selectedClinicId, selectedClinic } = storeToRefs(globalClinicStore)
 
 const mobileOpen = ref(false)
 const userSnapshot = ref<Record<string, unknown> | null>(null)
@@ -580,6 +598,7 @@ const syncUserSnapshot = () => {
 
 const fetchCurrentUser = async () => {
   try {
+    const {authMeService} = await import("@/services/auth-me.service")
     const me = await authMeService.get()
     if (me) {
       userSnapshot.value = me as unknown as Record<string, unknown>
@@ -688,9 +707,6 @@ const hasPermissionData = computed(() => userPermissionSet.value.size > 0)
 const hasAnyPermission = (...permissions: string[]) => permissions.some(permission => userPermissionSet.value.has(permission))
 
 const canAccessRoute = (routeName: string): boolean => {
-  const normalizedRole = displayRole.value.trim().toLowerCase()
-  if (normalizedRole === "owner") return true
-
   const rule = ROUTE_ACCESS_RULES[routeName]
   if (!rule) return true
 
@@ -730,6 +746,7 @@ defineExpose({
 
 onMounted(() => {
   void fetchCurrentUser()
+  void globalClinicStore.loadClinics()
   window.addEventListener("storage", syncUserSnapshot)
   window.addEventListener("auth-user-updated", fetchCurrentUser)
 })

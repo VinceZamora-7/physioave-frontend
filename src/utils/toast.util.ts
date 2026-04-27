@@ -1,4 +1,4 @@
-import type {ToastServiceMethods} from "primevue";
+import type {ToastServiceMethods} from "primevue/toastservice";
 
 export const successToast = (toast: ToastServiceMethods, message: string) => {
   return toast.add({

@@ -35,12 +35,13 @@ interface StaffService {
 export const staffService: StaffService = {
   async export(request: StaffExportRequestParams): Promise<AxiosResponse<Blob> | undefined> {
     try {
-      const {clinic_id, page_request, highest_only} = request
+      const {clinic_id, page_request, highest_only, staff_scope} = request
       return await pamsAPI.get(`/${ResourceKey.STAFFS}/export`, {
         params: {
           ...page_request,
           clinic_id,
-          highest_only
+          highest_only,
+          staff_scope
         },
         responseType: 'blob'
       })
@@ -51,12 +52,13 @@ export const staffService: StaffService = {
 
   async getAllLookup(params: StaffRequestParams): Promise<Pageable<Lookup> | undefined> {
     try {
-      const {clinic_id, pageable_request, highest_only} = params
+      const {clinic_id, pageable_request, highest_only, staff_scope} = params
       const {data: paginatedStaffLookups} = await pamsAPI.get<Pageable<Lookup>>(`/${ResourceKey.STAFFS}/lookup`, {
         params: {
           ...pageable_request,
           clinic_id,
-          highest_only
+          highest_only,
+          staff_scope
         }
       })
 
@@ -68,12 +70,13 @@ export const staffService: StaffService = {
 
   async getAll(params: StaffRequestParams): Promise<Pageable<Staff> | undefined> {
     try {
-      const {clinic_id, pageable_request, highest_only} = params
+      const {clinic_id, pageable_request, highest_only, staff_scope} = params
       const {data: paginatedStaffs} = await pamsAPI.get<Pageable<Staff>>(`/${ResourceKey.STAFFS}`, {
         params: {
           ...pageable_request,
           clinic_id,
-          highest_only
+          highest_only,
+          staff_scope
         }
       })
 

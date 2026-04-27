@@ -185,7 +185,9 @@ import {
 import {usePaginationDebounce} from "@/composables/pagination-debounce.composable.ts";
 import {useThrottleFn, watchDebounced} from "@vueuse/core";
 import {techniqueTanstackService} from "@/features/techniques/queries/technique.tanstack.service";
-import {Paginator, useConfirm, useToast} from "primevue";
+import Paginator from "primevue/paginator";
+import {useConfirm} from "primevue/useconfirm";
+import {useToast} from "primevue/usetoast";
 import {useQueryClient} from "@tanstack/vue-query";
 import {useMenuButtons} from "@/composables/menu-buttons.composable.ts";
 import Select from "primevue/select";
