@@ -973,18 +973,16 @@ const saveService = async (): Promise<void> => {
     }
 
     const endpoint = endpoints[formData.type]
-    if (formData.type === "machine" || formData.type === "technique") {
-      throw new Error("This service type is managed in its dedicated master data module.")
-    }
-
     const payload = { name: formData.name, price: Number(formData.price ?? 0) }
 
     if (editingId.value) {
       const id =
-        formData.type === "evaluation" ? parseNumericId(editingId.value, "evaluation-")
-          : formData.type === "add-on-machine" ? parseNumericId(editingId.value, "add-on-machine-")
-            : formData.type === "add-on-technique" ? parseNumericId(editingId.value, "add-on-technique-")
-              : parseNumericId(editingId.value, "add-on-home-service-")
+        formData.type === "machine" ? parseNumericId(editingId.value, "machine-")
+          : formData.type === "technique" ? parseNumericId(editingId.value, "technique-")
+            : formData.type === "evaluation" ? parseNumericId(editingId.value, "evaluation-")
+              : formData.type === "add-on-machine" ? parseNumericId(editingId.value, "add-on-machine-")
+                : formData.type === "add-on-technique" ? parseNumericId(editingId.value, "add-on-technique-")
+                  : parseNumericId(editingId.value, "add-on-home-service-")
       if (!id) throw new Error("Invalid id")
       await pamsAPI.put(`${endpoint}/${id}`, payload)
       successToast(toast, "Service updated")
@@ -1015,15 +1013,19 @@ const confirmDelete = (service: SingleService): void => {
       isLoading.value = true
       try {
         const endpoint =
-          service.type === "evaluation" ? "/evaluations"
-            : service.type === "add-on-machine" ? "/add-on-machines"
-              : service.type === "add-on-technique" ? "/add-on-techniques"
-                : "/add-on-home-services"
+          service.type === "machine" ? "/machines"
+            : service.type === "technique" ? "/techniques"
+              : service.type === "evaluation" ? "/evaluations"
+                : service.type === "add-on-machine" ? "/add-on-machines"
+                  : service.type === "add-on-technique" ? "/add-on-techniques"
+                    : "/add-on-home-services"
         const id =
-          service.type === "evaluation" ? parseNumericId(service.id, "evaluation-")
-            : service.type === "add-on-machine" ? parseNumericId(service.id, "add-on-machine-")
-              : service.type === "add-on-technique" ? parseNumericId(service.id, "add-on-technique-")
-                : parseNumericId(service.id, "add-on-home-service-")
+          service.type === "machine" ? parseNumericId(service.id, "machine-")
+            : service.type === "technique" ? parseNumericId(service.id, "technique-")
+              : service.type === "evaluation" ? parseNumericId(service.id, "evaluation-")
+                : service.type === "add-on-machine" ? parseNumericId(service.id, "add-on-machine-")
+                  : service.type === "add-on-technique" ? parseNumericId(service.id, "add-on-technique-")
+                    : parseNumericId(service.id, "add-on-home-service-")
         if (!id) throw new Error("Invalid id")
         await pamsAPI.patch(`${endpoint}/${id}/status`)
         successToast(toast, "Service deactivated")

@@ -519,16 +519,12 @@ import {pamsAPI} from "@/utils/axios-interceptor"
 import {OfferResourceKey} from "@/utils/keys/resource-key"
 import {errorToast, successToast} from "@/utils/toast.util"
 import {
-  SINGLE_PAY_SERVICES_KEY,
-  readPromosStorageArray,
-  writePromosStorageArray
+  // legacy local storage helpers are intentionally no longer used for services/bundles/packages
 } from "@/features/promos-offers/composables/promos-storage.composable"
 import {
   isLocalEditablePromosService,
   loadBackendPromosMasterCatalog,
-  normalizePromosServiceName,
-  partitionPromosCustomServices,
-  remapLegacyPromosServiceId
+  normalizePromosServiceName
 } from "@/features/promos-offers/composables/promos-master-catalog.composable"
 
 type ServiceType = "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service"
@@ -620,6 +616,12 @@ const allBundles = ref<BundledService[]>([])
 const allPackages = ref<PackageService[]>([])
 const selectedServiceCatalogFilters = ref<ServiceCatalogFilter[]>([])
 const sessionLookupServices = ref<Array<{id: string; name: string; price: number}>>([])
+
+const parseNumericId = (value: string, prefix: string): number => {
+  const raw = value.startsWith(prefix) ? value.slice(prefix.length) : value
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
 
 const ensureRefreshed = async (): Promise<void> => {
   if (!refreshPromise.value) {
@@ -719,10 +721,6 @@ const clearServiceCatalogFilters = (): void => {
 }
 
 const isLocalEditableService = (service: SingleService): boolean => isLocalEditablePromosService(service)
-
-const remapServiceIdWithCatalog = (id: string, serviceType: "machine" | "technique", backendByName: Map<string, string>, legacyById: Map<string, SingleService>): string => {
-  return remapLegacyPromosServiceId(id, serviceType, backendByName, legacyById)
-}
 
 const formData = reactive<{
   type: ServiceType
@@ -933,20 +931,44 @@ const loadServices = async (): Promise<void> => {
     machineServices.value = backendMachines as SingleService[]
     techniqueServices.value = backendTechniques as SingleService[]
 
-    const storedServices = readPromosStorageArray<SingleService>(SINGLE_PAY_SERVICES_KEY)
-    const { customOnlyServices, legacyMachineTechniqueEntries } = partitionPromosCustomServices(storedServices)
-    customServices.value = customOnlyServices
+    // DB-backed "custom" services: evaluations + add-ons
+    const [evaluationsRes, addOnMachinesRes, addOnTechniquesRes, addOnHomeRes] = await Promise.all([
+      withRefreshRetry(() => pamsAPI.get<Pageable<any>>("/evaluations", { params: { page: 1, size: 1000, name: "", status: "ALL" } })),
+      withRefreshRetry(() => pamsAPI.get<Pageable<any>>("/add-on-machines", { params: { page: 1, size: 1000, name: "", status: "ALL" } })),
+      withRefreshRetry(() => pamsAPI.get<Pageable<any>>("/add-on-techniques", { params: { page: 1, size: 1000, name: "", status: "ALL" } })),
+      withRefreshRetry(() => pamsAPI.get<Pageable<any>>("/add-on-home-services", { params: { page: 1, size: 1000, name: "", status: "ALL" } })),
+    ])
 
-    if (customOnlyServices.length !== storedServices.length) {
-      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customOnlyServices)
-    }
+    const evalServices: SingleService[] = (evaluationsRes.data?.content ?? []).map((item: any) => ({
+      id: `evaluation-${item.id}`,
+      type: "evaluation",
+      name: String(item.name ?? ""),
+      price: Number(item.price ?? 0),
+      status: item.is_active ? "Active" : "Inactive",
+    }))
+    const addOnMachineServices: SingleService[] = (addOnMachinesRes.data?.content ?? []).map((item: any) => ({
+      id: `add-on-machine-${item.id}`,
+      type: "add-on-machine",
+      name: String(item.name ?? ""),
+      price: Number(item.price ?? 0),
+      status: item.is_active ? "Active" : "Inactive",
+    }))
+    const addOnTechniqueServices: SingleService[] = (addOnTechniquesRes.data?.content ?? []).map((item: any) => ({
+      id: `add-on-technique-${item.id}`,
+      type: "add-on-technique",
+      name: String(item.name ?? ""),
+      price: Number(item.price ?? 0),
+      status: item.is_active ? "Active" : "Inactive",
+    }))
+    const addOnHomeServices: SingleService[] = (addOnHomeRes.data?.content ?? []).map((item: any) => ({
+      id: `add-on-home-service-${item.id}`,
+      type: "add-on-home-service",
+      name: String(item.name ?? ""),
+      price: Number(item.price ?? 0),
+      status: item.is_active ? "Active" : "Inactive",
+    }))
 
-    const legacyById = new Map(legacyMachineTechniqueEntries.map(service => [service.id, service]))
-
-    const machineByName = new Map(machineServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
-    const techniqueByName = new Map(techniqueServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
-
-    // Bundles are DB-backed (service_bundle_template). Loaded in loadBundles().
+    customServices.value = [...evalServices, ...addOnMachineServices, ...addOnTechniqueServices, ...addOnHomeServices]
 
     // Package offers are DB-backed (package_service_offer table).
     const { data } = await withRefreshRetry(() =>
@@ -985,12 +1007,6 @@ const loadServices = async (): Promise<void> => {
     customServices.value = []
     allPackages.value = []
   }
-}
-
-const parseNumericId = (value: string, prefix: string): number => {
-  const raw = value.startsWith(prefix) ? value.slice(prefix.length) : value
-  const parsed = Number(raw)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 }
 
 const loadBundles = async (): Promise<void> => {
@@ -1083,7 +1099,7 @@ const openEditDialog = (service: SingleService): void => {
   dialogVisible.value = true
 }
 
-const saveService = (): void => {
+const saveService = async (): Promise<void> => {
   if (!formData.name.trim()) {
     errorToast(toast, "Service name is required")
     return
@@ -1093,18 +1109,43 @@ const saveService = (): void => {
     return
   }
 
-  if (editingId.value) {
-    const index = customServices.value.findIndex(service => service.id === editingId.value)
-    if (index >= 0) {
-      customServices.value[index] = {id: editingId.value, type: formData.type, name: formData.name, price: formData.price, status: formData.status}
+  isLoading.value = true
+  try {
+    const endpoints: Record<ServiceType, string> = {
+      machine: "/machines",
+      technique: "/techniques",
+      evaluation: "/evaluations",
+      "add-on-machine": "/add-on-machines",
+      "add-on-technique": "/add-on-techniques",
+      "add-on-home-service": "/add-on-home-services"
     }
-  } else {
-    customServices.value.push({id: `service-${Date.now()}`, type: formData.type, name: formData.name, price: formData.price, status: formData.status})
-  }
 
-  writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
-  dialogVisible.value = false
-  successToast(toast, editingId.value ? "Service updated" : "Service added")
+    const endpoint = endpoints[formData.type]
+    const payload = { name: formData.name, price: Number(formData.price ?? 0) }
+
+    if (editingId.value) {
+      const id =
+        formData.type === "machine" ? parseNumericId(editingId.value, "machine-")
+          : formData.type === "technique" ? parseNumericId(editingId.value, "technique-")
+            : formData.type === "evaluation" ? parseNumericId(editingId.value, "evaluation-")
+              : formData.type === "add-on-machine" ? parseNumericId(editingId.value, "add-on-machine-")
+                : formData.type === "add-on-technique" ? parseNumericId(editingId.value, "add-on-technique-")
+                  : parseNumericId(editingId.value, "add-on-home-service-")
+      if (!id) throw new Error("Invalid id")
+      await withRefreshRetry(() => pamsAPI.put(`${endpoint}/${id}`, payload))
+      successToast(toast, "Service updated")
+    } else {
+      await withRefreshRetry(() => pamsAPI.post(`${endpoint}`, payload))
+      successToast(toast, "Service added")
+    }
+
+    dialogVisible.value = false
+    await loadServices()
+  } catch {
+    errorToast(toast, "Failed to save service")
+  } finally {
+    isLoading.value = false
+  }
 }
 
 const confirmDelete = (service: SingleService): void => {
@@ -1114,14 +1155,35 @@ const confirmDelete = (service: SingleService): void => {
   }
 
   confirm.require({
-    message: `Delete "${service.name}"?`,
+    message: `If you proceed, "${service.name}" will be deactivated.`,
     header: "Confirm",
     icon: "pi pi-exclamation-triangle",
-    accept: () => {
-      customServices.value = customServices.value.filter(entry => entry.id !== service.id)
-      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
-      successToast(toast, "Service deleted")
-      refreshAll()
+    accept: async () => {
+      isLoading.value = true
+      try {
+        const endpoint =
+          service.type === "machine" ? "/machines"
+            : service.type === "technique" ? "/techniques"
+              : service.type === "evaluation" ? "/evaluations"
+                : service.type === "add-on-machine" ? "/add-on-machines"
+                  : service.type === "add-on-technique" ? "/add-on-techniques"
+                    : "/add-on-home-services"
+        const id =
+          service.type === "machine" ? parseNumericId(service.id, "machine-")
+            : service.type === "technique" ? parseNumericId(service.id, "technique-")
+              : service.type === "evaluation" ? parseNumericId(service.id, "evaluation-")
+                : service.type === "add-on-machine" ? parseNumericId(service.id, "add-on-machine-")
+                  : service.type === "add-on-technique" ? parseNumericId(service.id, "add-on-technique-")
+                    : parseNumericId(service.id, "add-on-home-service-")
+        if (!id) throw new Error("Invalid id")
+        await withRefreshRetry(() => pamsAPI.patch(`${endpoint}/${id}/status`))
+        successToast(toast, "Service deactivated")
+        await loadServices()
+      } catch {
+        errorToast(toast, "Failed to update service status")
+      } finally {
+        isLoading.value = false
+      }
     }
   })
 }

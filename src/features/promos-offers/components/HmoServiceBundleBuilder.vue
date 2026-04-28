@@ -383,15 +383,12 @@ import { machineService } from "@/services/machine.service"
 import { Status } from "@/utils/global.type"
 import { errorToast, successToast } from "@/utils/toast.util"
 import {
-  SINGLE_PAY_SERVICES_KEY,
-  readPromosStorageArray,
-  writePromosStorageArray
-} from "@/features/promos-offers/composables/promos-storage.composable"
-import {
   isLocalEditablePromosService,
   loadBackendPromosMasterCatalog,
-  partitionPromosCustomServices
+  normalizePromosServiceName
 } from "@/features/promos-offers/composables/promos-master-catalog.composable"
+import { pamsAPI } from "@/utils/axios-interceptor"
+import type { Pageable } from "@/models/paging"
 
 type ServiceType = "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service"
 
@@ -644,6 +641,12 @@ const getTypeSeverity = (type: ServiceType): string => {
   return severityMap[type] || "info"
 }
 
+const parseNumericId = (value: string, prefix: string): number => {
+  const raw = value.startsWith(prefix) ? value.slice(prefix.length) : value
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
 const loadServices = async (): Promise<void> => {
   try {
     isLoading.value = true
@@ -651,13 +654,58 @@ const loadServices = async (): Promise<void> => {
     machineServices.value = backendMachines as HmoService[]
     techniqueServices.value = backendTechniques as HmoService[]
 
-    const storedServices = readPromosStorageArray<HmoService>(SINGLE_PAY_SERVICES_KEY)
-    const { customOnlyServices } = partitionPromosCustomServices(storedServices)
-    customServices.value = customOnlyServices
+    // DB-backed "custom" services used by billing (evaluations + add-ons).
+    const results = await Promise.allSettled([
+      pamsAPI.get<Pageable<{ id: number; name: string; price: number; is_active: boolean }>>("/evaluations", {
+        params: { page: 1, size: 1000, name: "", status: "ALL" }
+      }),
+      pamsAPI.get<Pageable<{ id: number; name: string; price: number; is_active: boolean }>>("/add-on-machines", {
+        params: { page: 1, size: 1000, name: "", status: "ALL" }
+      }),
+      pamsAPI.get<Pageable<{ id: number; name: string; price: number; is_active: boolean }>>("/add-on-techniques", {
+        params: { page: 1, size: 1000, name: "", status: "ALL" }
+      }),
+      pamsAPI.get<Pageable<{ id: number; name: string; price: number; is_active: boolean }>>("/add-on-home-services", {
+        params: { page: 1, size: 1000, name: "", status: "ALL" }
+      })
+    ])
 
-    if (customOnlyServices.length !== storedServices.length) {
-      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customOnlyServices)
+    const getContent = <T,>(idx: number): T[] => {
+      const res = results[idx]
+      if (res?.status !== "fulfilled") return []
+      return (res.value.data?.content ?? []) as T[]
     }
+
+    const evalServices: HmoService[] = getContent<{ id: number; name: string; price: number; is_active: boolean }>(0).map(item => ({
+      id: `evaluation-${item.id}`,
+      type: "evaluation",
+      name: item.name,
+      price: Number(item.price ?? 0),
+      status: item.is_active ? "Active" : "Inactive"
+    }))
+    const addOnMachineServices: HmoService[] = getContent<{ id: number; name: string; price: number; is_active: boolean }>(1).map(item => ({
+      id: `add-on-machine-${item.id}`,
+      type: "add-on-machine",
+      name: item.name,
+      price: Number(item.price ?? 0),
+      status: item.is_active ? "Active" : "Inactive"
+    }))
+    const addOnTechniqueServices: HmoService[] = getContent<{ id: number; name: string; price: number; is_active: boolean }>(2).map(item => ({
+      id: `add-on-technique-${item.id}`,
+      type: "add-on-technique",
+      name: item.name,
+      price: Number(item.price ?? 0),
+      status: item.is_active ? "Active" : "Inactive"
+    }))
+    const addOnHomeServices: HmoService[] = getContent<{ id: number; name: string; price: number; is_active: boolean }>(3).map(item => ({
+      id: `add-on-home-service-${item.id}`,
+      type: "add-on-home-service",
+      name: item.name,
+      price: Number(item.price ?? 0),
+      status: item.is_active ? "Active" : "Inactive"
+    }))
+
+    customServices.value = [...evalServices, ...addOnMachineServices, ...addOnTechniqueServices, ...addOnHomeServices]
   } catch {
     machineServices.value = []
     techniqueServices.value = []
@@ -1043,7 +1091,7 @@ const openEditDialog = (service: HmoService): void => {
   dialogVisible.value = true
 }
 
-const saveService = (): void => {
+const saveService = async (): Promise<void> => {
   if (!ensureConfidentialAccess()) return
 
   if (!formData.name.trim()) {
@@ -1055,30 +1103,46 @@ const saveService = (): void => {
     return
   }
 
-  if (editingId.value) {
-    const index = customServices.value.findIndex(s => s.id === editingId.value)
-    if (index >= 0) {
-      customServices.value[index] = {
-        id: editingId.value,
-        type: formData.type,
-        name: formData.name,
-        price: formData.price,
-        status: formData.status
-      }
+  isLoading.value = true
+  try {
+    const endpoints: Record<ServiceType, string> = {
+      machine: "/machines",
+      technique: "/techniques",
+      evaluation: "/evaluations",
+      "add-on-machine": "/add-on-machines",
+      "add-on-technique": "/add-on-techniques",
+      "add-on-home-service": "/add-on-home-services"
     }
-  } else {
-    customServices.value.push({
-      id: `hmo-service-${Date.now()}`,
-      type: formData.type,
-      name: formData.name,
-      price: formData.price,
-      status: formData.status
-    })
-  }
 
-  writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
-  dialogVisible.value = false
-  successToast(toast, editingId.value ? "HMO service updated" : "HMO service added")
+    const endpoint = endpoints[formData.type]
+    if (formData.type === "machine" || formData.type === "technique") {
+      errorToast(toast, `Edit ${formData.type} in its master data module.`)
+      return
+    }
+
+    const payload = { name: formData.name, price: Number(formData.price ?? 0) }
+
+    if (editingId.value) {
+      const id =
+        formData.type === "evaluation" ? parseNumericId(editingId.value, "evaluation-")
+          : formData.type === "add-on-machine" ? parseNumericId(editingId.value, "add-on-machine-")
+            : formData.type === "add-on-technique" ? parseNumericId(editingId.value, "add-on-technique-")
+              : parseNumericId(editingId.value, "add-on-home-service-")
+      if (!id) throw new Error("Invalid id")
+      await pamsAPI.put(`${endpoint}/${id}`, payload)
+      successToast(toast, "HMO service updated")
+    } else {
+      await pamsAPI.post(`${endpoint}`, payload)
+      successToast(toast, "HMO service added")
+    }
+
+    dialogVisible.value = false
+    await loadServices()
+  } catch {
+    errorToast(toast, "Failed to save HMO service")
+  } finally {
+    isLoading.value = false
+  }
 }
 
 const confirmDelete = (service: HmoService): void => {
@@ -1089,13 +1153,31 @@ const confirmDelete = (service: HmoService): void => {
   }
 
   confirm.require({
-    message: `Delete "${service.name}"?`,
+    message: `If you proceed, "${service.name}" will be deactivated.`,
     header: "Confirm",
     icon: "pi pi-exclamation-triangle",
-    accept: () => {
-      customServices.value = customServices.value.filter(s => s.id !== service.id)
-      writePromosStorageArray(SINGLE_PAY_SERVICES_KEY, customServices.value)
-      successToast(toast, "HMO service deleted")
+    accept: async () => {
+      isLoading.value = true
+      try {
+        const endpoint =
+          service.type === "evaluation" ? "/evaluations"
+            : service.type === "add-on-machine" ? "/add-on-machines"
+              : service.type === "add-on-technique" ? "/add-on-techniques"
+                : "/add-on-home-services"
+        const id =
+          service.type === "evaluation" ? parseNumericId(service.id, "evaluation-")
+            : service.type === "add-on-machine" ? parseNumericId(service.id, "add-on-machine-")
+              : service.type === "add-on-technique" ? parseNumericId(service.id, "add-on-technique-")
+                : parseNumericId(service.id, "add-on-home-service-")
+        if (!id) throw new Error("Invalid id")
+        await pamsAPI.patch(`${endpoint}/${id}/status`)
+        successToast(toast, "HMO service updated")
+        await loadServices()
+      } catch {
+        errorToast(toast, "Failed to update service status")
+      } finally {
+        isLoading.value = false
+      }
     }
   })
 }

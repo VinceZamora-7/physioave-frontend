@@ -111,23 +111,23 @@
         <Column header="Unit Price" style="width: 140px">
           <template #body="{data}">
             <InputNumber
-              v-model="data.price"
+              :model-value="data.price"
               mode="currency"
               currency="PHP"
               locale="en-PH"
               :min="0"
               class="w-full"
-              @update:model-value="onPriceEdit(data.key, $event)"
+              @update:model-value="onPriceEdit(data.key, Number($event ?? 0))"
             />
           </template>
         </Column>
         <Column header="Qty" style="width: 80px">
           <template #body="{data}">
             <InputNumber
-              v-model="data.quantity"
+              :model-value="data.quantity"
               :min="1"
               class="w-full"
-              @update:model-value="onQuantityEdit(data.key, $event)"
+              @update:model-value="onQuantityEdit(data.key, Number($event ?? 1))"
             />
           </template>
         </Column>
