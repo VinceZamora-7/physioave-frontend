@@ -11,11 +11,21 @@
         </div>
 
         <div class="flex flex-wrap gap-2">
-          <Button v-if="canViewConfidentialRates" label="Add New HMO Service" icon="pi pi-plus" @click="openAddDialog" />
+          <Button v-if="canManageCatalog" label="Add New HMO Service" icon="pi pi-plus" @click="openAddDialog" />
+          <Button
+            label="Recycle Bin"
+            icon="pi pi-trash"
+            outlined
+            @click="catalogManagerVisible = true"
+          />
           <Button label="Refresh" icon="pi pi-refresh" text outlined @click="loadServices" />
         </div>
       </div>
     </section>
+
+    <PromosCatalogManagerDialog v-model:visible="catalogManagerVisible" recycleOnly @refreshed="loadServices" />
+
+    <HmoRecentTransactionsCard />
 
     <section v-if="!canViewConfidentialRates" class="app-section-card-comfy">
       <p class="text-sm font-medium text-amber-700">
@@ -382,6 +392,8 @@ import { hmoService } from "@/services/hmo.service"
 import { machineService } from "@/services/machine.service"
 import { Status } from "@/utils/global.type"
 import { errorToast, successToast } from "@/utils/toast.util"
+import { hasAnyStoredPermission, readStoredAuthSnapshot } from "@/utils/auth-user.util"
+import PromosCatalogManagerDialog from "@/features/promos-offers/components/PromosCatalogManagerDialog.vue"
 import {
   isLocalEditablePromosService,
   loadBackendPromosMasterCatalog,
@@ -389,6 +401,7 @@ import {
 } from "@/features/promos-offers/composables/promos-master-catalog.composable"
 import { pamsAPI } from "@/utils/axios-interceptor"
 import type { Pageable } from "@/models/paging"
+import HmoRecentTransactionsCard from "@/features/promos-offers/components/HmoRecentTransactionsCard.vue"
 
 type ServiceType = "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service"
 
@@ -425,6 +438,12 @@ type ServiceCatalogMatrixRow = {
 
 const toast = useToast()
 const confirm = useConfirm()
+
+const catalogManagerVisible = ref(false)
+const authSnapshot = ref(readStoredAuthSnapshot())
+window.addEventListener("auth-user-updated", () => {
+  authSnapshot.value = readStoredAuthSnapshot()
+})
 const isLoading = ref(false)
 const dialogVisible = ref(false)
 const editingId = ref<string | null>(null)
@@ -502,6 +521,16 @@ const canViewConfidentialRates = computed(() => {
   const normalized = currentRoleName.value.trim().toLowerCase()
   if (!normalized) return false
   return PRIVILEGED_ROLE_KEYWORDS.some(keyword => normalized.includes(keyword))
+})
+
+const canManageCatalog = computed(() => {
+  if (/owner/i.test(authSnapshot.value.roleName)) return true
+  return hasAnyStoredPermission(
+    authSnapshot.value.permissions,
+    "Service::CREATE",
+    "Service::UPDATE",
+    "Service::DELETE"
+  )
 })
 
 const resolveRoleFromStorage = (): string => {
@@ -1068,7 +1097,10 @@ const downloadTemplate = (): void => {
 }
 
 const openAddDialog = (): void => {
-  if (!ensureConfidentialAccess()) return
+  if (!canManageCatalog.value) {
+    errorToast(toast, "You don't have access to manage the service catalog.")
+    return
+  }
   editingId.value = null
   formData.type = "evaluation"
   formData.name = ""
@@ -1078,7 +1110,10 @@ const openAddDialog = (): void => {
 }
 
 const openEditDialog = (service: HmoService): void => {
-  if (!ensureConfidentialAccess()) return
+  if (!canManageCatalog.value) {
+    errorToast(toast, "You don't have access to manage the service catalog.")
+    return
+  }
   if (!isLocalEditableService(service)) {
     errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
     return
@@ -1092,7 +1127,10 @@ const openEditDialog = (service: HmoService): void => {
 }
 
 const saveService = async (): Promise<void> => {
-  if (!ensureConfidentialAccess()) return
+  if (!canManageCatalog.value) {
+    errorToast(toast, "You don't have access to manage the service catalog.")
+    return
+  }
 
   if (!formData.name.trim()) {
     errorToast(toast, "Service name is required")
@@ -1146,7 +1184,10 @@ const saveService = async (): Promise<void> => {
 }
 
 const confirmDelete = (service: HmoService): void => {
-  if (!ensureConfidentialAccess()) return
+  if (!canManageCatalog.value) {
+    errorToast(toast, "You don't have access to manage the service catalog.")
+    return
+  }
   if (!isLocalEditableService(service)) {
     errorToast(toast, `This ${service.type} is managed in its dedicated master data module.`)
     return

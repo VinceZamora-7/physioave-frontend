@@ -12,12 +12,34 @@
 
         <div class="flex flex-wrap gap-2">
           <Button label="Add New Service" icon="pi pi-plus" @click="openAddDialog" />
+          <Button
+            label="Recycle Bin"
+            icon="pi pi-trash"
+            outlined
+            @click="catalogManagerVisible = true"
+          />
           <Button label="Refresh" icon="pi pi-refresh" text outlined @click="refreshAll" />
         </div>
       </div>
     </section>
 
-    <section class="app-section-card-comfy space-y-3">
+    <PromosCatalogManagerDialog v-model:visible="catalogManagerVisible" recycleOnly @refreshed="refreshAll" />
+
+    <PackageOffersManager
+      title="Package Builder"
+      description="Regular Total = (Bundled Price x Qty/Sessions) + (Evaluation original Price x Qty)."
+      :can-edit="true"
+      :machine-options="bundleMachineOptions"
+      :technique-options="bundleTechniqueOptions"
+      :evaluation-options="bundleEvaluationOptions"
+      :session-options="sessionServices.map(s => ({ id: s.id, name: s.name, price: s.price }))"
+      :get-service-name="getServiceName"
+      :get-service-price="getServicePrice"
+      @refreshed="refreshAll"
+    />
+
+    <!-- Legacy section kept for reference; replaced by PackageOffersManager -->
+    <section v-if="false" class="app-section-card-comfy space-y-3">
       <div class="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
         <div class="space-y-1">
           <h3 class="text-sm font-semibold">Package Builder</h3>
@@ -229,7 +251,20 @@
       </DataTable>
     </section>
 
-    <section class="app-section-card-comfy space-y-3">
+    <ServiceBundlesManager
+      :title="props.bundledSectionTitle"
+      :description="props.bundledSectionDescription"
+      :can-edit="true"
+      :machine-options="bundleMachineOptions"
+      :technique-options="bundleTechniqueOptions"
+      :evaluation-options="bundleEvaluationOptions"
+      :get-service-name="getServiceName"
+      :get-service-price="getServicePrice"
+      @refreshed="refreshAll"
+    />
+
+    <!-- Legacy section kept for reference; replaced by ServiceBundlesManager -->
+    <section v-if="false" class="app-section-card-comfy space-y-3">
       <div class="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
         <div class="space-y-1">
           <h3 class="text-sm font-semibold">{{ props.bundledSectionTitle }}</h3>
@@ -239,7 +274,7 @@
       </div>
 
       <DataTable
-        :value="allBundles"
+        :value="activeBundles"
         dataKey="id"
         paginator
         :rows="25"
@@ -518,6 +553,7 @@ import type {OfferLookupDTO} from "@/models/global.model.ts"
 import {pamsAPI} from "@/utils/axios-interceptor"
 import {OfferResourceKey} from "@/utils/keys/resource-key"
 import {errorToast, successToast} from "@/utils/toast.util"
+import PromosCatalogManagerDialog from "@/features/promos-offers/components/PromosCatalogManagerDialog.vue"
 import {
   // legacy local storage helpers are intentionally no longer used for services/bundles/packages
 } from "@/features/promos-offers/composables/promos-storage.composable"
@@ -526,6 +562,8 @@ import {
   loadBackendPromosMasterCatalog,
   normalizePromosServiceName
 } from "@/features/promos-offers/composables/promos-master-catalog.composable"
+import ServiceBundlesManager from "@/features/promos-offers/components/ServiceBundlesManager.vue"
+import PackageOffersManager from "@/features/promos-offers/components/PackageOffersManager.vue"
 
 type ServiceType = "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service"
 
@@ -584,6 +622,7 @@ type ServiceCatalogMatrixRow = {
 
 const toast = useToast()
 const confirm = useConfirm()
+const catalogManagerVisible = ref(false)
 const props = withDefaults(defineProps<{
   pageTitle?: string
   pageDescription?: string
@@ -829,6 +868,15 @@ watch(
 const evaluationServices = computed(() => allServices.value.filter(service => service.type === "evaluation"))
 const sessionServices = computed(() => sessionLookupServices.value)
 const activeBundles = computed(() => allBundles.value.filter(bundle => bundle.status !== "Inactive"))
+const bundleMachineOptions = computed(() =>
+  machineServices.value.filter(s => s.status !== "Inactive").map(s => ({id: s.id, name: s.name}))
+)
+const bundleTechniqueOptions = computed(() =>
+  techniqueServices.value.filter(s => s.status !== "Inactive").map(s => ({id: s.id, name: s.name}))
+)
+const bundleEvaluationOptions = computed(() =>
+  customServices.value.filter(s => s.type === "evaluation" && s.status !== "Inactive").map(s => ({id: s.id, name: s.name}))
+)
 
 const asCurrency = (value: number): string => Number(value ?? 0).toLocaleString("en-PH", {style: "currency", currency: "PHP"})
 

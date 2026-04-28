@@ -320,6 +320,24 @@ export interface LguDashboardHistoryItem {
   notes?: string | null
 }
 
+export interface HmoRecentHistoryItem {
+  id: number
+  created_at: string | null
+  patient_id: number
+  patient_name: string | null
+  billing_status: string | null
+  service_name: string | null
+  receipt_number: string | null
+  total_amount: number
+  amount_paid: number
+}
+
+export interface HmoSoaParams {
+  from: string
+  to: string
+  limit?: number
+}
+
 export interface DailyIncomeExpenseRow {
   id: number
   public_id: string
@@ -519,6 +537,20 @@ export const billingPhase1Service = {
         program_id: programId
       }
     })
+    return data
+  },
+  async getHmoRecentHistory(limit = 25): Promise<HmoRecentHistoryItem[] | undefined> {
+    const { data } = await pamsAPI.get<HmoRecentHistoryItem[]>("/billings/hmo-recent-history", {
+      params: { limit }
+    })
+    return data
+  },
+  async getHmoSoa(params: HmoSoaParams): Promise<HmoRecentHistoryItem[] | undefined> {
+    const { data } = await pamsAPI.get<HmoRecentHistoryItem[]>("/billings/hmo-soa", { params })
+    return data
+  },
+  async getLguSoa(params: { from: string; to: string; limit?: number; program_id?: number }): Promise<LguDashboardHistoryItem[] | undefined> {
+    const { data } = await pamsAPI.get<LguDashboardHistoryItem[]>("/billings/lgu-soa", { params })
     return data
   },
     async getLguPatientCreditDetail(patientId: number): Promise<LguPatientCreditDetail | null | undefined> {

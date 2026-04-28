@@ -24,6 +24,12 @@ const router = createRouter({
       meta: { requiresAuth: false }
     },
     {
+      path: "/soa/:payer",
+      name: "soa-print",
+      component: () => import("@/features/promos-offers/pages/SoaPrintView.vue"),
+      meta: { requiresAuth: true }
+    },
+    {
       path: "/home",
       name: "home",
       component: () => import("@/app/layouts/HomeLayout.vue"),

@@ -175,6 +175,13 @@
         <div class="flex items-center gap-2">
           <Tag :value="`${lguTransactionHistory.length} record${lguTransactionHistory.length === 1 ? '' : 's'}`" severity="contrast" />
           <Button
+            label="Create SOA"
+            icon="pi pi-file"
+            outlined
+            size="small"
+            @click="soaVisible = true"
+          />
+          <Button
             label="Refresh History"
             icon="pi pi-refresh"
             outlined
@@ -269,6 +276,20 @@
           </template>
         </Column>
       </DataTable>
+
+      <Dialog v-model:visible="soaVisible" header="Create Statement Of Account (LGU)" modal :style="{ width: '520px' }">
+        <div class="space-y-3">
+          <IftaLabel>
+            <DatePicker v-model="soaRange" selectionMode="range" dateFormat="yy-mm-dd" :manualInput="false" showIcon fluid />
+            <label>Date Range</label>
+          </IftaLabel>
+
+          <div class="flex justify-end gap-2 pt-2">
+            <Button label="Cancel" text @click="soaVisible = false" />
+            <Button label="Generate" icon="pi pi-print" :disabled="!hasValidSoaRange" @click="generateSoa" />
+          </div>
+        </div>
+      </Dialog>
     </div>
 
     <!-- Patient LGU Credit Detail Dialog -->
@@ -460,6 +481,7 @@ import Message from "primevue/message"
 import Select from "primevue/select"
 import Tag from "primevue/tag"
 import { useToast } from "primevue/usetoast"
+import { useRouter } from "vue-router"
 import {
   billingPhase1Service,
   type LguDashboardBudget,
@@ -476,6 +498,7 @@ type LocalLguBudgetDraft = {
 }
 
 const toast = useToast()
+const router = useRouter()
 const currentRoleName = ref<string>("")
 const lguPrograms = ref<LguProgramLookup[]>([])
 const loadingPrograms = ref(false)
@@ -502,6 +525,13 @@ const selectedPatientDetail = ref<LguPatientCreditDetail | null>(null)
 const loadingPatientDetail = ref(false)
 const patientDetailError = ref("")
 const isCreatingClaims = ref(false)
+const soaVisible = ref(false)
+const soaRange = ref<Date[] | null>(null)
+
+const hasValidSoaRange = computed(() => {
+  const r = soaRange.value
+  return Array.isArray(r) && r.length === 2 && r[0] instanceof Date && r[1] instanceof Date
+})
 
 const MANAGER_ROLE_KEYWORDS = [
   "manager",
@@ -517,6 +547,30 @@ const asCurrency = (value: number): string =>
 const formatDateTime = (value?: string): string => {
   if (!value) return "N/A"
   return new Date(value).toLocaleString("en-PH")
+}
+
+const formatYmd = (value: Date): string => {
+  const y = value.getFullYear()
+  const m = String(value.getMonth() + 1).padStart(2, "0")
+  const d = String(value.getDate()).padStart(2, "0")
+  return `${y}-${m}-${d}`
+}
+
+const generateSoa = (): void => {
+  if (!hasValidSoaRange.value) return
+  const [from, to] = soaRange.value as Date[]
+  const url = router.resolve({
+    name: "soa-print",
+    params: { payer: "lgu" },
+    query: {
+      from: formatYmd(from),
+      to: formatYmd(to),
+      ...(selectedProgramId.value ? { program_id: String(selectedProgramId.value) } : {}),
+      ...(selectedProgramName.value ? { program_name: selectedProgramName.value } : {})
+    }
+  }).href
+  window.open(url, "_blank", "noopener,noreferrer")
+  soaVisible.value = false
 }
 
 const firstDroppedOutAppointmentId = computed<number | null>(() => {

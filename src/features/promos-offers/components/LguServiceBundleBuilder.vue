@@ -12,10 +12,30 @@
 
         <div class="flex flex-wrap gap-2">
           <Button label="Add New Service" icon="pi pi-plus" @click="openAddDialog" />
+          <Button
+            label="Recycle Bin"
+            icon="pi pi-trash"
+            outlined
+            @click="catalogManagerVisible = true"
+          />
           <Button label="Refresh" icon="pi pi-refresh" text outlined @click="refreshAll" />
         </div>
       </div>
     </section>
+
+    <PromosCatalogManagerDialog v-model:visible="catalogManagerVisible" recycleOnly @refreshed="refreshAll" />
+
+    <ServiceBundlesManager
+      title="Bundled Services"
+      description="Create service bundles combining multiple services at a discounted price."
+      :can-edit="true"
+      :machine-options="bundleMachineOptions"
+      :technique-options="bundleTechniqueOptions"
+      :evaluation-options="bundleEvaluationOptions"
+      :get-service-name="getServiceName"
+      :get-service-price="getServicePrice"
+      @refreshed="refreshAll"
+    />
 
     <section class="app-section-card-comfy space-y-3">
       <div class="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
@@ -205,6 +225,8 @@ import Tag from "primevue/tag"
 import { useToast } from "primevue/usetoast"
 import { errorToast, successToast } from "@/utils/toast.util"
 import {readActivePromosServiceCatalog} from "@/features/promos-offers/composables/promos-storage.composable"
+import PromosCatalogManagerDialog from "@/features/promos-offers/components/PromosCatalogManagerDialog.vue"
+import ServiceBundlesManager from "@/features/promos-offers/components/ServiceBundlesManager.vue"
 
 interface BillingPickerLookup {
   id: string | number
@@ -218,6 +240,7 @@ type ServiceType = "machine" | "technique" | "evaluation" | "add-on-machine" | "
 
 const toast = useToast()
 const isLoading = ref(false)
+const catalogManagerVisible = ref(false)
 const allServices = ref<BillingPickerLookup[]>([])
 const currentRoleName = ref<string>("")
 
@@ -227,6 +250,42 @@ const lguSessionLimit = ref<Record<string | number, number>>({})
 const baseMonthlyBudget = ref<number>(0)
 const rolloverAmount = ref<number>(0)
 const rolloverInput = ref<number>(0)
+
+const stripPrefixId = (value: string): string => {
+  const raw = String(value ?? "")
+  if (raw.startsWith("machine-")) return raw.slice("machine-".length)
+  if (raw.startsWith("technique-")) return raw.slice("technique-".length)
+  if (raw.startsWith("evaluation-")) return raw.slice("evaluation-".length)
+  return raw
+}
+
+const getServiceName = (id: string): string => {
+  const needle = stripPrefixId(id)
+  return allServices.value.find(service => String(service.id) === needle)?.name ?? String(id)
+}
+
+const getServicePrice = (id: string): number => {
+  const needle = stripPrefixId(id)
+  return Number(allServices.value.find(service => String(service.id) === needle)?.price ?? 0)
+}
+
+const bundleMachineOptions = computed(() =>
+  allServices.value
+    .filter(service => service.type === "machine" && service.status !== "Inactive")
+    .map(service => ({ id: `machine-${service.id}`, name: service.name }))
+)
+
+const bundleTechniqueOptions = computed(() =>
+  allServices.value
+    .filter(service => service.type === "technique" && service.status !== "Inactive")
+    .map(service => ({ id: `technique-${service.id}`, name: service.name }))
+)
+
+const bundleEvaluationOptions = computed(() =>
+  allServices.value
+    .filter(service => service.type === "evaluation" && service.status !== "Inactive")
+    .map(service => ({ id: `evaluation-${service.id}`, name: service.name }))
+)
 
 const MANAGER_ROLE_KEYWORDS = [
   "manager",

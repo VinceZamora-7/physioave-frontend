@@ -26,6 +26,12 @@
             @click="openAddDialog"
           />
           <Button
+            label="Recycle Bin"
+            icon="pi pi-trash"
+            outlined
+            @click="catalogManagerVisible = true"
+          />
+          <Button
             label="Refresh"
             icon="pi pi-refresh"
             text
@@ -35,6 +41,8 @@
         </div>
       </div>
     </section>
+
+    <PromosCatalogManagerDialog v-model:visible="catalogManagerVisible" recycleOnly @refreshed="loadServices" />
 
     <!-- All available services -->
     <section class="app-section-card-comfy space-y-3">
@@ -223,7 +231,20 @@
     </section>
 
     <!-- Bundled services -->
-    <section class="app-section-card-comfy space-y-3">
+    <ServiceBundlesManager
+      title="Bundled Services"
+      description="Create service bundles combining multiple services at a discounted price."
+      :can-edit="canCreateService"
+      :machine-options="bundleMachineOptions"
+      :technique-options="bundleTechniqueOptions"
+      :evaluation-options="bundleEvaluationOptions"
+      :get-service-name="getServiceName"
+      :get-service-price="getServicePrice"
+      @refreshed="loadServices"
+    />
+
+    <!-- Legacy section kept for reference; replaced by ServiceBundlesManager -->
+    <section v-if="false" class="app-section-card-comfy space-y-3">
       <div class="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
         <div class="space-y-1">
           <h3 class="text-sm font-semibold">Bundled Services</h3>
@@ -240,7 +261,7 @@
       </div>
 
       <DataTable
-        :value="allBundles"
+        :value="activeBundles"
         dataKey="id"
         paginator
         :rows="25"
@@ -564,6 +585,8 @@ import {
 } from "@/features/promos-offers/composables/promos-master-catalog.composable"
 import { pamsAPI } from "@/utils/axios-interceptor"
 import type { Pageable } from "@/models/paging"
+import PromosCatalogManagerDialog from "@/features/promos-offers/components/PromosCatalogManagerDialog.vue"
+import ServiceBundlesManager from "@/features/promos-offers/components/ServiceBundlesManager.vue"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -613,6 +636,7 @@ const confirm = useConfirm()
 
 const isLoading = ref(false)
 const canCreateService = ref(true) // adjust to your actual permission logic
+const catalogManagerVisible = ref(false)
 
 // Single service state
 const dialogVisible = ref(false)
@@ -638,6 +662,7 @@ const formData = reactive<{
 const bundleDialogVisible = ref(false)
 const editingBundleId = ref<number | null>(null)
 const allBundles = ref<BundledService[]>([])
+const activeBundles = computed(() => allBundles.value.filter(bundle => bundle.status !== "Inactive"))
 
 const bundleFormData = reactive<{
   name: string
@@ -750,6 +775,19 @@ const asCurrency = (value: number): string =>
 
 const getServiceName = (id: string): string =>
   allServices.value.find(s => s.id === id)?.name ?? id
+
+const getServicePrice = (id: string): number =>
+  Number(allServices.value.find(s => s.id === id)?.price ?? 0)
+
+const bundleMachineOptions = computed(() =>
+  machineServices.value.filter(s => s.status !== "Inactive").map(s => ({ id: s.id, name: s.name }))
+)
+const bundleTechniqueOptions = computed(() =>
+  techniqueServices.value.filter(s => s.status !== "Inactive").map(s => ({ id: s.id, name: s.name }))
+)
+const bundleEvaluationOptions = computed(() =>
+  customServices.value.filter(s => s.type === "evaluation" && s.status !== "Inactive").map(s => ({ id: s.id, name: s.name }))
+)
 
 const calcOriginalPrice = (bundle: BundledService): number => {
   const ids = [...bundle.machineIds, ...bundle.techniqueIds, ...bundle.evaluationIds]
