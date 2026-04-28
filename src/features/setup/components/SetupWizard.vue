@@ -103,6 +103,7 @@ const loadStatus = async () => {
   try {
     const { data } = await pamsAPI.get<{ isInitialized: boolean }>("/setup/status")
     if (data?.isInitialized) {
+      sessionStorage.removeItem("onboardingToken")
       await router.replace({ name: "login" })
       return
     }
@@ -112,7 +113,9 @@ const loadStatus = async () => {
       await router.replace({ name: "login" })
     }
   } catch {
-    // Keep wizard visible if check fails
+    if (!onboardingToken) {
+      await router.replace({ name: "login" })
+    }
   }
 }
 

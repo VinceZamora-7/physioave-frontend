@@ -231,16 +231,20 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from "vue"
+import { computed, onMounted, ref } from "vue"
 import { useRouter } from "vue-router"
 import { pamsAPI, pamsBaseURL } from "@/utils/axios-interceptor.ts"
-
-const href: string = `${pamsBaseURL}/oauth2/authorization/google`
 
 const router = useRouter()
 
 const isDark = ref(false)
 const loading = ref(false)
+
+const href = computed(() => {
+  const redirectOrigin = encodeURIComponent(window.location.origin)
+
+  return `${pamsBaseURL}/oauth2/authorization/google?redirect_origin=${redirectOrigin}`
+})
 
 const syncIsDark = () => {
   isDark.value = document.documentElement.classList.contains("dark")
@@ -249,37 +253,38 @@ const syncIsDark = () => {
 const toggleTheme = () => {
   const root = document.documentElement
   const nowDark = root.classList.toggle("dark")
+
   localStorage.setItem("theme", nowDark ? "dark" : "light")
   isDark.value = nowDark
 }
 
 const onGoogleContinue = () => {
   if (loading.value) return
+
   loading.value = true
 
-  requestAnimationFrame(() => {
-    window.location.href = href
-  })
+  const redirectOrigin = encodeURIComponent(window.location.origin)
+
+  window.location.href =
+    `${pamsBaseURL}/oauth2/authorization/google?redirect_origin=${redirectOrigin}`
 }
 
-onMounted(() => {
-  // Check for onboardingToken and isNewSystem in URL after Google login
+onMounted(async () => {
+  syncIsDark()
+
   const params = new URLSearchParams(window.location.search)
-  const isNewSystem = params.get("isNewSystem") === "true"
   const onboardingToken = params.get("onboardingToken")
 
-  if (isNewSystem && onboardingToken) {
-    // Store onboardingToken for setup use
+  if (onboardingToken) {
     sessionStorage.setItem("onboardingToken", onboardingToken)
-    // Optionally, clear query params from URL
     window.history.replaceState({}, document.title, window.location.pathname)
-    router.replace({ name: "setup" })
+
+    await router.replace({ name: "setup" })
     return
   }
 
-  void pamsAPI.get<{ isInitialized: boolean }>("/setup/status").catch(() => {
-    // Ignore; user can still attempt sign-in and backend will respond accordingly.
+  await pamsAPI.get<{ isInitialized: boolean }>("/setup/status").catch(() => {
+    // Ignore; router guard handles setup/login routing.
   })
-  syncIsDark()
 })
 </script>
