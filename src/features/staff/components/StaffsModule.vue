@@ -273,37 +273,38 @@ const adminRoles = computed(() =>
   )
 )
 
-const selectedSearch = ref<string | undefined>()
-const selectedStatus = ref<Status>(Status.ACTIVE)
-
-const { page, pageSize, onPageChangeDebounceFn } = usePaginationDebounce<Pageable<Staff> | undefined>()
-
-const requestParams = computed(
-  () =>
-    ({
-      pageable_request: {
-        page: page.value,
-        size: pageSize.value,
-        name: selectedSearch.value?.trim() || undefined,
-        status: selectedStatus.value,
-      },
-      clinic_id: selectedClinicId.value,
-      staff_scope: "ADMIN",
-    }) satisfies StaffRequestParams
-)
+	const selectedSearch = ref<string | undefined>()
+	const selectedStatus = ref<Status>(Status.ACTIVE)
+	
+	const { page, pageSize, onPageChangeDebounceFn } = usePaginationDebounce<Pageable<Staff> | undefined>()
+	
+	const requestParams = computed(
+	  () =>
+	    ({
+	      pageable_request: {
+	        page: page.value,
+	        size: pageSize.value,
+	        name: selectedSearch.value?.trim() || undefined,
+	        status: selectedStatus.value,
+	      },
+	      // Staff directory is meant to be cross-branch; do not implicitly filter by the global branch selector.
+	      clinic_id: undefined,
+	      staff_scope: "ADMIN",
+	    }) satisfies StaffRequestParams
+	)
 
 const { data: staffs, isError, error, refetch } = staffTanstackService.getAll(requestParams)
 
 useRefreshToken<Pageable<Staff> | undefined>(error, refetch)
 
-watchDebounced(
-  [selectedClinicId, selectedSearch, selectedStatus],
-  () => {
-    page.value = 1
-    void refetch()
-  },
-  { debounce: defaultFilterDebounce, flush: "post" }
-)
+	watchDebounced(
+	  [selectedClinicId, selectedSearch, selectedStatus],
+	  () => {
+	    page.value = 1
+	    void refetch()
+	  },
+	  { debounce: defaultFilterDebounce, flush: "post" }
+	)
 
 const resetFilters = () => {
   selectedSearch.value = undefined
@@ -422,7 +423,7 @@ const confirmHardDelete = (staff: Staff) => {
 
 const onExportToExcelThrottleFn = useThrottleFn(async () => {
   const params: StaffExportRequestParams = {
-    clinic_id: selectedClinicId.value,
+      clinic_id: undefined,
     page_request: {
       status: selectedStatus.value,
       name: selectedSearch.value?.trim() || undefined,

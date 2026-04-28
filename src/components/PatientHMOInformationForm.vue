@@ -74,8 +74,10 @@
             :options="hmos"
             placeholder="Select HMO"
             :filter="true"
-            :filter-fields="['name']">
-            <template v-slot:value="slotProps">
+            :filter-fields="['name']"
+            optionLabel="name"
+          >
+            <template #value="slotProps">
               <div v-if="slotProps.value" class="flex items-center">
                 <div>{{ slotProps.value?.name }}</div>
               </div>
@@ -83,7 +85,7 @@
                 {{ slotProps.placeholder }}
               </span>
             </template>
-            <template v-slot:option="slotProps">
+            <template #option="slotProps">
               <div class="flex items-center">
                 <div>{{ slotProps.option?.name }}</div>
               </div>
@@ -150,6 +152,7 @@
     <Select
       id="relationship_to_principal"
       v-model="$field.value"
+      :fluid="true"
       :options="firstDegreeFamilyRelationshipOptions"
       optionLabel="label"
       optionValue="value"
@@ -317,15 +320,15 @@ import {useIsLoading} from "@/composables/tanstack-loader.composable.ts";
 import {PatientTanstackKey} from "@/utils/keys/tanstack-key.ts";
 import type {ButtonProps} from "primevue/button";
 import {useConfirm} from "primevue/useconfirm";
-import {useToast} from "primevue/usetoast";
-import InputText from "primevue/inputtext";
-import IftaLabel from "primevue/iftalabel";
-import Select from "primevue/select";
-import SelectButton from "primevue/selectbutton";
-import {useQueryClient} from "@tanstack/vue-query";
-import { getApiErrorMessage } from "@/utils/actionable-error.util";
-import {errorToast, successToast} from "@/utils/toast.util.ts";
-import { FIRST_DEGREE_FAMILY_RELATIONSHIPS } from "@/schema/patient.schema";
+	import {useToast} from "primevue/usetoast";
+	import InputText from "primevue/inputtext";
+	import IftaLabel from "primevue/iftalabel";
+	import Select from "primevue/select";
+	import SelectButton from "primevue/selectbutton";
+	import {useQueryClient} from "@tanstack/vue-query";
+	import { getApiErrorMessage } from "@/utils/actionable-error.util";
+	import {errorToast, successToast} from "@/utils/toast.util.ts";
+	import { FIRST_DEGREE_FAMILY_RELATIONSHIPS } from "@/schema/patient.schema";
 
 const toast = useToast()
 const confirm = useConfirm()
@@ -336,48 +339,38 @@ const emit = defineEmits<PatientHMOInformationFormEmits>()
 const props = defineProps<PatientHMOInformationFormProps>()
 const {patient, hmoTypes, hmos, isLoading: isParentLoading} = toRefs(props)
 
-const isPatientHMOInformationLoading = useIsLoading(PatientTanstackKey.PATIENT_HMO_INFORMATION)
-const isPatientHMOHistoryLoading = useIsLoading(PatientTanstackKey.PATIENT_HMO_INFORMATION_HISTORY)
-const isLoading = computed<boolean>(() => isParentLoading.value || isPatientHMOInformationLoading.value || isPatientHMOHistoryLoading.value)
+	const isPatientHMOInformationLoading = useIsLoading(PatientTanstackKey.PATIENT_HMO_INFORMATION)
+	const isPatientHMOHistoryLoading = useIsLoading(PatientTanstackKey.PATIENT_HMO_INFORMATION_HISTORY)
+	const isLoading = computed<boolean>(() => isParentLoading.value || isPatientHMOInformationLoading.value || isPatientHMOHistoryLoading.value)
+	
+	const [visible, toggle] = useToggle()
+	
+	const patientId = computed<number>(() => patient.value?.id ?? 0)
 
-const header = computed<string>(() => patientHMOInformation.value ? `Edit ${patient.value?.full_name} HMO Information` : `Save ${patient.value?.full_name} HMO Information`)
-const buttonProps = computed<ButtonProps>(() => ({
-  label: patientHMOInformation.value ? `Edit` : `Save`,
-  icon: patientHMOInformation.value ? 'pi pi-pen-to-square' : 'pi pi-save',
-  severity: patientHMOInformation.value ? 'success' : 'info'
-}))
+	const historyLoadError = ref<string>("")
+	const patientHMOHistoryEntries = ref<PatientHMOInformationHistoryEntry[]>([])
 
-const [visible, toggle] = useToggle()
+	const {
+	  data: patientHMOInformation,
+	  isError,
+	  refetch
+	} = patientHmoInformationTanstackService.getByPatientId(patientId)
 
-const patientId = computed<number>(() => patient.value?.id ?? 0)
-const {
-  data: patientHMOInformation,
-  isError,
-  error,
-  refetch
-} = patientHmoInformationTanstackService.getByPatientId(patientId)
-useRefreshToken<PatientHMOInformation | undefined>(error, refetch)
+	const isEditing = computed<boolean>(() => Boolean(patientHMOInformation.value))
+	const editEnabled = ref(false)
+	const isReadOnly = computed<boolean>(() => isEditing.value && !editEnabled.value)
 
-const {
-  data: patientHMOHistory,
-} = patientHmoInformationTanstackService.getHistoryByPatientId(patientId)
-const patientHMOHistoryEntries = ref<PatientHMOInformationHistoryEntry[]>(patientHMOHistory.value ?? [])
-const historyLoadError = ref<string>("")
+	const { mutate: editMutation } = patientHmoInformationTanstackService.updateByPatientId()
+	const { mutate: saveMutation } = patientHmoInformationTanstackService.save()
 
-const {
-  mutate: saveMutation
-} = patientHmoInformationTanstackService.save()
+	const header = computed<string>(() => patientHMOInformation.value ? `Edit ${patient.value?.full_name} HMO Information` : `Save ${patient.value?.full_name} HMO Information`)
+	const buttonProps = computed<ButtonProps>(() => ({
+	  label: patientHMOInformation.value ? `Edit` : `Save`,
+	  icon: patientHMOInformation.value ? 'pi pi-pen-to-square' : 'pi pi-save',
+	  severity: patientHMOInformation.value ? 'success' : 'info'
+	}))
 
-const {
-  mutate: editMutation
-} = patientHmoInformationTanstackService.updateByPatientId()
-
-
-const isEditing = computed<boolean>(() => !!patientHMOInformation.value)
-const editEnabled = ref(false)
-const isReadOnly = computed<boolean>(() => isEditing.value && !editEnabled.value)
-
-const resolver = ref(zodResolver(patientHMOInformationSchema))
+	const resolver = ref(zodResolver(patientHMOInformationSchema))
 
 const firstDegreeFamilyRelationshipOptions = FIRST_DEGREE_FAMILY_RELATIONSHIPS.map((relationship) => ({
   label: relationship,
@@ -465,18 +458,18 @@ const onSubmit = (event: FormSubmitEvent) => {
     message: 'Are you sure you want to proceed?',
     header: `${buttonProps.value?.label} Confirmation`,
     icon: 'pi pi-exclamation-triangle',
-    rejectProps: {
-      label: 'Cancel',
-      severity: 'secondary',
-      outlined: true,
-      loading: isLoading
-    },
-    acceptProps: {
-      label: `${buttonProps.value?.label}`,
-      severity: `${buttonProps.value?.severity}`,
-      icon: `${buttonProps.value?.icon}`,
-      loading: isLoading
-    },
+	    rejectProps: {
+	      label: 'Cancel',
+	      severity: 'secondary',
+	      outlined: true,
+	      loading: isLoading.value
+	    },
+	    acceptProps: {
+	      label: `${buttonProps.value?.label}`,
+	      severity: `${buttonProps.value?.severity}`,
+	      icon: `${buttonProps.value?.icon}`,
+	      loading: isLoading.value
+	    },
     accept: (): void => {
       const eventt: FormSubmitEvent<PatientHMOInformationFormState> = event as FormSubmitEvent<PatientHMOInformationFormState>
       const payload: PatientHMOInformationPayload = {

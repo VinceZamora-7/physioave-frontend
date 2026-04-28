@@ -147,11 +147,20 @@
             </span>
           </label>
 
-          <div class="mt-4 flex flex-wrap justify-end gap-2">
-            <Button
-              v-if="!isCreateMode"
-              :label="selectedRole?.is_active ? 'Deactivate Job Title' : 'Activate Job Title'"
-              :icon="selectedRole?.is_active ? 'pi pi-times-circle' : 'pi pi-refresh'"
+	          <div class="mt-4 flex flex-wrap justify-end gap-2">
+	            <Button
+	              v-if="canCreateOwnerEquivalent && !isCreateMode && !isSelectedRoleLocked"
+	              label="Grant Owner-Equivalent Access"
+	              icon="pi pi-crown"
+	              severity="secondary"
+	              outlined
+	              :disabled="isBusy"
+	              @click="grantOwnerEquivalentAccess"
+	            />
+	            <Button
+	              v-if="!isCreateMode"
+	              :label="selectedRole?.is_active ? 'Deactivate Job Title' : 'Activate Job Title'"
+	              :icon="selectedRole?.is_active ? 'pi pi-times-circle' : 'pi pi-refresh'"
               :severity="selectedRole?.is_active ? 'danger' : 'success'"
               outlined
               :disabled="isSelectedRoleLocked || isBusy"
@@ -343,9 +352,10 @@ import IftaLabel from "primevue/iftalabel"
 import InputText from "primevue/inputtext"
 import Message from "primevue/message"
 import Select from "primevue/select"
-import SelectButton from "primevue/selectbutton"
-import Tag from "primevue/tag"
-import { useToast } from "primevue/usetoast"
+	import SelectButton from "primevue/selectbutton"
+	import Tag from "primevue/tag"
+	import { useConfirm } from "primevue/useconfirm"
+	import { useToast } from "primevue/usetoast"
 
 import type { Pageable } from "@/models/paging"
 import type { AppointmentProviderType, Permission, Role } from "@/models/reference"
@@ -396,7 +406,8 @@ const props = withDefaults(defineProps<{
   dialogTitle: "Job Titles and Permissions"
 })
 
-const toast = useToast()
+	const toast = useToast()
+	const confirm = useConfirm()
 
 const visible = ref(false)
 const roles = ref<Role[]>([])
@@ -1019,12 +1030,48 @@ function resetRoleForm(): void {
   applyRoleToForm()
 }
 
-async function saveRole(): Promise<void> {
-  const name = roleForm.value.name.trim()
-  if (!name) {
-    errorToast(toast, "Job title name is required")
-    return
-  }
+	async function grantOwnerEquivalentAccess(): Promise<void> {
+	  const roleId = selectedRoleId.value
+	  if (!roleId || isCreateMode.value || isSelectedRoleLocked.value) return
+
+	  confirm.require({
+	    message: `Grant ${selectedRole.value?.name ?? "this role"} the same permissions as Owner?`,
+	    header: "Owner-Equivalent Access",
+	    icon: "pi pi-exclamation-triangle",
+	    rejectProps: {
+	      label: "Cancel",
+	      severity: "secondary",
+	      outlined: true,
+	      loading: isBusy.value
+	    },
+	    acceptProps: {
+	      label: "Grant Access",
+	      severity: "info",
+	      icon: "pi pi-check",
+	      loading: isBusy.value
+	    },
+	    accept: async () => {
+	      isPermissionSaving.value = true
+	      try {
+	        await cloneOwnerPermissionsToRole(roleId)
+	        successToast(toast, "Owner-equivalent access applied")
+	        await fetchPermissions(roleId)
+	        emit("rolesUpdated")
+	      } catch (error: unknown) {
+	        errorToast(toast, extractApiErrorMessage(error, "Failed to grant Owner-equivalent access"))
+	      } finally {
+	        isPermissionSaving.value = false
+	      }
+	    }
+	  })
+	}
+
+	async function saveRole(): Promise<void> {
+	  const name = roleForm.value.name.trim()
+	  if (!name) {
+	    errorToast(toast, "Job title name is required")
+	    return
+	  }
 
   const wasCreating = isCreateMode.value
   const shouldCreateOwnerEquivalent = wasCreating && canCreateOwnerEquivalent.value && createAsOwnerEquivalent.value

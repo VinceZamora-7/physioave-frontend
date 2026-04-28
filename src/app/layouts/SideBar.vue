@@ -75,6 +75,19 @@
           </button>
 
           <ul class="mt-2 space-y-1">
+            <li v-if="canAccessRoute('dashboard')">
+              <button
+                type="button"
+                @click="goToAndClose('dashboard')"
+                :class="itemClass('dashboard')"
+                aria-label="Dashboard"
+                title="Dashboard"
+              >
+                <span :class="iconWrapClass('dashboard')"><i class="pi pi-chart-line text-[16px]" /></span>
+                <span v-if="!collapsed" class="truncate">Dashboard</span>
+              </button>
+            </li>
+
             <li>
               <button
                 type="button"

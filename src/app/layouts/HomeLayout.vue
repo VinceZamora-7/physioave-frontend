@@ -57,12 +57,10 @@
     optionLabel="name"
     optionValue="id"
     filter
-    fluid
-    size="small"
     placeholder="Select branch"
     :loading="isLoadingClinics"
     :disabled="isLoadingClinics || !clinicOptions.length"
-    class="rounded-lg"
+    class="rounded-lg w-full"
   />
 </div>
 
@@ -91,7 +89,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref } from "vue"
 import { useRoute } from "vue-router"
-import Dropdown from "primevue/dropdown"
+import Select from "primevue/select"
 import { storeToRefs } from "pinia"
 import { clinicStore } from "@/stores/clinic.store"
 
@@ -99,7 +97,7 @@ type SideBarExpose = {
   toggleMobile: () => void
 }
 
-  <Dropdown
+const SideBar = defineAsyncComponent(() => import("@/app/layouts/SideBar.vue"))
 
 const sidebarRef = ref<SideBarExpose | null>(null)
 

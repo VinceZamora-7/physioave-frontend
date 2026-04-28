@@ -13,6 +13,14 @@ const router = createRouter({
       }
     },
     {
+      path: "/setup",
+      name: "setup",
+      component: () => import("@/features/setup/pages/SetupView.vue"),
+      meta: {
+        requiresAuth: false
+      }
+    },
+    {
       path: '/error',
       name: 'error',
       component: () => import('@/app/pages/ErrorView.vue'),

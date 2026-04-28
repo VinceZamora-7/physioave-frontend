@@ -5,7 +5,7 @@
         <IconField class="w-full sm:w-80">
           <InputIcon :class="isLoading ? 'pi pi-spinner pi-spin' : 'pi pi-search'" />
           <InputText
-            v-model="modelSearch"
+            v-model="selectedSearch"
             placeholder="Search name or patient record ID"
             size="small"
             class="w-full"
@@ -15,7 +15,7 @@
 
         <IftaLabel class="w-full sm:w-60">
           <Select
-            v-model="modelStatus"
+            v-model="selectedStatus"
             input-id="patientStatus"
             :options="statuses"
             :loading="isLoading"
@@ -73,34 +73,31 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue"
 import Button from "primevue/button"
 import IconField from "primevue/iconfield"
-import IftaLabel from "primevue/iftalabel"
 import InputIcon from "primevue/inputicon"
 import InputText from "primevue/inputtext"
 import Select from "primevue/select"
-import {ptInputText, ptOutlinedBtn, ptPrimaryBtn, ptSelect} from "@/features/shared/table-header.styles"
+import IftaLabel from "primevue/iftalabel"
+import { ptInputText, ptOutlinedBtn, ptPrimaryBtn, ptSelect } from "@/features/shared/table-header.styles"
 
 import type { Status } from "@/utils/global.type"
 
-const props = defineProps<{
+// 1. Define standard props
+defineProps<{
   statuses: Status[]
   isLoading: boolean
   isExportLoading: boolean
-  selectedSearch?: string
-  selectedStatus: Status
 }>()
 
+// 2. Define standard emits
 const emit = defineEmits<{
-  (e: "update:selectedSearch", v: string | undefined): void
-  (e: "update:selectedStatus", v: Status): void
   (e: "reset"): void
   (e: "save"): void
   (e: "export"): void
 }>()
 
-const modelSearch = computed({ get: () => props.selectedSearch, set: (v) => emit("update:selectedSearch", v) })
-const modelStatus = computed({ get: () => props.selectedStatus, set: (v) => emit("update:selectedStatus", v) })
-
+// 3. Use Vue 3.4+ defineModel for two-way binding (Replaces the manual computed get/set)
+const selectedSearch = defineModel<string>("selectedSearch")
+const selectedStatus = defineModel<Status>("selectedStatus", { required: true })
 </script>

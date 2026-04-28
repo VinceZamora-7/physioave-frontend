@@ -232,9 +232,12 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from "vue"
-import { pamsBaseURL } from "@/utils/axios-interceptor.ts"
+import { useRouter } from "vue-router"
+import { pamsAPI, pamsBaseURL } from "@/utils/axios-interceptor.ts"
 
 const href: string = `${pamsBaseURL}/oauth2/authorization/google`
+
+const router = useRouter()
 
 const isDark = ref(false)
 const loading = ref(false)
@@ -260,6 +263,23 @@ const onGoogleContinue = () => {
 }
 
 onMounted(() => {
+  // Check for onboardingToken and isNewSystem in URL after Google login
+  const params = new URLSearchParams(window.location.search)
+  const isNewSystem = params.get("isNewSystem") === "true"
+  const onboardingToken = params.get("onboardingToken")
+
+  if (isNewSystem && onboardingToken) {
+    // Store onboardingToken for setup use
+    sessionStorage.setItem("onboardingToken", onboardingToken)
+    // Optionally, clear query params from URL
+    window.history.replaceState({}, document.title, window.location.pathname)
+    router.replace({ name: "setup" })
+    return
+  }
+
+  void pamsAPI.get<{ isInitialized: boolean }>("/setup/status").catch(() => {
+    // Ignore; user can still attempt sign-in and backend will respond accordingly.
+  })
   syncIsDark()
 })
 </script>

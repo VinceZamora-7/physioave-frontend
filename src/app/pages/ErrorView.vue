@@ -89,6 +89,11 @@ const badgeLabel = computed(() => {
 const title = computed(() => {
   if (errorCode.value === "staff_not_found") return "Access not allowed"
   if (errorCode.value === "staff_inactive") return "Account is inactive"
+  if (errorCode.value === "oauth_redirect_uri_mismatch") return "Google redirect mismatch"
+  if (errorCode.value === "oauth_invalid_client") return "Google client rejected"
+  if (errorCode.value === "oauth_invalid_grant") return "Google login expired"
+  if (errorCode.value === "oauth_access_denied") return "Google access denied"
+  if (errorCode.value === "oauth_unauthorized_client") return "Google client unauthorized"
   if (errorCode.value === "oauth2_failed") return "Google sign-in failed"
   if (errorCode.value === "login_failed") return "Login failed"
   return "Page not found"
@@ -97,6 +102,11 @@ const title = computed(() => {
 const description = computed(() => {
   if (errorCode.value === "staff_not_found") return "Your Google account is not registered in this system. Please contact your administrator for access."
   if (errorCode.value === "staff_inactive") return "Your account exists but is currently inactive. Please contact your administrator."
+  if (errorCode.value === "oauth_redirect_uri_mismatch") return "The Google OAuth redirect URI does not exactly match the backend callback URL configured for this app."
+  if (errorCode.value === "oauth_invalid_client") return "Google rejected the configured OAuth client. Check the client ID and client secret in the backend environment."
+  if (errorCode.value === "oauth_invalid_grant") return "The Google sign-in code was rejected or expired. Please try signing in again from the login page."
+  if (errorCode.value === "oauth_access_denied") return "Google did not grant access to this app. Please try again and approve the requested profile and email access."
+  if (errorCode.value === "oauth_unauthorized_client") return "This Google OAuth client is not authorized for the requested local callback."
   if (errorCode.value === "oauth2_failed") return "Google authentication failed before login could be completed. Please try again."
   if (errorCode.value === "login_failed") return "We could not complete your login request. Please try again or contact your administrator."
   return "Sorry, we couldn't find the page you're looking for. It might have been moved or deleted."

@@ -106,41 +106,41 @@
             </IftaLabel>
           </FormField>
 
-          <FormField v-slot="$field" name="gender">
-            <IftaLabel>
-              <Select
-                id="gender"
-                v-model="$field.value"
-                :fluid="true"
-                :loading="isLoading"
-                :options="genders"
-                optionLabel="name"
-                placeholder="Select gender"
-                :filter="true"
-                :filter-fields="['name']"
-              />
-              <label for="gender">Gender <span class="text-rose-600">*</span></label>
-              <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
-            </IftaLabel>
-          </FormField>
+	          <FormField v-slot="$field" name="gender">
+	            <IftaLabel>
+	              <Select
+	                id="gender"
+	                v-model="$field.value"
+	                :fluid="true"
+	                :loading="isLoading"
+	                :options="genders"
+	                optionLabel="name"
+	                placeholder="Select gender"
+	                :filter="true"
+	                :filter-fields="['name']"
+	              />
+	              <label for="gender">Gender <span class="text-rose-600">*</span></label>
+	              <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
+	            </IftaLabel>
+	          </FormField>
 
-          <FormField v-slot="$field" name="civil_status">
-            <IftaLabel>
-              <Select
-                id="civil_status"
-                v-model="$field.value"
-                :fluid="true"
-                :loading="isLoading"
-                :options="civilStatuses"
-                optionLabel="name"
-                placeholder="Select civil status"
-                :filter="true"
-                :filter-fields="['name']"
-              />
-              <label for="civil_status">Civil Status <span class="text-rose-600">*</span></label>
-              <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
-            </IftaLabel>
-          </FormField>
+	          <FormField v-slot="$field" name="civil_status">
+	            <IftaLabel>
+	              <Select
+	                id="civil_status"
+	                v-model="$field.value"
+	                :fluid="true"
+	                :loading="isLoading"
+	                :options="civilStatuses"
+	                optionLabel="name"
+	                placeholder="Select civil status"
+	                :filter="true"
+	                :filter-fields="['name']"
+	              />
+	              <label for="civil_status">Civil Status <span class="text-rose-600">*</span></label>
+	              <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
+	            </IftaLabel>
+	          </FormField>
 
           <FormField v-slot="$field" name="occupation">
             <IftaLabel>

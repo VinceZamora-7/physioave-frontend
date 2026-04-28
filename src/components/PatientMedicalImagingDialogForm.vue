@@ -110,25 +110,20 @@ import { acceptedFileTypes, type DialogExpose, maxFileSize } from "@/utils/globa
 import { ptModalPrimaryBtn } from "@/features/shared/table-header.styles"
 
 const toast = useToast()
+const [visible, toggle] = useToggle()
 
 const emit = defineEmits<PatientMedicalImagingDialogFormEmits>()
 const props = defineProps<PatientMedicalImagingDialogFormProps>()
-const { selectedMedicalImaging: selectedMedicalImagingProp } = toRefs(props)
+const { isLoading, header, medicalImagings, selectedMedicalImaging: selectedMedicalImagingProp } = toRefs(props)
 
-const [visible, toggle] = useToggle()
 const selectedMedicalImaging = ref<MedicalImaging | undefined>()
 
 const {
   selected: selectedAttachment,
   preview: previewAttachment,
   onSelect: onFileSelect,
-  reset: resetAttachments
+  reset: resetAttachment
 } = useFileSelect()
-
-const resetAttachment = (): void => {
-  selectedMedicalImaging.value = selectedMedicalImagingProp.value
-  resetAttachments()
-}
 
 watch(selectedMedicalImagingProp, (value) => {
   selectedMedicalImaging.value = value
