@@ -149,6 +149,24 @@
 
     <!-- ── System Information ─────────────────────────────────────────── -->
     <section class="app-section-card-comfy space-y-4">
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 class="app-section-title">Patient Referrals</h3>
+          <p class="text-sm opacity-70">Manage the referral sources shown in the patient form.</p>
+        </div>
+
+        <Button
+          label="Manage Referral Sources"
+          icon="pi pi-sliders-h"
+          :pt="ptPrimaryBtn"
+          @click="modeOfReferralManager?.open()"
+        />
+      </div>
+
+      <ModeOfReferralManagerDialog ref="modeOfReferralManager" />
+    </section>
+
+    <section class="app-section-card-comfy space-y-4">
       <h3 class="app-section-title">System Information</h3>
 
       <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -192,11 +210,13 @@ import { useRouter } from "vue-router"
 
 import { authMeService, type AuthMe } from "@/services/auth-me.service"
 import { ptOutlinedBtn, ptPrimaryBtn } from "@/features/shared/table-header.styles"
+import ModeOfReferralManagerDialog from "@/features/general-settings/components/ModeOfReferralManagerDialog.vue"
 
 const router = useRouter()
 
 const currentUser = ref<AuthMe>()
 const loadError = ref("")
+const modeOfReferralManager = ref<InstanceType<typeof ModeOfReferralManagerDialog> | null>(null)
 
 const formatProviderType = (type?: string): string => {
   if (!type) return "—"

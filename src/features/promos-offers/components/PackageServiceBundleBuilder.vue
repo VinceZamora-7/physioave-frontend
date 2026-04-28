@@ -519,8 +519,6 @@ import {pamsAPI} from "@/utils/axios-interceptor"
 import {OfferResourceKey} from "@/utils/keys/resource-key"
 import {errorToast, successToast} from "@/utils/toast.util"
 import {
-  BUNDLED_SERVICES_KEY,
-  PACKAGE_SERVICES_KEY,
   SINGLE_PAY_SERVICES_KEY,
   readPromosStorageArray,
   writePromosStorageArray
@@ -544,7 +542,7 @@ interface SingleService {
 }
 
 interface BundledService {
-  id: string
+  id: number
   name: string
   machineIds: string[]
   techniqueIds: string[]
@@ -555,9 +553,9 @@ interface BundledService {
 }
 
 interface PackageService {
-  id: string
+  id: number
   name: string
-  bundleId?: string
+  bundleId?: number
   bundleQty: number
   machineIds?: string[]
   machineQty?: number
@@ -605,9 +603,9 @@ const isLoading = ref(false)
 const dialogVisible = ref(false)
 const editingId = ref<string | null>(null)
 const bundleDialogVisible = ref(false)
-const editingBundleId = ref<string | null>(null)
+const editingBundleId = ref<number | null>(null)
 const packageDialogVisible = ref(false)
-const editingPackageId = ref<string | null>(null)
+const editingPackageId = ref<number | null>(null)
 const refreshPromise = ref<Promise<unknown> | null>(null)
 
 const customServices = ref<SingleService[]>([])
@@ -758,7 +756,7 @@ const bundleFormData = reactive<{
 
 const packageFormData = reactive<{
   name: string
-  bundleId?: string
+  bundleId?: any
   bundleQty: number
   machineIds: string[]
   machineItems: Array<{id: string; qty: number}>
@@ -907,7 +905,7 @@ const getCategoryTotalQty = (
 }
 
 const bundlePreviewOriginalPrice = computed(() => calcOriginalPrice({
-  id: "preview",
+  id: 0,
   name: "preview",
   machineIds: bundleFormData.machineIds,
   techniqueIds: bundleFormData.techniqueIds,
@@ -938,74 +936,84 @@ const loadServices = async (): Promise<void> => {
     const machineByName = new Map(machineServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
     const techniqueByName = new Map(techniqueServices.value.map(service => [normalizePromosServiceName(service.name), service.id]))
 
-    const loadedBundles = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
-    const remappedBundles = loadedBundles.map(bundle => ({
-      ...bundle,
-      machineIds: bundle.machineIds
-        .map(id => remapServiceIdWithCatalog(id, "machine", machineByName, legacyById))
-        .filter((id, index, array) => array.indexOf(id) === index),
-      techniqueIds: bundle.techniqueIds
-        .map(id => remapServiceIdWithCatalog(id, "technique", techniqueByName, legacyById))
-        .filter((id, index, array) => array.indexOf(id) === index)
+    // Bundles are DB-backed (service_bundle_template). Loaded in loadBundles().
+
+    // Package offers are DB-backed (package_service_offer table).
+    const { data } = await withRefreshRetry(() =>
+      pamsAPI.get<Pageable<any>>("/package-service-offers", {
+        params: { page: 1, size: 500, name: "", status: "ALL" }
+      })
+    )
+
+    const rawPackages = (data?.content ?? []) as Array<Record<string, any>>
+    allPackages.value = rawPackages.map((row) => ({
+      id: Number(row.id),
+      name: String(row.name ?? ""),
+      bundleId: row.bundle_template_id === null || row.bundle_template_id === undefined ? undefined : Number(row.bundle_template_id),
+      bundleQty: Number(row.bundle_qty ?? 1),
+      machineIds: (row.machine_ids ?? []).map((id: any) => String(id)),
+      machineQty: Number(row.machine_qty ?? 1),
+      machineItems: (row.machine_items ?? []).map((entry: any) => ({ id: String(entry.id), qty: Number(entry.qty ?? 1) })),
+      techniqueIds: (row.technique_ids ?? []).map((id: any) => String(id)),
+      techniqueQty: Number(row.technique_qty ?? 1),
+      techniqueItems: (row.technique_items ?? []).map((entry: any) => ({ id: String(entry.id), qty: Number(entry.qty ?? 1) })),
+      evaluationIds: (row.evaluation_ids ?? []).map((id: any) => String(id)),
+      evaluationQty: Number(row.evaluation_qty ?? 1),
+      evaluationItems: (row.evaluation_items ?? []).map((entry: any) => ({ id: String(entry.id), qty: Number(entry.qty ?? 1) })),
+      addOnIds: (row.add_on_ids ?? []).map((id: any) => String(id)),
+      addOnQty: Number(row.add_on_qty ?? 1),
+      addOnItems: (row.add_on_items ?? []).map((entry: any) => ({ id: String(entry.id), qty: Number(entry.qty ?? 1) })),
+      sessionIds: (row.session_ids ?? []).map((id: any) => String(id)),
+      sessionQty: Number(row.session_qty ?? 1),
+      sessionItems: (row.session_items ?? []).map((entry: any) => ({ id: String(entry.id), qty: Number(entry.qty ?? 1) })),
+      packagePrice: Number(row.package_price ?? 0),
+      status: String(row.status ?? (row.is_active ? "Active" : "Inactive"))
     }))
-
-    allBundles.value = remappedBundles
-    if (JSON.stringify(remappedBundles) !== JSON.stringify(loadedBundles)) {
-      writePromosStorageArray(BUNDLED_SERVICES_KEY, remappedBundles)
-    }
-
-    const loadedPackages = readPromosStorageArray<PackageService>(PACKAGE_SERVICES_KEY)
-    const remappedPackages = loadedPackages.map((pkg) => {
-      const machineIds = (pkg.machineIds ?? [])
-        .map(id => remapServiceIdWithCatalog(id, "machine", machineByName, legacyById))
-        .filter((id, index, array) => array.indexOf(id) === index)
-      const techniqueIds = (pkg.techniqueIds ?? [])
-        .map(id => remapServiceIdWithCatalog(id, "technique", techniqueByName, legacyById))
-        .filter((id, index, array) => array.indexOf(id) === index)
-
-      const machineItems = (pkg.machineItems ?? []).map(entry => ({
-        ...entry,
-        id: remapServiceIdWithCatalog(entry.id, "machine", machineByName, legacyById)
-      }))
-      const techniqueItems = (pkg.techniqueItems ?? []).map(entry => ({
-        ...entry,
-        id: remapServiceIdWithCatalog(entry.id, "technique", techniqueByName, legacyById)
-      }))
-
-      return {
-        ...pkg,
-        machineIds,
-        techniqueIds,
-        machineItems,
-        techniqueItems
-      }
-    })
-
-    allPackages.value = remappedPackages
-    if (JSON.stringify(remappedPackages) !== JSON.stringify(loadedPackages)) {
-      writePromosStorageArray(PACKAGE_SERVICES_KEY, remappedPackages)
-    }
   } catch {
     machineServices.value = []
     techniqueServices.value = []
     customServices.value = []
+    allPackages.value = []
   }
 }
 
-const loadBundles = (): void => {
+const parseNumericId = (value: string, prefix: string): number => {
+  const raw = value.startsWith(prefix) ? value.slice(prefix.length) : value
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+const loadBundles = async (): Promise<void> => {
   try {
-    allBundles.value = readPromosStorageArray<BundledService>(BUNDLED_SERVICES_KEY)
+    const { data } = await withRefreshRetry(() =>
+      pamsAPI.get<Pageable<any>>("/service-bundles", {
+        params: { page: 1, size: 500, name: "", status: "ALL" }
+      })
+    )
+
+    const rows = (data?.content ?? []) as Array<Record<string, any>>
+    allBundles.value = rows.map((row) => ({
+      id: Number(row.id),
+      name: String(row.name ?? ""),
+      machineIds: (row.machine_ids ?? []).map((id: any) => `machine-${Number(id)}`),
+      techniqueIds: (row.technique_ids ?? []).map((id: any) => `technique-${Number(id)}`),
+      evaluationIds: (row.evaluation_ids ?? []).map((id: any) => `evaluation-${Number(id)}`),
+      addOnIds: [
+        ...(row.add_on_machine_ids ?? []).map((id: any) => `add-on-machine-${Number(id)}`),
+        ...(row.add_on_technique_ids ?? []).map((id: any) => `add-on-technique-${Number(id)}`),
+        ...(row.add_on_home_service_ids ?? []).map((id: any) => `add-on-home-service-${Number(id)}`),
+      ],
+      bundledPrice: Number(row.bundled_price ?? 0),
+      status: String(row.status ?? (row.is_active ? "Active" : "Inactive")),
+    }))
   } catch {
     allBundles.value = []
   }
 }
 
 const loadPackages = (): void => {
-  try {
-    allPackages.value = readPromosStorageArray<PackageService>(PACKAGE_SERVICES_KEY)
-  } catch {
-    allPackages.value = []
-  }
+  // DB-backed; handled in loadServices().
+  allPackages.value = []
 }
 
 const loadSessionLookupServices = async (): Promise<void> => {
@@ -1035,6 +1043,7 @@ const refreshAll = async (): Promise<void> => {
   isLoading.value = true
   try {
     await loadServices()
+    await loadBundles()
     await loadSessionLookupServices()
   } finally {
     isLoading.value = false
@@ -1131,7 +1140,7 @@ const openEditBundleDialog = (bundle: BundledService): void => {
   bundleDialogVisible.value = true
 }
 
-const saveBundle = (): void => {
+const saveBundle = async (): Promise<void> => {
   if (!bundleFormData.name.trim()) {
     errorToast(toast, "Bundle name is required")
     return
@@ -1146,49 +1155,52 @@ const saveBundle = (): void => {
     return
   }
 
-  if (editingBundleId.value) {
-    const index = allBundles.value.findIndex(bundle => bundle.id === editingBundleId.value)
-    if (index >= 0) {
-      allBundles.value[index] = {
-        id: editingBundleId.value,
-        name: bundleFormData.name,
-        machineIds: [...bundleFormData.machineIds],
-        techniqueIds: [...bundleFormData.techniqueIds],
-        evaluationIds: [...bundleFormData.evaluationIds],
-        addOnIds: [],
-        bundledPrice: bundleFormData.bundledPrice,
-        status: bundleFormData.status
-      }
-    }
-  } else {
-    allBundles.value.push({
-      id: `bundle-${Date.now()}`,
+  isLoading.value = true
+  try {
+    const apiPayload = {
       name: bundleFormData.name,
-      machineIds: [...bundleFormData.machineIds],
-      techniqueIds: [...bundleFormData.techniqueIds],
-      evaluationIds: [...bundleFormData.evaluationIds],
-      addOnIds: [],
-      bundledPrice: bundleFormData.bundledPrice,
-      status: bundleFormData.status
-    })
-  }
+      bundled_price: Number(bundleFormData.bundledPrice ?? 0),
+      machine_ids: [...bundleFormData.machineIds].map((id) => parseNumericId(id, "machine-")).filter(Boolean),
+      technique_ids: [...bundleFormData.techniqueIds].map((id) => parseNumericId(id, "technique-")).filter(Boolean),
+      evaluation_ids: [...bundleFormData.evaluationIds].map((id) => parseNumericId(id, "evaluation-")).filter(Boolean),
+      add_on_machine_ids: ([] as number[]),
+      add_on_technique_ids: ([] as number[]),
+      add_on_home_service_ids: ([] as number[]),
+    }
 
-  writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
-  bundleDialogVisible.value = false
-  successToast(toast, editingBundleId.value ? "Bundle updated" : "Bundle added")
-  refreshAll()
+    if (editingBundleId.value) {
+      await withRefreshRetry(() => pamsAPI.put(`/service-bundles/${editingBundleId.value}`, apiPayload))
+      successToast(toast, "Bundle updated")
+    } else {
+      await withRefreshRetry(() => pamsAPI.post(`/service-bundles`, apiPayload))
+      successToast(toast, "Bundle added")
+    }
+
+    bundleDialogVisible.value = false
+    await loadBundles()
+  } catch {
+    errorToast(toast, "Failed to save bundle")
+  } finally {
+    isLoading.value = false
+  }
 }
 
 const confirmDeleteBundle = (bundle: BundledService): void => {
   confirm.require({
-    message: `Delete bundle "${bundle.name}"?`,
+    message: `If you proceed, "${bundle.name}" will be deactivated.`,
     header: "Confirm",
     icon: "pi pi-exclamation-triangle",
-    accept: () => {
-      allBundles.value = allBundles.value.filter(entry => entry.id !== bundle.id)
-      writePromosStorageArray(BUNDLED_SERVICES_KEY, allBundles.value)
-      successToast(toast, "Bundle deleted")
-      refreshAll()
+    accept: async () => {
+      isLoading.value = true
+      try {
+        await withRefreshRetry(() => pamsAPI.patch(`/service-bundles/${bundle.id}/status`))
+        successToast(toast, "Bundle updated")
+        await loadBundles()
+      } catch {
+        errorToast(toast, "Failed to update bundle status")
+      } finally {
+        isLoading.value = false
+      }
     }
   })
 }
@@ -1243,7 +1255,7 @@ const openEditPackageDialog = (item: PackageService): void => {
   packageDialogVisible.value = true
 }
 
-const savePackage = (): void => {
+const savePackage = async (): Promise<void> => {
   if (!packageFormData.name.trim()) {
     errorToast(toast, "Package name is required")
     return
@@ -1274,53 +1286,69 @@ const savePackage = (): void => {
     return
   }
 
-  const payload: PackageService = {
-    id: editingPackageId.value ?? `package-${Date.now()}`,
-    name: packageFormData.name,
-    bundleId: packageFormData.bundleId,
-    bundleQty: Number(packageFormData.bundleQty ?? 1),
-    machineIds: [...packageFormData.machineIds],
-    machineQty: 1,
-    machineItems: packageFormData.machineItems.map(entry => ({id: entry.id, qty: Number(entry.qty ?? 1)})),
-    techniqueIds: [...packageFormData.techniqueIds],
-    techniqueQty: 1,
-    techniqueItems: packageFormData.techniqueItems.map(entry => ({id: entry.id, qty: Number(entry.qty ?? 1)})),
-    evaluationIds: [...packageFormData.evaluationIds],
-    evaluationQty: 1,
-    evaluationItems: packageFormData.evaluationItems.map(entry => ({id: entry.id, qty: Number(entry.qty ?? 1)})),
-    addOnIds: [],
-    addOnQty: 1,
-    addOnItems: [],
-    sessionIds: [...packageFormData.sessionIds],
-    sessionQty: 1,
-    sessionItems: packageFormData.sessionItems.map(entry => ({id: entry.id, qty: Number(entry.qty ?? 1)})),
-    packagePrice: Number(packageFormData.packagePrice ?? 0),
-    status: packageFormData.status
-  }
+  isLoading.value = true
+  try {
+    const apiPayload = {
+      name: packageFormData.name,
+      bundle_template_id: (typeof packageFormData.bundleId === "number" && Number.isFinite(packageFormData.bundleId) && packageFormData.bundleId > 0)
+        ? packageFormData.bundleId
+        : null,
+      bundle_qty: Number(packageFormData.bundleQty ?? 1),
+      machine_ids: [...packageFormData.machineIds].map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0),
+      machine_qty: 1,
+      machine_items: packageFormData.machineItems.map(entry => ({ id: Number(entry.id), qty: Number(entry.qty ?? 1) })).filter((e) => Number.isFinite(e.id) && e.id > 0),
+      technique_ids: [...packageFormData.techniqueIds].map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0),
+      technique_qty: 1,
+      technique_items: packageFormData.techniqueItems.map(entry => ({ id: Number(entry.id), qty: Number(entry.qty ?? 1) })).filter((e) => Number.isFinite(e.id) && e.id > 0),
+      evaluation_ids: [...packageFormData.evaluationIds].map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0),
+      evaluation_qty: 1,
+      evaluation_items: packageFormData.evaluationItems.map(entry => ({ id: Number(entry.id), qty: Number(entry.qty ?? 1) })).filter((e) => Number.isFinite(e.id) && e.id > 0),
+      add_on_ids: [],
+      add_on_qty: 1,
+      add_on_items: [],
+      session_ids: [...packageFormData.sessionIds].map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0),
+      session_qty: 1,
+      session_items: packageFormData.sessionItems.map(entry => ({ id: Number(entry.id), qty: Number(entry.qty ?? 1) })).filter((e) => Number.isFinite(e.id) && e.id > 0),
+      package_price: Number(packageFormData.packagePrice ?? 0),
+    }
 
-  if (editingPackageId.value) {
-    const index = allPackages.value.findIndex(item => item.id === editingPackageId.value)
-    if (index >= 0) allPackages.value[index] = payload
-  } else {
-    allPackages.value.push(payload)
-  }
+    if (editingPackageId.value) {
+      await withRefreshRetry(() =>
+        pamsAPI.put(`/package-service-offers/${editingPackageId.value}`, apiPayload)
+      )
+      successToast(toast, "Package updated")
+    } else {
+      await withRefreshRetry(() =>
+        pamsAPI.post(`/package-service-offers`, apiPayload)
+      )
+      successToast(toast, "Package added")
+    }
 
-  writePromosStorageArray(PACKAGE_SERVICES_KEY, allPackages.value)
-  packageDialogVisible.value = false
-  successToast(toast, editingPackageId.value ? "Package updated" : "Package added")
-  refreshAll()
+    packageDialogVisible.value = false
+    await refreshAll()
+  } catch {
+    errorToast(toast, "Failed to save package")
+  } finally {
+    isLoading.value = false
+  }
 }
 
 const confirmDeletePackage = (item: PackageService): void => {
   confirm.require({
-    message: `Delete package "${item.name}"?`,
+    message: `If you proceed, "${item.name}" will be deactivated.`,
     header: "Confirm",
     icon: "pi pi-exclamation-triangle",
-    accept: () => {
-      allPackages.value = allPackages.value.filter(entry => entry.id !== item.id)
-      writePromosStorageArray(PACKAGE_SERVICES_KEY, allPackages.value)
-      successToast(toast, "Package deleted")
-      refreshAll()
+    accept: async () => {
+      isLoading.value = true
+      try {
+        await withRefreshRetry(() => pamsAPI.patch(`/package-service-offers/${item.id}/status`))
+        successToast(toast, "Package deactivated")
+        await refreshAll()
+      } catch {
+        errorToast(toast, "Failed to update package status")
+      } finally {
+        isLoading.value = false
+      }
     }
   })
 }
