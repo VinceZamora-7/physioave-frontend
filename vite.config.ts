@@ -20,6 +20,7 @@ export default defineConfig({
     },
   },
   build: {
+    chunkSizeWarningLimit: 1200,
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -45,14 +46,6 @@ export default defineConfig({
               return 'vendor-utils'
             }
           }
-
-          if (id.includes('/src/features/appointments/')) return 'appointments'
-          if (id.includes('/src/features/billing/')) return 'billing'
-          if (id.includes('/src/features/patients/')) return 'patients'
-          if (id.includes('/src/features/promos-offers/')) return 'promos-offers'
-          if (id.includes('/src/features/reports/')) return 'reports'
-          if (id.includes('/src/features/dashboard/')) return 'dashboard'
-
           return undefined
         }
       }
