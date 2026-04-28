@@ -6,17 +6,6 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 import tailwindcss from "@tailwindcss/vite";
 
 const enableVueDevTools = process.env.NODE_ENV !== 'production'
-const heavyPrimeVueChunks = new Set([
-  'datatable',
-  'datepicker',
-  'dialog',
-  'fileupload',
-  'inputnumber',
-  'menu',
-  'multiselect',
-  'select',
-  'toast'
-])
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -35,20 +24,16 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (id.includes('node_modules')) {
+            const normalizedId = id.replace(/\\/g, '/')
             if (id.includes('primeicons')) {
               return 'primeicons'
             }
-            if (id.includes('@primeuix')) {
-              return 'primeuix-theme'
-            }
-            if (id.includes('primevue')) {
-              const normalizedId = id.replace(/\\/g, '/')
-              const match = normalizedId.match(/\/node_modules\/primevue\/([^/]+)/)
-              const chunkName = match?.[1]
-              if (chunkName && heavyPrimeVueChunks.has(chunkName)) {
-                return `primevue-${chunkName}`
-              }
-              return 'primevue-core'
+            if (
+              normalizedId.includes('/node_modules/primevue/')
+              || normalizedId.includes('/node_modules/@primevue/')
+              || normalizedId.includes('/node_modules/@primeuix/')
+            ) {
+              return 'primevue'
             }
             if (id.includes('@tanstack')) {
               return 'tanstack'
