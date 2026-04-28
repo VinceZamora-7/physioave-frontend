@@ -863,16 +863,26 @@ const getServicePrice = (id: string): number => {
   if (local?.price != null) return local.price
   return sessionLookupServices.value.find(service => service.id === id)?.price ?? 0
 }
-const getBundleName = (id: string): string => allBundles.value.find(bundle => bundle.id === id)?.name ?? id
+const getBundleName = (id: number | string): string => {
+  const parsed = typeof id === "string" ? Number(id) : id
+  if (Number.isFinite(parsed)) {
+    const found = allBundles.value.find(bundle => bundle.id === parsed)
+    if (found?.name) return found.name
+  }
+  return String(id)
+}
 
 const calcOriginalPrice = (bundle: BundledService): number => {
   const ids = [...bundle.machineIds, ...bundle.techniqueIds, ...bundle.evaluationIds]
   return ids.reduce((sum, id) => sum + getServicePrice(id), 0)
 }
 
-const calcPackageRegularTotal = (item: PackageService | {bundleId?: string; bundleQty: number; machineIds?: string[]; machineItems?: Array<{id: string; qty: number}>; techniqueIds?: string[]; techniqueItems?: Array<{id: string; qty: number}>; evaluationIds: string[]; evaluationItems?: Array<{id: string; qty: number}>; addOnIds?: string[]; addOnItems?: Array<{id: string; qty: number}>; sessionIds?: string[]; sessionItems?: Array<{id: string; qty: number}>}): number => {
+const calcPackageRegularTotal = (item: PackageService | {bundleId?: number | string; bundleQty: number; machineIds?: string[]; machineItems?: Array<{id: string; qty: number}>; techniqueIds?: string[]; techniqueItems?: Array<{id: string; qty: number}>; evaluationIds: string[]; evaluationItems?: Array<{id: string; qty: number}>; addOnIds?: string[]; addOnItems?: Array<{id: string; qty: number}>; sessionIds?: string[]; sessionItems?: Array<{id: string; qty: number}>}): number => {
   const typed = item as PackageService
-  const bundle = typed.bundleId ? allBundles.value.find(entry => entry.id === typed.bundleId) : undefined
+  const bundleId = (typed.bundleId === undefined || typed.bundleId === null || String(typed.bundleId).trim() === "")
+    ? null
+    : Number(typed.bundleId)
+  const bundle = bundleId ? allBundles.value.find(entry => entry.id === bundleId) : undefined
   const bundleRegularTotal = Number(bundle?.bundledPrice ?? 0) * Number(typed.bundleQty ?? 1)
   const machineRegularTotal = (typed.machineItems?.length
     ? typed.machineItems
