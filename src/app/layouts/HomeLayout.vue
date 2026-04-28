@@ -52,8 +52,8 @@
     Branch
   </label>
   <Select
-    v-model="selectedClinicId"
-    :options="clinicOptions"
+    v-model="selectedClinicIdProxy"
+    :options="clinicSelectOptions"
     optionLabel="name"
     optionValue="id"
     filter
@@ -107,6 +107,17 @@ const sidebarCollapsed = ref(true)
 // ── Clinic branch store ───────────────────────────────────────────────────
 const globalClinicStore = clinicStore()
 const { clinicOptions, isLoadingClinics, selectedClinicId } = storeToRefs(globalClinicStore)
+const { setSelectedClinicId } = globalClinicStore
+
+const clinicSelectOptions = computed(() => ([
+  { id: 0, name: "All Branches" },
+  ...(clinicOptions.value ?? [])
+]))
+
+const selectedClinicIdProxy = computed<number>({
+  get: () => selectedClinicId.value ?? 0,
+  set: (value: number) => setSelectedClinicId(value > 0 ? value : undefined)
+})
 
 const route = useRoute()
 const pageTitle = computed(() => {

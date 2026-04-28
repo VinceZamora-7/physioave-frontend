@@ -27,7 +27,7 @@ export const clinicStore = defineStore('clinicStore', () => {
   )
 
   const persistSelectedClinicId = (id: number | undefined) => {
-    if (typeof id === "number" && Number.isFinite(id)) {
+    if (typeof id === "number" && Number.isFinite(id) && id > 0) {
       localStorage.setItem(SELECTED_CLINIC_STORAGE_KEY, String(id))
       return
     }
@@ -36,12 +36,19 @@ export const clinicStore = defineStore('clinicStore', () => {
   }
 
   const setSelectedClinicId = (id: number | undefined) => {
-    selectedClinicId.value = id
-    clinic.value = clinicOptions.value.find((item) => item.id === id)
+    const normalized = typeof id === "number" && Number.isFinite(id) && id > 0 ? id : undefined
+    selectedClinicId.value = normalized
+    clinic.value = clinicOptions.value.find((item) => item.id === normalized)
     persistSelectedClinicId(id)
   }
 
   const ensureSelectedClinic = () => {
+    // Undefined means "All branches" (no clinic filter).
+    if (selectedClinicId.value == null) {
+      clinic.value = undefined
+      return
+    }
+
     const isSelectedStillValid = clinicOptions.value.some((item) => item.id === selectedClinicId.value)
     if (!isSelectedStillValid) {
       setSelectedClinicId(clinicOptions.value[0]?.id)
