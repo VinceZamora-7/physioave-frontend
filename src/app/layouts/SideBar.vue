@@ -84,7 +84,7 @@
                 title="Dashboard"
               >
                 <span :class="iconWrapClass('dashboard')"><i class="pi pi-chart-line text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">Dashboard</span>
+                <span v-if="!collapsed" class="truncate">Dashboards</span>
               </button>
             </li>
 
