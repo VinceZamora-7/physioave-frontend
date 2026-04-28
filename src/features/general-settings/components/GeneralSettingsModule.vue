@@ -167,6 +167,42 @@
     </section>
 
     <section class="app-section-card-comfy space-y-4">
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 class="app-section-title">Expense Items</h3>
+          <p class="text-sm opacity-70">Manage the dropdown options shown when adding expenses in Reports.</p>
+        </div>
+
+        <Button
+          label="Manage Expense Items"
+          icon="pi pi-sliders-h"
+          :pt="ptPrimaryBtn"
+          @click="expenseItemManager?.open()"
+        />
+      </div>
+
+      <ExpenseItemManagerDialog ref="expenseItemManager" />
+    </section>
+
+    <section class="app-section-card-comfy space-y-4">
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 class="app-section-title">Monthly Expense Templates</h3>
+          <p class="text-sm opacity-70">Set recurring monthly expenses once, then apply them each month in Reports.</p>
+        </div>
+
+        <Button
+          label="Manage Monthly Templates"
+          icon="pi pi-sliders-h"
+          :pt="ptPrimaryBtn"
+          @click="monthlyExpenseTemplateManager?.open()"
+        />
+      </div>
+
+      <MonthlyExpenseTemplateManagerDialog ref="monthlyExpenseTemplateManager" />
+    </section>
+
+    <section class="app-section-card-comfy space-y-4">
       <h3 class="app-section-title">System Information</h3>
 
       <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -211,12 +247,16 @@ import { useRouter } from "vue-router"
 import { authMeService, type AuthMe } from "@/services/auth-me.service"
 import { ptOutlinedBtn, ptPrimaryBtn } from "@/features/shared/table-header.styles"
 import ModeOfReferralManagerDialog from "@/features/general-settings/components/ModeOfReferralManagerDialog.vue"
+import ExpenseItemManagerDialog from "@/features/general-settings/components/ExpenseItemManagerDialog.vue"
+import MonthlyExpenseTemplateManagerDialog from "@/features/general-settings/components/MonthlyExpenseTemplateManagerDialog.vue"
 
 const router = useRouter()
 
 const currentUser = ref<AuthMe>()
 const loadError = ref("")
 const modeOfReferralManager = ref<InstanceType<typeof ModeOfReferralManagerDialog> | null>(null)
+const expenseItemManager = ref<InstanceType<typeof ExpenseItemManagerDialog> | null>(null)
+const monthlyExpenseTemplateManager = ref<InstanceType<typeof MonthlyExpenseTemplateManagerDialog> | null>(null)
 
 const formatProviderType = (type?: string): string => {
   if (!type) return "—"

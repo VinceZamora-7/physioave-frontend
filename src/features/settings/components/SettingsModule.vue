@@ -383,11 +383,6 @@
           </section>
         </div>
 
-        <ClinicTreatmentAreasCard
-          v-if="canSeeTreatmentAreasSection"
-          :selectedClinic="selectedClinic"
-          :canManage="canManageTreatmentAreas"
-        />
       </div>
     </template>
 

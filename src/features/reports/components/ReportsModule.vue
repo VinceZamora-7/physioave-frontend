@@ -11,7 +11,9 @@ import DatePicker from "primevue/datepicker"
 import Dialog from "primevue/dialog"
 import InputNumber from "primevue/inputnumber"
 import InputText from "primevue/inputtext"
+import Select from "primevue/select"
 import Tag from "primevue/tag"
+import Checkbox from "primevue/checkbox"
 import {
   appointmentPhase1Service,
   type EndOfDayHistoryItem,
@@ -28,6 +30,7 @@ import {getApiErrorMessage} from "@/utils/actionable-error.util"
 import {errorToast, successToast} from "@/utils/toast.util"
 import {authMeService, type AuthMe} from "@/services/auth-me.service"
 import {clinicStore} from "@/stores/clinic.store"
+import {pamsAPI} from "@/utils/axios-interceptor"
 
 const toast = useToast()
 const confirm = useConfirm()
@@ -52,10 +55,22 @@ const doctorSessionsReport = ref<ReferringDoctorCompletedSessionsReport>()
 const eodSectionRef = ref<HTMLElement | null>(null)
 const monthlySectionRef = ref<HTMLElement | null>(null)
 const expenseForm = ref({
-  item_name: "",
+  expense_item_id: null as number | null,
   amount: 0,
   notes: ""
 })
+
+type ExpenseItemRow = { id: number; name: string; is_active: boolean }
+const expenseItems = ref<ExpenseItemRow[]>([])
+const activeExpenseItems = computed(() => expenseItems.value.filter(item => item.is_active))
+
+type MonthlyExpenseTemplateRow = { id: number; name: string; amount: number; is_active: boolean }
+const monthlyTemplates = ref<MonthlyExpenseTemplateRow[]>([])
+const appliedMonthlyTemplateIds = ref<number[]>([])
+const selectedMonthlyTemplateIds = ref<number[]>([])
+const monthlyTemplateDialogVisible = ref(false)
+const loadingMonthlyTemplates = ref(false)
+const applyingMonthlyTemplates = ref(false)
 
 const user = ref<AuthMe | null>(null)
 const userPermissions = computed(() => user.value?.permissions ?? [])
@@ -125,6 +140,11 @@ const summaryCards = computed(() => [
     caption: "Manually entered operating expenses"
   },
   {
+    label: "Net Income",
+    value: asCurrency((report.value?.summary.gross_income ?? 0) - (report.value?.summary.expense_total ?? 0)),
+    caption: "Gross charges minus expenses"
+  },
+  {
     label: "Net Cash",
     value: asCurrency(report.value?.summary.net_cash ?? 0),
     caption: "Cash collected minus expenses"
@@ -151,6 +171,11 @@ const monthlySummaryCards = computed(() => [
     label: "Expenses",
     value: asCurrency(monthlyReport.value?.summary.expense_total ?? 0),
     caption: "Operating expenses logged this month"
+  },
+  {
+    label: "Net Income",
+    value: asCurrency((monthlyReport.value?.summary.gross_income ?? 0) - (monthlyReport.value?.summary.expense_total ?? 0)),
+    caption: "Gross charges minus monthly expenses"
   },
   {
     label: "Net Cash",
@@ -367,7 +392,7 @@ const refreshDoctorSessionsReport = async (): Promise<void> => {
 
 const resetExpenseForm = (): void => {
   expenseForm.value = {
-    item_name: "",
+    expense_item_id: null,
     amount: 0,
     notes: ""
   }
@@ -375,8 +400,9 @@ const resetExpenseForm = (): void => {
 
 const saveExpense = async (): Promise<void> => {
   if (!canManageExpenses.value) return
-  if (!expenseForm.value.item_name.trim()) {
-    errorToast(toast, "Expense item name is required")
+  const selectedExpenseItem = activeExpenseItems.value.find(item => item.id === expenseForm.value.expense_item_id)
+  if (!selectedExpenseItem) {
+    errorToast(toast, "Expense item is required")
     return
   }
 
@@ -390,7 +416,7 @@ const saveExpense = async (): Promise<void> => {
     await billingPhase1Service.addDailyExpense({
       expense_date: toDateParam(selectedDate.value),
       clinic_id: selectedClinicId.value,
-      item_name: expenseForm.value.item_name.trim(),
+      item_name: selectedExpenseItem.name,
       amount: Number(expenseForm.value.amount ?? 0),
       notes: expenseForm.value.notes.trim() || undefined
     })
@@ -409,6 +435,73 @@ const saveExpense = async (): Promise<void> => {
     )
   } finally {
     isSavingExpense.value = false
+  }
+}
+
+const loadExpenseItems = async (): Promise<void> => {
+  try {
+    const { data } = await pamsAPI.get<{ content: ExpenseItemRow[] }>("/references/expense-items", {
+      params: { page: 1, size: 1000, name: "", status: "ALL" }
+    })
+    expenseItems.value = data?.content ?? []
+  } catch {
+    expenseItems.value = []
+  }
+}
+
+const loadMonthlyExpenseTemplates = async (): Promise<void> => {
+  loadingMonthlyTemplates.value = true
+  try {
+    const { data } = await pamsAPI.get<MonthlyExpenseTemplateRow[]>("/billings/monthly-expense-templates", {
+      params: { clinic_id: selectedClinicId.value }
+    })
+    monthlyTemplates.value = data ?? []
+  } catch {
+    monthlyTemplates.value = []
+  } finally {
+    loadingMonthlyTemplates.value = false
+  }
+}
+
+const loadMonthlyExpenseStatus = async (): Promise<void> => {
+  try {
+    const month = selectedMonthParam.value
+    const [y, m] = month.split("-").map(v => Number(v))
+    const { data } = await pamsAPI.get<number[]>("/billings/monthly-expenses/status", {
+      params: { period_year: y, period_month: m, clinic_id: selectedClinicId.value }
+    })
+    appliedMonthlyTemplateIds.value = data ?? []
+  } catch {
+    appliedMonthlyTemplateIds.value = []
+  }
+}
+
+const openMonthlyExpenseDialog = async (): Promise<void> => {
+  monthlyTemplateDialogVisible.value = true
+  await Promise.all([loadMonthlyExpenseTemplates(), loadMonthlyExpenseStatus()])
+  // Default select all active not-yet-applied templates.
+  const selectable = (monthlyTemplates.value ?? []).filter(t => t.is_active).map(t => t.id)
+  selectedMonthlyTemplateIds.value = selectable.filter(id => !appliedMonthlyTemplateIds.value.includes(id))
+}
+
+const applyMonthlyExpenseTemplates = async (): Promise<void> => {
+  if (!selectedMonthlyTemplateIds.value.length) return
+  applyingMonthlyTemplates.value = true
+  try {
+    const [year, month] = selectedMonthParam.value.split("-").map(v => Number(v))
+    await pamsAPI.post("/billings/monthly-expenses/apply", {
+      period_year: year,
+      period_month: month,
+      clinic_id: selectedClinicId.value,
+      template_ids: selectedMonthlyTemplateIds.value
+    })
+    successToast(toast, "Monthly expenses applied")
+    monthlyTemplateDialogVisible.value = false
+    await Promise.all([refreshReport(), loadMonthlyExpenseStatus()])
+  } catch (error: unknown) {
+    errorToast(toast, getApiErrorMessage(error, { baseMessage: "Failed to apply monthly expenses" }))
+  } finally {
+    applyingMonthlyTemplates.value = false
   }
 }
 
@@ -547,6 +640,7 @@ onMounted(async () => {
       })
     )
   }
+  await loadExpenseItems()
   void refreshAllReports()
   void scrollToRequestedSection()
 })
@@ -902,7 +996,15 @@ onMounted(async () => {
       <div class="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.3fr)_180px_minmax(0,1fr)_auto]">
         <div class="space-y-2">
           <label class="text-xs font-semibold uppercase tracking-wide opacity-60">Item Name</label>
-          <InputText v-model="expenseForm.item_name" fluid placeholder="e.g. Supplies, transportation, snacks" />
+          <Select
+            v-model="expenseForm.expense_item_id"
+            :options="activeExpenseItems"
+            optionLabel="name"
+            optionValue="id"
+            filter
+            fluid
+            placeholder="Select expense item"
+          />
         </div>
 
         <div class="space-y-2">
@@ -1006,10 +1108,64 @@ onMounted(async () => {
           <h2 class="app-section-title">Monthly Income &amp; Expenses</h2>
           <p class="text-sm opacity-70">Monthly operations rollup for finance review, cash monitoring, and expense tracking using the same billing and expense records as the daily report.</p>
         </div>
-        <div class="text-sm opacity-70">
-          {{ selectedMonthLabel }} · Active days {{ monthlyReport?.summary.active_day_count ?? 0 }}
+        <div class="flex flex-wrap items-center gap-2">
+          <Button
+            v-if="canManageExpenses"
+            label="Apply Monthly Expenses"
+            icon="pi pi-calendar-plus"
+            outlined
+            size="small"
+            @click="openMonthlyExpenseDialog"
+          />
+          <div class="text-sm opacity-70">
+            {{ selectedMonthLabel }} · Active days {{ monthlyReport?.summary.active_day_count ?? 0 }}
+          </div>
         </div>
       </div>
+
+      <Dialog v-model:visible="monthlyTemplateDialogVisible" header="Apply Monthly Expense Templates" modal :style="{ width: '720px' }">
+        <div class="space-y-3">
+          <Message severity="secondary" :closable="false" size="small">
+            Select templates to add as expense entries for {{ selectedMonthLabel }}. Already applied templates are disabled.
+          </Message>
+
+          <div class="rounded-lg border border-[rgb(var(--app-border))] p-3 space-y-2">
+            <div v-if="loadingMonthlyTemplates" class="text-sm opacity-70">Loading templates...</div>
+            <div v-else-if="!monthlyTemplates.length" class="text-sm opacity-70">No templates found. Add them in General Settings.</div>
+            <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <label
+                v-for="tpl in monthlyTemplates"
+                :key="tpl.id"
+                class="flex items-center gap-2 rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] px-3 py-2"
+              >
+                <Checkbox
+                  v-model="selectedMonthlyTemplateIds"
+                  :value="tpl.id"
+                  :binary="false"
+                  :disabled="!tpl.is_active || appliedMonthlyTemplateIds.includes(tpl.id)"
+                />
+                <div class="flex-1">
+                  <div class="text-sm font-medium">{{ tpl.name }}</div>
+                  <div class="text-xs opacity-70">{{ asCurrency(tpl.amount) }}</div>
+                </div>
+                <Tag v-if="appliedMonthlyTemplateIds.includes(tpl.id)" value="Applied" severity="success" />
+                <Tag v-else-if="!tpl.is_active" value="Inactive" severity="danger" />
+              </label>
+            </div>
+          </div>
+
+          <div class="flex justify-end gap-2 pt-1">
+            <Button label="Cancel" text @click="monthlyTemplateDialogVisible = false" />
+            <Button
+              label="Apply"
+              icon="pi pi-check"
+              :loading="applyingMonthlyTemplates"
+              :disabled="!selectedMonthlyTemplateIds.length"
+              @click="applyMonthlyExpenseTemplates"
+            />
+          </div>
+        </div>
+      </Dialog>
 
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <article v-for="card in monthlySummaryCards" :key="card.label" class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
@@ -1052,6 +1208,14 @@ onMounted(async () => {
 
           <Column header="Expenses" style="min-width: 140px">
             <template #body="{ data }">{{ asCurrency(data.expense_total) }}</template>
+          </Column>
+
+          <Column header="Net Income" style="min-width: 140px">
+            <template #body="{ data }">
+              <span :class="(data.gross_income - data.expense_total) < 0 ? 'font-medium text-rose-600' : 'font-medium text-emerald-700'">
+                {{ asCurrency(data.gross_income - data.expense_total) }}
+              </span>
+            </template>
           </Column>
 
           <Column header="Net Cash" style="min-width: 140px">
