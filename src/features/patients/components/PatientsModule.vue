@@ -187,6 +187,41 @@
       @updated="void onPatientProfileImageUpdated()"
     />
 
+    <Dialog
+      v-model:visible="registerSponsorInfoVisible"
+      modal
+      header="Register Sponsor Information"
+      :style="{ width: '28rem', maxWidth: '95vw' }"
+      :draggable="false"
+    >
+      <div class="space-y-3 text-sm">
+        <p class="m-0 opacity-80">
+          Would you like to register sponsor information for <span class="font-medium">{{ selectedPatient?.full_name }}</span>?
+        </p>
+        <div class="flex flex-col gap-2">
+          <Button
+            label="Register HMO Information"
+            icon="pi pi-building"
+            :disabled="!selectedPatient"
+            @click="openHmoRegistration"
+          />
+          <Button
+            label="Register LGU Information"
+            icon="pi pi-flag"
+            severity="secondary"
+            :disabled="!selectedPatient"
+            @click="openLguRegistration"
+          />
+          <Button
+            label="Skip"
+            text
+            severity="secondary"
+            @click="skipSponsorRegistration"
+          />
+        </div>
+      </div>
+    </Dialog>
+
     <PatientAppointmentsDialog
       ref="patientAppointmentsDialog"
       :patient="selectedPatient"
@@ -330,6 +365,26 @@ const patientBillingsDialog = useTemplateRef<OpenDialogExpose>('patientBillingsD
 
 const patientForm = useTemplateRef<ToggleDialogExpose>('patientForm')
 const patientHMOInformationForm = useTemplateRef<ToggleDialogExpose>('patientHMOInformationForm')
+
+const registerSponsorInfoVisible = ref(false)
+const sponsorContext = ref<"HMO" | "LGU">("HMO")
+const openHmoRegistration = (): void => {
+  registerSponsorInfoVisible.value = false
+  sponsorContext.value = "HMO"
+  patientHMOInformationForm.value?.toggleDialog()
+}
+
+// For now LGU uses the same dialog as HMO until requirements are finalized.
+const openLguRegistration = (): void => {
+  registerSponsorInfoVisible.value = false
+  sponsorContext.value = "LGU"
+  patientHMOInformationForm.value?.toggleDialog()
+}
+
+const skipSponsorRegistration = (): void => {
+  registerSponsorInfoVisible.value = false
+  selectedPatient.value = undefined
+}
 
 const useClinicStore = clinicStore()
 const { selectedClinicId } = storeToRefs(useClinicStore)
@@ -591,7 +646,8 @@ const patientHMOInformationFormProps = computed(() => ({
   isLoading: isLoading.value,
   patient: selectedPatient.value,
   hmoTypes: hmoTypes.value,
-  hmos: hmos.value
+  hmos: hmos.value,
+  sponsor_context: sponsorContext.value
 }) satisfies PatientHMOInformationFormProps)
 
 const patientMedicalCategoryDialogProps = computed(() => ({
@@ -656,8 +712,7 @@ const {mutate: toggleStatusMutation} = patientTanstackService.toggleStatus()
 const folderSaveMutation = (): UUID => toUUID(crypto.randomUUID())
 
 const onSave = (): void => {
-  selectedPatient.value = undefined
-  patientForm.value?.toggleDialog()
+  void openCreatePatient()
 }
 
 const onSubmit = async (event: FormSubmitEvent): Promise<void> => {
@@ -760,15 +815,7 @@ const onSubmit = async (event: FormSubmitEvent): Promise<void> => {
               clinic_name: '',
               is_active: true,
             }
-            confirm.require({
-              message: `Would you like to register HMO information for ${fullName}?`,
-              header: 'Register HMO Information',
-              icon: 'pi pi-address-book',
-              acceptLabel: 'Yes, register now',
-              rejectLabel: 'Skip',
-              accept: () => { patientHMOInformationForm.value?.toggleDialog() },
-              reject: () => { selectedPatient.value = undefined },
-            })
+            registerSponsorInfoVisible.value = true
           }
         },
         async onError(error: APIError) {
@@ -792,8 +839,7 @@ const menuButtons = (patient: Patient): MenuItem[] => {
       label: `Edit this record`,
       icon: 'pi pi-pen-to-square',
       command: () => {
-        selectedPatient.value = patient
-        patientForm.value?.toggleDialog()
+        void openEditPatient(patient)
       },
     },
     {
@@ -861,11 +907,11 @@ const menuButtons = (patient: Patient): MenuItem[] => {
       },
     },
     {
-      label: 'View HMO Information',
+      label: 'View Sponsor Information',
       icon: 'pi pi-address-book',
       command: () => {
         selectedPatient.value = patient
-        patientHMOInformationForm.value?.toggleDialog()
+        registerSponsorInfoVisible.value = true
       },
     },
     {
@@ -988,8 +1034,32 @@ const resetQueries = async (): Promise<void> => {
   await queryClient.invalidateQueries({queryKey: [PatientTanstackKey.PATIENTS]})
 }
 
+const dropdownsReady = ref(false)
+const dropdownsLoading = ref(false)
+const ensureDropdownsLoaded = async (): Promise<void> => {
+  if (dropdownsReady.value || dropdownsLoading.value) return
+  dropdownsLoading.value = true
+  try {
+    await initializeDropdowns()
+    dropdownsReady.value = true
+  } finally {
+    dropdownsLoading.value = false
+  }
+}
+
+const openCreatePatient = async (): Promise<void> => {
+  selectedPatient.value = undefined
+  await ensureDropdownsLoaded()
+  patientForm.value?.toggleDialog()
+}
+
+const openEditPatient = async (patient: Patient): Promise<void> => {
+  selectedPatient.value = patient
+  await ensureDropdownsLoaded()
+  patientForm.value?.toggleDialog()
+}
+
 onMounted(async (): Promise<void> => {
-  void initializeDropdowns()
   await applyAppointmentDrillDown()
 })
 

@@ -21,9 +21,9 @@
             v-model="$field.value"
             :disabled="isReadOnly || isLoading"
             fluid
-            placeholder="Enter company name"
+            :placeholder="`Enter ${sponsorLabel} name`"
           />
-          <label for="company_name">Company name</label>
+          <label for="company_name">{{ sponsorLabel }} name</label>
           <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
             {{ $field.error.message }}
           </Message>
@@ -56,7 +56,7 @@
               </div>
             </template>
           </Select>
-          <label for="hmo_type">HMO Type</label>
+          <label for="hmo_type">{{ sponsorLabel }} Type</label>
           <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
             {{ $field.error.message }}
           </Message>
@@ -91,7 +91,7 @@
               </div>
             </template>
           </Select>
-          <label for="hmo">HMO</label>
+          <label for="hmo">{{ sponsorLabel }}</label>
           <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
             {{ $field.error.message }}
           </Message>
@@ -337,7 +337,9 @@ const form = useTemplateRef<FormInstance>('form')
 
 const emit = defineEmits<PatientHMOInformationFormEmits>()
 const props = defineProps<PatientHMOInformationFormProps>()
-const {patient, hmoTypes, hmos, isLoading: isParentLoading} = toRefs(props)
+const {patient, hmoTypes, hmos, isLoading: isParentLoading, sponsor_context} = toRefs(props)
+
+const sponsorLabel = computed(() => sponsor_context?.value === "LGU" ? "LGU" : "HMO")
 
 	const isPatientHMOInformationLoading = useIsLoading(PatientTanstackKey.PATIENT_HMO_INFORMATION)
 	const isPatientHMOHistoryLoading = useIsLoading(PatientTanstackKey.PATIENT_HMO_INFORMATION_HISTORY)
@@ -363,7 +365,12 @@ const {patient, hmoTypes, hmos, isLoading: isParentLoading} = toRefs(props)
 	const { mutate: editMutation } = patientHmoInformationTanstackService.updateByPatientId()
 	const { mutate: saveMutation } = patientHmoInformationTanstackService.save()
 
-	const header = computed<string>(() => patientHMOInformation.value ? `Edit ${patient.value?.full_name} HMO Information` : `Save ${patient.value?.full_name} HMO Information`)
+	const header = computed<string>(() => {
+	  const label = sponsorLabel.value
+	  return patientHMOInformation.value
+	    ? `Edit ${patient.value?.full_name} ${label} Information`
+	    : `Save ${patient.value?.full_name} ${label} Information`
+	})
 	const buttonProps = computed<ButtonProps>(() => ({
 	  label: patientHMOInformation.value ? `Edit` : `Save`,
 	  icon: patientHMOInformation.value ? 'pi pi-pen-to-square' : 'pi pi-save',

@@ -2965,6 +2965,9 @@ const printSelectedPatientInvoiceCopy = (): void => {
 
 const openReceiptEditor = async (): Promise<void> => {
   if (!selectedBillingDetail.value || !canEditReceipt.value) return
+  if (!machines.value.length && !techniques.value.length && !evaluations.value.length) {
+    await loadLookups()
+  }
   resetBillingForm()
   await loadBillingForEdit(selectedBillingDetail.value.id)
   billingEditDrawerVisible.value = true
@@ -3027,6 +3030,9 @@ const applyRouteBillingContext = async (): Promise<void> => {
       await openBillingDetails(billingId)
     } else {
       overlayActivated.value = props.overlayOnly
+      if (!machines.value.length && !techniques.value.length && !evaluations.value.length) {
+        await loadLookups()
+      }
       await loadBillingForEdit(billingId)
       billingEditDrawerVisible.value = true
       await syncBillingPatientHmoRates()
@@ -3105,7 +3111,6 @@ watch(editingBillingId, (v) => {
 // ── Mount ─────────────────────────────────────────────────────────────────────
 onMounted(async () => {
   syncRoleFromStorage()
-  await loadLookups()
   await fetchBillings()
   await applyRouteBillingContext()
 })

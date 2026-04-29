@@ -3995,7 +3995,6 @@ watch([createPatient, createBillingType], async () => {
 
 onMounted(async () => {
   syncRoleFromStorage()
-  await loadCreateLookups()
   await fetchBookedDatesForMonth(visibleYear.value, visibleMonth.value)
   await refreshAll()
 })
