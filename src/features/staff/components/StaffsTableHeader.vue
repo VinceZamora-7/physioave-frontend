@@ -70,17 +70,6 @@
         />
 
         <Button
-          v-if="canCreateStaff"
-          label="Save Staff"
-          icon="pi pi-plus"
-          severity="primary"
-          :loading="isLoading"
-          class="w-full sm:w-auto"
-          :pt="ptPrimaryBtn"
-          @click="emit('save')"
-        />
-
-        <Button
           label="Export"
           icon="pi pi-file-excel"
           severity="secondary"
@@ -124,7 +113,6 @@ const emit = defineEmits<{
   (e: "update:selectedSearch", v: string | undefined): void
   (e: "update:selectedStatus", v: Status): void
   (e: "reset"): void
-  (e: "save"): void
   (e: "manageSpecialties"): void
   (e: "manageRoles"): void
   (e: "export"): void

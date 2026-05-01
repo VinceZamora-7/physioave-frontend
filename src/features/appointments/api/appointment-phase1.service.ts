@@ -413,6 +413,9 @@ export interface EndOfDayHistoryItem {
   created_at: string
 }
 
+const branchParams = (clinic_id?: number): Record<string, unknown> =>
+  clinic_id ? {clinic_id} : {all_branches: true}
+
 export const appointmentPhase1Service = {
   refreshPromise: null as Promise<unknown> | null,
 
@@ -480,7 +483,7 @@ export const appointmentPhase1Service = {
           params: {
             from_date,
             to_date,
-            ...(clinic_id ? {clinic_id} : {})
+            ...branchParams(clinic_id)
           }
         }
       )
@@ -491,7 +494,7 @@ export const appointmentPhase1Service = {
     return await this.withRefreshRetry(async () => {
       const {data} = await pamsAPI.get<PtCompletedSessionsReport>(
         "/appointments/reports/pt-completed-sessions",
-        {params: {from_date, to_date, ...(clinic_id ? {clinic_id} : {})}}
+        {params: {from_date, to_date, ...branchParams(clinic_id)}}
       )
       return data
     })

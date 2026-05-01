@@ -55,6 +55,7 @@
             :filter="true"
             :filter-fields="['name']"
             :loading="isClinicsLoading"
+            :disabled="canViewAllBranches && !isPtForm"
             placeholder="Select Clinic">
             <template v-slot:value="slotProps">
               <div v-if="slotProps.value" class="flex items-center">
@@ -362,6 +363,7 @@ const showSpecialtyField = computed(() => selectedRoleAllowsSpecialty.value)
 const selectedRoleRequiresSpecialty = computed(() =>
   Boolean(selectedProviderRole.value?.requires_specialty_tag)
 )
+const canViewAllBranches = computed(() => Boolean(form.value?.states?.can_view_all_branches?.value))
 
 const resolver = ref(zodResolver(staffSchema))
 
@@ -479,4 +481,34 @@ watchDebounced(() => form.value?.states, async (newValues): Promise<void> => {
   deep: true,
   flush: "post"
 })
+
+// If an admin can view all branches, we still need a "home" clinic for record ownership/back-end constraints.
+// Auto-pick the first clinic if none is selected, and lock the picker to avoid confusion.
+watchDebounced(
+  () => ({
+    allBranches: Boolean(form.value?.states?.can_view_all_branches?.value),
+    clinicId: (form.value?.states?.clinic?.value as any)?.id ?? null,
+    clinicsCount: clinics.value?.length ?? 0
+  }),
+  async ({ allBranches, clinicId, clinicsCount }) => {
+    if (isPtForm.value) return
+    if (!allBranches) return
+    if (clinicId) return
+    if (!clinicsCount) return
+    const fallback = clinics.value?.[0]
+    if (!fallback) return
+
+    form.value?.setValues({
+      name: String(form.value?.states?.name?.value ?? ""),
+      email: String(form.value?.states?.email?.value ?? ""),
+      clinic: fallback,
+      can_view_all_branches: true,
+      role: form.value?.states?.role?.value,
+      also_pt: Boolean(form.value?.states?.also_pt?.value),
+      secondary_role: form.value?.states?.secondary_role?.value,
+      specialty: form.value?.states?.specialty?.value
+    })
+  },
+  { debounce: 50, maxWait: 200, deep: false }
+)
 </script>

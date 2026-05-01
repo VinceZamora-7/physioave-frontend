@@ -78,7 +78,6 @@
               :canManageRoles="canManageRoles"
               :canManageSpecialties="canManageSpecialties"
               @reset="resetFilters"
-              @save="openCreate"
               @manageSpecialties="openSpecialtyManager"
               @manageRoles="openRoleManager"
               @export="onExportToExcelThrottleFn"

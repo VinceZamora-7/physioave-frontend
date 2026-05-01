@@ -1,19 +1,41 @@
 <template>
   <section class="app-section-card-comfy space-y-3">
-    <div class="flex items-center justify-between gap-3">
+    <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
       <div class="space-y-1">
-        <h4 class="text-sm font-semibold">Recent HMO Transactions</h4>
-        <p class="text-xs opacity-70">Latest HMO billings recorded in the system.</p>
+        <h3 class="text-sm font-semibold">Manager HMO Dashboard</h3>
+        <p class="text-xs opacity-70">Recent HMO billings and quick tools for operations monitoring.</p>
       </div>
-      <div class="flex gap-2">
-        <Button label="Create SOA" icon="pi pi-file" size="small" outlined @click="soaVisible = true" />
-        <Button label="Refresh" icon="pi pi-refresh" size="small" text outlined :loading="loading" @click="load" />
+      <div class="flex flex-wrap items-start justify-between gap-2">
+        <Tag :value="canManageHmoDashboard ? 'Manager Access' : 'Read-only'" :severity="canManageHmoDashboard ? 'success' : 'secondary'" />
+        <div class="flex gap-2">
+          <Button label="Create SOA" icon="pi pi-file" size="small" outlined @click="soaVisible = true" />
+          <Button label="Refresh" icon="pi pi-refresh" size="small" text outlined :loading="loading" @click="load" />
+        </div>
       </div>
     </div>
+
+    <Message v-if="!canManageHmoDashboard" severity="warn" :closable="false" size="small">
+      Manager dashboard controls are available to operations leadership roles. Transaction totals remain visible.
+    </Message>
 
     <Message v-if="error" severity="warn" :closable="false" size="small">
       {{ error }}
     </Message>
+
+    <div class="grid grid-cols-1 gap-2 md:grid-cols-3">
+      <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3 text-sm">
+        <div class="text-xs opacity-60">Total Amount (Latest {{ items.length }})</div>
+        <div class="mt-1 text-lg font-semibold">{{ asCurrency(totalAmount) }}</div>
+      </div>
+      <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3 text-sm">
+        <div class="text-xs opacity-60">Total Paid</div>
+        <div class="mt-1 text-lg font-semibold">{{ asCurrency(totalPaid) }}</div>
+      </div>
+      <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3 text-sm">
+        <div class="text-xs opacity-60">Outstanding</div>
+        <div class="mt-1 text-lg font-semibold">{{ asCurrency(totalOutstanding) }}</div>
+      </div>
+    </div>
 
     <DataTable
       :value="items"
@@ -90,6 +112,30 @@ const router = useRouter()
 const soaVisible = ref(false)
 const soaRange = ref<Date[] | null>(null)
 
+const MANAGER_ROLE_KEYWORDS = ["owner", "chief", "coo", "operations", "manager", "admin"]
+const resolveRoleFromStorage = (): string => {
+  const candidateKeys = ["auth_user", "currentUser", "user", "profile", "loggedInUser", "google_user"]
+  for (const key of candidateKeys) {
+    const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key)
+    if (!raw) continue
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>
+      const role = String(parsed.role_name ?? parsed.role ?? parsed.userRole ?? parsed.primaryRole ?? "").trim()
+      if (role) return role
+    } catch {
+      // ignore
+    }
+  }
+  return ""
+}
+
+const currentRoleName = ref(resolveRoleFromStorage())
+const canManageHmoDashboard = computed(() => {
+  const normalized = currentRoleName.value.trim().toLowerCase()
+  if (!normalized) return false
+  return MANAGER_ROLE_KEYWORDS.some(keyword => normalized.includes(keyword))
+})
+
 const hasValidRange = computed(() => {
   const r = soaRange.value
   return Array.isArray(r) && r.length === 2 && r[0] instanceof Date && r[1] instanceof Date
@@ -113,6 +159,16 @@ const statusSeverity = (value: string | null): "success" | "danger" | "warning" 
   if (normalized.includes("pending") || normalized.includes("unpaid")) return "warning"
   return "secondary"
 }
+
+const totalAmount = computed(() =>
+  (items.value ?? []).reduce((sum, item) => sum + Number(item.total_amount ?? 0), 0)
+)
+const totalPaid = computed(() =>
+  (items.value ?? []).reduce((sum, item) => sum + Number(item.amount_paid ?? 0), 0)
+)
+const totalOutstanding = computed(() =>
+  Math.max(0, Number((totalAmount.value - totalPaid.value).toFixed(2)))
+)
 
 const load = async (): Promise<void> => {
   loading.value = true
@@ -147,6 +203,7 @@ const generateSoa = (): void => {
 }
 
 onMounted(() => {
+  currentRoleName.value = resolveRoleFromStorage()
   void load()
 })
 </script>
