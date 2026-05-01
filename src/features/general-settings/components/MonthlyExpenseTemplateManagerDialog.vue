@@ -17,6 +17,9 @@
         <Column field="amount" header="Amount" style="width: 160px">
           <template #body="{ data }">{{ asCurrency(data.amount) }}</template>
         </Column>
+        <Column field="post_day" header="Post Day" style="width: 120px">
+          <template #body="{ data }">Day {{ data.post_day || 1 }}</template>
+        </Column>
         <Column field="status" header="Status" style="width: 120px">
           <template #body="{ data }">
             <Tag :value="data.is_active ? 'Active' : 'Inactive'" :severity="data.is_active ? 'success' : 'danger'" />
@@ -45,6 +48,11 @@
           <label>Amount</label>
         </IftaLabel>
 
+        <IftaLabel>
+          <InputNumber v-model="formPostDay" :min="1" :max="31" fluid />
+          <label>Post Day</label>
+        </IftaLabel>
+
         <div class="flex justify-end gap-2 pt-2">
           <Button label="Cancel" text @click="editorVisible = false" />
           <Button label="Save" icon="pi pi-check" :loading="saving" @click="save" />
@@ -70,7 +78,7 @@ import { useToast } from "primevue/usetoast"
 import { pamsAPI } from "@/utils/axios-interceptor"
 import { errorToast, successToast } from "@/utils/toast.util"
 
-type Row = { id: number; name: string; amount: number; is_active: boolean }
+type Row = { id: number; name: string; amount: number; post_day: number; is_active: boolean }
 
 const visible = ref(false)
 const rows = ref<Row[]>([])
@@ -81,6 +89,7 @@ const editorVisible = ref(false)
 const editingId = ref<number | null>(null)
 const formName = ref("")
 const formAmount = ref(0)
+const formPostDay = ref(1)
 
 const toast = useToast()
 const confirm = useConfirm()
@@ -110,6 +119,7 @@ const openAdd = (): void => {
   editingId.value = null
   formName.value = ""
   formAmount.value = 0
+  formPostDay.value = 1
   editorVisible.value = true
 }
 
@@ -117,22 +127,25 @@ const openEdit = (row: Row): void => {
   editingId.value = row.id
   formName.value = row.name
   formAmount.value = Number(row.amount ?? 0)
+  formPostDay.value = Number(row.post_day ?? 1)
   editorVisible.value = true
 }
 
 const save = async (): Promise<void> => {
   const name = formName.value.trim()
   const amount = Number(formAmount.value ?? 0)
+  const post_day = Number(formPostDay.value ?? 1)
   if (!name) return errorToast(toast, "Name is required")
   if (!Number.isFinite(amount) || amount < 0) return errorToast(toast, "Amount must be 0 or greater")
+  if (!Number.isFinite(post_day) || post_day < 1 || post_day > 31) return errorToast(toast, "Post day must be from 1 to 31")
 
   saving.value = true
   try {
     if (editingId.value) {
-      await pamsAPI.put(`/billings/monthly-expense-templates/${editingId.value}`, { name, amount })
+      await pamsAPI.put(`/billings/monthly-expense-templates/${editingId.value}`, { name, amount, post_day })
       successToast(toast, "Template updated")
     } else {
-      await pamsAPI.post("/billings/monthly-expense-templates", { name, amount })
+      await pamsAPI.post("/billings/monthly-expense-templates", { name, amount, post_day })
       successToast(toast, "Template added")
     }
     editorVisible.value = false

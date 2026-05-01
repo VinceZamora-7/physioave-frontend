@@ -369,9 +369,13 @@ export interface DailyIncomeExpenseReport {
   summary: {
     income_entry_count: number
     expense_entry_count: number
+    unbilled_appointment_count: number
+    incomplete_billing_count: number
+    partial_billing_count: number
     gross_income: number
     cash_collected: number
     outstanding_balance: number
+    incomplete_billing_balance: number
     expense_total: number
     net_cash: number
   }
@@ -398,9 +402,13 @@ export interface MonthlyIncomeExpenseReport {
     days_with_expenses: number
     income_entry_count: number
     expense_entry_count: number
+    unbilled_appointment_count: number
+    incomplete_billing_count: number
+    partial_billing_count: number
     gross_income: number
     cash_collected: number
     outstanding_balance: number
+    incomplete_billing_balance: number
     expense_total: number
     net_cash: number
   }

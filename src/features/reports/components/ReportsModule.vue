@@ -64,7 +64,7 @@ type ExpenseItemRow = { id: number; name: string; is_active: boolean }
 const expenseItems = ref<ExpenseItemRow[]>([])
 const activeExpenseItems = computed(() => expenseItems.value.filter(item => item.is_active))
 
-type MonthlyExpenseTemplateRow = { id: number; name: string; amount: number; is_active: boolean }
+type MonthlyExpenseTemplateRow = { id: number; name: string; amount: number; post_day: number; is_active: boolean }
 const monthlyTemplates = ref<MonthlyExpenseTemplateRow[]>([])
 const appliedMonthlyTemplateIds = ref<number[]>([])
 const selectedMonthlyTemplateIds = ref<number[]>([])
@@ -122,7 +122,7 @@ const summaryCards = computed(() => [
   {
     label: "Gross Daily Charges",
     value: asCurrency(report.value?.summary.gross_income ?? 0),
-    caption: "Total billed value for the selected day"
+    caption: "Only PARTIAL, BILLED, and PAID records"
   },
   {
     label: "Cash Collected",
@@ -132,7 +132,17 @@ const summaryCards = computed(() => [
   {
     label: "Outstanding",
     value: asCurrency(report.value?.summary.outstanding_balance ?? 0),
-    caption: "Remaining balance across all entries"
+    caption: "Remaining balance from billed/partial entries"
+  },
+  {
+    label: "Unbilled Appointments",
+    value: String(report.value?.summary.unbilled_appointment_count ?? 0),
+    caption: "Appointments not yet converted to billable records"
+  },
+  {
+    label: "Incomplete Billings",
+    value: `${report.value?.summary.incomplete_billing_count ?? 0} · ${asCurrency(report.value?.summary.incomplete_billing_balance ?? 0)}`,
+    caption: `${report.value?.summary.partial_billing_count ?? 0} partially paid billings included`
   },
   {
     label: "Expenses",
@@ -155,7 +165,7 @@ const monthlySummaryCards = computed(() => [
   {
     label: "Gross Monthly Charges",
     value: asCurrency(monthlyReport.value?.summary.gross_income ?? 0),
-    caption: "Total billed value recorded this month"
+    caption: "Only PARTIAL, BILLED, and PAID records"
   },
   {
     label: "Cash Collected",
@@ -165,7 +175,17 @@ const monthlySummaryCards = computed(() => [
   {
     label: "Outstanding",
     value: asCurrency(monthlyReport.value?.summary.outstanding_balance ?? 0),
-    caption: "Uncleared balance across the month"
+    caption: "Uncleared billed/partial balance across the month"
+  },
+  {
+    label: "Unbilled Appointments",
+    value: String(monthlyReport.value?.summary.unbilled_appointment_count ?? 0),
+    caption: "Appointments still outside billed totals"
+  },
+  {
+    label: "Incomplete Billings",
+    value: `${monthlyReport.value?.summary.incomplete_billing_count ?? 0} · ${asCurrency(monthlyReport.value?.summary.incomplete_billing_balance ?? 0)}`,
+    caption: `${monthlyReport.value?.summary.partial_billing_count ?? 0} partially paid billings included`
   },
   {
     label: "Expenses",
@@ -990,7 +1010,17 @@ onMounted(async () => {
           <h2 class="app-section-title">Expenses</h2>
           <p class="text-sm opacity-70">Add daily operating expenses so the net cash view stays complete.</p>
         </div>
-        <div class="text-sm opacity-70">Total {{ asCurrency(report?.summary.expense_total ?? 0) }}</div>
+        <div class="flex flex-wrap items-center gap-2">
+          <Button
+            v-if="canManageExpenses"
+            label="Apply Monthly Templates"
+            icon="pi pi-calendar-plus"
+            outlined
+            size="small"
+            @click="openMonthlyExpenseDialog"
+          />
+          <div class="text-sm opacity-70">Total {{ asCurrency(report?.summary.expense_total ?? 0) }}</div>
+        </div>
       </div>
 
       <div class="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.3fr)_180px_minmax(0,1fr)_auto]">
@@ -1146,7 +1176,7 @@ onMounted(async () => {
                 />
                 <div class="flex-1">
                   <div class="text-sm font-medium">{{ tpl.name }}</div>
-                  <div class="text-xs opacity-70">{{ asCurrency(tpl.amount) }}</div>
+                  <div class="text-xs opacity-70">{{ asCurrency(tpl.amount) }} · Posts day {{ tpl.post_day || 1 }}</div>
                 </div>
                 <Tag v-if="appliedMonthlyTemplateIds.includes(tpl.id)" value="Applied" severity="success" />
                 <Tag v-else-if="!tpl.is_active" value="Inactive" severity="danger" />
