@@ -2009,9 +2009,6 @@ const displayBillingType = (value?: string): string => {
   if (n === "SELF_PAY_PACKAGE")                         return "Self Pay: Package"
   if (n === "HMO_BILLING" || n === "HMO")               return "HMO"
   if (n === "LGU_BILLING" || n === "LGU")               return "LGU"
-  if (n === "INDIVIDUAL_PRICING")                       return "Individual Pricing"
-  if (n === "PACKAGE_BILLING")                          return "Package Billing"
-  if (n === "ALA_CARTE")                                return "A La Carte"
   return value?.trim() || "N/A"
 }
 
@@ -2061,9 +2058,6 @@ const normalizeBillingTypeValue = (value?: string): BillingType|undefined => {
   if (["self pay: package service","self_pay_package"].includes(n)) return "SELF_PAY_PACKAGE"
   if (["hmo","hmo_billing"].includes(n)) return "HMO_BILLING"
   if (["lgu","lgu_billing"].includes(n)) return "LGU_BILLING"
-  if (["individual pricing","individual_pricing"].includes(n)) return "INDIVIDUAL_PRICING"
-  if (["package billing","package_billing"].includes(n)) return "PACKAGE_BILLING"
-  if (["ala carte","a la carte","ala_carte"].includes(n)) return "ALA_CARTE"
   return undefined
 }
 
@@ -3041,7 +3035,7 @@ const applyRouteBillingContext = async (): Promise<void> => {
 }
 
 // ── Type normalisation ────────────────────────────────────────────────────────
-const normalizeBillingType  = (value: string): BillingType  => normalizeBillingTypeValue(value) ?? "ALA_CARTE"
+const normalizeBillingType  = (value: string): BillingType  => normalizeBillingTypeValue(value) ?? "SELF_PAY_SINGLE"
 const normalizeServiceType  = (value: string): ServiceType  => {
   const n = value.trim().toLowerCase()
   if (n === "package") return "PACKAGE"; if (n === "hmo") return "HMO"; if (n === "lgu") return "LGU"
@@ -3064,7 +3058,6 @@ const parseBillingLines = (raw?: string): SelectedLine[] => {
 watch(() => form.value.billing_type, (value) => {
   const serviceTypeMap: Record<BillingType, ServiceType> = {
     SELF_PAY_SINGLE: "SINGLE", SELF_PAY_PACKAGE: "PACKAGE", HMO_BILLING: "HMO", LGU_BILLING: "LGU",
-    INDIVIDUAL_PRICING: "SINGLE", PACKAGE_BILLING: "PACKAGE", ALA_CARTE: "SINGLE",
   }
   form.value.service_type = serviceTypeMap[value] ?? "SINGLE"
   if (value === "HMO_BILLING") {

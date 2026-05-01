@@ -3,9 +3,6 @@ import type {Pageable} from "@/models/paging";
 import type {AxiosResponse} from "axios";
 
 export type BillingType =
-  | "INDIVIDUAL_PRICING"
-  | "PACKAGE_BILLING"
-  | "ALA_CARTE"
   | "SELF_PAY_SINGLE"
   | "SELF_PAY_PACKAGE"
   | "HMO_BILLING"

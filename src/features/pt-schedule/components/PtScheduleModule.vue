@@ -735,7 +735,6 @@ const isMultiSessionAppointment = (appointment: AppointmentListItem): boolean =>
 
   return normalizedServiceType === "PACKAGE"
     || normalizedBillingType === "SELF_PAY_PACKAGE"
-    || normalizedBillingType === "PACKAGE_BILLING"
 }
 const classifyCalendarDayStatus = (rows: AppointmentListItem[]): CalendarDayStatus | null => {
   if (!rows.length) return null

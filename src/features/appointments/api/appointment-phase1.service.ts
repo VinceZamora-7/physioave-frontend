@@ -1,10 +1,19 @@
-import {pamsAPI} from "@/utils/axios-interceptor";
-import type {Pageable} from "@/models/paging";
-import type {AxiosResponse} from "axios";
-import axios, {HttpStatusCode} from "axios";
+import { pamsAPI } from "@/utils/axios-interceptor"
+import type { Pageable } from "@/models/paging"
+import axios, { HttpStatusCode, type AxiosRequestConfig, type AxiosResponse } from "axios"
 
 export type AppointmentPhase = "EVAL" | "SESSION" | "RE_EVAL"
 export type AppointmentLocationContext = "IN_CLINIC" | "HOME_CARE"
+export type AppointmentAttendanceStatus = "ATTENDED" | "NO_SHOW"
+export type AppointmentDailyLogSignatureState = "PENDING" | "PATIENT_SIGNED" | "PT_SIGNED" | "FULLY_SIGNED" | "NO_SHOW"
+export type AppointmentBillingType =
+  | "SELF_PAY_SINGLE"
+  | "SELF_PAY_PACKAGE"
+  | "HMO_BILLING"
+  | "LGU_BILLING"
+export type AppointmentServiceType = "SINGLE" | "PACKAGE" | "HMO" | "LGU"
+export type AppointmentSponsorType = "HMO" | "LGU"
+export type QueryParams = Record<string, string | number | boolean | null | undefined>
 
 export interface AppointmentListItem {
   id: number
@@ -46,7 +55,7 @@ export interface AppointmentCheckoutSummary {
     amount_to_collect: number
   }
   sponsor_wallet?: {
-    sponsor_type: "HMO" | "LGU"
+    sponsor_type: AppointmentSponsorType
     sponsor_name: string
     authorization_status: "AUTHORIZED"
     consumed_sessions?: number
@@ -55,11 +64,52 @@ export interface AppointmentCheckoutSummary {
   }
 }
 
+export interface AppointmentBillingLineItem {
+  id?: number | string
+  type: string
+  name: string
+  quantity: number
+  price: number
+  originalPrice?: number
+}
+
+export interface AppointmentBillingSnapshot {
+  appointment_id: number
+  appointment_public_id?: string
+  phase1_billing_id: number
+  phase1_billing_public_id?: string
+  patient_id: number
+  patient_public_id?: string
+  patient_name: string
+  provider_name?: string
+  active_billing_package_id?: string
+  active_billing_package_name?: string
+  active_billing_package_source?: string
+  specialty_tag_name?: string
+  specialty_tag_is_active?: boolean
+  treatment_area_name?: string
+  treatment_area_color?: string
+  treatment_area_is_active?: boolean
+  starts_at: string
+  ends_at: string
+  billing_type?: string
+  service_type?: string
+  billing_status?: string
+  service_name?: string
+  amount_due: number
+  amount_paid: number
+  total_amount: number
+  session_sequence?: number
+  total_sessions?: number
+  session_sequence_label?: string
+  line_items: AppointmentBillingLineItem[]
+}
+
 export interface AppointmentEncounterTicket {
   id: number
   appointment_public_id?: string
   patient_public_id?: string
-  attendance_status: "ATTENDED" | "NO_SHOW"
+  attendance_status: AppointmentAttendanceStatus
   attended_at: string
   phase1_billing_id?: number
   phase1_billing_public_id?: string
@@ -78,44 +128,29 @@ export interface AppointmentEncounterTicket {
   signed_off_at: string
   record_locked: boolean
   locked_at?: string
-  billing_snapshot?: {
-    appointment_id: number
-    appointment_public_id?: string
-    phase1_billing_id: number
-    phase1_billing_public_id?: string
-    patient_id: number
-    patient_public_id?: string
-    patient_name: string
-    provider_name?: string
-    active_billing_package_id?: string
-    active_billing_package_name?: string
-    active_billing_package_source?: string
-    specialty_tag_name?: string
-    specialty_tag_is_active?: boolean
-    treatment_area_name?: string
-    treatment_area_color?: string
-    treatment_area_is_active?: boolean
-    starts_at: string
-    ends_at: string
-    billing_type?: string
-    service_type?: string
-    billing_status?: string
-    service_name?: string
-    amount_due: number
-    amount_paid: number
-    total_amount: number
-    session_sequence?: number
-    total_sessions?: number
-    session_sequence_label?: string
-    line_items: Array<{
-      id?: number | string
-      type: string
-      name: string
-      quantity: number
-      price: number
-      originalPrice?: number
-    }>
-  }
+  billing_snapshot?: AppointmentBillingSnapshot
+}
+
+export interface LguCreditSummaryItem {
+  id: number
+  service_item: string
+  package_name: string
+  total_purchased: number
+  used: number
+  balance: number
+  expiry_date?: string
+  status: string
+}
+
+export interface LguCreditSummary {
+  authorization_id: number
+  package_name: string
+  total_sessions: number
+  consumed_sessions: number
+  billed_sessions: number
+  authorization_status: string
+  expiry_date?: string
+  items: LguCreditSummaryItem[]
 }
 
 export interface AppointmentDetail extends AppointmentListItem {
@@ -127,25 +162,13 @@ export interface AppointmentDetail extends AppointmentListItem {
   dropout_status?: string
   checkout_summary: AppointmentCheckoutSummary
   encounter_ticket?: AppointmentEncounterTicket
-  lgu_credit_summary?: {
-    authorization_id: number
-    package_name: string
-    total_sessions: number
-    consumed_sessions: number
-    billed_sessions: number
-    authorization_status: string
-    expiry_date?: string
-    items: Array<{
-      id: number
-      service_item: string
-      package_name: string
-      total_purchased: number
-      used: number
-      balance: number
-      expiry_date?: string
-      status: string
-    }>
-  }
+  lgu_credit_summary?: LguCreditSummary
+}
+
+export interface StaffReference {
+  id?: number
+  name?: string
+  role_name?: string
 }
 
 export interface DailyPtDeckBlock extends AppointmentListItem {
@@ -153,19 +176,9 @@ export interface DailyPtDeckBlock extends AppointmentListItem {
     id: number
     name: string
   }
-  pt?: {
-    id?: number
-    name?: string
-    role_name?: string
-  }
-  referring_doctor?: {
-    id?: number
-    name?: string
-  }
-  support_staff?: {
-    id?: number
-    name?: string
-  }
+  pt?: StaffReference
+  referring_doctor?: Pick<StaffReference, "id" | "name">
+  support_staff?: Pick<StaffReference, "id" | "name">
   start: string
   end: string
   treatment_area?: {
@@ -194,6 +207,12 @@ export interface DailyPtDeckGroup {
   appointments: DailyPtDeckBlock[]
 }
 
+export interface AppointmentSessionSchedulePayload {
+  starts_at: string
+  ends_at: string
+  label?: string
+}
+
 export interface ReschedulePayload {
   starts_at: string
   ends_at: string
@@ -211,16 +230,12 @@ export interface AppointmentCreatePayload {
   support_staff_id?: number
   starts_at: string
   ends_at: string
-  session_schedules?: Array<{
-    starts_at: string
-    ends_at: string
-    label?: string
-  }>
+  session_schedules?: AppointmentSessionSchedulePayload[]
   appointment_phase?: AppointmentPhase
   appointment_type_id?: number
   appointment_status_id?: number
-  billing_type?: "INDIVIDUAL_PRICING" | "PACKAGE_BILLING" | "ALA_CARTE" | "SELF_PAY_SINGLE" | "SELF_PAY_PACKAGE" | "HMO_BILLING" | "LGU_BILLING"
-  service_type?: "SINGLE" | "PACKAGE" | "HMO" | "LGU"
+  billing_type?: AppointmentBillingType
+  service_type?: AppointmentServiceType
   shared_phase1_billing_id?: number
   package_id?: number
   lgu_program_id?: number
@@ -266,8 +281,6 @@ export interface AppointmentPtCompletionPayload {
   pt_completion_tag?: string
 }
 
-export type AppointmentDailyLogSignatureState = "PENDING" | "PATIENT_SIGNED" | "PT_SIGNED" | "FULLY_SIGNED" | "NO_SHOW"
-
 export interface AppointmentDailyLogItem {
   id: number
   public_id: string
@@ -288,7 +301,7 @@ export interface AppointmentDailyLogItem {
   appointment_status: string
   billing_status: string
   encounter_ticket_id?: number
-  attendance_status?: "ATTENDED" | "NO_SHOW"
+  attendance_status?: AppointmentAttendanceStatus
   attended_at?: string
   patient_acknowledged_by?: string
   patient_signature_data_url?: string
@@ -321,11 +334,29 @@ export interface AppointmentDailyLogResponse {
   items: AppointmentDailyLogItem[]
 }
 
-export interface AppointmentDailyLogParams {
+export interface AppointmentDailyLogParams extends QueryParams {
   date?: string
   clinic_id?: number
   doctor_id?: number
   search?: string
+}
+
+export interface AppointmentDayOptions extends QueryParams {
+  phase?: AppointmentPhase
+  clinic_id?: number
+}
+
+export interface AppointmentUpcomingOptions extends QueryParams {
+  clinic_id?: number
+  phase?: AppointmentPhase
+  limit?: number
+}
+
+export interface EndOfDayHistoryParams extends QueryParams {
+  clinic_id?: number
+  from_date?: string
+  to_date?: string
+  limit?: number
 }
 
 export interface ReferringDoctorCompletedSessionsItem {
@@ -363,6 +394,17 @@ export interface PtEndOfDayPendingSignatureByPt {
   pending_pt_signature_count: number
 }
 
+export interface PtEndOfDaySummary {
+  total_appointments: number
+  eligible_appointments: number
+  pt_signed_appointments: number
+  pending_pt_signature_count: number
+  billing_cleared_appointments: number
+  pending_billing_count: number
+  all_appointments_done: boolean
+  all_billings_cleared: boolean
+}
+
 export interface PtEndOfDayReport {
   selected_date: string
   clinic: {
@@ -375,16 +417,7 @@ export interface PtEndOfDayReport {
   }
   eod_report_generated: boolean
   eod_generated_at?: string
-  summary: {
-    total_appointments: number
-    eligible_appointments: number
-    pt_signed_appointments: number
-    pending_pt_signature_count: number
-    billing_cleared_appointments: number
-    pending_billing_count: number
-    all_appointments_done: boolean
-    all_billings_cleared: boolean
-  }
+  summary: PtEndOfDaySummary
   pending_pt_signatures_by_pt: PtEndOfDayPendingSignatureByPt[]
 }
 
@@ -396,16 +429,7 @@ export interface EndOfDayHistoryItem {
   clinic_start_time?: string
   clinic_end_time?: string
   eod_generated_at: string
-  summary: {
-    total_appointments: number
-    eligible_appointments: number
-    pt_signed_appointments: number
-    pending_pt_signature_count: number
-    billing_cleared_appointments: number
-    pending_billing_count: number
-    all_appointments_done: boolean
-    all_billings_cleared: boolean
-  }
+  summary: PtEndOfDaySummary
   pending_pt_signatures_by_pt: PtEndOfDayPendingSignatureByPt[]
   generated_by_staff_id?: number
   generated_by_name?: string
@@ -413,165 +437,238 @@ export interface EndOfDayHistoryItem {
   created_at: string
 }
 
-const branchParams = (clinic_id?: number): Record<string, unknown> =>
-  clinic_id ? {clinic_id} : {all_branches: true}
+export interface DropoutStatusUpdateResult {
+  dropout_status: string
+  dropout_billing_id?: number
+  dropout_billing_public_id?: string
+}
+
+const APPOINTMENTS_PATH = "/appointments"
+const REFRESH_TOKENS_PATH = "/refresh-tokens"
+const AUTH_ERROR_STATUSES = new Set<number>([HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden])
+
+let refreshPromise: Promise<unknown> | null = null
+
+const branchParams = (clinicId?: number): QueryParams => (
+  clinicId ? { clinic_id: clinicId } : { all_branches: true }
+)
+
+const extractAxiosErrorMessage = (error: unknown): string => {
+  if (!axios.isAxiosError(error)) return ""
+
+  const responseData = error.response?.data
+
+  if (typeof responseData === "string") return responseData
+  if (responseData && typeof responseData === "object") {
+    const data = responseData as Record<string, unknown>
+    return String(data.message || data.detail || data.error || error.message || "")
+  }
+
+  return String(error.message || "")
+}
+
+const hasJwtMessage = (message: string): boolean => {
+  const normalizedMessage = message.toLowerCase()
+
+  return (
+    normalizedMessage.includes("expired") ||
+    normalizedMessage.includes("jwt") ||
+    normalizedMessage.includes("token")
+  )
+}
+
+const shouldRefreshToken = (error: unknown): boolean => {
+  if (!axios.isAxiosError(error)) return false
+
+  const status = error.response?.status
+  const message = extractAxiosErrorMessage(error)
+
+  if (status && AUTH_ERROR_STATUSES.has(status)) return true
+
+  // Keep support for backends that incorrectly return 500 for expired JWT,
+  // but avoid refreshing on every real server error.
+  return status === HttpStatusCode.InternalServerError && hasJwtMessage(message)
+}
+
+const ensureRefreshed = async (): Promise<void> => {
+  if (!refreshPromise) {
+    refreshPromise = pamsAPI.post(REFRESH_TOKENS_PATH).finally(() => {
+      refreshPromise = null
+    })
+  }
+
+  await refreshPromise
+}
+
+const withRefreshRetry = async <T>(operation: () => Promise<T>): Promise<T> => {
+  try {
+    return await operation()
+  } catch (error: unknown) {
+    if (!shouldRefreshToken(error)) throw error
+
+    await ensureRefreshed()
+    return await operation()
+  }
+}
+
+const getData = async <T>(url: string, config?: AxiosRequestConfig): Promise<T> => {
+  return await withRefreshRetry(async () => {
+    const { data } = await pamsAPI.get<T>(url, config)
+    return data
+  })
+}
+
+const postData = async <T, TPayload = unknown>(url: string, payload?: TPayload): Promise<T> => {
+  return await withRefreshRetry(async () => {
+    const { data } = await pamsAPI.post<T>(url, payload)
+    return data
+  })
+}
+
+const patchData = async <T, TPayload = unknown>(url: string, payload?: TPayload): Promise<T> => {
+  return await withRefreshRetry(async () => {
+    const { data } = await pamsAPI.patch<T>(url, payload)
+    return data
+  })
+}
+
+const requestVoid = async (config: AxiosRequestConfig): Promise<void> => {
+  await withRefreshRetry(async () => {
+    await pamsAPI.request(config)
+  })
+}
 
 export const appointmentPhase1Service = {
-  refreshPromise: null as Promise<unknown> | null,
+  ensureRefreshed,
+  withRefreshRetry,
 
-  async ensureRefreshed(): Promise<void> {
-    if (!this.refreshPromise) {
-      this.refreshPromise = pamsAPI.post("/refresh-tokens")
-        .finally(() => {
-          this.refreshPromise = null
-        })
-    }
-    await this.refreshPromise
+  getAll(params: QueryParams = {}): Promise<Pageable<AppointmentListItem>> {
+    return getData<Pageable<AppointmentListItem>>(APPOINTMENTS_PATH, { params })
   },
 
-  async withRefreshRetry<T>(operation: () => Promise<T>): Promise<T> {
-    try {
-      return await operation()
-    } catch (error: unknown) {
-      if (axios.isAxiosError(error)) {
-        const status = error.response?.status
-        const message = String(error.response?.data?.message || error.response?.data?.detail || error.message || "").toLowerCase()
-        const shouldRefresh =
-          status === HttpStatusCode.Unauthorized ||
-          status === HttpStatusCode.InternalServerError ||
-          message.includes("expired") ||
-          message.includes("jwt")
+  getDay(date: string, options: AppointmentDayOptions = {}): Promise<AppointmentListItem[]> {
+    return getData<AppointmentListItem[]>(`${APPOINTMENTS_PATH}/calendar/day`, {
+      params: { date, ...options }
+    })
+  },
 
-        if (shouldRefresh) {
-          await this.ensureRefreshed()
-          return await operation()
+  getDailyPtDeck(date: string, clinicId: number): Promise<DailyPtDeckGroup[]> {
+    return getData<DailyPtDeckGroup[]>(`${APPOINTMENTS_PATH}/calendar/day/pt-deck`, {
+      params: { date, clinic_id: clinicId }
+    })
+  },
+
+  getMyUpcoming(options: AppointmentUpcomingOptions = {}): Promise<AppointmentListItem[]> {
+    return getData<AppointmentListItem[]>(`${APPOINTMENTS_PATH}/my-upcoming`, { params: options })
+  },
+
+  getCompletedSessionsByReferringDoctor(
+    fromDate: string,
+    toDate: string,
+    clinicId?: number
+  ): Promise<ReferringDoctorCompletedSessionsReport> {
+    return getData<ReferringDoctorCompletedSessionsReport>(
+      `${APPOINTMENTS_PATH}/reports/referring-doctor-completed-sessions`,
+      {
+        params: {
+          from_date: fromDate,
+          to_date: toDate,
+          ...branchParams(clinicId)
         }
       }
-      throw error
-    }
+    )
   },
 
-  async getAll(params: Record<string, unknown>): Promise<Pageable<AppointmentListItem> | undefined> {
-    return await this.withRefreshRetry(async () => {
-      const {data} = await pamsAPI.get<Pageable<AppointmentListItem>>("/appointments", {params})
-      return data
+  getCompletedSessionsByPt(
+    fromDate: string,
+    toDate: string,
+    clinicId?: number
+  ): Promise<PtCompletedSessionsReport> {
+    return getData<PtCompletedSessionsReport>(`${APPOINTMENTS_PATH}/reports/pt-completed-sessions`, {
+      params: {
+        from_date: fromDate,
+        to_date: toDate,
+        ...branchParams(clinicId)
+      }
     })
   },
-  async getDay(date: string, options?: { phase?: AppointmentPhase; clinic_id?: number }): Promise<AppointmentListItem[] | undefined> {
-    return await this.withRefreshRetry(async () => {
-      const {data} = await pamsAPI.get<AppointmentListItem[]>("/appointments/calendar/day", {params: {date, ...options}})
-      return data
+
+  getPtEndOfDay(date: string, clinicId: number): Promise<PtEndOfDayReport> {
+    return getData<PtEndOfDayReport>(`${APPOINTMENTS_PATH}/reports/pt-end-of-day`, {
+      params: { date, clinic_id: clinicId }
     })
   },
-  async getDailyPtDeck(date: string, clinic_id: number): Promise<DailyPtDeckGroup[] | undefined> {
-    return await this.withRefreshRetry(async () => {
-      const {data} = await pamsAPI.get<DailyPtDeckGroup[]>("/appointments/calendar/day/pt-deck", {params: {date, clinic_id}})
-      return data
+
+  getEndOfDayHistory(params: EndOfDayHistoryParams = {}): Promise<EndOfDayHistoryItem[]> {
+    return getData<EndOfDayHistoryItem[]>(`${APPOINTMENTS_PATH}/reports/end-of-day-history`, {
+      params
     })
   },
-  async getMyUpcoming(options?: { clinic_id?: number; phase?: AppointmentPhase; limit?: number }): Promise<AppointmentListItem[] | undefined> {
-    return await this.withRefreshRetry(async () => {
-      const {data} = await pamsAPI.get<AppointmentListItem[]>("/appointments/my-upcoming", {params: options})
-      return data
+
+  getDailyLog(params: AppointmentDailyLogParams): Promise<AppointmentDailyLogResponse> {
+    return getData<AppointmentDailyLogResponse>(`${APPOINTMENTS_PATH}/daily-log`, { params })
+  },
+
+  getById(id: number): Promise<AppointmentDetail> {
+    return getData<AppointmentDetail>(`${APPOINTMENTS_PATH}/${id}`)
+  },
+
+  create(payload: AppointmentCreatePayload): Promise<AppointmentCreateResult> {
+    return postData<AppointmentCreateResult, AppointmentCreatePayload>(APPOINTMENTS_PATH, payload)
+  },
+
+  update(id: number, payload: AppointmentUpdatePayload): Promise<void> {
+    return requestVoid({
+      method: "PUT",
+      url: `${APPOINTMENTS_PATH}/${id}`,
+      data: payload
     })
   },
-  async getCompletedSessionsByReferringDoctor(from_date: string, to_date: string, clinic_id?: number): Promise<ReferringDoctorCompletedSessionsReport | undefined> {
-    return await this.withRefreshRetry(async () => {
-      const {data} = await pamsAPI.get<ReferringDoctorCompletedSessionsReport>(
-        "/appointments/reports/referring-doctor-completed-sessions",
-        {
-          params: {
-            from_date,
-            to_date,
-            ...branchParams(clinic_id)
-          }
-        }
-      )
-      return data
+
+  reschedule(id: number, payload: ReschedulePayload): Promise<void> {
+    return requestVoid({
+      method: "POST",
+      url: `${APPOINTMENTS_PATH}/${id}/reschedule`,
+      data: payload
     })
   },
-  async getCompletedSessionsByPt(from_date: string, to_date: string, clinic_id?: number): Promise<PtCompletedSessionsReport | undefined> {
-    return await this.withRefreshRetry(async () => {
-      const {data} = await pamsAPI.get<PtCompletedSessionsReport>(
-        "/appointments/reports/pt-completed-sessions",
-        {params: {from_date, to_date, ...branchParams(clinic_id)}}
-      )
-      return data
+
+  delete(id: number): Promise<void> {
+    return requestVoid({
+      method: "DELETE",
+      url: `${APPOINTMENTS_PATH}/${id}`
     })
   },
-  async getPtEndOfDay(date: string, clinic_id: number): Promise<PtEndOfDayReport | undefined> {
-    return await this.withRefreshRetry(async () => {
-      const {data} = await pamsAPI.get<PtEndOfDayReport>("/appointments/reports/pt-end-of-day", {
-        params: {date, clinic_id}
-      })
-      return data
-    })
-  },
-  async getEndOfDayHistory(params?: { clinic_id?: number; from_date?: string; to_date?: string; limit?: number }): Promise<EndOfDayHistoryItem[] | undefined> {
-    return await this.withRefreshRetry(async () => {
-      const {data} = await pamsAPI.get<EndOfDayHistoryItem[]>("/appointments/reports/end-of-day-history", {
-        params
-      })
-      return data
-    })
-  },
-  async getDailyLog(params: AppointmentDailyLogParams): Promise<AppointmentDailyLogResponse | undefined> {
-    return await this.withRefreshRetry(async () => {
-      const {data} = await pamsAPI.get<AppointmentDailyLogResponse>("/appointments/daily-log", {params})
-      return data
-    })
-  },
-  async getById(id: number): Promise<AppointmentDetail | undefined> {
-    return await this.withRefreshRetry(async () => {
-      const {data} = await pamsAPI.get<AppointmentDetail>(`/appointments/${id}`)
-      return data
-    })
-  },
-  async create(payload: AppointmentCreatePayload): Promise<AppointmentCreateResult | undefined> {
-    return await this.withRefreshRetry(async () => {
-      const {data} = await pamsAPI.post<AppointmentCreateResult>("/appointments", payload)
-      return data
-    })
-  },
-  async update(id: number, payload: AppointmentUpdatePayload): Promise<void> {
-    await this.withRefreshRetry(async () => {
-      await pamsAPI.put(`/appointments/${id}`, payload)
-    })
-  },
-  async reschedule(id: number, payload: ReschedulePayload): Promise<void> {
-    await this.withRefreshRetry(async () => {
-      await pamsAPI.post(`/appointments/${id}/reschedule`, payload)
-    })
-  },
-  async delete(id: number): Promise<void> {
-    await this.withRefreshRetry(async () => {
-      await pamsAPI.delete(`/appointments/${id}`)
-    })
-  },
-  async processEncounterTicket(id: number, payload: AppointmentEncounterTicketPayload): Promise<AppointmentEncounterTicket | undefined> {
-    return await this.withRefreshRetry(async () => {
-      const {data} = await pamsAPI.post<AppointmentEncounterTicket>(`/appointments/${id}/encounter-ticket`, payload)
-      return data
-    })
-  },
-  async processPtCompletion(id: number, payload: AppointmentPtCompletionPayload): Promise<AppointmentEncounterTicket | undefined> {
-    return await this.withRefreshRetry(async () => {
-      const {data} = await pamsAPI.post<AppointmentEncounterTicket>(`/appointments/${id}/pt-completion`, payload)
-      return data
-    })
-  },
-  async updateDropoutStatus(
+
+  processEncounterTicket(
     id: number,
-    dropoutStatus: string
-  ): Promise<{ dropout_status: string; dropout_billing_id?: number; dropout_billing_public_id?: string } | undefined> {
-    return await this.withRefreshRetry(async () => {
-      const {data} = await pamsAPI.patch<{ dropout_status: string; dropout_billing_id?: number; dropout_billing_public_id?: string }>(`/appointments/${id}/dropout-status`, { dropout_status: dropoutStatus })
-      return data
+    payload: AppointmentEncounterTicketPayload
+  ): Promise<AppointmentEncounterTicket> {
+    return postData<AppointmentEncounterTicket, AppointmentEncounterTicketPayload>(
+      `${APPOINTMENTS_PATH}/${id}/encounter-ticket`,
+      payload
+    )
+  },
+
+  processPtCompletion(
+    id: number,
+    payload: AppointmentPtCompletionPayload
+  ): Promise<AppointmentEncounterTicket> {
+    return postData<AppointmentEncounterTicket, AppointmentPtCompletionPayload>(
+      `${APPOINTMENTS_PATH}/${id}/pt-completion`,
+      payload
+    )
+  },
+
+  updateDropoutStatus(id: number, dropoutStatus: string): Promise<DropoutStatusUpdateResult> {
+    return patchData<DropoutStatusUpdateResult>(`${APPOINTMENTS_PATH}/${id}/dropout-status`, {
+      dropout_status: dropoutStatus
     })
   },
-  async exportCsv(params: Record<string, unknown>): Promise<AxiosResponse<Blob> | undefined> {
-    return await this.withRefreshRetry(async () => {
-      return await pamsAPI.get("/appointments/export/csv", {
+
+  exportCsv(params: QueryParams): Promise<AxiosResponse<Blob>> {
+    return withRefreshRetry(async () => {
+      return await pamsAPI.get<Blob>(`${APPOINTMENTS_PATH}/export/csv`, {
         params,
         responseType: "blob"
       })

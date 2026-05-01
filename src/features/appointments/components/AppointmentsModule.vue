@@ -2,610 +2,496 @@
   <main class="app-page-shell space-y-5">
     <section class="app-hero-banner-vivid p-4 sm:p-5">
       <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div class="space-y-2">
-          <div class="text-lg font-semibold tracking-tight">Appointments Overview</div>
-          <p class="max-w-2xl text-sm text-slate-600 dark:text-slate-300">
-            Manage the clinic's day from the primary Appointments view, then use the table below for filtering, export, and reporting support.
-          </p>
-          <div class="flex flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-300">
-            <span class="rounded-full border border-white/40 bg-white/55 px-3 py-1 dark:border-white/10 dark:bg-white/10">
-              Date: {{ selectedDateLabel }}
-            </span>
-            <span class="rounded-full border border-white/40 bg-white/55 px-3 py-1 dark:border-white/10 dark:bg-white/10">
-              Clinic: {{ selectedClinic?.name || "Select clinic schedule" }}
-            </span>
-          </div>
-        </div>
+<div class="space-y-2">
+  <div class="text-lg font-semibold tracking-tight text-slate-900 dark:text-white">
+    Appointments Overview
+  </div>
 
-        <div class="flex flex-col items-stretch gap-3 lg:items-end">
-          <Button label="Add Appointment" icon="pi pi-plus" :pt="ptPrimaryBtn" @click="openCreateDialog" />
-          <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <article class="rounded-2xl border border-white/40 bg-white/60 p-3 dark:border-white/10 dark:bg-white/10">
-            <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Visible Appointments</div>
-            <div class="mt-1 text-2xl font-semibold">{{ dayBookings.length }}</div>
-            </article>
-            <article class="rounded-2xl border border-white/40 bg-white/60 p-3 dark:border-white/10 dark:bg-white/10">
-            <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Filtered Table</div>
-            <div class="mt-1 text-2xl font-semibold">{{ totalElements }}</div>
-            </article>
-            <article class="rounded-2xl border border-white/40 bg-white/60 p-3 dark:border-white/10 dark:bg-white/10">
-            <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Rescheduled Today</div>
-            <div class="mt-1 text-2xl font-semibold">{{ rescheduledAppointmentsCount }}</div>
-            </article>
-            <article class="rounded-2xl border border-white/40 bg-white/60 p-3 dark:border-white/10 dark:bg-white/10">
-            <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Needs Billing</div>
-            <div class="mt-1 text-2xl font-semibold">{{ billingAttentionCount }}</div>
-            </article>
-          </div>
-        </div>
+  <p class="max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+    Manage daily clinic appointments, filter schedules, export records, and review reports from one view.
+  </p>
+
+  <div class="flex flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-300">
+    <span
+      class="min-w-0 rounded-full border border-white/40 bg-white/55 px-3 py-1 dark:border-white/10 dark:bg-white/10"
+    >
+      Date: {{ selectedDateLabel }}
+    </span>
+
+    <span
+      class="min-w-0 rounded-full border border-white/40 bg-white/55 px-3 py-1 dark:border-white/10 dark:bg-white/10"
+    >
+      Clinic: {{ selectedClinic?.name || "No clinic selected" }}
+    </span>
+  </div>
+</div>
+
+<div class="flex flex-col gap-4 lg:items-end">
+  <Button
+    label="Add Appointment"
+    icon="pi pi-plus"
+    :pt="ptPrimaryBtn"
+    class="w-full sm:w-auto"
+    @click="openCreateDialog"
+  />
+
+  <div class="grid w-full grid-cols-2 gap-3 sm:grid-cols-4 lg:w-auto">
+    <article
+      class="rounded-2xl border border-white/40 bg-white/60 p-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/10"
+    >
+      <p class="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        Visible Appointments
+      </p>
+      <p class="mt-1 text-2xl font-semibold text-slate-900 dark:text-white">
+        {{ dayBookings.length }}
+      </p>
+    </article>
+
+    <article
+      class="rounded-2xl border border-white/40 bg-white/60 p-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/10"
+    >
+      <p class="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        Filtered Table
+      </p>
+      <p class="mt-1 text-2xl font-semibold text-slate-900 dark:text-white">
+        {{ totalElements }}
+      </p>
+    </article>
+
+    <article
+      class="rounded-2xl border border-white/40 bg-white/60 p-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/10"
+    >
+      <p class="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        Rescheduled Today
+      </p>
+      <p class="mt-1 text-2xl font-semibold text-slate-900 dark:text-white">
+        {{ rescheduledAppointmentsCount }}
+      </p>
+    </article>
+
+    <article
+      class="rounded-2xl border border-white/40 bg-white/60 p-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/10"
+    >
+      <p class="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        Needs Billing
+      </p>
+      <p class="mt-1 text-2xl font-semibold text-slate-900 dark:text-white">
+        {{ billingAttentionCount }}
+      </p>
+    </article>
+  </div>
+</div>
       </div>
     </section>
 
-    <section :class="sectionCardClass">
-      <div class="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h3 :class="sectionTitleClass">Clinic Calendar</h3>
-          <p class="text-sm opacity-70">Uses the global branch selection to show valid booking days and day-status colors for the month.</p>
-          <span class="text-sm opacity-70">Selected: {{ selectedDateLabel }}</span>
-        </div>
-        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] px-3 py-2 text-xs opacity-80">
-          Branch: {{ selectedClinic?.name || "Select a branch in the sidebar" }}
-        </div>
-      </div>
-      <small v-if="selectedClinicScheduleLabel" class="opacity-70">{{ selectedClinicScheduleLabel }}</small>
-      <div class="flex flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-300">
-        <span class="inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-1 dark:border-red-500/20 dark:bg-red-500/10">
-          <span class="h-2.5 w-2.5 rounded-full bg-red-500 dark:bg-red-300" />
-          Red: Unfinished and unbilled
+<section :class="sectionCardClass">
+  <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <div class="space-y-1">
+      <h3 :class="sectionTitleClass">
+        Clinic Calendar
+      </h3>
+
+      <p class="max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+        View valid booking days, monthly appointment status, and branch schedule availability.
+      </p>
+
+      <div class="flex flex-wrap gap-2 pt-1 text-xs text-slate-600 dark:text-slate-300">
+        <span
+          class="rounded-full border border-white/40 bg-white/55 px-3 py-1 dark:border-white/10 dark:bg-white/10"
+        >
+          Selected: {{ selectedDateLabel }}
         </span>
-        <span class="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 dark:border-blue-500/20 dark:bg-blue-500/10">
-          <span class="h-2.5 w-2.5 rounded-full bg-blue-500 dark:bg-blue-300" />
-          Blue: Scheduled but not fully paid
-        </span>
-        <span class="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 dark:border-orange-500/20 dark:bg-orange-500/10">
-          <span class="h-2.5 w-2.5 rounded-full bg-orange-500 dark:bg-orange-300" />
-          Orange: Unfinished but billed
-        </span>
-        <span class="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 dark:border-amber-500/20 dark:bg-amber-500/10">
-          <span class="h-2.5 w-2.5 rounded-full bg-amber-500 dark:bg-amber-300" />
-          Yellow: Multi-session already billed
-        </span>
-        <span class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 dark:border-emerald-500/20 dark:bg-emerald-500/10">
-          <span class="h-2.5 w-2.5 rounded-full bg-emerald-500 dark:bg-emerald-300" />
-          Green: Finished and billed
+
+        <span
+          v-if="selectedClinicScheduleLabel"
+          class="rounded-full border border-white/40 bg-white/55 px-3 py-1 dark:border-white/10 dark:bg-white/10"
+        >
+          {{ selectedClinicScheduleLabel }}
         </span>
       </div>
-      <DatePicker
-        v-model="calendarDate"
-        inline
+    </div>
+
+    <div
+      class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] px-3 py-2 text-xs text-slate-600 shadow-sm dark:text-slate-300"
+    >
+      Branch:
+      <span class="font-medium text-slate-900 dark:text-white">
+        {{ selectedClinic?.name || "No branch selected" }}
+      </span>
+    </div>
+  </div>
+
+  <div class="flex flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-300">
+    <span
+      class="inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-1 dark:border-red-500/20 dark:bg-red-500/10"
+    >
+      <span class="h-2.5 w-2.5 rounded-full bg-red-500 dark:bg-red-300" />
+      Unfinished and unbilled
+    </span>
+
+    <span
+      class="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 dark:border-blue-500/20 dark:bg-blue-500/10"
+    >
+      <span class="h-2.5 w-2.5 rounded-full bg-blue-500 dark:bg-blue-300" />
+      Scheduled, not fully paid
+    </span>
+
+    <span
+      class="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 dark:border-orange-500/20 dark:bg-orange-500/10"
+    >
+      <span class="h-2.5 w-2.5 rounded-full bg-orange-500 dark:bg-orange-300" />
+      Unfinished but billed
+    </span>
+
+    <span
+      class="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 dark:border-amber-500/20 dark:bg-amber-500/10"
+    >
+      <span class="h-2.5 w-2.5 rounded-full bg-amber-500 dark:bg-amber-300" />
+      Multi-session billed
+    </span>
+
+    <span
+      class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 dark:border-emerald-500/20 dark:bg-emerald-500/10"
+    >
+      <span class="h-2.5 w-2.5 rounded-full bg-emerald-500 dark:bg-emerald-300" />
+      Finished and billed
+    </span>
+  </div>
+
+  <DatePicker
+    v-model="calendarDate"
+    inline
+    fluid
+    :manualInput="false"
+    :disabledDays="calendarDisabledDays"
+    @month-change="onCalendarMonthChange"
+  >
+    <template #date="slotProps">
+      <div :class="calendarDayCellClass(slotProps.date)">
+        <span>{{ slotProps.date.day }}</span>
+
+        <span
+          v-if="getCalendarDayStatus(slotProps.date)"
+          :class="calendarDayDotClass(slotProps.date)"
+        />
+      </div>
+    </template>
+  </DatePicker>
+
+  <div class="flex justify-end pt-1">
+    <Button
+      label="Add Appointment"
+      icon="pi pi-plus"
+      size="small"
+      outlined
+      :pt="ptPrimaryBtn"
+      @click="openCreateDialog"
+    />
+  </div>
+</section>
+
+<section :class="sectionCardClass">
+  <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+    <div class="space-y-1">
+      <h3 :class="sectionTitleClass">
+        Appointments Table
+      </h3>
+
+      <p class="max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+        Filter, review, page through, and export appointment records for the selected date.
+      </p>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+    <IftaLabel>
+      <InputText
+        v-model="recordFilter"
         fluid
-        :manualInput="false"
-        :disabledDays="calendarDisabledDays"
-        @month-change="onCalendarMonthChange"
-      >
-        <template #date="slotProps">
-          <div
-            :class="calendarDayCellClass(slotProps.date)"
-          >
-            <span>{{ slotProps.date.day }}</span>
-            <span
-              v-if="getCalendarDayStatus(slotProps.date)"
-              :class="calendarDayDotClass(slotProps.date)"
+        placeholder="Search patient or record ID"
+        :pt="ptInputText"
+      />
+      <label>Record Search</label>
+    </IftaLabel>
+
+    <IftaLabel>
+      <Select
+        v-model="statusFilter"
+        :options="appointmentStatusOptions"
+        showClear
+        fluid
+        placeholder="All statuses"
+        :pt="ptSelect"
+      />
+      <label>Status</label>
+    </IftaLabel>
+
+    <IftaLabel>
+      <Select
+        v-model="phaseFilter"
+        :options="appointmentPhaseOptions"
+        optionLabel="label"
+        optionValue="value"
+        showClear
+        fluid
+        placeholder="All phases"
+        :pt="ptSelect"
+      />
+      <label>Phase</label>
+    </IftaLabel>
+
+    <IftaLabel>
+      <Select
+        v-model="ptFilter"
+        :options="ptFilterOptions"
+        optionLabel="label"
+        optionValue="value"
+        showClear
+        filter
+        fluid
+        placeholder="All assigned PTs"
+        :pt="ptSelect"
+      />
+      <label>Assigned PT</label>
+    </IftaLabel>
+
+    <div class="flex flex-col gap-2 md:col-span-2 sm:flex-row sm:items-end xl:col-span-2">
+      <Button
+        label="Refresh"
+        icon="pi pi-refresh"
+        severity="secondary"
+        outlined
+        class="w-full sm:w-auto"
+        :pt="ptOutlinedBtn"
+        @click="refreshAll"
+      />
+
+      <Button
+        label="Export CSV"
+        icon="pi pi-download"
+        severity="secondary"
+        outlined
+        class="w-full sm:w-auto"
+        :pt="ptOutlinedBtn"
+        @click="onExportCsv"
+      />
+    </div>
+
+    <p
+      v-if="recordFilter.trim()"
+      class="text-xs leading-5 text-slate-500 md:col-span-2 xl:col-span-6 dark:text-slate-400"
+    >
+      Record search checks across clinics, assigned PTs, statuses, and dates. Clear the search to return to the selected table filters.
+    </p>
+  </div>
+
+  <div class="overflow-x-auto rounded-2xl border border-white/40 bg-white/40 dark:border-white/10 dark:bg-white/5">
+    <DataTable
+      :value="appointments"
+      dataKey="id"
+      paginator
+      :rows="pageSize"
+      :first="(page - 1) * pageSize"
+      :totalRecords="totalElements"
+      :loading="isLoading"
+      selectionMode="single"
+      @page="onPage"
+      @rowSelect="onSelectRow"
+      :pt="{
+        column: {
+          headerCell: {
+            class: 'px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400'
+          },
+          bodyCell: {
+            class: 'px-4 py-3 text-sm text-slate-700 dark:text-slate-200'
+          }
+        }
+      }"
+    >
+      <template #empty>
+        <div class="py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+          No appointments found for the selected date and filters.
+        </div>
+      </template>
+
+      <Column field="patient_name" header="Patient" />
+
+      <Column field="doctor_name" header="Assigned PT">
+        <template #body="{ data }">
+          {{ data.doctor_name || "Unassigned" }}
+        </template>
+      </Column>
+
+      <Column field="starts_at" header="Start">
+        <template #body="{ data }">
+          {{ formatDateTime(data.starts_at) }}
+        </template>
+      </Column>
+
+      <Column field="appointment_status" header="Status">
+        <template #body="{ data }">
+          <Tag
+            :value="displayAppointmentStatus(data.appointment_status)"
+            :severity="appointmentSeverity(data.appointment_status)"
+          />
+        </template>
+      </Column>
+
+      <Column field="appointment_phase" header="Phase">
+        <template #body="{ data }">
+          <Tag
+            :value="displayAppointmentPhase(data.appointment_phase)"
+            :severity="appointmentPhaseSeverity(data.appointment_phase)"
+          />
+        </template>
+      </Column>
+
+      <Column field="location_context" header="Location">
+        <template #body="{ data }">
+          <Tag
+            :value="displayLocationContext(data.location_context)"
+            :severity="appointmentLocationContextSeverity(data.location_context)"
+          />
+        </template>
+      </Column>
+
+      <Column field="specialty_tag_name" header="Specialty">
+        <template #body="{ data }">
+          <div class="space-y-1">
+            <p>{{ data.specialty_tag_name || "N/A" }}</p>
+
+            <Tag
+              v-if="data.specialty_tag_name && data.specialty_tag_is_active === false"
+              value="Inactive Specialty"
+              severity="secondary"
+              class="text-xs"
             />
           </div>
         </template>
-      </DatePicker>
-      <div class="flex justify-end pt-1">
-        <Button
-          label="Add Appointment"
-          icon="pi pi-plus"
-          size="small"
-          outlined
-          :pt="ptPrimaryBtn"
-          @click="openCreateDialog"
-        />
-      </div>
-    </section>
+      </Column>
 
-    <section :class="sectionCardClass">
-      <div class="flex items-center justify-between gap-2">
-        <div>
-          <h3 :class="sectionTitleClass">Appointments Table</h3>
-          <p class="text-sm opacity-70">Secondary list and report view for filtering, paging, and CSV export for the selected date.</p>
-        </div>
-      </div>
-      <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
-        <IftaLabel>
-          <InputText
-            v-model="recordFilter"
-            fluid
-            placeholder="Search patient or record ID"
-            :pt="ptInputText"
-          />
-          <label>Record Search</label>
-        </IftaLabel>
-        <IftaLabel>
-          <Select
-            v-model="statusFilter"
-            :options="appointmentStatusOptions"
-            showClear
-            fluid
-            placeholder="All statuses"
-            :pt="ptSelect"
-          />
-          <label>Status Filter</label>
-        </IftaLabel>
-        <IftaLabel>
-          <Select
-            v-model="phaseFilter"
-            :options="appointmentPhaseOptions"
-            optionLabel="label"
-            optionValue="value"
-            showClear
-            fluid
-            placeholder="All phases"
-            :pt="ptSelect"
-          />
-          <label>Phase Filter</label>
-        </IftaLabel>
-        <IftaLabel>
-          <Select
-            v-model="ptFilter"
-            :options="ptFilterOptions"
-            optionLabel="label"
-            optionValue="value"
-            showClear
-            filter
-            fluid
-            placeholder="All assigned PTs"
-            :pt="ptSelect"
-          />
-          <label>Assigned PT Filter</label>
-        </IftaLabel>
-        <div class="flex flex-wrap items-end gap-2 md:col-span-2 xl:col-span-2">
-          <Button label="Refresh" icon="pi pi-refresh" severity="secondary" outlined :pt="ptOutlinedBtn" @click="refreshAll" />
-          <Button label="Export CSV" icon="pi pi-download" severity="secondary" outlined :pt="ptOutlinedBtn" @click="onExportCsv" />
-        </div>
-        <p v-if="recordFilter.trim()" class="text-xs opacity-60 md:col-span-2 xl:col-span-6">
-          Record searches look across clinics, assigned PTs, statuses, and dates. Clear the search to return to the selected table filters.
-        </p>
-      </div>
-
-      <div class="overflow-x-auto">
-        <DataTable
-          :value="appointments"
-          dataKey="id"
-          paginator
-          :rows="pageSize"
-          :first="(page - 1) * pageSize"
-          :totalRecords="totalElements"
-          :loading="isLoading"
-          @page="onPage"
-          selectionMode="single"
-          @rowSelect="onSelectRow"
-          :pt="{
-            column: {
-              headerCell: { class: 'px-4 py-3' },
-              bodyCell: { class: 'px-4 py-3' }
-            }
-          }"
-        >
-          <template #empty>
-            <div class="py-8 text-center text-sm opacity-70">
-              No appointments found for the selected date and filter.
-            </div>
-          </template>
-          <Column field="patient_name" header="Patient" />
-          <Column field="doctor_name" header="Assigned PT" />
-          <Column field="starts_at" header="Start">
-            <template #body="{data}">{{ formatDateTime(data.starts_at) }}</template>
-          </Column>
-          <Column field="appointment_status" header="Appointment Status">
-            <template #body="{data}">
-              <Tag :value="displayAppointmentStatus(data.appointment_status)" :severity="appointmentSeverity(data.appointment_status)" />
-            </template>
-          </Column>
-          <Column field="appointment_phase" header="Phase">
-            <template #body="{data}">
-              <Tag :value="displayAppointmentPhase(data.appointment_phase)" :severity="appointmentPhaseSeverity(data.appointment_phase)" />
-            </template>
-          </Column>
-          <Column field="location_context" header="Location">
-            <template #body="{data}">
-              <Tag :value="displayLocationContext(data.location_context)" :severity="appointmentLocationContextSeverity(data.location_context)" />
-            </template>
-          </Column>
-          <Column field="specialty_tag_name" header="Specialty">
-            <template #body="{data}">
-              <div class="space-y-1">
-                <div>{{ data.specialty_tag_name || "N/A" }}</div>
-                <Tag
-                  v-if="data.specialty_tag_name && data.specialty_tag_is_active === false"
-                  value="Inactive Specialty"
-                  severity="secondary"
-                  class="text-xs"
-                />
-              </div>
-            </template>
-          </Column>
-          <Column field="treatment_area_name" header="Clinic Room">
-            <template #body="{data}">
-              <div class="space-y-1">
-                <TreatmentAreaChip :name="data.treatment_area_name" :color="data.treatment_area_color" />
-                <Tag
-                  v-if="data.treatment_area_name && data.treatment_area_is_active === false"
-                  value="Inactive Room"
-                  severity="secondary"
-                  class="text-xs"
-                />
-              </div>
-            </template>
-          </Column>
-          <Column field="billing_status" header="Billing">
-            <template #body="{data}">
-              <Tag :value="displayBillingStatus(data.billing_status)" :severity="billingSeverity(data.billing_status)" />
-            </template>
-          </Column>
-          <Column field="reschedule_count" header="Reschedules" />
-          <Column header="Actions">
-            <template #body="{data}">
-              <div class="flex items-center gap-1">
-                <Button size="small" text icon="pi pi-eye" @click="selectAppointment(data)" />
-                <Button size="small" text icon="pi pi-calendar-plus" @click="openReschedule(data)" />
-                <Button
-                  v-if="canDeleteAppointments"
-                  size="small"
-                  text
-                  severity="danger"
-                  icon="pi pi-trash"
-                  @click="confirmDeleteAppointment(data)"
-                />
-              </div>
-            </template>
-          </Column>
-        </DataTable>
-      </div>
-    </section>
-
-    <Dialog
-      v-model:visible="detailPanelVisible"
-      :modal="false"
-      position="right"
-      dismissableMask
-      :draggable="false"
-      :resizable="false"
-      :style="{ width: '430px' }"
-      :breakpoints="{ '1280px': '92vw', '768px': '100vw' }"
-      header="Appointment Checkout"
-      @hide="closeDetailPanel"
-    >
-      <div v-if="selectedDetail" class="space-y-4">
-        <div class="app-hero-panel">
-          <div class="text-xs uppercase tracking-wide opacity-70">Checkout For</div>
-          <div class="mt-1 text-lg font-semibold">{{ selectedDetail.patient_name }}</div>
-          <div class="mt-1 text-xs opacity-70">
-            {{ selectedDetail.public_id || "Pending appointment record code" }} · {{ formatDateTime(selectedDetail.starts_at) }}
-          </div>
-          <div class="mt-3 rounded-xl border border-white/50 bg-white/70 px-3 py-2 text-xs opacity-80 dark:border-white/10 dark:bg-white/10">
-            Follow this order: 1) verify payment responsibility, 2) open/create billing, 3) finalize sign-off slip.
-          </div>
-        </div>
-
-        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 space-y-3">
-          <div class="text-xs uppercase tracking-wide opacity-70">Step 1 · Verify Payment Responsibility</div>
-          <div
-            :class="hasPatientWalletAmountToCollect
-              ? 'rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-red-900 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200'
-              : 'rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200'"
-          >
-            <div class="text-xs uppercase tracking-wide opacity-75">Wallet 1 - Patient Responsibility</div>
-            <template v-if="hasPatientWalletAmountToCollect">
-              <div class="mt-2 text-sm font-medium">Collect this out-of-pocket balance before checkout clears.</div>
-              <div class="mt-1 text-2xl font-semibold">{{ asCurrency(patientWalletAmountToCollect) }}</div>
-            </template>
-            <div v-else class="mt-2 text-sm font-medium">No out-of-pocket cash due right now.</div>
-          </div>
-
-          <div class="rounded-2xl border border-white/50 bg-white/70 px-4 py-3 dark:border-white/10 dark:bg-white/10">
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <div class="text-xs uppercase tracking-wide opacity-60">Wallet 2 - Third-Party / Packages</div>
-                <div class="mt-2 text-sm font-medium">
-                  {{ sponsorWalletSummary?.display_text || "No HMO/LGU authorization attached to this appointment." }}
-                </div>
-                <div v-if="sponsorWalletSummary" class="mt-1 text-xs opacity-60">
-                  Sponsor balances stay hidden here. Only authorization and session usage are shown.
-                </div>
-              </div>
-              <Tag
-                v-if="sponsorWalletSummary"
-                :value="sponsorWalletSummary.sponsor_type"
-                severity="info"
-                class="shrink-0"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 space-y-3">
-          <div class="text-xs uppercase tracking-wide opacity-70">Step 2 · Open Billing and Collect Payment</div>
-          <div class="flex flex-wrap gap-2">
-            <Button label="Open Patient Record" icon="pi pi-user" outlined :pt="ptOutlinedBtn" class="min-w-[180px]" @click="goToPatients" />
-            <Button
-              v-if="selectedDetail.billing_id"
-              label="Open Billing / Tender Payment"
-              icon="pi pi-wallet"
-              :pt="ptPrimaryBtn"
-              class="min-w-[180px]"
-              @click="openTenderPaymentDrawer"
+      <Column field="treatment_area_name" header="Clinic Room">
+        <template #body="{ data }">
+          <div class="space-y-1">
+            <TreatmentAreaChip
+              :name="data.treatment_area_name"
+              :color="data.treatment_area_color"
             />
-            <Button
-              v-if="!selectedDetail.billing_id"
-              label="Create Billing"
-              icon="pi pi-plus"
+
+            <Tag
+              v-if="data.treatment_area_name && data.treatment_area_is_active === false"
+              value="Inactive Room"
               severity="secondary"
-              outlined
-              :pt="ptOutlinedBtn"
-              class="min-w-[180px]"
-              @click="goToBilling"
+              class="text-xs"
             />
           </div>
-          <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-3 py-2 text-xs opacity-70">
-            Billing Record ID: {{ selectedDetail.billing_public_id || "No billing linked yet" }}
-          </div>
-        </div>
+        </template>
+      </Column>
 
-        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 space-y-3">
-          <div class="text-xs uppercase tracking-wide opacity-70">Step 3 · Finalize Attendance Sign-Off</div>
-          <Button
-            :label="encounterTicketButtonLabel"
-            icon="pi pi-receipt"
-            :pt="ptPrimaryBtn"
-            class="w-full"
-            :disabled="!canProcessEncounterTicket"
-            @click="openEncounterTicketDialog"
-          />
-          <Button
-            v-if="isSelectedEncounterTicketLocked"
-            label="Export Ticket PDF"
-            icon="pi pi-file-pdf"
-            outlined
-            class="w-full"
-            @click="exportSelectedEncounterTicketPdf"
-          />
-          <p v-if="!canProcessEncounterTicket" class="text-xs opacity-70">
-            Create or open the billing record first so the signed ticket can be permanently attached to the patient’s billing profile.
-          </p>
-        </div>
-
-        <div class="rounded-xl border border-dashed border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-3 py-2">
-          <div class="text-[11px] uppercase tracking-wide opacity-60">Reference Section</div>
-          <p class="mt-1 text-xs opacity-70">
-            The tags and additional details below are read-only appointment context for audit and review.
-          </p>
-        </div>
-
-        <div class="flex flex-wrap gap-2 pt-2 border-t border-[rgb(var(--app-border))]">
-          <Tag v-if="selectedDetail.specialty_tag_name" :value="selectedDetail.specialty_tag_name" severity="info" />
+      <Column field="billing_status" header="Billing">
+        <template #body="{ data }">
           <Tag
-            v-if="selectedDetail.specialty_tag_name && selectedDetail.specialty_tag_is_active === false"
-            value="Inactive Specialty"
-            severity="secondary"
+            :value="displayBillingStatus(data.billing_status)"
+            :severity="billingSeverity(data.billing_status)"
           />
-          <Tag
-            v-if="selectedDetail.treatment_area_name && selectedDetail.treatment_area_is_active === false"
-            value="Inactive Room"
-            severity="secondary"
-          />
-          <Tag
-            v-if="selectedEncounterTicketHasPtSignature"
-            value="PT Signed-Off"
-            severity="success"
-          />
-          <Tag :value="displayAppointmentPhase(selectedDetail.appointment_phase)" :severity="appointmentPhaseSeverity(selectedDetail.appointment_phase)" />
-          <Tag :value="displayLocationContext(selectedDetail.location_context)" :severity="appointmentLocationContextSeverity(selectedDetail.location_context)" />
-          <Tag :value="displayAppointmentStatus(selectedDetail.appointment_status)" :severity="appointmentSeverity(selectedDetail.appointment_status)" />
-          <Tag :value="displayBillingStatus(selectedDetail.billing_status)" :severity="billingSeverity(selectedDetail.billing_status)" />
-          <Tag :value="encounterAttendanceLabel" :severity="selectedEncounterTicket ? 'success' : 'warn'" />
-        </div>
+        </template>
+      </Column>
 
-        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 mt-1">
-          <div class="text-xs uppercase tracking-wide opacity-70">Additional Details</div>
-          <div class="mt-3 grid grid-cols-1 gap-3 text-sm">
-          <div :class="detailCardClass">
-            <div class="text-xs uppercase tracking-wide opacity-70">Clinic</div>
-            <div class="font-medium">{{ selectedDetail.clinic_name }}</div>
-          </div>
-          <div :class="detailCardClass">
-            <div class="text-xs uppercase tracking-wide opacity-70">Patient Record ID</div>
-            <div class="font-medium">{{ selectedDetail.patient_public_id || "Pending patient record code" }}</div>
-          </div>
-          <div :class="detailCardClass">
-            <div class="text-xs uppercase tracking-wide opacity-70">Appointment Record ID</div>
-            <div class="font-medium">{{ selectedDetail.public_id || "Pending appointment record code" }}</div>
-          </div>
-          <div :class="detailCardClass">
-            <div class="text-xs uppercase tracking-wide opacity-70">Billing Record ID</div>
-            <div class="font-medium">{{ selectedDetail.billing_public_id || "No billing linked yet" }}</div>
-          </div>
-          <div :class="detailCardClass">
-            <div class="text-xs uppercase tracking-wide opacity-70">Assigned PT</div>
-            <div class="font-medium">{{ selectedDetail.doctor_name || "N/A" }}</div>
-          </div>
-            <div :class="detailCardClass">
-              <div class="text-xs uppercase tracking-wide opacity-70">Referring Doctor</div>
-              <div class="font-medium">{{ selectedDetail.referring_doctor_name || "N/A" }}</div>
-            </div>
-            <div :class="detailCardClass">
-              <div class="text-xs uppercase tracking-wide opacity-70">Supporting PT / Intern</div>
-              <div class="font-medium">{{ selectedDetail.support_staff_name || "N/A" }}</div>
-            </div>
-          <div :class="detailCardClass">
-            <div class="text-xs uppercase tracking-wide opacity-70">Schedule</div>
-            <div class="font-medium">{{ formatDateTime(selectedDetail.starts_at) }} - {{ formatDateTime(selectedDetail.ends_at) }}</div>
-          </div>
-          <div :class="detailCardClass">
-            <div class="text-xs uppercase tracking-wide opacity-70">Specialty</div>
-            <div class="font-medium">{{ selectedDetail.specialty_tag_name || "N/A" }}</div>
-            <div
-              v-if="selectedDetail.specialty_tag_name && selectedDetail.specialty_tag_is_active === false"
-              class="mt-1 text-xs opacity-70"
-            >
-              Inactive now, preserved on this appointment for audit history.
-            </div>
-          </div>
-          <div :class="detailCardClass">
-            <div class="text-xs uppercase tracking-wide opacity-70">Clinic Room</div>
-            <div class="mt-1">
-              <TreatmentAreaChip :name="selectedDetail.treatment_area_name" :color="selectedDetail.treatment_area_color" />
-            </div>
-            <div
-              v-if="selectedDetail.treatment_area_name && selectedDetail.treatment_area_is_active === false"
-              class="mt-1 text-xs opacity-70"
-            >
-              Inactive now, preserved on this appointment for audit history.
-            </div>
-          </div>
-          <div :class="detailCardClass">
-            <div class="text-xs uppercase tracking-wide opacity-70">Appointment Status</div>
-            <div class="mt-1">
-              <Tag :value="displayAppointmentStatus(selectedDetail.appointment_status)" :severity="appointmentSeverity(selectedDetail.appointment_status)" />
-            </div>
-          </div>
-          <div :class="detailCardClass">
-            <div class="text-xs uppercase tracking-wide opacity-70">Encounter Ticket</div>
-            <div class="font-medium">
-              {{ selectedEncounterTicket?.slip_number || "Not generated yet" }}
-            </div>
-            <div class="mt-1 text-xs opacity-70">
-              {{ selectedEncounterTicketSummaryLabel }}
-            </div>
-          </div>
-          <div :class="detailCardClass">
-            <div class="text-xs uppercase tracking-wide opacity-70">Encounter Ticket ID</div>
-            <div class="font-medium">{{ encounterTicketRecordLabel }}</div>
-            <div class="mt-1 text-xs opacity-70">
-              {{ isSelectedEncounterTicketLocked
-                ? "Locked as the independent attendance ledger record for this appointment."
-                : "This attendance ledger record stays open until patient sign-off locks it." }}
-            </div>
-          </div>
-          <div :class="detailCardClass">
-            <div class="text-xs uppercase tracking-wide opacity-70">Active Billing Package</div>
-            <div class="font-medium">{{ selectedEncounterTicketPackageLabel }}</div>
-            <div v-if="selectedEncounterTicketPackageSourceLabel" class="mt-1 text-xs opacity-70">
-              {{ selectedEncounterTicketPackageSourceLabel }}
-            </div>
-          </div>
-          <div v-if="isLguBilling" :class="detailCardClass">
-            <div class="text-xs uppercase tracking-wide opacity-70">LGU Program Status</div>
-            <div class="mt-2 flex flex-wrap items-center gap-2">
-              <Tag :value="dropoutStatusLabel" :severity="dropoutStatusSeverity" />
-              <Button
-                v-if="!isSelectedEncounterTicketLocked || dropoutStatusValue !== 'DROPPED_OUT'"
-                :label="dropoutToggleLabel"
-                :icon="dropoutToggleIcon"
-                :severity="dropoutToggleSeverity"
-                size="small"
-                outlined
-                :loading="dropoutLoading"
-                @click="toggleDropoutStatus"
-              />
-            </div>
-            <div class="mt-1 text-xs opacity-70">
-              {{ dropoutStatusDescription }}
-            </div>
-          </div>
-          <div :class="detailCardClass">
-            <div class="text-xs uppercase tracking-wide opacity-70">PT Session Confirmation</div>
-            <div class="font-medium">
-              {{ selectedEncounterTicketHasPtSignature
-                ? `Signed by ${selectedEncounterTicketPtConfirmedByLabel}`
-                : "PT has not signed this session yet" }}
-            </div>
-            <div class="mt-1 text-xs opacity-70">
-              {{ selectedEncounterTicket?.pt_confirmed_at
-                ? `Captured ${formatDateTime(selectedEncounterTicket.pt_confirmed_at)}`
-                : "Higher-ups can review the PT signature here before final patient sign-off." }}
-            </div>
-            <div
-              v-if="selectedEncounterTicketPtCompletionTag"
-              class="mt-2 rounded-xl border border-white/50 bg-white/70 px-3 py-2 text-xs opacity-80 dark:border-white/10 dark:bg-white/10"
-            >
-              {{ selectedEncounterTicketPtCompletionTag }}
-            </div>
-            <div
-              v-if="selectedEncounterTicket?.pt_signature_data_url"
-              class="mt-3 overflow-hidden rounded-xl border border-[rgb(var(--app-border))] bg-white p-2"
-            >
-              <img
-                :src="selectedEncounterTicket.pt_signature_data_url"
-                alt="PT signature"
-                class="h-24 w-full object-contain"
-              />
-            </div>
-          </div>
-          </div>
-        </div>
+      <Column field="reschedule_count" header="Reschedules">
+        <template #body="{ data }">
+          <span class="font-medium">
+            {{ data.reschedule_count }}
+          </span>
+        </template>
+      </Column>
 
-        <div
-          v-if="selectedDetail.lgu_credit_summary?.items?.length"
-          class="overflow-hidden rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))]"
-        >
-          <div class="border-b border-[rgb(var(--app-border))] px-4 py-3">
-            <div class="flex items-center justify-between gap-2">
-              <div>
-                <div class="text-sm font-semibold text-[rgb(var(--app-fg))]">LGU Credit Ledger</div>
-                <div class="mt-1 text-xs opacity-70">
-                  {{ selectedDetail.lgu_credit_summary.package_name }}: {{ selectedDetail.lgu_credit_summary.consumed_sessions }} of {{ selectedDetail.lgu_credit_summary.total_sessions }} consumed
-                </div>
-              </div>
-              <Button
-                v-if="selectedDetail.lgu_credit_summary.consumed_sessions > 0 && selectedDetail.lgu_credit_summary.authorization_status === 'ACTIVE'"
-                label="Create Month-End Claim"
-                icon="pi pi-file"
-                size="small"
-                :pt="ptPrimaryBtn"
-                @click="openLguMonthlyClaimDialog"
-              />
-            </div>
-          </div>
-          <div class="overflow-x-auto">
-            <table class="min-w-full text-sm">
-              <thead class="bg-black/5 text-left text-xs uppercase tracking-wide opacity-70 dark:bg-white/5">
-                <tr>
-                  <th class="px-4 py-3 font-medium">Service Item</th>
-                  <th class="px-4 py-3 font-medium">Package</th>
-                  <th class="px-4 py-3 font-medium text-right">Total</th>
-                  <th class="px-4 py-3 font-medium text-right">Used</th>
-                  <th class="px-4 py-3 font-medium text-right">Balance</th>
-                  <th class="px-4 py-3 font-medium">Expiry</th>
-                  <th class="px-4 py-3 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="item in selectedDetail.lgu_credit_summary.items"
-                  :key="item.id"
-                  class="border-t border-[rgb(var(--app-border))]"
-                >
-                  <td class="px-4 py-3 font-medium">{{ item.service_item }}</td>
-                  <td class="px-4 py-3">{{ item.package_name }}</td>
-                  <td class="px-4 py-3 text-right">{{ item.total_purchased }}</td>
-                  <td class="px-4 py-3 text-right">{{ item.used }}</td>
-                  <td class="px-4 py-3 text-right">{{ item.balance }}</td>
-                  <td class="px-4 py-3">{{ item.expiry_date || "Open" }}</td>
-                  <td class="px-4 py-3">
-                    <Tag :value="item.status" :severity="item.balance <= 0 ? 'contrast' : item.status === 'DROPPED_OUT' ? 'danger' : 'info'" />
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
+      <Column header="Actions">
+        <template #body="{ data }">
+          <div class="flex items-center gap-1">
+            <Button
+              size="small"
+              text
+              rounded
+              icon="pi pi-eye"
+              aria-label="View appointment"
+              @click.stop="selectAppointment(data)"
+            />
 
-      </div>
-    </Dialog>
+            <Button
+              size="small"
+              text
+              rounded
+              icon="pi pi-calendar-plus"
+              aria-label="Reschedule appointment"
+              @click.stop="openReschedule(data)"
+            />
+
+            <Button
+              v-if="canDeleteAppointments"
+              size="small"
+              text
+              rounded
+              severity="danger"
+              icon="pi pi-trash"
+              aria-label="Delete appointment"
+              @click.stop="confirmDeleteAppointment(data)"
+            />
+          </div>
+        </template>
+      </Column>
+    </DataTable>
+  </div>
+</section>
+
+<AppointmentCheckoutPanel
+  v-model:visible="detailPanelVisible"
+  :selected-detail="selectedDetail"
+  :sponsor-wallet-summary="sponsorWalletSummary"
+  :has-patient-wallet-amount-to-collect="hasPatientWalletAmountToCollect"
+  :patient-wallet-amount-to-collect="patientWalletAmountToCollect"
+  :selected-encounter-ticket="selectedEncounterTicket"
+  :selected-encounter-ticket-has-pt-signature="selectedEncounterTicketHasPtSignature"
+  :selected-encounter-ticket-summary-label="selectedEncounterTicketSummaryLabel"
+  :selected-encounter-ticket-package-label="selectedEncounterTicketPackageLabel"
+  :selected-encounter-ticket-package-source-label="selectedEncounterTicketPackageSourceLabel"
+  :selected-encounter-ticket-pt-confirmed-by-label="selectedEncounterTicketPtConfirmedByLabel"
+  :selected-encounter-ticket-pt-completion-tag="selectedEncounterTicketPtCompletionTag"
+  :encounter-ticket-button-label="encounterTicketButtonLabel"
+  :encounter-ticket-record-label="encounterTicketRecordLabel"
+  :encounter-attendance-label="encounterAttendanceLabel"
+  :can-process-encounter-ticket="canProcessEncounterTicket"
+  :is-selected-encounter-ticket-locked="isSelectedEncounterTicketLocked"
+  :is-lgu-billing="isLguBilling"
+  :dropout-status-label="dropoutStatusLabel"
+  :dropout-status-severity="dropoutStatusSeverity"
+  :dropout-status-value="dropoutStatusValue"
+  :dropout-toggle-label="dropoutToggleLabel"
+  :dropout-toggle-icon="dropoutToggleIcon"
+  :dropout-toggle-severity="dropoutToggleSeverity"
+  :dropout-loading="dropoutLoading"
+  :dropout-status-description="dropoutStatusDescription"
+  :pt-primary-btn="ptPrimaryBtn"
+  :pt-outlined-btn="ptOutlinedBtn"
+  :detail-card-class="detailCardClass"
+  :format-date-time="formatDateTime"
+  :as-currency="asCurrency"
+  :display-appointment-phase="displayAppointmentPhase"
+  :appointment-phase-severity="appointmentPhaseSeverity"
+  :display-location-context="displayLocationContext"
+  :appointment-location-context-severity="appointmentLocationContextSeverity"
+  :display-appointment-status="displayAppointmentStatus"
+  :appointment-severity="appointmentSeverity"
+  :display-billing-status="displayBillingStatus"
+  :billing-severity="billingSeverity"
+  @close="closeDetailPanel"
+  @open-patient-record="goToPatients"
+  @open-tender-payment="openTenderPaymentDrawer"
+  @create-billing="goToBilling"
+  @open-encounter-ticket="openEncounterTicketDialog"
+  @export-ticket-pdf="exportSelectedEncounterTicketPdf"
+  @toggle-dropout-status="toggleDropoutStatus"
+  @open-lgu-monthly-claim="openLguMonthlyClaimDialog"
+/>
 
     <Dialog
       v-model:visible="lguMonthlyClaimVisible"
@@ -686,112 +572,25 @@
       </template>
     </Dialog>
 
-    <Dialog
-      v-model:visible="encounterTicketVisible"
-      modal
-      header="Digital Sign-Off Slip"
-      :style="{width:'620px'}"
-      :breakpoints="{'1024px':'94vw','768px':'100vw'}"
-    >
-      <div v-if="selectedDetail" class="space-y-4">
-        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4">
-          <div class="text-sm font-semibold text-[rgb(var(--app-fg))]">Encounter Ticket</div>
-          <p class="mt-1 text-sm text-[rgb(var(--app-fg))]/65">
-            Review the transaction details below, then let the patient sign to confirm attendance and authorize the session deduction.
-          </p>
-          <div class="mt-4 grid gap-3 md:grid-cols-2 text-sm">
-            <div>
-              <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Date</div>
-              <div class="mt-1 font-medium text-[rgb(var(--app-fg))]">{{ formatDateTime(selectedDetail.starts_at) }}</div>
-            </div>
-            <div>
-              <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">PT Name</div>
-              <div class="mt-1 font-medium text-[rgb(var(--app-fg))]">{{ selectedDetail.doctor_name || "Unassigned" }}</div>
-            </div>
-            <div>
-              <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Service Rendered</div>
-              <div class="mt-1 font-medium text-[rgb(var(--app-fg))]">{{ encounterServiceRenderedLabel }}</div>
-            </div>
-            <div>
-              <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Session Deduction</div>
-              <div class="mt-1 font-medium text-[rgb(var(--app-fg))]">{{ encounterSessionDeductionLabel }}</div>
-            </div>
-            <div>
-              <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Session Sequence</div>
-              <div class="mt-1 font-medium text-[rgb(var(--app-fg))]">{{ selectedEncounterTicket?.billing_snapshot?.session_sequence_label || "N/A" }}</div>
-            </div>
-            <div>
-              <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Encounter Ticket ID</div>
-              <div class="mt-1 font-medium text-[rgb(var(--app-fg))]">{{ encounterTicketRecordLabel }}</div>
-            </div>
-            <div>
-              <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Billing Package Link</div>
-              <div class="mt-1 font-medium text-[rgb(var(--app-fg))]">{{ selectedEncounterTicketPackageLabel }}</div>
-              <div v-if="selectedEncounterTicketPackageSourceLabel" class="mt-1 text-xs text-[rgb(var(--app-fg))]/55">
-                {{ selectedEncounterTicketPackageSourceLabel }}
-              </div>
-            </div>
-          </div>
-          <div v-if="selectedEncounterTicket" class="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
-            Existing slip: <strong>{{ selectedEncounterTicket.slip_number || `#${selectedEncounterTicket.id}` }}</strong>
-            <span class="mx-1 opacity-50">|</span>
-            {{ isSelectedEncounterTicketLocked
-              ? `Patient signed ${formatDateTime(selectedEncounterTicket.signed_off_at)}`
-              : "Waiting for patient sign-off to lock this record" }}
-          </div>
-          <div v-if="isSelectedEncounterTicketLocked" class="mt-3 rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
-            This signed ticket is locked as a permanent billing record and can no longer be changed.
-          </div>
-        </div>
-
-        <div v-if="selectedEncounterTicketHasPtSignature" class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
-          <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">PT Confirmation</div>
-          <div class="mt-2 text-sm text-[rgb(var(--app-fg))]/75">
-            {{ selectedEncounterTicketPtConfirmedByLabel }}
-            <span v-if="selectedEncounterTicket?.pt_confirmed_at">
-              signed on {{ formatDateTime(selectedEncounterTicket.pt_confirmed_at) }}
-            </span>
-            to confirm the session was completed.
-          </div>
-          <div
-            v-if="selectedEncounterTicketPtCompletionTag"
-            class="mt-3 rounded-xl border border-white/50 bg-white/70 px-3 py-2 text-sm text-[rgb(var(--app-fg))]/75 dark:border-white/10 dark:bg-white/10"
-          >
-            {{ selectedEncounterTicketPtCompletionTag }}
-          </div>
-          <div class="mt-4 overflow-hidden rounded-xl border border-[rgb(var(--app-border))] bg-white p-2">
-            <img
-              :src="selectedEncounterTicket?.pt_signature_data_url"
-              alt="PT signature"
-              class="h-28 w-full object-contain"
-            />
-          </div>
-        </div>
-
-        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
-          <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Patient Signature</div>
-          <div class="mt-2 text-sm text-[rgb(var(--app-fg))]/65">
-            {{ isSelectedEncounterTicketLocked
-              ? "This is the stored patient signature linked to billing. It is shown here for record review only."
-              : "The patient signs below to acknowledge attendance and authorize this session to be tallied." }}
-          </div>
-          <div class="mt-4">
-            <PatientSignaturePad v-model="encounterTicketSignatureDataUrl" :disabled="isSelectedEncounterTicketLocked" />
-          </div>
-        </div>
-      </div>
-      <template #footer>
-        <Button :label="isSelectedEncounterTicketLocked ? 'Close' : 'Cancel'" text @click="encounterTicketVisible = false" />
-        <Button
-          v-if="!isSelectedEncounterTicketLocked"
-          :label="'Generate Sign-Off Slip'"
-          icon="pi pi-check"
-          :loading="isEncounterTicketSaving"
-          :pt="ptPrimaryBtn"
-          @click="submitEncounterTicket"
-        />
-      </template>
-    </Dialog>
+  <AppointmentEncounterTicketDialog
+  v-model:visible="encounterTicketVisible"
+  v-model:signature-data-url="encounterTicketSignatureDataUrl"
+  :selected-detail="selectedDetail"
+  :selected-encounter-ticket="selectedEncounterTicket"
+  :selected-encounter-ticket-has-pt-signature="selectedEncounterTicketHasPtSignature"
+  :selected-encounter-ticket-pt-confirmed-by-label="selectedEncounterTicketPtConfirmedByLabel"
+  :selected-encounter-ticket-pt-completion-tag="selectedEncounterTicketPtCompletionTag"
+  :encounter-service-rendered-label="encounterServiceRenderedLabel"
+  :encounter-session-deduction-label="encounterSessionDeductionLabel"
+  :encounter-ticket-record-label="encounterTicketRecordLabel"
+  :selected-encounter-ticket-package-label="selectedEncounterTicketPackageLabel"
+  :selected-encounter-ticket-package-source-label="selectedEncounterTicketPackageSourceLabel"
+  :is-selected-encounter-ticket-locked="isSelectedEncounterTicketLocked"
+  :is-encounter-ticket-saving="isEncounterTicketSaving"
+  :pt-primary-btn="ptPrimaryBtn"
+  :format-date-time="formatDateTime"
+  @submit="submitEncounterTicket"
+/>
 
     <Dialog v-model:visible="rescheduleVisible" modal header="Reschedule Appointment" :style="{width:'520px'}">
       <div class="space-y-3">
@@ -1498,6 +1297,7 @@
 </template>
 
 <script setup lang="ts">
+import AppointmentEncounterTicketDialog from "@/features/appointments/components/AppointmentEncounterTicketDialog.vue";
 import {computed, defineAsyncComponent, onMounted, ref, watch} from "vue";
 import {storeToRefs} from "pinia";
 import {useRouter} from "vue-router";
@@ -1553,6 +1353,8 @@ import type {AppointmentProviderType, SpecialtyTag, TreatmentArea} from "@/model
 import { ptInputText, ptModalPrimaryBtn, ptOutlinedBtn, ptPrimaryBtn, ptSelect } from "@/features/shared/table-header.styles";
 import { hasAnyStoredPermission, readStoredAuthSnapshot } from "@/utils/auth-user.util"
 import {clinicStore} from "@/stores/clinic.store"
+import AppointmentCheckoutPanel from "@/features/appointments/components/AppointmentCheckoutPanel.vue"
+
 
 const BillingModule = defineAsyncComponent(() => import("@/features/billing/components/BillingModule.vue"))
 
@@ -1679,6 +1481,7 @@ type PackageSessionSchedule = {
 }
 type PackageSessionTemplate = Omit<PackageSessionSchedule, "startsAt">
 const patientOptions = ref<AppointmentPersonOption[]>([])
+const createLookupsClinicId = ref<number>()
 const doctorOptions = ref<AppointmentPersonOption[]>([])
 const referringDoctorOptions = ref<AppointmentPersonOption[]>([])
 const supportStaffOptions = ref<AppointmentPersonOption[]>([])
@@ -2712,7 +2515,6 @@ const isMultiSessionAppointment = (appointment: AppointmentListItem): boolean =>
 
   return normalizedServiceType === "PACKAGE"
     || normalizedBillingType === "SELF_PAY_PACKAGE"
-    || normalizedBillingType === "PACKAGE_BILLING"
 }
 
 const formatDateTime = (value: string | Date): string => new Date(value).toLocaleString()
@@ -3361,9 +3163,15 @@ const refreshAll = async (): Promise<void> => {
 }
 
 const loadCreateLookups = async (): Promise<void> => {
+  await globalClinicStore.loadClinics()
+  if (!selectedClinicId.value && clinicOptions.value.length) {
+    globalClinicStore.setSelectedClinicId(clinicOptions.value[0].id)
+  }
+
+  const lookupClinicId = selectedClinicId.value
   const [patientsPage, staffLookupPage, specialtyTags, sessionLookupPage] = await Promise.all([
     patientService.getAll({
-      clinic_id: undefined,
+      clinic_id: lookupClinicId,
       pageable_request: {
         page: defaultPage,
         size: 100,
@@ -3376,7 +3184,8 @@ const loadCreateLookups = async (): Promise<void> => {
         page: defaultPage,
         size: 100,
         status: Status.ACTIVE,
-        name: undefined
+        name: undefined,
+        clinic_id: lookupClinicId
       }
     }),
     specialtyTagReferenceService.getAll({
@@ -3420,12 +3229,9 @@ const loadCreateLookups = async (): Promise<void> => {
   doctorOptions.value = allStaffMapped.filter((staff) => isPhysicalTherapistProviderType(staff.appointment_provider_type))
   referringDoctorOptions.value = allStaffMapped.filter((staff) => isDoctorConsultantProviderType(staff.appointment_provider_type))
   supportStaffOptions.value = allStaffMapped.filter((staff) => isSupportStaffProviderType(staff.appointment_provider_type))
-  await globalClinicStore.loadClinics()
   specialtyTagOptions.value = specialtyTags?.content ?? []
   sessionServices.value = sessionLookupPage.data?.content ?? []
-  if (!selectedClinicId.value && clinicOptions.value.length) {
-    globalClinicStore.setSelectedClinicId(clinicOptions.value[0].id)
-  }
+  createLookupsClinicId.value = lookupClinicId
   await loadTreatmentAreaOptions()
 
   await loadSinglePayServices()
@@ -3436,7 +3242,8 @@ const openCreateDialog = async (): Promise<void> => {
     !patientOptions.value.length ||
     !doctorOptions.value.length ||
     !clinicOptions.value.length ||
-    !specialtyTagOptions.value.length
+    !specialtyTagOptions.value.length ||
+    createLookupsClinicId.value !== selectedClinicId.value
   ) {
     await loadCreateLookups()
   }
@@ -3902,6 +3709,23 @@ watch(recordFilter, () => {
 })
 
 watch(selectedClinicId, async () => {
+  createLookupsClinicId.value = undefined
+  if (createPatient.value && !patientOptions.value.some(option => option.id === createPatient.value && option.clinic_id === selectedClinicId.value)) {
+    createPatient.value = undefined
+  }
+  if (createDoctor.value && !doctorOptions.value.some(option => option.id === createDoctor.value && option.clinic_id === selectedClinicId.value)) {
+    createDoctor.value = undefined
+  }
+  if (createReferringDoctor.value && !referringDoctorOptions.value.some(option => option.id === createReferringDoctor.value && option.clinic_id === selectedClinicId.value)) {
+    createReferringDoctor.value = undefined
+  }
+  if (createSupportStaff.value && !supportStaffOptions.value.some(option => option.id === createSupportStaff.value && option.clinic_id === selectedClinicId.value)) {
+    createSupportStaff.value = undefined
+  }
+  if (createVisible.value) {
+    await loadCreateLookups()
+  }
+
   await loadTreatmentAreaOptions()
   const normalizedDate = findNextAllowedDate(new Date(calendarDate.value))
   if (normalizedDate.toDateString() !== calendarDate.value.toDateString()) {
@@ -3918,8 +3742,8 @@ watch(selectedClinicId, async () => {
 watch(createPatient, (patientId) => {
   if (!patientId) return
   const selectedPatientOption = patientOptions.value.find(option => option.id === patientId)
-  if (selectedPatientOption?.clinic_id) {
-    selectedClinicId.value = selectedPatientOption.clinic_id
+  if (selectedPatientOption?.clinic_id && selectedPatientOption.clinic_id !== selectedClinicId.value) {
+    createPatient.value = undefined
   }
 })
 
@@ -3927,8 +3751,9 @@ watch(createDoctor, (doctorId, previousDoctorId) => {
   const selectedDoctorOption = doctorOptions.value.find(option => option.id === doctorId)
   const previousDoctorOption = doctorOptions.value.find(option => option.id === previousDoctorId)
 
-  if (!createPatient.value && selectedDoctorOption?.clinic_id) {
-    selectedClinicId.value = selectedDoctorOption.clinic_id
+  if (selectedDoctorOption?.clinic_id && selectedDoctorOption.clinic_id !== selectedClinicId.value) {
+    createDoctor.value = undefined
+    return
   }
 
   if (selectedDoctorOption?.specialty_tag_id) {
