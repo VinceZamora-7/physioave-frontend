@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router"
 import { ROUTE_ACCESS_RULES } from "@/shared/permissions"
-import { pamsAPI } from "@/utils/axios-interceptor"
+import { getSetupStatus } from "@/app/setup-status"
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -165,23 +165,6 @@ const router = createRouter({
 })
 
 let userPermissions: string[] = []
-let setupChecked = false
-let isInitialized = false
-
-const checkSetupStatus = async (): Promise<boolean> => {
-  if (setupChecked) return isInitialized
-
-  try {
-    const { data } = await pamsAPI.get<{ isInitialized: boolean }>("/setup/status")
-    isInitialized = Boolean(data?.isInitialized)
-  } catch {
-    isInitialized = false
-  } finally {
-    setupChecked = true
-  }
-
-  return isInitialized
-}
 
 const loadUserPermissions = async (): Promise<boolean> => {
   try {
@@ -219,12 +202,22 @@ const resolveFallbackRouteName = (blockedRouteName: string): string => {
 }
 
 router.beforeEach(async (to) => {
-  const initialized = await checkSetupStatus()
+  if (to.name === "error" || to.name === "not-found") {
+    return true
+  }
 
-  if (!initialized && to.name !== "setup") {
+  const initialized = await getSetupStatus()
+
+  if (initialized === null) {
     return {
-      name: "setup",
-      query: to.query
+      name: "error",
+      query: { error: "backend_unreachable" }
+    }
+  }
+
+  if (!initialized && to.meta.requiresAuth === true) {
+    return {
+      name: "login"
     }
   }
 

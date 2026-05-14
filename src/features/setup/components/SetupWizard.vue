@@ -57,6 +57,7 @@ import IftaLabel from "primevue/iftalabel"
 import InputText from "primevue/inputtext"
 import Message from "primevue/message"
 import Select from "primevue/select"
+import { getSetupStatus, markSetupInitialized } from "@/app/setup-status"
 import { pamsAPI } from "@/utils/axios-interceptor"
 
 const router = useRouter()
@@ -101,8 +102,12 @@ if (onboardingToken) {
 
 const loadStatus = async () => {
   try {
-    const { data } = await pamsAPI.get<{ isInitialized: boolean }>("/setup/status")
-    if (data?.isInitialized) {
+    const initialized = await getSetupStatus(true)
+    if (initialized === null) {
+      throw new Error("backend_unreachable")
+    }
+
+    if (initialized) {
       sessionStorage.removeItem("onboardingToken")
       await router.replace({ name: "login" })
       return
@@ -114,8 +119,14 @@ const loadStatus = async () => {
     }
   } catch {
     if (!onboardingToken) {
-      await router.replace({ name: "login" })
+      await router.replace({
+        name: "error",
+        query: { error: "backend_unreachable" }
+      })
+      return
     }
+
+    errorMessage.value = "We could not verify setup status because the backend server is unavailable. Please start the backend, then try again."
   }
 }
 
@@ -153,6 +164,7 @@ const onSubmit = async () => {
       }
     )
 
+    markSetupInitialized()
     sessionStorage.removeItem("onboardingToken")
     await router.replace({ name: "dashboard" })
   } catch (error: any) {

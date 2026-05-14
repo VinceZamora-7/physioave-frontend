@@ -87,6 +87,7 @@ const badgeLabel = computed(() => {
 })
 
 const title = computed(() => {
+  if (errorCode.value === "backend_unreachable") return "Service unavailable"
   if (errorCode.value === "staff_not_found") return "Access not allowed"
   if (errorCode.value === "staff_inactive") return "Account is inactive"
   if (errorCode.value === "oauth_redirect_uri_mismatch") return "Google redirect mismatch"
@@ -100,6 +101,7 @@ const title = computed(() => {
 })
 
 const description = computed(() => {
+  if (errorCode.value === "backend_unreachable") return "The system could not reach the server to verify login or first-run setup status. Check that the system and database are both running, then try again."
   if (errorCode.value === "staff_not_found") return "Your Google account is not registered in this system. Please contact your administrator for access."
   if (errorCode.value === "staff_inactive") return "Your account exists but is currently inactive. Please contact your administrator."
   if (errorCode.value === "oauth_redirect_uri_mismatch") return "The Google OAuth redirect URI does not exactly match the backend callback URL configured for this app."

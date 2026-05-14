@@ -9,6 +9,7 @@ const enableVueDevTools = process.env.NODE_ENV !== 'production'
 
 // https://vite.dev/config/
 export default defineConfig({
+  envDir: fileURLToPath(new URL('../production', import.meta.url)),
   plugins: [
     vue(),
     ...(enableVueDevTools ? [vueDevTools()] : []),

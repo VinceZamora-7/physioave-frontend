@@ -233,7 +233,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue"
 import { useRouter } from "vue-router"
-import { pamsAPI, pamsBaseURL } from "@/utils/axios-interceptor.ts"
+import { getSetupStatus } from "@/app/setup-status"
+import { pamsBaseURL } from "@/utils/axios-interceptor.ts"
 
 const router = useRouter()
 
@@ -283,7 +284,7 @@ onMounted(async () => {
     return
   }
 
-  await pamsAPI.get<{ isInitialized: boolean }>("/setup/status").catch(() => {
+  await getSetupStatus().catch(() => {
     // Ignore; router guard handles setup/login routing.
   })
 })
