@@ -46,7 +46,6 @@ export const patientSchema = z.strictObject({
       message: "Middle name is required unless patient has no middle name."
     })
   }
-
   const selectedMode = value.mode_of_referral as ({name?: string; referral_channel?: ReferralChannel} | undefined)
   if (value.referral_channel && !selectedMode) {
     ctx.addIssue({

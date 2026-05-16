@@ -51,6 +51,7 @@
                   fluid
                   placeholder="Enter middle name"
                   :disabled="noMiddleNameChecked"
+                  @input="onMiddleNameInput"
                   @blur="$field.value = toNameCase($field.value)"
                 />
                 <label for="middle_name">
@@ -68,7 +69,7 @@
                   v-model="$noMiddleNameField.value"
                   :binary="true"
                   class="scale-90"
-                  @value-change="onNoMiddleNameToggle(Boolean($noMiddleNameField.value))"
+                  @value-change="onNoMiddleNameToggle(Boolean($event))"
                 />
                 <label for="has_no_middle_name_inline" class="text-xs text-slate-500 dark:text-slate-400">
                   No middle name
@@ -545,6 +546,12 @@ const toNameCase = (input: string | undefined | null): string => {
 const onNoMiddleNameToggle = (checked: boolean): void => {
   if (!checked) return
   form.value?.setFieldValue("middle_name", undefined)
+}
+
+const onMiddleNameInput = (event: Event): void => {
+  const value = (event.target as HTMLInputElement | null)?.value ?? ""
+  if (!value.trim()) return
+  form.value?.setFieldValue("has_no_middle_name", false)
 }
 
 const onGooglePlaceChanged = (place: GooglePlaceAddress): void => {
