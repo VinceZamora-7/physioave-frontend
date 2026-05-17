@@ -1,433 +1,578 @@
 <template>
-  <Dialog
-    v-model:visible="visible"
-    :style="{ width: '76rem', maxWidth: '95vw' }"
-    header="Add Patient Profile"
-    modal
-    :draggable="false"
-    :resizable="false"
-    class="patient-form-dialog"
-    @show="onShow"
+<Dialog
+  v-model:visible="visible"
+  :style="{ width: '76rem', maxWidth: '95vw' }"
+  header="Add Patient Profile"
+  modal
+  :draggable="false"
+  :resizable="false"
+  class="patient-form-dialog"
+  @show="onShow"
+>
+  <!-- Form Guide -->
+<div
+  class="app-brand-form-guide mb-5 flex items-start gap-3"
+>
+  <div
+    class="app-brand-form-guide-icon mt-0.5 h-9 w-9"
   >
-    <div class="mb-5 rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-4 py-3">
-      <p class="m-0 text-sm">
-        <span class="font-semibold">Form guide:</span>
-        fields with <span class="font-semibold text-rose-600">*</span> are required.
-      </p>
+    <i class="pi pi-info-circle text-sm"></i>
+  </div>
+
+  <div>
+    <p class="m-0 text-sm font-semibold">Form Guide</p>
+    <p class="m-0 mt-0.5 text-sm opacity-80">
+      Fields marked with <span class="app-brand-required">*</span> are required.
+    </p>
+  </div>
+</div>
+
+  <Form
+    ref="form"
+    :resolver="resolver"
+    @submit="onSubmit"
+    class="space-y-6"
+  >
+    <!-- Personal Information -->
+<section
+  class="app-brand-form-section app-brand-form-section-primary"
+>
+  <div
+    class="app-brand-form-section-header app-brand-form-section-header-primary"
+  >
+    <div
+      class="app-brand-form-section-icon-primary h-10 w-10"
+    >
+      <i class="pi pi-user text-base"></i>
     </div>
 
-    <Form
-      ref="form"
-      :resolver="resolver"
-      @submit="onSubmit"
-      class="space-y-6"
-    >
-      <section class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 sm:p-5">
-        <h3 class="mb-4 text-sm font-semibold tracking-wide text-slate-600 dark:text-slate-300">
-          Personal Information
-        </h3>
+    <div>
+      <h3 class="app-brand-form-section-title">
+        Personal Information
+      </h3>
+      <p class="app-brand-form-section-copy">
+        Basic identity, referral, and clinic assignment details.
+      </p>
+    </div>
+  </div>
 
-        <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <FormField v-slot="$field" name="first_name">
-            <IftaLabel>
-              <InputText
-                id="first_name"
-                v-model="$field.value"
-                fluid
-                placeholder="Enter first name"
-                @blur="$field.value = toNameCase($field.value)"
-              />
-              <label for="first_name">First Name <span class="text-rose-600">*</span></label>
-              <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
-            </IftaLabel>
-          </FormField>
+  <div class="p-4 sm:p-5">
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <FormField v-slot="$field" name="first_name">
+        <IftaLabel>
+          <InputText
+            id="first_name"
+            v-model="$field.value"
+            fluid
+            placeholder="Enter first name"
+            @blur="$field.value = toNameCase($field.value)"
+          />
+          <label for="first_name">
+            First Name <span class="app-brand-required">*</span>
+          </label>
+          <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
+            {{ $field.error.message }}
+          </Message>
+        </IftaLabel>
+      </FormField>
 
-          <div class="space-y-2">
-            <FormField v-slot="$field" name="middle_name">
-              <IftaLabel>
-                <InputText
-                  id="middle_name"
-                  v-model="$field.value"
-                  fluid
-                  placeholder="Enter middle name"
-                  :disabled="noMiddleNameChecked"
-                  @input="onMiddleNameInput"
-                  @blur="$field.value = toNameCase($field.value)"
-                />
-                <label for="middle_name">
-                  Middle Name
-                  <span v-if="!noMiddleNameChecked" class="text-rose-600">*</span>
-                </label>
-                <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
-              </IftaLabel>
-            </FormField>
+      <div class="space-y-2">
+        <FormField v-slot="$field" name="middle_name">
+          <IftaLabel>
+            <InputText
+              id="middle_name"
+              v-model="$field.value"
+              fluid
+              placeholder="Enter middle name"
+              :disabled="noMiddleNameChecked"
+              @input="onMiddleNameInput"
+              @blur="$field.value = toNameCase($field.value)"
+            />
+            <label for="middle_name">
+              Middle Name
+              <span v-if="!noMiddleNameChecked" class="app-brand-required">*</span>
+            </label>
+            <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
+              {{ $field.error.message }}
+            </Message>
+          </IftaLabel>
+        </FormField>
 
-            <FormField v-slot="$noMiddleNameField" name="has_no_middle_name">
-              <div class="flex items-center gap-2 pl-1">
-                <Checkbox
-                  input-id="has_no_middle_name_inline"
-                  v-model="$noMiddleNameField.value"
-                  :binary="true"
-                  class="scale-90"
-                  @value-change="onNoMiddleNameToggle(Boolean($event))"
-                />
-                <label for="has_no_middle_name_inline" class="text-xs text-slate-500 dark:text-slate-400">
-                  No middle name
-                </label>
-              </div>
-            </FormField>
-          </div>
-
-          <FormField v-slot="$field" name="last_name">
-            <IftaLabel>
-              <InputText
-                id="last_name"
-                v-model="$field.value"
-                fluid
-                placeholder="Enter last name"
-                @blur="$field.value = toNameCase($field.value)"
-              />
-              <label for="last_name">Last Name <span class="text-rose-600">*</span></label>
-              <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
-            </IftaLabel>
-          </FormField>
-
-          <FormField v-slot="$field" name="age">
-            <IftaLabel>
-              <InputNumber
-                id="age"
-                v-model="$field.value"
-                :allow-empty="true"
-                mode="decimal"
-                fluid
-                placeholder="Enter age"
-              />
-              <label for="age">Age <span class="text-rose-600">*</span></label>
-              <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
-            </IftaLabel>
-          </FormField>
-
-	          <FormField v-slot="$field" name="gender">
-	            <IftaLabel>
-	              <Select
-	                id="gender"
-	                v-model="$field.value"
-	                :fluid="true"
-	                :loading="isLoading"
-	                :options="genders"
-	                optionLabel="name"
-	                placeholder="Select gender"
-	                :filter="true"
-	                :filter-fields="['name']"
-	              />
-	              <label for="gender">Gender <span class="text-rose-600">*</span></label>
-	              <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
-	            </IftaLabel>
-	          </FormField>
-
-	          <FormField v-slot="$field" name="civil_status">
-	            <IftaLabel>
-	              <Select
-	                id="civil_status"
-	                v-model="$field.value"
-	                :fluid="true"
-	                :loading="isLoading"
-	                :options="civilStatuses"
-	                optionLabel="name"
-	                placeholder="Select civil status"
-	                :filter="true"
-	                :filter-fields="['name']"
-	              />
-	              <label for="civil_status">Civil Status <span class="text-rose-600">*</span></label>
-	              <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
-	            </IftaLabel>
-	          </FormField>
-
-          <FormField v-slot="$field" name="occupation">
-            <IftaLabel>
-              <InputText
-                id="occupation"
-                v-model="$field.value"
-                fluid
-                placeholder="Enter occupation"
-                @blur="$field.value = toNameCase($field.value)"
-              />
-              <label for="occupation">Occupation (Optional)</label>
-              <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
-            </IftaLabel>
-          </FormField>
-
-          <FormField v-slot="$field" name="religion">
-            <IftaLabel>
-              <Select
-                id="religion"
-                v-model="$field.value"
-                :fluid="true"
-                :loading="isLoading"
-                :options="religions"
-                optionLabel="name"
-                placeholder="Select religion"
-                :filter="true"
-                :filter-fields="['name']"
-              />
-              <label for="religion">Religion (Optional)</label>
-              <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
-            </IftaLabel>
-          </FormField>
-
-          <FormField v-slot="$field" name="referral_channel">
-            <IftaLabel>
-              <Select
-                id="referral_channel"
-                v-model="$field.value"
-                :fluid="true"
-                :options="referralChannelOptions"
-                optionLabel="label"
-                optionValue="value"
-                placeholder="Select referral category"
-              />
-              <label for="referral_channel">Referral Category (Optional)</label>
-              <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
-            </IftaLabel>
-          </FormField>
-
-          <FormField v-slot="$field" name="mode_of_referral">
-            <IftaLabel>
-              <Select
-                id="mode_of_referral"
-                v-model="$field.value"
-                :fluid="true"
-                :loading="isLoading"
-                :options="filteredModeOfReferrals"
-                optionLabel="name"
-                placeholder="Select referral source"
-                :filter="true"
-                :filter-fields="['name']"
-                :disabled="!selectedReferralChannel"
-              />
-              <label for="mode_of_referral">Referral Source (Optional)</label>
-              <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
-            </IftaLabel>
-          </FormField>
-
-          <FormField v-slot="$hiddenField" name="referred_by">
-            <input v-model="$hiddenField.value" type="hidden">
-          </FormField>
-
-          <FormField v-if="isDoctorReferral" v-slot="$field" name="referred_by_staff">
-            <IftaLabel>
-              <Select
-                id="referred_by_staff"
-                v-model="$field.value"
-                :fluid="true"
-                :loading="isLoading"
-                :options="doctorReferralOptions"
-                optionLabel="name"
-                placeholder="Select referring doctor from database"
-                :filter="true"
-                :filter-fields="['name']"
-              />
-              <label for="referred_by_staff">Referring Doctor <span class="text-rose-600">*</span></label>
-              <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
-            </IftaLabel>
-
-            <div
-              v-if="legacyDoctorReferralName && !$field.value"
-              class="mt-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+        <FormField v-slot="$noMiddleNameField" name="has_no_middle_name">
+          <div class="flex items-center gap-2 pl-1">
+            <Checkbox
+              input-id="has_no_middle_name_inline"
+              v-model="$noMiddleNameField.value"
+              :binary="true"
+              class="scale-90"
+              @value-change="onNoMiddleNameToggle(Boolean($event))"
+            />
+            <label
+              for="has_no_middle_name_inline"
+              class="app-form-muted-label text-xs"
             >
-              Legacy doctor referral on this record: <span class="font-semibold">{{ legacyDoctorReferralName }}</span>.
-              Select a doctor from the database to link this referral for future ROI and commission tracking.
-            </div>
-          </FormField>
-
-          <FormField v-slot="$field" name="clinic">
-            <IftaLabel>
-              <Select
-                id="clinic"
-                v-model="$field.value"
-                :fluid="true"
-                :loading="isLoading"
-                :options="availableClinics"
-                optionLabel="name"
-                placeholder="Select clinic"
-                :filter="true"
-                :filter-fields="['name']"
-              />
-              <label for="clinic">Clinic <span class="text-rose-600">*</span></label>
-              <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
-            </IftaLabel>
-          </FormField>
-        </div>
-      </section>
-
-      <section class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 sm:p-5">
-        <h3 class="mb-4 text-sm font-semibold tracking-wide text-slate-600 dark:text-slate-300">
-          Contact Information
-        </h3>
-
-        <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <FormField v-slot="$field" name="phone_number">
-            <IftaLabel>
-              <InputMask
-                id="phone_number"
-                v-model="$field.value"
-                fluid
-                mask="99999999999"
-                placeholder="Enter phone number (09XXXXXXXXX)"
-              />
-              <label for="phone_number">Phone Number <span class="text-rose-600">*</span></label>
-              <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error?.message }}</Message>
-            </IftaLabel>
-          </FormField>
-
-          <FormField v-slot="$field" name="email">
-            <IftaLabel>
-              <InputText
-                id="email"
-                v-model="$field.value"
-                fluid
-                type="email"
-                placeholder="Enter email"
-                v-keyfilter="/^[@_.\-a-zA-Z0-9]+$/"
-              />
-              <label for="email">Email (Optional)</label>
-              <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error?.message }}</Message>
-            </IftaLabel>
-          </FormField>
-
-          <FormField v-slot="$field" name="fb_link">
-            <IftaLabel>
-              <InputText
-                id="fb_link"
-                v-model="$field.value"
-                fluid
-                placeholder="Enter Facebook profile link"
-              />
-              <label for="fb_link">Facebook Link (Optional)</label>
-              <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
-            </IftaLabel>
-          </FormField>
-        </div>
-      </section>
-
-      <section class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 sm:p-5">
-        <h3 class="mb-4 text-sm font-semibold tracking-wide text-slate-600 dark:text-slate-300">
-          Address Information
-        </h3>
-
-        <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <FormField v-slot="$field" name="region">
-            <IftaLabel>
-              <Select
-                id="region"
-                v-model="$field.value"
-                :fluid="true"
-                :loading="isLoading"
-                :options="availableRegions"
-                optionLabel="name"
-                placeholder="Select region"
-                :filter="true"
-                :filter-fields="['name', 'description']"
-                @value-change="onRegionChange"
-              >
-                <template #option="slotProps">
-                  <div>{{ slotProps.option?.name }} - {{ slotProps.option?.description }}</div>
-                </template>
-                <template #value="slotProps">
-                  <div v-if="slotProps.value">{{ slotProps.value?.name }} - {{ slotProps.value?.description }}</div>
-                  <span v-else>{{ slotProps.placeholder }}</span>
-                </template>
-              </Select>
-              <label for="region">Region</label>
-              <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
-            </IftaLabel>
-          </FormField>
-
-          <FormField v-slot="$field" name="province">
-            <IftaLabel>
-              <Select
-                id="province"
-                v-model="$field.value"
-                :fluid="true"
-                :loading="isLoading"
-                :options="provinces"
-                optionLabel="name"
-                placeholder="Select province"
-                :filter="true"
-                :filter-fields="['name']"
-                @value-change="onProvinceChange"
-              />
-              <label for="province">Province</label>
-              <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
-            </IftaLabel>
-          </FormField>
-
-          <FormField v-slot="$field" name="city">
-            <IftaLabel>
-              <Select
-                id="city"
-                v-model="$field.value"
-                :fluid="true"
-                :loading="isLoading"
-                :options="cities"
-                optionLabel="name"
-                placeholder="Select city"
-                :filter="true"
-                :filter-fields="['name']"
-                @value-change="onCityChange"
-              />
-              <label for="city">City</label>
-              <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
-            </IftaLabel>
-          </FormField>
-
-          <FormField v-slot="$field" name="baranggay">
-            <IftaLabel>
-              <Select
-                id="baranggay"
-                v-model="$field.value"
-                :fluid="true"
-                :loading="isLoading"
-                :options="baranggays"
-                optionLabel="name"
-                placeholder="Select barangay"
-                :filter="true"
-                :filter-fields="['name']"
-              />
-              <label for="baranggay">Barangay</label>
-              <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
-            </IftaLabel>
-          </FormField>
-
-          <FormField v-slot="$field" name="details">
-            <IftaLabel>
-              <InputText
-                id="details"
-                v-model="$field.value"
-                fluid
-                placeholder="House no., street, landmark, etc."
-                @blur="$field.value = toNameCase($field.value)"
-              />
-              <label for="details">Address Details (Optional)</label>
-              <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">{{ $field.error.message }}</Message>
-            </IftaLabel>
-          </FormField>
-        </div>
-      </section>
-
-      <div class="flex justify-end gap-2 pt-1">
-        <Button :loading="isLoading" label="Cancel" type="button" severity="secondary" outlined @click="onClose" />
-        <Button
-          :loading="isLoading"
-          :label="buttonProps.label"
-          :icon="buttonProps.icon"
-          :severity="buttonProps.severity"
-          :pt="ptModalPrimaryBtn"
-          type="submit"
-        />
+              No middle name
+            </label>
+          </div>
+        </FormField>
       </div>
-    </Form>
-  </Dialog>
+
+      <FormField v-slot="$field" name="last_name">
+        <IftaLabel>
+          <InputText
+            id="last_name"
+            v-model="$field.value"
+            fluid
+            placeholder="Enter last name"
+            @blur="$field.value = toNameCase($field.value)"
+          />
+          <label for="last_name">
+            Last Name <span class="app-brand-required">*</span>
+          </label>
+          <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
+            {{ $field.error.message }}
+          </Message>
+        </IftaLabel>
+      </FormField>
+
+      <FormField v-slot="$field" name="age">
+        <IftaLabel>
+          <InputNumber
+            id="age"
+            v-model="$field.value"
+            :allow-empty="true"
+            mode="decimal"
+            fluid
+            placeholder="Enter age"
+          />
+          <label for="age">
+            Age <span class="app-brand-required">*</span>
+          </label>
+          <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
+            {{ $field.error.message }}
+          </Message>
+        </IftaLabel>
+      </FormField>
+
+      <FormField v-slot="$field" name="gender">
+        <IftaLabel>
+          <Select
+            id="gender"
+            v-model="$field.value"
+            :fluid="true"
+            :loading="isLoading"
+            :options="genders"
+            optionLabel="name"
+            placeholder="Select gender"
+            :filter="true"
+            :filter-fields="['name']"
+          />
+          <label for="gender">
+            Gender <span class="app-brand-required">*</span>
+          </label>
+          <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
+            {{ $field.error.message }}
+          </Message>
+        </IftaLabel>
+      </FormField>
+
+      <FormField v-slot="$field" name="civil_status">
+        <IftaLabel>
+          <Select
+            id="civil_status"
+            v-model="$field.value"
+            :fluid="true"
+            :loading="isLoading"
+            :options="civilStatuses"
+            optionLabel="name"
+            placeholder="Select civil status"
+            :filter="true"
+            :filter-fields="['name']"
+          />
+          <label for="civil_status">
+            Civil Status <span class="app-brand-required">*</span>
+          </label>
+          <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
+            {{ $field.error.message }}
+          </Message>
+        </IftaLabel>
+      </FormField>
+
+      <FormField v-slot="$field" name="occupation">
+        <IftaLabel>
+          <InputText
+            id="occupation"
+            v-model="$field.value"
+            fluid
+            placeholder="Enter occupation"
+            @blur="$field.value = toNameCase($field.value)"
+          />
+          <label for="occupation">Occupation (Optional)</label>
+          <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
+            {{ $field.error.message }}
+          </Message>
+        </IftaLabel>
+      </FormField>
+
+      <FormField v-slot="$field" name="religion">
+        <IftaLabel>
+          <Select
+            id="religion"
+            v-model="$field.value"
+            :fluid="true"
+            :loading="isLoading"
+            :options="religions"
+            optionLabel="name"
+            placeholder="Select religion"
+            :filter="true"
+            :filter-fields="['name']"
+          />
+          <label for="religion">Religion (Optional)</label>
+          <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
+            {{ $field.error.message }}
+          </Message>
+        </IftaLabel>
+      </FormField>
+
+      <FormField v-slot="$field" name="referral_channel">
+        <IftaLabel>
+          <Select
+            id="referral_channel"
+            v-model="$field.value"
+            :fluid="true"
+            :options="referralChannelOptions"
+            optionLabel="label"
+            optionValue="value"
+            placeholder="Select referral category"
+          />
+          <label for="referral_channel">Referral Category (Optional)</label>
+          <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
+            {{ $field.error.message }}
+          </Message>
+        </IftaLabel>
+      </FormField>
+
+      <FormField v-slot="$field" name="mode_of_referral">
+        <IftaLabel>
+          <Select
+            id="mode_of_referral"
+            v-model="$field.value"
+            :fluid="true"
+            :loading="isLoading"
+            :options="filteredModeOfReferrals"
+            optionLabel="name"
+            placeholder="Select referral source"
+            :filter="true"
+            :filter-fields="['name']"
+            :disabled="!selectedReferralChannel"
+          />
+          <label for="mode_of_referral">Referral Source (Optional)</label>
+          <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
+            {{ $field.error.message }}
+          </Message>
+        </IftaLabel>
+      </FormField>
+
+      <FormField v-slot="$hiddenField" name="referred_by">
+        <input v-model="$hiddenField.value" type="hidden" />
+      </FormField>
+
+      <FormField v-if="isDoctorReferral" v-slot="$field" name="referred_by_staff">
+        <IftaLabel>
+          <Select
+            id="referred_by_staff"
+            v-model="$field.value"
+            :fluid="true"
+            :loading="isLoading"
+            :options="doctorReferralOptions"
+            optionLabel="name"
+            placeholder="Select referring doctor from database"
+            :filter="true"
+            :filter-fields="['name']"
+          />
+          <label for="referred_by_staff">
+            Referring Doctor <span class="app-brand-required">*</span>
+          </label>
+          <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
+            {{ $field.error.message }}
+          </Message>
+        </IftaLabel>
+
+        <div
+          v-if="legacyDoctorReferralName && !$field.value"
+          class="app-brand-warning mt-2"
+        >
+          Legacy doctor referral on this record:
+          <span class="font-semibold">{{ legacyDoctorReferralName }}</span>.
+          Select a doctor from the database to link this referral for future ROI and commission tracking.
+        </div>
+      </FormField>
+
+      <FormField v-slot="$field" name="clinic">
+        <IftaLabel>
+          <Select
+            id="clinic"
+            v-model="$field.value"
+            :fluid="true"
+            :loading="isLoading"
+            :options="availableClinics"
+            optionLabel="name"
+            placeholder="Select clinic"
+            :filter="true"
+            :filter-fields="['name']"
+          />
+          <label for="clinic">
+            Clinic <span class="app-brand-required">*</span>
+          </label>
+          <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
+            {{ $field.error.message }}
+          </Message>
+        </IftaLabel>
+      </FormField>
+    </div>
+  </div>
+</section>
+
+    <!-- Contact Information -->
+<section
+  class="app-brand-form-section app-brand-form-section-secondary"
+>
+  <div
+    class="app-brand-form-section-header app-brand-form-section-header-secondary"
+  >
+    <div
+      class="app-brand-form-section-icon-secondary h-10 w-10"
+    >
+      <i class="pi pi-phone text-base"></i>
+    </div>
+
+    <div>
+      <h3 class="app-brand-form-section-title">
+        Contact Information
+      </h3>
+      <p class="app-brand-form-section-copy">
+        Patient phone, email, and online contact details.
+      </p>
+    </div>
+  </div>
+
+  <div class="p-4 sm:p-5">
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <FormField v-slot="$field" name="phone_number">
+        <IftaLabel>
+          <InputMask
+            id="phone_number"
+            v-model="$field.value"
+            fluid
+            mask="99999999999"
+            placeholder="Enter phone number (09XXXXXXXXX)"
+          />
+          <label for="phone_number">
+            Phone Number <span class="app-brand-required">*</span>
+          </label>
+          <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
+            {{ $field.error?.message }}
+          </Message>
+        </IftaLabel>
+      </FormField>
+
+      <FormField v-slot="$field" name="email">
+        <IftaLabel>
+          <InputText
+            id="email"
+            v-model="$field.value"
+            fluid
+            type="email"
+            placeholder="Enter email"
+            v-keyfilter="/^[@_.\-a-zA-Z0-9]+$/"
+          />
+          <label for="email">Email (Optional)</label>
+          <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
+            {{ $field.error?.message }}
+          </Message>
+        </IftaLabel>
+      </FormField>
+
+      <FormField v-slot="$field" name="fb_link">
+        <IftaLabel>
+          <InputText
+            id="fb_link"
+            v-model="$field.value"
+            fluid
+            placeholder="Enter Facebook profile link"
+          />
+          <label for="fb_link">Facebook Link (Optional)</label>
+          <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
+            {{ $field.error.message }}
+          </Message>
+        </IftaLabel>
+      </FormField>
+    </div>
+  </div>
+</section>
+
+<!-- Address Information -->
+<section
+  class="app-brand-form-section app-brand-form-section-accent"
+>
+  <div
+    class="app-brand-form-section-header app-brand-form-section-header-accent"
+  >
+    <div
+      class="app-brand-form-section-icon-accent h-10 w-10"
+    >
+      <i class="pi pi-map-marker text-base"></i>
+    </div>
+
+    <div>
+      <h3 class="app-brand-form-section-title app-brand-form-section-title-accent">
+        Address Information
+      </h3>
+      <p class="app-brand-form-section-copy app-brand-form-section-copy-accent">
+        Location details used for patient records and branch reporting.
+      </p>
+    </div>
+  </div>
+
+  <div class="p-4 sm:p-5">
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <FormField v-slot="$field" name="region">
+        <IftaLabel>
+          <Select
+            id="region"
+            v-model="$field.value"
+            :fluid="true"
+            :loading="isLoading"
+            :options="availableRegions"
+            optionLabel="name"
+            placeholder="Select region"
+            :filter="true"
+            :filter-fields="['name', 'description']"
+            @value-change="onRegionChange"
+          >
+            <template #option="slotProps">
+              <div>{{ slotProps.option?.name }} - {{ slotProps.option?.description }}</div>
+            </template>
+
+            <template #value="slotProps">
+              <div v-if="slotProps.value">
+                {{ slotProps.value?.name }} - {{ slotProps.value?.description }}
+              </div>
+              <span v-else>{{ slotProps.placeholder }}</span>
+            </template>
+          </Select>
+          <label for="region">Region</label>
+          <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
+            {{ $field.error.message }}
+          </Message>
+        </IftaLabel>
+      </FormField>
+
+      <FormField v-slot="$field" name="province">
+        <IftaLabel>
+          <Select
+            id="province"
+            v-model="$field.value"
+            :fluid="true"
+            :loading="isLoading"
+            :options="provinces"
+            optionLabel="name"
+            placeholder="Select province"
+            :filter="true"
+            :filter-fields="['name']"
+            @value-change="onProvinceChange"
+          />
+          <label for="province">Province</label>
+          <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
+            {{ $field.error.message }}
+          </Message>
+        </IftaLabel>
+      </FormField>
+
+      <FormField v-slot="$field" name="city">
+        <IftaLabel>
+          <Select
+            id="city"
+            v-model="$field.value"
+            :fluid="true"
+            :loading="isLoading"
+            :options="cities"
+            optionLabel="name"
+            placeholder="Select city"
+            :filter="true"
+            :filter-fields="['name']"
+            @value-change="onCityChange"
+          />
+          <label for="city">City</label>
+          <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
+            {{ $field.error.message }}
+          </Message>
+        </IftaLabel>
+      </FormField>
+
+      <FormField v-slot="$field" name="baranggay">
+        <IftaLabel>
+          <Select
+            id="baranggay"
+            v-model="$field.value"
+            :fluid="true"
+            :loading="isLoading"
+            :options="baranggays"
+            optionLabel="name"
+            placeholder="Select barangay"
+            :filter="true"
+            :filter-fields="['name']"
+          />
+          <label for="baranggay">Barangay</label>
+          <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
+            {{ $field.error.message }}
+          </Message>
+        </IftaLabel>
+      </FormField>
+
+      <FormField v-slot="$field" name="details">
+        <IftaLabel>
+          <InputText
+            id="details"
+            v-model="$field.value"
+            fluid
+            placeholder="House no., street, landmark, etc."
+            @blur="$field.value = toNameCase($field.value)"
+          />
+          <label for="details">Address Details (Optional)</label>
+          <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
+            {{ $field.error.message }}
+          </Message>
+        </IftaLabel>
+      </FormField>
+    </div>
+  </div>
+</section>
+
+    <!-- Footer Actions -->
+    <div
+      class="app-sticky-form-footer"
+    >
+      <Button
+        :loading="isLoading"
+        label="Cancel"
+        type="button"
+        severity="secondary"
+        outlined
+        @click="onClose"
+      />
+
+      <Button
+        :loading="isLoading"
+        :label="buttonProps.label"
+        :icon="buttonProps.icon"
+        :severity="buttonProps.severity"
+        :pt="ptModalPrimaryBtn"
+        type="submit"
+      />
+    </div>
+  </Form>
+</Dialog>
 </template>
 
 <script setup lang="ts">

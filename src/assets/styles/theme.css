@@ -11,6 +11,13 @@
   --color-brand-magenta: #A91D8B;
   --color-brand-pink: #DB65C6;
 
+  --brand-navy: 36 39 87;
+  --brand-cyan: 60 136 177;
+  --brand-cyan-soft: 163 217 232;
+  --brand-purple: 94 24 105;
+  --brand-magenta: 169 29 139;
+  --brand-pink: 219 101 198;
+
   /* ✅ Semantic tokens (LIGHT) */
   --app-bg: 249 248 250;        /* off-white */
   --app-fg: 15 23 42;           /* readable dark text */
@@ -21,6 +28,102 @@
   --app-primary: 36 39 87;      /* navy */
   --app-secondary: 60 136 177;  /* cyan */
   --app-accent: 169 29 139;     /* magenta */
+
+  /* surfaces / cards */
+  --app-surface: 255 255 255;
+  --app-surface-muted: 249 248 250;
+  --app-surface-soft: 244 247 250;
+  --app-card-hover: 248 250 252;
+  --app-card-active: 241 245 249;
+
+  /* buttons */
+  --app-button-primary-from: 36 39 87;
+  --app-button-primary-via: 94 24 105;
+  --app-button-primary-to: 169 29 139;
+  --app-button-primary-fg: 255 255 255;
+  --app-button-secondary-bg: 255 255 255;
+  --app-button-secondary-fg: 36 39 87;
+  --app-button-secondary-border: 226 232 240;
+  --app-button-danger-bg: 220 38 38;
+  --app-button-danger-fg: 255 255 255;
+
+  /* active / hover states */
+  --app-hover-bg: 241 245 249;
+  --app-hover-border: 203 213 225;
+  --app-active-bg: 232 240 247;
+  --app-active-border: 60 136 177;
+  --app-active-fg: 36 39 87;
+  --app-focus-ring: 169 29 139;
+
+  /* tables */
+  --app-table-bg: 255 255 255;
+  --app-table-header-bg: 244 247 250;
+  --app-table-header-fg: 71 85 105;
+  --app-table-row-bg: 255 255 255;
+  --app-table-row-alt-bg: 249 250 251;
+  --app-table-row-hover-bg: 241 245 249;
+  --app-table-row-active-bg: 232 240 247;
+  --app-table-border: 226 232 240;
+  --app-table-muted-fg: 100 116 139;
+
+  /* patient form panels */
+  --patient-form-required: 225 29 72;
+  --patient-form-guide-border: 163 217 232;
+  --patient-form-guide-bg: 238 248 251;
+  --patient-form-guide-fg: 15 23 42;
+  --patient-form-guide-icon-bg: 255 255 255;
+  --patient-form-guide-icon-fg: 30 41 59;
+  --patient-form-primary-border: 199 200 227;
+  --patient-form-primary-bg: 243 243 250;
+  --patient-form-secondary-border: 243 232 245;
+  --patient-form-secondary-bg: 243 232 245;
+  --patient-form-accent-border: 231 166 218;
+  --patient-form-accent-bg: 252 238 248;
+  --patient-form-heading: 94 24 105;
+  --patient-form-heading-muted: 94 24 105;
+  --patient-form-primary-icon-bg: 191 219 254;
+  --patient-form-primary-icon-fg: 36 39 87;
+  --patient-form-secondary-icon-bg: 243 232 245;
+  --patient-form-secondary-icon-fg: 94 24 105;
+  --patient-form-accent-icon-bg: 169 29 139;
+  --patient-form-accent-icon-fg: 255 255 255;
+  --patient-form-muted-label: 100 116 139;
+  --patient-form-warning-border: 253 230 138;
+  --patient-form-warning-bg: 255 251 235;
+  --patient-form-warning-fg: 120 53 15;
+
+  /* patient detail cards */
+--patient-detail-hero-border: 163 217 232; /* #A3D9E8 */
+--patient-detail-hero-bg-from: 238 248 251; /* #EEF8FB */
+--patient-detail-hero-bg-to: 232 246 251; /* #E8F6FB */
+  --patient-detail-primary-border: 199 200 227;
+  --patient-detail-primary-bg: 243 243 250;
+  --patient-detail-secondary-border: 243 232 245;
+  --patient-detail-secondary-bg: 243 232 245;
+  --patient-detail-accent-border: 231 166 218;
+  --patient-detail-accent-bg: 231 166 218;;
+  --patient-detail-heading: 94 24 105;
+  --patient-detail-muted: 94 24 105;
+  --patient-detail-value: 15 23 42;
+  --patient-detail-address-bg: 255 255 255;
+  --patient-detail-address-border: 226 232 240;
+  --patient-detail-address-fg: 15 23 42;
+
+  /* appointments */
+  --appointment-panel-border: 199 200 227;
+  --appointment-panel-bg: 243 243 250;
+  --appointment-panel-secondary-border: 243 232 245;
+  --appointment-panel-secondary-bg: 243 232 245;
+  --appointment-panel-accent-border: 231 166 218;
+  --appointment-panel-accent-bg: 252 238 248;
+  --appointment-heading: 94 24 105;
+  --appointment-muted: 94 24 105;
+  --appointment-value: 15 23 42;
+  --appointment-table-bg: 255 255 255;
+  --appointment-table-border: 226 232 240;
+  --appointment-chip-bg: 238 248 251;
+  --appointment-chip-border: 163 217 232;
+  --appointment-chip-fg: 15 23 42;
 }
 
 /* ✅ Semantic tokens (DARK) */
@@ -33,6 +136,102 @@ html.dark {
   --app-primary: 163 217 232;   /* cyan pops on dark */
   --app-secondary: 60 136 177;  /* cyan */
   --app-accent: 219 101 198;    /* pink pops on dark */
+
+  /* surfaces / cards */
+  --app-surface: 18 20 48;
+  --app-surface-muted: 13 16 38;
+  --app-surface-soft: 22 25 56;
+  --app-card-hover: 26 30 66;
+  --app-card-active: 31 36 78;
+
+  /* buttons */
+  --app-button-primary-from: 36 39 87;
+  --app-button-primary-via: 94 24 105;
+  --app-button-primary-to: 169 29 139;
+  --app-button-primary-fg: 255 255 255;
+  --app-button-secondary-bg: 18 20 48;
+  --app-button-secondary-fg: 235 241 250;
+  --app-button-secondary-border: 49 52 92;
+  --app-button-danger-bg: 239 68 68;
+  --app-button-danger-fg: 255 255 255;
+
+  /* active / hover states */
+  --app-hover-bg: 26 30 66;
+  --app-hover-border: 73 78 130;
+  --app-active-bg: 31 52 77;
+  --app-active-border: 163 217 232;
+  --app-active-fg: 235 241 250;
+  --app-focus-ring: 219 101 198;
+
+  /* tables */
+  --app-table-bg: 18 20 48;
+  --app-table-header-bg: 22 25 56;
+  --app-table-header-fg: 203 213 225;
+  --app-table-row-bg: 18 20 48;
+  --app-table-row-alt-bg: 15 18 42;
+  --app-table-row-hover-bg: 26 30 66;
+  --app-table-row-active-bg: 31 52 77;
+  --app-table-border: 49 52 92;
+  --app-table-muted-fg: 148 163 184;
+
+  /* patient form panels */
+  --patient-form-required: 251 113 133;
+  --patient-form-guide-border: 60 136 177;
+  --patient-form-guide-bg: 14 42 58;
+  --patient-form-guide-fg: 215 236 246;
+  --patient-form-guide-icon-bg: 255 255 255;
+  --patient-form-guide-icon-fg: 30 41 59;
+  --patient-form-primary-border: 30 58 138;
+  --patient-form-primary-bg: 23 37 84;
+  --patient-form-secondary-border: 60 136 177;
+  --patient-form-secondary-bg: 14 42 58;
+  --patient-form-accent-border: 60 136 177;
+  --patient-form-accent-bg: 11 34 48;
+  --patient-form-heading: 215 236 246;
+  --patient-form-heading-muted: 215 236 246;
+  --patient-form-primary-icon-bg: 30 58 138;
+  --patient-form-primary-icon-fg: 147 197 253;
+  --patient-form-secondary-icon-bg: 243 232 245;
+  --patient-form-secondary-icon-fg: 94 24 105;
+  --patient-form-accent-icon-bg: 169 29 139;
+  --patient-form-accent-icon-fg: 255 255 255;
+  --patient-form-muted-label: 148 163 184;
+  --patient-form-warning-border: 120 53 15;
+  --patient-form-warning-bg: 69 26 3;
+  --patient-form-warning-fg: 253 230 138;
+
+  /* patient detail cards */
+  --patient-detail-hero-border: 60 136 177;
+  --patient-detail-hero-bg-from: 14 42 58;
+  --patient-detail-hero-bg-to: 11 34 48;
+  --patient-detail-primary-border: 30 58 138;
+  --patient-detail-primary-bg: 23 37 84;
+  --patient-detail-secondary-border: 60 136 177;
+  --patient-detail-secondary-bg: 14 42 58;
+  --patient-detail-accent-border: 60 136 177;
+  --patient-detail-accent-bg: 11 34 48;
+  --patient-detail-heading: 215 236 246;
+  --patient-detail-muted: 215 236 246;
+  --patient-detail-value: 235 241 250;
+  --patient-detail-address-bg: 18 20 48;
+  --patient-detail-address-border: 49 52 92;
+  --patient-detail-address-fg: 235 241 250;
+
+  /* appointments */
+  --appointment-panel-border: 30 58 138;
+  --appointment-panel-bg: 23 37 84;
+  --appointment-panel-secondary-border: 60 136 177;
+  --appointment-panel-secondary-bg: 14 42 58;
+  --appointment-panel-accent-border: 60 136 177;
+  --appointment-panel-accent-bg: 11 34 48;
+  --appointment-heading: 215 236 246;
+  --appointment-muted: 215 236 246;
+  --appointment-value: 235 241 250;
+  --appointment-table-bg: 18 20 48;
+  --appointment-table-border: 49 52 92;
+  --appointment-chip-bg: 14 42 58;
+  --appointment-chip-border: 60 136 177;
+  --appointment-chip-fg: 215 236 246;
 }
 
 /* Sidebar scrollbar (scoped by class) */
@@ -62,4 +261,3 @@ html.dark {
 .app-scrollbar::-webkit-scrollbar-thumb:hover {
   background-color: rgba(var(--app-fg), 0.35);
 }
-

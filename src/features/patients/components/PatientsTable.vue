@@ -1,107 +1,207 @@
 <template>
-  <div class="h-full border rounded-lg overflow-hidden flex flex-col bg-[rgb(var(--app-card))] shadow-sm">
+  <div class="app-patient-table-shell">
     <DataTable
       :value="isLoading ? virtualItems : patients?.content"
       :show-gridlines="false"
       :removable-sort="true"
       :scrollable="true"
       scroll-height="flex"
+      striped-rows
+      row-hover
+      size="small"
       class="h-full flex-1"
       :pt="pt"
     >
       <template #header>
-        <div class="p-2">
+        <div class="app-patient-table-header">
           <slot name="header" />
         </div>
       </template>
 
       <template #empty>
-        <div v-if="!isLoading" class="flex flex-col items-center justify-center py-20 text-muted-foreground">
-          <i class="pi pi-inbox text-4xl mb-4 opacity-20"></i>
-          <span class="font-medium text-lg">No patient records found.</span>
+        <div
+          v-if="!isLoading"
+          class="app-empty-state"
+        >
+          <div class="app-empty-state-icon">
+            <i class="pi pi-inbox text-3xl opacity-60"></i>
+          </div>
+
+          <span class="text-lg font-semibold">
+            No patient records found
+          </span>
+
+          <span class="app-muted-text mt-1 text-sm">
+            Try adjusting your search or filter.
+          </span>
         </div>
       </template>
 
-      <Column :sortable="true" header="Full Name" field="last_name">
+      <!-- Patient -->
+      <Column
+        :sortable="true"
+        header="Patient"
+        field="last_name"
+        class="min-w-[260px]"
+      >
         <template #body="slotProps">
           <SkeletonLoader :loading="isLoading">
-            <div class="flex flex-col items-start text-left">
-              <span class="font-bold text-primary">
-                {{ toPascalCase(getDisplayFullName(slotProps.data)) }}
-              </span>
-              <span class="text-[10px] font-mono uppercase tracking-wider bg-slate-100 px-1.5 py-0.5 rounded border">
-                {{ slotProps.data?.public_id || "PENDING ID" }}
+            <div class="flex items-center gap-3 text-left">
+              <div class="app-patient-avatar h-11 w-11 text-sm">
+                {{
+                  toPascalCase(getDisplayFullName(slotProps.data))
+                    ?.charAt(0) || "P"
+                }}
+              </div>
+
+              <div class="min-w-0">
+                <div class="truncate text-sm font-bold">
+                  {{ toPascalCase(getDisplayFullName(slotProps.data)) }}
+                </div>
+
+                <div class="mt-1 flex flex-wrap items-center gap-2">
+                  <span class="app-record-badge">
+                    <i class="pi pi-id-card text-[10px]"></i>
+                    {{ slotProps.data?.public_id || "PENDING ID" }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </SkeletonLoader>
+        </template>
+      </Column>
+
+      <!-- Age -->
+      <Column
+        :sortable="true"
+        header="Age"
+        field="age"
+        class="w-[90px]"
+      >
+        <template #body="slotProps">
+          <SkeletonLoader :loading="isLoading">
+            <div class="flex justify-center">
+              <span class="app-age-pill">
+                {{ slotProps.data?.age ?? "—" }}
               </span>
             </div>
           </SkeletonLoader>
         </template>
       </Column>
 
-      <Column :sortable="true" header="Age" field="age" class="w-[80px]">
+      <!-- Gender -->
+      <Column
+        :sortable="true"
+        header="Gender"
+        field="gender_name"
+        class="min-w-[130px]"
+      >
         <template #body="slotProps">
           <SkeletonLoader :loading="isLoading">
-            <span class="font-medium text-slate-700">{{ slotProps.data?.age ?? '—' }}</span>
+            <div class="flex justify-center">
+              <span class="app-value-pill gap-1.5 rounded-full px-3 py-1">
+                <i class="pi pi-user text-[10px]"></i>
+                {{ toPascalCase(slotProps.data?.gender_name) || "—" }}
+              </span>
+            </div>
           </SkeletonLoader>
         </template>
       </Column>
 
-      <Column :sortable="true" header="Gender" field="gender_name">
+      <!-- Clinic -->
+      <Column
+        :sortable="true"
+        header="Clinic"
+        field="clinic_name"
+        class="min-w-[220px]"
+      >
         <template #body="slotProps">
           <SkeletonLoader :loading="isLoading">
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-secondary text-secondary-foreground">
-              {{ toPascalCase(slotProps.data?.gender_name) }}
+            <div class="flex items-center gap-3">
+              <div class="app-patient-avatar h-9 w-9 rounded-xl">
+                <i class="pi pi-building text-sm"></i>
+              </div>
+
+              <div class="min-w-0">
+                <div class="truncate text-sm font-semibold">
+                  {{ toPascalCase(slotProps.data?.clinic_name) || "—" }}
+                </div>
+
+                <div class="app-subtle-text text-xs">
+                  Assigned branch
+                </div>
+              </div>
+            </div>
+          </SkeletonLoader>
+        </template>
+      </Column>
+
+      <!-- Phone -->
+      <Column
+        :sortable="true"
+        header="Phone Number"
+        field="phone_number"
+        class="min-w-[190px]"
+      >
+        <template #body="slotProps">
+          <SkeletonLoader :loading="isLoading">
+            <button
+              v-if="slotProps.data?.phone_number"
+              v-tooltip.top="'Click to copy'"
+              type="button"
+              class="app-copy-button group"
+              @click="handleCopy(slotProps.data?.phone_number)"
+            >
+              <i class="app-copy-button-icon pi pi-phone text-xs"></i>
+
+              <span class="font-mono">
+                {{ slotProps.data?.phone_number }}
+              </span>
+
+              <i
+                class="pi pi-copy text-[10px] opacity-40 transition group-hover:opacity-100"
+              ></i>
+            </button>
+
+            <span
+              v-else
+              class="app-subtle-text inline-flex items-center rounded-xl px-3 py-2 text-sm font-medium"
+            >
+              —
             </span>
           </SkeletonLoader>
         </template>
       </Column>
 
-      <Column :sortable="true" header="Clinic" field="clinic_name">
-        <template #body="slotProps">
-          <SkeletonLoader :loading="isLoading">
-            <div class="flex items-center gap-2">
-              <i class="pi pi-building text-xs opacity-40"></i>
-              <span>{{ toPascalCase(slotProps.data?.clinic_name) }}</span>
-            </div>
-          </SkeletonLoader>
-        </template>
-      </Column>
-
-      <Column :sortable="true" header="Phone Number" field="phone_number">
-        <template #body="slotProps">
-          <SkeletonLoader :loading="isLoading">
-            <div
-              v-if="slotProps.data?.phone_number"
-              v-tooltip.top="'Click to copy'"
-              class="group flex items-center justify-center gap-2 cursor-pointer hover:text-primary transition-colors"
-              @click="handleCopy(slotProps.data?.phone_number)"
-            >
-              <span class="font-mono text-sm">{{ slotProps.data?.phone_number }}</span>
-              <i class="pi pi-copy text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"></i>
-            </div>
-            <span v-else class="text-slate-400">—</span>
-          </SkeletonLoader>
-        </template>
-      </Column>
-
-      <Column header="Actions" class="w-[120px]">
+      <!-- Actions -->
+      <Column
+        header="Actions"
+        class="w-[120px]"
+        frozen
+        align-frozen="right"
+      >
         <template #body="slotProps">
           <SkeletonLoader :loading="isLoading" class="flex justify-center">
-            <slot name="actions" :patient="slotProps.data" />
+            <div class="flex justify-center">
+              <slot name="actions" :patient="slotProps.data" />
+            </div>
           </SkeletonLoader>
         </template>
       </Column>
 
       <template #footer>
-        <div class="overflow-x-auto border-t bg-slate-50/50">
-          <Paginator
-            template="CurrentPageReport FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
-            :first="(page - 1) * pageSize"
-            :rows="pageSize"
-            :totalRecords="patients?.total_elements || 0"
-            :rowsPerPageOptions="rowPerPageOptions"
-            class="!bg-transparent"
-            @page="$emit('pageChange', $event)"
-          />
+        <div class="app-patient-table-footer">
+          <div class="overflow-x-auto">
+            <Paginator
+              template="CurrentPageReport FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
+              :first="(page - 1) * pageSize"
+              :rows="pageSize"
+              :totalRecords="patients?.total_elements || 0"
+              :rowsPerPageOptions="rowPerPageOptions"
+              class="!bg-transparent"
+              @page="$emit('pageChange', $event)"
+            />
+          </div>
         </div>
       </template>
     </DataTable>
@@ -162,20 +262,11 @@ const handleCopy = (text: string) => {
 
 const pt = {
   root: { class: "flex flex-col h-full overflow-hidden" },
-  header: { class: "bg-white border-b border-slate-200" },
-  thead: { class: "bg-slate-50" },
+  header: { class: "app-patient-table-pt-header" },
+  thead: { class: "app-patient-table-pt-thead" },
   column: {
-    headerCell: { class: "bg-slate-50 text-slate-600 text-xs uppercase tracking-wider py-4 border-b" },
-    bodyCell: { class: "py-4 px-4 text-sm border-b border-slate-100" },
+    headerCell: { class: "app-patient-table-pt-th" },
+    bodyCell: { class: "app-patient-table-pt-td" },
   },
 } as const
 </script>
-
-<style scoped>
-/* Ensure the paginator text doesn't wrap awkwardly */
-:deep(.p-paginator-current) {
-  font-size: 0.875rem;
-  color: #64748b;
-  margin-right: auto;
-}
-</style>

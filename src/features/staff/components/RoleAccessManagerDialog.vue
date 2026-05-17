@@ -143,7 +143,7 @@
               :disabled="!isCreateMode || isBusy"
             >
             <span class="text-sm text-[rgb(var(--app-fg))]">
-              Give this role full administrative access, allowing you to use your preferred top-level title.
+              Grant Owner-equivalent access after creating this job title.
             </span>
           </label>
 
@@ -363,6 +363,7 @@ import { pamsAPI } from "@/utils/axios-interceptor"
 import { getApiErrorMessage } from "@/utils/actionable-error.util"
 import { errorToast, successToast } from "@/utils/toast.util"
 import { Status } from "@/utils/global.type"
+import { readStoredAuthSnapshot } from "@/utils/auth-user.util"
 
 type ProviderScope = "ALL" | "ADMIN" | "PT"
 
@@ -424,6 +425,7 @@ const isPermissionLoading = ref(false)
 const isSavingRole = ref(false)
 const isPermissionSaving = ref(false)
 const createAsOwnerEquivalent = ref(false)
+const authSnapshot = ref(readStoredAuthSnapshot())
 
 const roleForm = ref<RoleFormState>({
   name: "",
@@ -463,6 +465,85 @@ const permissionLevelOptions: Array<{ label: string; value: PermissionLevel }> =
   { label: "Read Only", value: "read" },
   { label: "Can Edit", value: "edit" }
 ]
+
+const OWNER_EQUIVALENT_REQUIRED_AUTHORITIES = [
+  "Dashboard::READ",
+  "AccessMatrix::READ",
+  "AccessMatrix::CREATE",
+  "AccessMatrix::UPDATE",
+  "AccessMatrix::DELETE",
+  "Reference::LOOKUP",
+  "Reference::READ",
+  "Reference::CREATE",
+  "Reference::UPDATE",
+  "Reference::DELETE",
+  "Clinic::LOOKUP",
+  "Clinic::READ",
+  "Clinic::CREATE",
+  "Clinic::UPDATE",
+  "Clinic::DELETE",
+  "Clinic::MANAGE_STAFFS",
+  "Clinic::MANAGE_PATIENTS",
+  "Staff::LOOKUP",
+  "Staff::READ",
+  "Staff::CREATE",
+  "Staff::UPDATE",
+  "Staff::DELETE",
+  "Staff::MANAGE_APPOINTMENTS",
+  "Staff::MANAGE_STATUS",
+  "Patient::LOOKUP",
+  "Patient::READ",
+  "Patient::CREATE",
+  "Patient::UPDATE",
+  "Patient::DELETE",
+  "Patient::MANAGE_BILLS",
+  "Patient::MANAGE_APPOINTMENTS",
+  "Patient::MANAGE_ATTACHMENTS",
+  "Patient::MANAGE_MEDICAL_INFORMATION",
+  "Appointment::LOOKUP",
+  "Appointment::READ",
+  "Appointment::CREATE",
+  "Appointment::UPDATE",
+  "Appointment::DELETE",
+  "Appointment::MANAGE_BILL",
+  "Appointment::MANAGE_STATUS",
+  "Appointment::OVERRIDE_RESCHEDULE_LIMIT",
+  "Service::LOOKUP",
+  "Service::READ",
+  "Service::CREATE",
+  "Service::UPDATE",
+  "Service::DELETE",
+  "HMO::LOOKUP",
+  "HMO::READ",
+  "HMO::CREATE",
+  "HMO::UPDATE",
+  "HMO::DELETE",
+  "HMO::MANAGE_EVALUATIONS",
+  "HMO::MANAGE_MACHINES",
+  "HMO::MANAGE_TECHNIQUES",
+  "CashBill::LOOKUP",
+  "CashBill::READ",
+  "CashBill::CREATE",
+  "CashBill::UPDATE",
+  "CashBill::DELETE",
+  "CashBill::MANAGE_STATUS",
+  "CashBill::APPLY_DISCOUNT",
+  "CashBill::MANAGE_CONFORMED_DETAILS",
+  "CashBill::MANAGE_PAYMENT_DETAILS",
+  "CashBill::MANAGE_SERVICE_ITEMS",
+  "CashBill::MANAGE_ADD_ON_ITEMS",
+  "HMOBill::LOOKUP",
+  "HMOBill::READ",
+  "HMOBill::CREATE",
+  "HMOBill::UPDATE",
+  "HMOBill::DELETE",
+  "HMOBill::MANAGE_STATUS",
+  "HMOBill::APPLY_DISCOUNT",
+  "HMOBill::MANAGE_CONFORMED_DETAILS",
+  "HMOBill::MANAGE_PAYMENT_DETAILS",
+  "HMOBill::MANAGE_LOA_DETAILS",
+  "HMOBill::MANAGE_SERVICE_ITEMS"
+] as const
 
 const startsWithAny = (permissionName: string, prefixes: string[]): boolean =>
   prefixes.some(prefix => permissionName.startsWith(prefix))
@@ -555,7 +636,11 @@ const visibleSidebarAccessOptions = computed<SidebarAccessOption[]>(() => {
 
 const selectedRole = computed(() => roles.value.find(role => role.id === selectedRoleId.value))
 const isCreateMode = computed(() => selectedRoleId.value == null)
-const canCreateOwnerEquivalent = computed(() => props.providerScope === "ADMIN")
+const canGrantOwnerEquivalentAccess = computed(() =>
+  authSnapshot.value.roleName === "Owner" ||
+  OWNER_EQUIVALENT_REQUIRED_AUTHORITIES.every(permission => authSnapshot.value.permissions.has(permission))
+)
+const canCreateOwnerEquivalent = computed(() => props.providerScope === "ADMIN" && canGrantOwnerEquivalentAccess.value)
 const isSelectedRoleLocked = computed(() => selectedRole.value?.name === "Owner")
 const isSpecialtyToggleDisabled = computed(() =>
   roleForm.value.appointment_provider_type === "NONE" || isSelectedRoleLocked.value
@@ -965,32 +1050,22 @@ async function fetchPermissions(roleId: number): Promise<void> {
   }
 }
 
-async function fetchAssignedPermissionIds(roleId: number): Promise<number[]> {
-  const params = { role_id: roleId, page: 1, size: 500, status: "ACTIVE" }
-  const { data } = await pamsAPI.get<Pageable<Permission>>("/references/permissions/assigned", { params })
-  return (data?.content ?? []).map(permission => permission.id)
+async function refreshCurrentAuthSnapshot(): Promise<void> {
+  try {
+    await pamsAPI.post("/refresh-tokens")
+    const { data } = await pamsAPI.get("/auth/me")
+    localStorage.setItem("auth_user", JSON.stringify(data))
+    authSnapshot.value = readStoredAuthSnapshot()
+    window.dispatchEvent(new CustomEvent("auth-user-updated"))
+  } catch {
+    // Ignore refresh errors; access changes were already saved.
+  }
 }
 
-async function cloneOwnerPermissionsToRole(targetRoleId: number): Promise<void> {
-  const ownerRole = roles.value.find(role => role.name === "Owner")
-  if (!ownerRole?.id) {
-    throw new Error("Owner role not found")
-  }
-
-  const ownerPermissionIds = await fetchAssignedPermissionIds(ownerRole.id)
-  if (!ownerPermissionIds.length) return
-
-  const existingPermissionIds = new Set(await fetchAssignedPermissionIds(targetRoleId))
-  const toGrant = ownerPermissionIds.filter(permissionId => !existingPermissionIds.has(permissionId))
-  if (!toGrant.length) return
-
-  await Promise.all(
-    toGrant.map(permissionId =>
-      pamsAPI.post("/access-matrix", null, {
-        params: { role_id: targetRoleId, permission_id: permissionId }
-      })
-    )
-  )
+async function grantOwnerEquivalentPermissionsToRole(targetRoleId: number): Promise<void> {
+  await pamsAPI.post("/access-matrix/owner-equivalent", null, {
+    params: { role_id: targetRoleId }
+  })
 }
 
 async function selectRole(role: Role): Promise<void> {
@@ -1053,7 +1128,8 @@ function resetRoleForm(): void {
 	    accept: async () => {
 	      isPermissionSaving.value = true
 	      try {
-	        await cloneOwnerPermissionsToRole(roleId)
+	        await grantOwnerEquivalentPermissionsToRole(roleId)
+          await refreshCurrentAuthSnapshot()
 	        successToast(toast, "Owner-equivalent access applied")
 	        await fetchPermissions(roleId)
 	        emit("rolesUpdated")
@@ -1098,7 +1174,8 @@ function resetRoleForm(): void {
       const createdRole = roles.value.find(role => role.name.toLowerCase() === name.toLowerCase())
       if (createdRole) {
         if (shouldCreateOwnerEquivalent) {
-          await cloneOwnerPermissionsToRole(createdRole.id)
+          await grantOwnerEquivalentPermissionsToRole(createdRole.id)
+          await refreshCurrentAuthSnapshot()
           successToast(toast, "Owner-equivalent access applied")
           createAsOwnerEquivalent.value = false
           await fetchRoles(createdRole.id)
@@ -1177,14 +1254,7 @@ async function saveSidebarAccess(): Promise<void> {
       )
     ])
 
-    try {
-      await pamsAPI.post("/refresh-tokens")
-      const { data } = await pamsAPI.get("/auth/me")
-      localStorage.setItem("auth_user", JSON.stringify(data))
-      window.dispatchEvent(new CustomEvent("auth-user-updated"))
-    } catch {
-      // Ignore refresh errors; access changes were already saved.
-    }
+    await refreshCurrentAuthSnapshot()
 
     successToast(toast, "Sidebar access updated")
     await refreshPermissions()
@@ -1197,6 +1267,7 @@ async function saveSidebarAccess(): Promise<void> {
 
 async function open(): Promise<void> {
   visible.value = true
+  authSnapshot.value = readStoredAuthSnapshot()
   await fetchRoles(selectedRoleId.value)
 }
 

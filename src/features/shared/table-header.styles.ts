@@ -56,21 +56,13 @@ export const ptOutlinedBtn = {
 export const ptPrimaryBtn = {
   root: {
     class:
-      "h-10 rounded-xl px-4 text-sm font-semibold text-white " +
-      "border border-[#A91D8B]/20 " +
-      "bg-[linear-gradient(90deg,#242757,#5E1869,#A91D8B)] " +
-      "hover:opacity-95 active:scale-[0.99] transition " +
-      "focus:ring-0 focus:shadow-none shadow-sm shadow-[0_12px_28px_rgba(36,39,87,0.18)]",
+      "app-primary-action h-10",
   },
 }
 
 export const ptModalPrimaryBtn = {
   root: {
     class:
-      "rounded-xl px-4 text-sm font-semibold text-white " +
-      "border border-[#A91D8B]/20 " +
-      "bg-[linear-gradient(90deg,#242757,#5E1869,#A91D8B)] " +
-      "hover:opacity-95 active:scale-[0.99] transition " +
-      "focus:ring-0 focus:shadow-none shadow-sm shadow-[0_12px_28px_rgba(36,39,87,0.18)]",
+      "app-primary-action",
   },
 }

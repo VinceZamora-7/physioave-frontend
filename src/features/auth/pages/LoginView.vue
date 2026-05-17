@@ -1,26 +1,10 @@
 <template>
-  <main
-    class="relative min-h-screen w-screen overflow-hidden
-           bg-[rgb(var(--app-bg))] text-[rgb(var(--app-fg))]"
-  >
-    <!-- Decorative blobs -->
-    <div
-      class="pointer-events-none absolute -top-32 -left-32 h-96 w-96 rounded-full blur-3xl opacity-30
-             bg-[#3C88B1]/50"
-    />
-    <div
-      class="pointer-events-none absolute -bottom-32 -right-32 h-96 w-96 rounded-full blur-3xl opacity-25
-             bg-[#A91D8B]/45"
-    />
-
+  <main class="app-auth-page">
     <!-- Theme Toggle -->
     <button
       type="button"
       @click="toggleTheme"
-      class="fixed top-5 right-5 z-50 inline-flex items-center gap-2 rounded-2xl px-4 py-2
-             text-white shadow-lg transition active:scale-[0.97]
-             bg-gradient-to-r from-[#242757] via-[#5E1869] to-[#A91D8B]
-             hover:opacity-90 hover:shadow-xl"
+      class="app-primary-action fixed right-5 top-5 z-50 inline-flex items-center gap-2 py-2 shadow-lg"
       aria-label="Toggle theme"
       :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
     >
@@ -30,29 +14,18 @@
 
     <!-- Wrapper -->
     <div class="min-h-screen grid place-items-center px-4 py-10 sm:px-6">
-      <section
-        class="w-full max-w-4xl overflow-hidden rounded-3xl
-               border border-[rgb(var(--app-border))]
-               bg-[rgb(var(--app-card))]/90 dark:bg-[rgb(var(--app-card))]/75
-               backdrop-blur-xl
-               shadow-[0_25px_80px_-20px_rgba(0,0,0,0.4)]"
-      >
+      <section class="app-auth-card">
         <div class="grid lg:grid-cols-2">
           <!-- Left Brand Panel -->
-          <aside
-            class="hidden lg:flex flex-col justify-between p-10
-                   bg-gradient-to-br from-[#242757] via-[#5E1869] to-[#A91D8B]
-                   text-white"
-          >
+          <aside class="app-auth-brand-panel">
             <div class="space-y-8">
               <!-- Logo -->
               <div class="flex items-center gap-4">
                 <div
-                  class="h-16 w-16 rounded-2xl bg-white/15 border border-white/20
-                         grid place-items-center overflow-hidden"
+                  class="app-auth-logo-frame h-16 w-16"
                 >
                   <img
-                    src="@/assets/img/physioave-white.png"
+                    src="@/assets/img/physioave-logo-white.png"
                     alt="PhysioAve logo"
                     class="h-14 w-14 object-contain"
                   />
@@ -103,18 +76,13 @@
           <!-- Right Login Panel -->
           <div class="relative flex flex-col justify-center p-8 sm:p-10 lg:p-12">
             <!-- Mobile Accent Bar -->
-            <div
-              class="lg:hidden absolute inset-x-0 top-0 h-1.5 rounded-t-3xl
-                     bg-gradient-to-r from-[#242757] via-[#5E1869] to-[#A91D8B]"
-            />
+            <div class="app-auth-mobile-accent lg:hidden" />
 
             <!-- Mobile Brand Header -->
             <header class="lg:hidden mb-6 pt-2">
               <div class="flex items-center gap-4">
                 <div
-                  class="grid place-items-center h-14 w-14 rounded-2xl text-white shadow-md
-                         bg-gradient-to-br from-[#242757] via-[#5E1869] to-[#A91D8B]
-                         overflow-hidden"
+                  class="app-auth-mobile-logo h-14 w-14"
                 >
                   <img
                     src="@/assets/img/physioave-logo-white.png"
@@ -123,7 +91,7 @@
                   />
                 </div>
                 <div>
-                  <p class="text-xs font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase">
+                  <p class="app-subtle-text text-xs font-semibold tracking-widest uppercase">
                     PhysioAve
                   </p>
                   <h2 class="text-xl font-bold tracking-tight">
@@ -136,30 +104,22 @@
             <!-- Heading -->
             <div class="space-y-2">
               <h3 class="text-2xl sm:text-3xl font-bold tracking-tight">Welcome back</h3>
-              <p class="text-sm text-slate-600 dark:text-slate-400">
+              <p class="app-muted-text text-sm">
                 Sign in with Google to access the system.
               </p>
             </div>
 
             <!-- Google Sign-In Button -->
             <div class="mt-8">
-              <a :href="href" class="block" @click.prevent="onGoogleContinue">
+              <a :href="href" class="block " @click.prevent="onGoogleContinue">
                 <button
                   type="button"
                   :disabled="loading"
-                  class="group relative h-14 w-full rounded-2xl px-5
-                         border border-[rgb(var(--app-border))]
-                         bg-[rgb(var(--app-bg))]
-                         hover:border-[#3C88B1]/50
-                         active:scale-[0.98] transition-all duration-200
-                         shadow-sm hover:shadow-lg
-                         flex items-center justify-center
-                         disabled:opacity-60 disabled:cursor-not-allowed"
+                  class="app-oauth-button group"
                 >
                   <!-- Hover gradient overlay -->
                   <span
-                    class="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity
-                           bg-gradient-to-r from-[#3C88B1]/10 via-transparent to-[#A91D8B]/10"
+                    class="app-oauth-button-overlay"
                     aria-hidden="true"
                   />
 
@@ -174,7 +134,7 @@
                     />
                     <i
                       v-else
-                      class="pi pi-spin pi-spinner text-lg text-[#3C88B1]"
+                      class="pi pi-spin pi-spinner text-lg text-[rgb(var(--app-secondary))]"
                       aria-hidden="true"
                     />
                   </span>
@@ -182,7 +142,7 @@
                   <span
                     class="relative text-sm sm:text-base font-semibold
                            text-[rgb(var(--app-fg))]
-                           group-hover:text-[#3C88B1] transition-colors"
+                           group-hover:text-[rgb(var(--app-secondary))] transition-colors"
                   >
                     {{ loading ? "Redirecting…" : "Continue with Google" }}
                   </span>
@@ -190,7 +150,7 @@
               </a>
 
               <!-- Security badges -->
-              <div class="mt-5 flex flex-wrap items-center justify-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+              <div class="app-subtle-text mt-5 flex flex-wrap items-center justify-center gap-4 text-xs">
                 <span class="inline-flex items-center gap-1.5">
                   <i class="pi pi-lock text-[10px]" />
                   256-bit encryption
@@ -204,20 +164,18 @@
 
             <!-- Footer -->
             <div class="mt-10 pt-6 border-t border-[rgb(var(--app-border))]">
-              <p class="text-xs leading-relaxed text-slate-500 dark:text-slate-400 text-center">
+              <p class="app-subtle-text text-xs leading-relaxed text-center">
                 By signing in, you agree to our
                 <a
                   href="/privacy-policy/"
-                  class="font-medium underline underline-offset-4 decoration-slate-300 dark:decoration-slate-600
-                         hover:text-[#3C88B1] hover:decoration-[#3C88B1] transition-colors"
+                  class="app-link"
                 >
                   Terms of Use
                 </a>
                 and
                 <a
                   href="/privacy-policy/"
-                  class="font-medium underline underline-offset-4 decoration-slate-300 dark:decoration-slate-600
-                         hover:text-[#3C88B1] hover:decoration-[#3C88B1] transition-colors"
+                  class="app-link"
                 >
                   Privacy Policy
                 </a>.

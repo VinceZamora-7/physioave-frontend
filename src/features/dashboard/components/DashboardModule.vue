@@ -1,13 +1,13 @@
 <template>
   <main class="app-page-shell space-y-5">
-    <section class="app-section-card-comfy space-y-3">
+    <section class="app-section-card-comfy  space-y-3">
       <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h2 class="app-section-title">Dashboard</h2>
-          <p class="text-sm opacity-70">Clinic overview, trends, and operational report snapshot</p>
+          <p class="app-muted-text text-sm">Clinic overview, trends, and operational report snapshot</p>
         </div>
         <div class="flex flex-wrap items-end gap-2">
-          <span class="rounded-full border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] px-3 py-2 text-xs opacity-80">
+          <span class="app-filter-pill">
             Branch: {{ selectedClinic?.name || "All branches" }}
           </span>
           <Button label="Refresh" icon="pi pi-refresh" severity="secondary" outlined :loading="isLoading" @click="refreshDashboard" />
@@ -15,18 +15,18 @@
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-        <article v-for="item in kpiCards" :key="item.label" class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
-          <p class="text-xs uppercase tracking-wide opacity-70">{{ item.label }}</p>
+        <article v-for="item in kpiCards" :key="item.label" class="app-dashboard-kpi-card">
+          <p class="app-muted-text text-xs uppercase tracking-wide">{{ item.label }}</p>
           <p class="mt-1 text-2xl font-semibold">{{ item.value }}</p>
         </article>
       </div>
 
-      <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
+      <div class="app-dashboard-panel">
         <h4 class="text-sm font-semibold mb-3">Marketing Channels</h4>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
           <div>
             <p class="font-medium mb-2">Online Marketing</p>
-            <ul class="space-y-1 opacity-80">
+            <ul class="app-muted-text space-y-1">
               <li>Social Media</li>
               <li>Website / Google Maps</li>
               <li>Paid Ads</li>
@@ -34,7 +34,7 @@
           </div>
           <div>
             <p class="font-medium mb-2">Offline Marketing</p>
-            <ul class="space-y-1 opacity-80">
+            <ul class="app-muted-text space-y-1">
               <li>Doctor's Referrals</li>
               <li>Patient's Referrals</li>
               <li>Walk-ins</li>
@@ -48,14 +48,14 @@
       <h3 class="app-section-title">7-Day Appointments Trend</h3>
       <div class="grid grid-cols-7 gap-2">
         <div v-for="item in appointmentTrend" :key="item.date" class="flex flex-col items-center gap-2">
-          <div class="w-full h-36 rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-2 flex items-end">
+          <div class="app-chart-track w-full h-36 p-2 flex items-end">
             <div
-              class="w-full rounded-md bg-[rgb(var(--app-secondary))] transition-all"
+              class="app-chart-bar w-full rounded-md transition-all"
               :style="{ height: `${item.height}%` }"
               :title="`${item.label}: ${item.count} bookings`"
             />
           </div>
-          <span class="text-[11px] opacity-70">{{ item.shortLabel }}</span>
+          <span class="app-muted-text text-[11px]">{{ item.shortLabel }}</span>
           <span class="text-xs font-medium">{{ item.count }}</span>
         </div>
       </div>
@@ -70,10 +70,11 @@
               <span>{{ item.label }}</span>
               <span class="font-medium">{{ item.count }}</span>
             </div>
-            <div class="h-2 rounded-full bg-[rgb(var(--app-bg))] border border-[rgb(var(--app-border))] overflow-hidden">
+            <div class="app-progress-track h-2">
               <div
                 class="h-full rounded-full"
-                :style="{ width: `${item.percent}%`, backgroundColor: item.color }"
+                :class="item.statusClass"
+                :style="{ width: `${item.percent}%` }"
               />
             </div>
           </div>
@@ -82,7 +83,7 @@
 
       <article class="app-section-card-comfy space-y-3">
         <h3 class="app-section-title">Recent Appointments</h3>
-        <DataTable :value="recentAppointments" size="small" :loading="isLoading">
+        <DataTable class="app-data-table" :value="recentAppointments" size="small" :loading="isLoading">
           <Column field="patient_name" header="Patient" />
           <Column field="starts_at" header="Start">
             <template #body="{ data }">{{ formatDateTime(data.starts_at) }}</template>
@@ -95,10 +96,10 @@
 
     <section class="app-section-card-comfy space-y-3">
       <div class="flex items-center gap-2 text-sm">
-        <i class="pi pi-check-square text-[rgb(var(--app-secondary))]" />
+        <i class="app-section-icon pi pi-check-square" />
         <span class="font-medium">PT Performance (Monthly Bookings)</span>
       </div>
-      <DataTable :value="ptPerformance" size="small" :loading="isLoading">
+      <DataTable class="app-data-table" :value="ptPerformance" size="small" :loading="isLoading">
         <Column field="pt_name" header="Physical Therapist" />
         <Column field="bookings" header="Monthly Bookings" />
         <Column header="Documentation Reminder" style="min-width: 220px">
@@ -125,10 +126,10 @@
 
     <section class="app-section-card-comfy space-y-3">
       <div class="flex items-center gap-2 text-sm">
-        <i class="pi pi-user-md text-[rgb(var(--app-secondary))]" />
+        <i class="app-section-icon pi pi-user-md" />
         <span class="font-medium">Completed Sessions by Referring Doctor</span>
       </div>
-      <DataTable :value="referringDoctorSummary" size="small" :loading="isLoading">
+      <DataTable class="app-data-table" :value="referringDoctorSummary" size="small" :loading="isLoading">
         <Column field="referring_doctor_name" header="Referring Doctor" />
         <Column field="completed_sessions_count" header="Completed Sessions" />
       </DataTable>
@@ -192,12 +193,12 @@ const billingDistribution = ref<Array<{
   label: string
   count: number
   percent: number
-  color: string
+  statusClass: string
 }>>([
-  {label: "Unbilled", count: 0, percent: 0, color: "rgb(96 165 250)"},
-  {label: "Pending", count: 0, percent: 0, color: "rgb(251 191 36)"},
-  {label: "Partial", count: 0, percent: 0, color: "rgb(251 146 60)"},
-  {label: "Paid", count: 0, percent: 0, color: "rgb(74 222 128)"},
+  {label: "Unbilled", count: 0, percent: 0, statusClass: "app-status-unbilled"},
+  {label: "Pending", count: 0, percent: 0, statusClass: "app-status-pending"},
+  {label: "Partial", count: 0, percent: 0, statusClass: "app-status-partial"},
+  {label: "Paid", count: 0, percent: 0, statusClass: "app-status-paid"},
 ])
 
 const recentAppointments = ref<DashboardRecentAppointment[]>([])
@@ -351,11 +352,11 @@ const loadTrend = async (): Promise<void> => {
 }
 
 const loadBillingDistribution = async (): Promise<void> => {
-  const paletteByStatus: Record<string, string> = {
-    Unbilled: "rgb(96 165 250)",
-    Pending: "rgb(251 191 36)",
-    Partial: "rgb(251 146 60)",
-    Paid: "rgb(74 222 128)",
+  const classByStatus: Record<string, string> = {
+    Unbilled: "app-status-unbilled",
+    Pending: "app-status-pending",
+    Partial: "app-status-partial",
+    Paid: "app-status-paid",
   }
   const defaults = ["Unbilled", "Pending", "Partial", "Paid"]
   const distribution: DashboardDistributionItem[] = (await dashboardService.getBillingDistribution(selectedClinicId.value)) ?? []
@@ -363,7 +364,7 @@ const loadBillingDistribution = async (): Promise<void> => {
   const indexed = new Map(distribution.map(item => [item.label.toUpperCase(), item.count]))
   const normalized = defaults.map(label => ({
     label,
-    color: paletteByStatus[label],
+    statusClass: classByStatus[label],
     count: indexed.get(label.toUpperCase()) ?? 0,
   }))
 

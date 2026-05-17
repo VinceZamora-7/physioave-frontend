@@ -3,23 +3,23 @@
     <section class="app-hero-banner-vivid p-4 sm:p-5">
       <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
 <div class="space-y-2">
-  <div class="text-lg font-semibold tracking-tight text-slate-900 dark:text-white">
+  <div class="app-section-title">
     Appointments Overview
   </div>
 
-  <p class="max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+  <p class="app-muted-text max-w-2xl text-sm leading-6">
     Manage daily clinic appointments, filter schedules, export records, and review reports from one view.
   </p>
 
-  <div class="flex flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-300">
+  <div class="flex flex-wrap gap-2 text-xs">
     <span
-      class="min-w-0 rounded-full border border-white/40 bg-white/55 px-3 py-1 dark:border-white/10 dark:bg-white/10"
+      class="app-appointment-chip"
     >
       Date: {{ selectedDateLabel }}
     </span>
 
     <span
-      class="min-w-0 rounded-full border border-white/40 bg-white/55 px-3 py-1 dark:border-white/10 dark:bg-white/10"
+      class="app-appointment-chip"
     >
       Clinic: {{ selectedClinic?.name || "No clinic selected" }}
     </span>
@@ -37,45 +37,45 @@
 
   <div class="grid w-full grid-cols-2 gap-3 sm:grid-cols-4 lg:w-auto">
     <article
-      class="rounded-2xl border border-white/40 bg-white/60 p-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/10"
+      class="app-appointment-summary-card"
     >
-      <p class="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+      <p class="app-appointment-muted text-xs font-medium uppercase tracking-wide">
         Visible Appointments
       </p>
-      <p class="mt-1 text-2xl font-semibold text-slate-900 dark:text-white">
+      <p class="app-appointment-value mt-1 text-2xl font-semibold">
         {{ dayBookings.length }}
       </p>
     </article>
 
     <article
-      class="rounded-2xl border border-white/40 bg-white/60 p-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/10"
+      class="app-appointment-summary-card"
     >
-      <p class="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+      <p class="app-appointment-muted text-xs font-medium uppercase tracking-wide">
         Filtered Table
       </p>
-      <p class="mt-1 text-2xl font-semibold text-slate-900 dark:text-white">
+      <p class="app-appointment-value mt-1 text-2xl font-semibold">
         {{ totalElements }}
       </p>
     </article>
 
     <article
-      class="rounded-2xl border border-white/40 bg-white/60 p-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/10"
+      class="app-appointment-summary-card"
     >
-      <p class="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+      <p class="app-appointment-muted text-xs font-medium uppercase tracking-wide">
         Rescheduled Today
       </p>
-      <p class="mt-1 text-2xl font-semibold text-slate-900 dark:text-white">
+      <p class="app-appointment-value mt-1 text-2xl font-semibold">
         {{ rescheduledAppointmentsCount }}
       </p>
     </article>
 
     <article
-      class="rounded-2xl border border-white/40 bg-white/60 p-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/10"
+      class="app-appointment-summary-card"
     >
-      <p class="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+      <p class="app-appointment-muted text-xs font-medium uppercase tracking-wide">
         Needs Billing
       </p>
-      <p class="mt-1 text-2xl font-semibold text-slate-900 dark:text-white">
+      <p class="app-appointment-value mt-1 text-2xl font-semibold">
         {{ billingAttentionCount }}
       </p>
     </article>
@@ -91,20 +91,20 @@
         Clinic Calendar
       </h3>
 
-      <p class="max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+      <p class="app-muted-text max-w-2xl text-sm leading-6">
         View valid booking days, monthly appointment status, and branch schedule availability.
       </p>
 
-      <div class="flex flex-wrap gap-2 pt-1 text-xs text-slate-600 dark:text-slate-300">
+      <div class="flex flex-wrap gap-2 pt-1 text-xs">
         <span
-          class="rounded-full border border-white/40 bg-white/55 px-3 py-1 dark:border-white/10 dark:bg-white/10"
+          class="app-appointment-chip"
         >
           Selected: {{ selectedDateLabel }}
         </span>
 
         <span
           v-if="selectedClinicScheduleLabel"
-          class="rounded-full border border-white/40 bg-white/55 px-3 py-1 dark:border-white/10 dark:bg-white/10"
+          class="app-appointment-chip"
         >
           {{ selectedClinicScheduleLabel }}
         </span>
@@ -112,48 +112,48 @@
     </div>
 
     <div
-      class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] px-3 py-2 text-xs text-slate-600 shadow-sm dark:text-slate-300"
+      class="app-appointment-branch-pill"
     >
       Branch:
-      <span class="font-medium text-slate-900 dark:text-white">
+      <span class="app-appointment-value font-medium">
         {{ selectedClinic?.name || "No branch selected" }}
       </span>
     </div>
   </div>
 
-  <div class="flex flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-300">
+  <div class="app-appointment-muted flex flex-wrap gap-2 text-xs">
     <span
-      class="inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-1 dark:border-red-500/20 dark:bg-red-500/10"
+      class="app-appointment-legend app-appointment-legend-danger"
     >
-      <span class="h-2.5 w-2.5 rounded-full bg-red-500 dark:bg-red-300" />
+      <span class="app-appointment-legend-dot app-appointment-legend-dot-danger" />
       Unfinished and unbilled
     </span>
 
     <span
-      class="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 dark:border-blue-500/20 dark:bg-blue-500/10"
+      class="app-appointment-legend app-appointment-legend-info"
     >
-      <span class="h-2.5 w-2.5 rounded-full bg-blue-500 dark:bg-blue-300" />
+      <span class="app-appointment-legend-dot app-appointment-legend-dot-info" />
       Scheduled, not fully paid
     </span>
 
     <span
-      class="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 dark:border-orange-500/20 dark:bg-orange-500/10"
+      class="app-appointment-legend app-appointment-legend-warning"
     >
-      <span class="h-2.5 w-2.5 rounded-full bg-orange-500 dark:bg-orange-300" />
+      <span class="app-appointment-legend-dot app-appointment-legend-dot-warning" />
       Unfinished but billed
     </span>
 
     <span
-      class="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 dark:border-amber-500/20 dark:bg-amber-500/10"
+      class="app-appointment-legend app-appointment-legend-amber"
     >
-      <span class="h-2.5 w-2.5 rounded-full bg-amber-500 dark:bg-amber-300" />
+      <span class="app-appointment-legend-dot app-appointment-legend-dot-amber" />
       Multi-session billed
     </span>
 
     <span
-      class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 dark:border-emerald-500/20 dark:bg-emerald-500/10"
+      class="app-appointment-legend app-appointment-legend-success"
     >
-      <span class="h-2.5 w-2.5 rounded-full bg-emerald-500 dark:bg-emerald-300" />
+      <span class="app-appointment-legend-dot app-appointment-legend-dot-success" />
       Finished and billed
     </span>
   </div>
@@ -197,7 +197,7 @@
         Appointments Table
       </h3>
 
-      <p class="max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+      <p class="app-muted-text max-w-2xl text-sm leading-6">
         Filter, review, page through, and export appointment records for the selected date.
       </p>
     </div>
@@ -279,13 +279,13 @@
 
     <p
       v-if="recordFilter.trim()"
-      class="text-xs leading-5 text-slate-500 md:col-span-2 xl:col-span-6 dark:text-slate-400"
+      class="app-muted-text text-xs leading-5 md:col-span-2 xl:col-span-6"
     >
       Record search checks across clinics, assigned PTs, statuses, and dates. Clear the search to return to the selected table filters.
     </p>
   </div>
 
-  <div class="overflow-x-auto rounded-2xl border border-white/40 bg-white/40 dark:border-white/10 dark:bg-white/5">
+  <div class="app-appointment-table-shell">
     <DataTable
       :value="appointments"
       dataKey="id"
@@ -300,16 +300,16 @@
       :pt="{
         column: {
           headerCell: {
-            class: 'px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400'
+            class: 'app-appointment-table-th'
           },
           bodyCell: {
-            class: 'px-4 py-3 text-sm text-slate-700 dark:text-slate-200'
+            class: 'app-appointment-table-td'
           }
         }
       }"
     >
       <template #empty>
-        <div class="py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+        <div class="app-appointment-empty">
           No appointments found for the selected date and filters.
         </div>
       </template>
@@ -501,27 +501,27 @@
       :breakpoints="{ '1024px': '92vw', '768px': '100vw' }"
     >
       <div v-if="selectedDetail?.lgu_credit_summary" class="space-y-4">
-        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
-          <div class="text-sm font-semibold text-[rgb(var(--app-fg))]">Appointment & Package Summary</div>
+        <div class="app-appointment-card">
+          <div class="app-appointment-title text-sm">Appointment & Package Summary</div>
           <div class="mt-4 grid gap-3 md:grid-cols-2 text-sm">
             <div>
-              <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Patient</div>
-              <div class="mt-1 font-medium text-[rgb(var(--app-fg))]">{{ selectedDetail.patient_name }}</div>
+              <div class="app-appointment-muted text-xs uppercase tracking-wide">Patient</div>
+              <div class="app-appointment-value mt-1 font-medium">{{ selectedDetail.patient_name }}</div>
               <div class="text-xs opacity-65">{{ selectedDetail.patient_public_id }}</div>
             </div>
             <div>
-              <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Package</div>
-              <div class="mt-1 font-medium text-[rgb(var(--app-fg))]">{{ selectedDetail.lgu_credit_summary.package_name }}</div>
+              <div class="app-appointment-muted text-xs uppercase tracking-wide">Package</div>
+              <div class="app-appointment-value mt-1 font-medium">{{ selectedDetail.lgu_credit_summary.package_name }}</div>
             </div>
             <div>
-              <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Consumed Credits</div>
+              <div class="app-appointment-muted text-xs uppercase tracking-wide">Consumed Credits</div>
               <div class="mt-1">
-                <span class="text-xl font-semibold text-[rgb(var(--app-fg))]">{{ selectedDetail.lgu_credit_summary.consumed_sessions }}</span>
+                <span class="app-appointment-value text-xl font-semibold">{{ selectedDetail.lgu_credit_summary.consumed_sessions }}</span>
                 <span class="text-xs opacity-65"> of {{ selectedDetail.lgu_credit_summary.total_sessions }} total</span>
               </div>
             </div>
             <div>
-              <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Status</div>
+              <div class="app-appointment-muted text-xs uppercase tracking-wide">Status</div>
               <div class="mt-1">
                 <Tag :value="selectedDetail.lgu_credit_summary.authorization_status" :severity="selectedDetail.lgu_credit_summary.authorization_status === 'ACTIVE' ? 'success' : 'danger'" />
               </div>
@@ -529,9 +529,9 @@
           </div>
         </div>
 
-        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
-          <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Billing Month</div>
-          <div class="mt-2 text-sm text-[rgb(var(--app-fg))]/65">
+        <div class="app-appointment-card app-appointment-card-secondary">
+          <div class="app-appointment-muted text-xs uppercase tracking-wide">Billing Month</div>
+          <div class="app-appointment-muted mt-2 text-sm">
             Select the month to bill these consumed LGU credits. Format: YYYY-MM (e.g., 2026-04 for April 2026).
           </div>
           <IftaLabel class="mt-4">
@@ -646,25 +646,25 @@
     >
 <div class="space-y-5">
   <!-- Header Card -->
-  <section class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4">
+  <section class="app-appointment-card app-appointment-card-accent">
     <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_220px_160px] lg:items-center">
       <div>
-        <h3 class="text-lg font-semibold text-[rgb(var(--app-fg))]">New appointment</h3>
-        <p class="mt-1 text-sm leading-6 text-[rgb(var(--app-fg))]/65">
+        <h3 class="app-appointment-title text-lg">New appointment</h3>
+        <p class="app-appointment-muted mt-1 text-sm leading-6">
           Fill in the essentials, add at least one service, then save.
         </p>
       </div>
-      <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] px-4 py-3">
-        <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Date</div>
-        <div class="mt-1 font-medium text-[rgb(var(--app-fg))]">{{ selectedDateLabel }}</div>
+      <div class="app-appointment-card px-4 py-3">
+        <div class="app-appointment-muted text-xs uppercase tracking-wide">Date</div>
+        <div class="app-appointment-value mt-1 font-medium">{{ selectedDateLabel }}</div>
       </div>
-      <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] px-4 py-3">
-        <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Clinic</div>
-        <div class="mt-1 font-medium text-[rgb(var(--app-fg))]">{{ selectedClinic?.name || "No clinic selected" }}</div>
+      <div class="app-appointment-card px-4 py-3">
+        <div class="app-appointment-muted text-xs uppercase tracking-wide">Clinic</div>
+        <div class="app-appointment-value mt-1 font-medium">{{ selectedClinic?.name || "No clinic selected" }}</div>
       </div>
-      <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] px-4 py-3">
-        <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Total</div>
-        <div class="mt-1 font-semibold text-[rgb(var(--app-fg))]">{{ asCurrency(subtotalFromServiceLines) }}</div>
+      <div class="app-appointment-card px-4 py-3">
+        <div class="app-appointment-muted text-xs uppercase tracking-wide">Total</div>
+        <div class="app-appointment-value mt-1 font-semibold">{{ asCurrency(subtotalFromServiceLines) }}</div>
       </div>
     </div>
   </section>
@@ -771,141 +771,213 @@
         </div>
 
         <!-- Care team and session setup (collapsible) -->
-        <details class="mt-4 group rounded-2xl border border-dashed border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))]">
-          <summary class="flex cursor-pointer select-none items-center justify-between px-4 py-3 text-sm font-medium text-[rgb(var(--app-fg))]">
-            <span>Care Team and Session Setup</span>
-            <svg
-              class="h-4 w-4 text-[rgb(var(--app-fg))]/40 transition-transform duration-200 group-open:rotate-180"
-              fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
-            >
-              <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </summary>
+<section
+  class="mt-4 overflow-hidden rounded-2xl border border-[#A3D9E8] bg-[#EEF8FB] shadow-sm"
+>
+  <!-- Section Header -->
+  <div class="flex items-start gap-3 border-b border-[#A3D9E8] bg-[#E8F6FB] px-4 py-4">
+    <div
+      class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#3C88B1] text-white shadow-sm"
+    >
+      <i class="pi pi-users text-base"></i>
+    </div>
 
-          <div class="px-4 pb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-            <!-- Referring Doctor -->
-            <div class="md:col-span-2 flex flex-col gap-1.5">
-              <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Referring Doctor</label>
-              <Select
-                v-model="createReferringDoctor"
-                :options="referringDoctorOptions"
-                optionLabel="label"
-                optionValue="id"
-                filter showClear fluid
-                placeholder="Select referring doctor (optional)"
-                :pt="ptSelect"
-              />
-            </div>
+    <div class="min-w-0">
+      <h3 class="m-0 text-sm font-bold uppercase tracking-wide text-[#242757]">
+        Care Team and Session Setup
+      </h3>
+      <p class="m-0 mt-1 text-xs text-[#276C91]">
+        Assign the PT, session location, specialty, room, and billing notes.
+      </p>
+    </div>
+  </div>
 
-            <!-- Assigned PT -->
-            <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Assigned PT (Required)</label>
-              <Select
-                v-model="createDoctor"
-                :options="doctorOptions"
-                optionLabel="label"
-                optionValue="id"
-                filter showClear fluid
-                placeholder="Select assigned PT"
-                :pt="ptSelect"
-              />
-            </div>
+  <div class="grid grid-cols-1 gap-4 p-4 md:grid-cols-2">
+    <!-- Referring Doctor -->
+    <div class="md:col-span-2 flex flex-col gap-1.5">
+      <label class="px-1 text-xs font-semibold uppercase tracking-widest text-[#276C91]">
+        Referring Doctor
+      </label>
 
-            <!-- Supporting PT / Intern -->
-            <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">PT Assistant / Intern</label>
-              <Select
-                v-model="createSupportStaff"
-                :options="supportStaffOptions"
-                optionLabel="label"
-                optionValue="id"
-                filter showClear fluid
-                placeholder="Select PT assistant or intern (optional)"
-                :pt="ptSelect"
-              />
-            </div>
+      <Select
+        v-model="createReferringDoctor"
+        :options="referringDoctorOptions"
+        optionLabel="label"
+        optionValue="id"
+        filter
+        showClear
+        fluid
+        placeholder="Select referring doctor (optional)"
+        :pt="ptSelect"
+      />
+    </div>
 
-            <!-- Location Context -->
-            <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Location Context</label>
-              <div class="flex rounded-xl bg-[rgb(var(--app-bg))] border border-[rgb(var(--app-border))] p-1 gap-1">
-                <button
-                  v-for="option in appointmentLocationContextOptions"
-                  :key="option.value"
-                  @click="createLocationContext = option.value"
-                  :class="[
-                    'flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all duration-200',
-                    createLocationContext === option.value
-                      ? 'bg-[rgb(var(--app-card))] text-[rgb(var(--app-fg))] shadow-sm ring-1 ring-[rgb(var(--app-border))]'
-                      : 'text-[rgb(var(--app-fg))]/50 hover:text-[rgb(var(--app-fg))]/80 hover:bg-[rgb(var(--app-card))]'
-                  ]"
-                >
-                  {{ option.label }}
-                </button>
-              </div>
-            </div>
+    <!-- Assigned PT -->
+    <div
+      class="rounded-2xl border border-[#7EC8DD] bg-white/80 p-3 shadow-sm"
+    >
+      <div class="mb-2 flex items-center justify-between gap-2">
+        <label class="px-1 text-xs font-bold uppercase tracking-widest text-[#242757]">
+          Assigned PT
+        </label>
 
-            <!-- Specialty -->
-            <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Specialty</label>
-              <Select
-                v-model="createSpecialtyTag"
-                :options="specialtyTagOptions"
-                optionLabel="name"
-                optionValue="id"
-                showClear filter fluid
-                :disabled="isCreateSpecialtyLockedByProvider"
-                :placeholder="isCreateSpecialtyLockedByProvider ? 'Assigned PT specialty applied automatically' : 'Select specialty (optional)'"
-                :pt="ptSelect"
-              />
-              <p v-if="selectedCreateProviderHasSpecialty || selectedCreateProviderRequiresSpecialty" class="px-1 text-xs text-[rgb(var(--app-fg))]/50">
-                {{ selectedCreateProviderSpecialtyLabel
-                  ? (selectedCreateProviderRequiresSpecialty
-                    ? `This assigned PT role requires a specialty, so ${selectedCreateProviderSpecialtyLabel} is applied automatically.`
-                    : `${selectedCreateProviderSpecialtyLabel} is suggested from the selected PT and can still be changed.`)
-                  : 'This assigned PT role requires a specialty. Assign it on Staffs or choose one here before saving.' }}
-              </p>
-            </div>
+        <span class="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold uppercase text-rose-600">
+          Required
+        </span>
+      </div>
 
-            <!-- Clinic Room -->
-            <div class="md:col-span-2 flex flex-col gap-1.5">
-              <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Clinic Room</label>
-              <Select
-                v-model="createTreatmentArea"
-                :options="treatmentAreaOptions"
-                optionLabel="name"
-                optionValue="id"
-                showClear filter fluid
-                :disabled="createLocationContext === 'HOME_CARE'"
-                :placeholder="createLocationContext === 'HOME_CARE' ? 'Not used for Home Care' : 'Select clinic room (optional)'"
-                :pt="ptSelect"
-              >
-                <template #option="{ option }">
-                  <div class="flex items-center gap-2">
-                    <TreatmentAreaChip :name="option.name" :color="option.color" />
-                  </div>
-                </template>
-                <template #value="{ value, placeholder }">
-                  <span v-if="value && selectedTreatmentAreaOption">
-                    <TreatmentAreaChip :name="selectedTreatmentAreaOption.name" :color="selectedTreatmentAreaOption.color" />
-                  </span>
-                  <span v-else class="opacity-70">{{ placeholder }}</span>
-                </template>
-              </Select>
-              <p class="px-1 text-xs text-[rgb(var(--app-fg))]/50">
-                {{ createLocationContext === 'HOME_CARE'
-                  ? 'Clinic rooms are skipped for Home Care appointments.'
-                  : 'Clinic rooms are managed from the Clinics page and applied per selected clinic.' }}
-              </p>
-            </div>
+      <Select
+        v-model="createDoctor"
+        :options="doctorOptions"
+        optionLabel="label"
+        optionValue="id"
+        filter
+        showClear
+        fluid
+        placeholder="Select assigned PT"
+        :pt="ptSelect"
+      />
+    </div>
 
-            <!-- Billing Notes -->
-            <div class="md:col-span-2 flex flex-col gap-1.5">
-              <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Billing Notes</label>
-              <InputText v-model="createBillingNotes" fluid placeholder="Optional billing notes" :pt="ptInputText" />
-            </div>
+    <!-- Supporting PT / Intern -->
+    <div class="flex flex-col gap-1.5">
+      <label class="px-1 text-xs font-semibold uppercase tracking-widest text-[#276C91]">
+        PT Assistant / Intern
+      </label>
+
+      <Select
+        v-model="createSupportStaff"
+        :options="supportStaffOptions"
+        optionLabel="label"
+        optionValue="id"
+        filter
+        showClear
+        fluid
+        placeholder="Select PT assistant or intern (optional)"
+        :pt="ptSelect"
+      />
+    </div>
+
+    <!-- Location Context -->
+    <div
+      class="rounded-2xl border border-[#A3D9E8] bg-white/80 p-3 shadow-sm"
+    >
+      <label class="mb-2 block px-1 text-xs font-bold uppercase tracking-widest text-[#242757]">
+        Location Context
+      </label>
+
+      <div class="flex gap-1 rounded-xl border border-[#A3D9E8] bg-[#F8FCFE] p-1">
+        <button
+          v-for="option in appointmentLocationContextOptions"
+          :key="option.value"
+          type="button"
+          @click="createLocationContext = option.value"
+          :class="[
+            'flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-200',
+            createLocationContext === option.value
+              ? 'bg-[#3C88B1] text-white shadow-sm'
+              : 'text-[#276C91] hover:bg-[#E8F6FB] hover:text-[#242757]'
+          ]"
+        >
+          {{ option.label }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Specialty -->
+    <div
+      class="rounded-2xl border border-[#A3D9E8] bg-white/80 p-3 shadow-sm"
+    >
+      <label class="mb-2 block px-1 text-xs font-bold uppercase tracking-widest text-[#242757]">
+        Specialty
+      </label>
+
+      <Select
+        v-model="createSpecialtyTag"
+        :options="specialtyTagOptions"
+        optionLabel="name"
+        optionValue="id"
+        showClear
+        filter
+        fluid
+        :disabled="isCreateSpecialtyLockedByProvider"
+        :placeholder="isCreateSpecialtyLockedByProvider ? 'Assigned PT specialty applied automatically' : 'Select specialty (optional)'"
+        :pt="ptSelect"
+      />
+
+      <p
+        v-if="selectedCreateProviderHasSpecialty || selectedCreateProviderRequiresSpecialty"
+        class="m-0 mt-2 px-1 text-xs leading-relaxed text-[#276C91]"
+      >
+        {{
+          selectedCreateProviderSpecialtyLabel
+            ? (selectedCreateProviderRequiresSpecialty
+              ? `This assigned PT role requires a specialty, so ${selectedCreateProviderSpecialtyLabel} is applied automatically.`
+              : `${selectedCreateProviderSpecialtyLabel} is suggested from the selected PT and can still be changed.`)
+            : 'This assigned PT role requires a specialty. Assign it on Staffs or choose one here before saving.'
+        }}
+      </p>
+    </div>
+
+    <!-- Clinic Room -->
+    <div class="md:col-span-2 rounded-2xl border border-[#A3D9E8] bg-white/80 p-3 shadow-sm">
+      <label class="mb-2 block px-1 text-xs font-bold uppercase tracking-widest text-[#242757]">
+        Clinic Room
+      </label>
+
+      <Select
+        v-model="createTreatmentArea"
+        :options="treatmentAreaOptions"
+        optionLabel="name"
+        optionValue="id"
+        showClear
+        filter
+        fluid
+        :disabled="createLocationContext === 'HOME_CARE'"
+        :placeholder="createLocationContext === 'HOME_CARE' ? 'Not used for Home Care' : 'Select clinic room (optional)'"
+        :pt="ptSelect"
+      >
+        <template #option="{ option }">
+          <div class="flex items-center gap-2">
+            <TreatmentAreaChip :name="option.name" :color="option.color" />
           </div>
-        </details>
+        </template>
+
+        <template #value="{ value, placeholder }">
+          <span v-if="value && selectedTreatmentAreaOption">
+            <TreatmentAreaChip
+              :name="selectedTreatmentAreaOption.name"
+              :color="selectedTreatmentAreaOption.color"
+            />
+          </span>
+          <span v-else class="opacity-70">{{ placeholder }}</span>
+        </template>
+      </Select>
+
+      <p class="m-0 mt-2 px-1 text-xs leading-relaxed text-[#276C91]">
+        {{
+          createLocationContext === 'HOME_CARE'
+            ? 'Clinic rooms are skipped for Home Care appointments.'
+            : 'Clinic rooms are managed from the Clinics page and applied per selected clinic.'
+        }}
+      </p>
+    </div>
+
+    <!-- Billing Notes -->
+    <div class="md:col-span-2 flex flex-col gap-1.5">
+      <label class="px-1 text-xs font-semibold uppercase tracking-widest text-[#276C91]">
+        Billing Notes
+      </label>
+
+      <InputText
+        v-model="createBillingNotes"
+        fluid
+        placeholder="Optional billing notes"
+        :pt="ptInputText"
+      />
+    </div>
+  </div>
+</section>
       </section>
 
       <!-- ── Services ── -->
@@ -1761,8 +1833,8 @@ function filterServicesByHmoIds<T extends { id: string; type: string }>(services
   return services.filter(s => allowed.has(Number(s.id)))
 }
 
-const createModalCardClass = "rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 shadow-sm"
-const createModalSectionTitleClass = "text-base font-semibold text-[rgb(var(--app-fg))]"
+const createModalCardClass = "app-appointment-card"
+const createModalSectionTitleClass = "app-appointment-title text-base"
 
 const formatCreateLineType = (type: string): string => {
   switch (type) {
@@ -2144,7 +2216,7 @@ const formatLocalDateKey = (date: Date): string => {
 const selectedDateIso = computed(() => formatLocalDateKey(calendarDate.value))
 const sectionCardClass = "app-section-card-comfy space-y-4"
 const sectionTitleClass = "app-section-title"
-const detailCardClass = "rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3"
+const detailCardClass = "app-appointment-card p-3"
 const selectedCheckoutSummary = computed(() => selectedDetail.value?.checkout_summary)
 const patientWalletAmountToCollect = computed(() =>
   Number(selectedCheckoutSummary.value?.patient_wallet.amount_to_collect ?? 0)
@@ -3619,7 +3691,7 @@ const confirmDeleteAppointment = (appointment: AppointmentListItem): void => {
 const goToPatients = async (): Promise<void> => {
   if (!selectedDetail.value) return
   await router.push({
-    path: "/patients",
+    name: "patients",
     query: {
       patientId: String(selectedDetail.value.patient_id),
       name: selectedDetail.value.patient_name
@@ -3630,7 +3702,7 @@ const goToPatients = async (): Promise<void> => {
 const goToBilling = async (): Promise<void> => {
   if (!selectedDetail.value) return
   await router.push({
-    path: "/billing",
+    name: "billing",
     query: {
       patientId: String(selectedDetail.value.patient_id),
       appointmentId: String(selectedDetail.value.id),

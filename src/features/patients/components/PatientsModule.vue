@@ -58,7 +58,7 @@
         :draggable="false"
       >
         <div v-if="selectedPatientDetails" class="space-y-4">
-          <div class="app-hero-panel">
+          <div class="app-patient-detail-hero">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div class="flex gap-4 items-start flex-1">
                 <div v-if="selectedPatientProfileImageUrl" class="shrink-0">
@@ -68,18 +68,18 @@
                     class="h-20 w-20 rounded-full object-cover border-2 border-white/30"
                   />
                 </div>
-                <div v-else class="shrink-0 h-20 w-20 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 font-semibold text-lg">
+                <div v-else class="app-patient-avatar h-20 w-20 rounded-full text-lg">
                   {{ getPatientInitials(selectedPatientDetails.full_name) }}
                 </div>
                 <div>
                   <div class="text-lg font-semibold tracking-tight">{{ selectedPatientDetails.full_name }}</div>
-                  <div class="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                  <div class="app-muted-text mt-1 text-sm">
                     {{ selectedPatientDetails.gender_name }} • {{ selectedPatientDetails.age }} years old
                   </div>
-                  <div class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  <div class="app-subtle-text mt-1 text-xs">
                     Patient record: {{ selectedPatientDetails.public_id || "Pending patient record code" }}
                   </div>
-                  <div class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  <div class="app-subtle-text mt-1 text-xs">
                     Assigned clinic: {{ selectedPatientDetails.clinic_name }}
                   </div>
                 </div>
@@ -91,38 +91,144 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4">
-              <div class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Personal Information</div>
-              <div class="space-y-2 text-sm">
-                <div><span class="font-medium">Civil Status:</span> {{ selectedPatientDetails.civil_status_name }}</div>
-                <div><span class="font-medium">Religion:</span> {{ selectedPatientDetails.religion_name ?? "N/A" }}</div>
-                <div><span class="font-medium">Referral Category:</span> {{ formatReferralChannel(selectedPatientDetails.mode_of_referral_channel) }}</div>
-                <div><span class="font-medium">Referral Source:</span> {{ selectedPatientDetails.mode_of_referral_name ?? "N/A" }}</div>
-                <div><span class="font-medium">Referring Doctor:</span> {{ selectedPatientDetails.referred_by_staff_name ?? selectedPatientDetails.referred_by ?? "N/A" }}</div>
-              </div>
-            </div>
+<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+  <!-- Personal Information -->
+  <div class="app-detail-card app-detail-card-primary">
+    <div class="mb-4 flex items-center gap-3">
+      <div class="app-brand-icon app-brand-icon-primary h-10 w-10">
+        <i class="pi pi-user text-base"></i>
+      </div>
 
-            <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4">
-              <div class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Contact Information</div>
-              <div class="space-y-2 text-sm">
-                <div><span class="font-medium">Phone Number:</span> {{ selectedPatientDetails.phone_number }}</div>
-                <div><span class="font-medium">Email:</span> {{ selectedPatientDetails.email ?? "N/A" }}</div>
-                <div><span class="font-medium">Facebook Link:</span> {{ selectedPatientDetails.fb_link ?? "N/A" }}</div>
-              </div>
-            </div>
+      <div>
+        <div class="app-detail-card-title">
+          Personal Information
+        </div>
+        <div class="app-detail-card-copy text-xs">
+          Basic patient profile details
+        </div>
+      </div>
+    </div>
 
-            <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 md:col-span-2">
-              <div class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Address Information</div>
-              <div class="text-sm">
-                {{ formatPatientAddress(selectedPatientDetails) }}
-              </div>
-            </div>
-          </div>
+    <div class="space-y-3 text-sm">
+      <div class="flex items-start justify-between gap-4">
+        <span class="app-detail-label">Civil Status</span>
+        <span class="app-detail-value">
+          {{ selectedPatientDetails.civil_status_name }}
+        </span>
+      </div>
 
-          <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4">
-            <div class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Attachments</div>
-            <div class="mb-3 text-sm text-slate-600 dark:text-slate-300">
+      <div class="flex items-start justify-between gap-4">
+        <span class="app-detail-label">Religion</span>
+        <span class="app-detail-value">
+          {{ selectedPatientDetails.religion_name ?? "N/A" }}
+        </span>
+      </div>
+
+      <div class="flex items-start justify-between gap-4">
+        <span class="app-detail-label">Referral Category</span>
+        <span class="app-detail-value">
+          {{ formatReferralChannel(selectedPatientDetails.mode_of_referral_channel) }}
+        </span>
+      </div>
+
+      <div class="flex items-start justify-between gap-4">
+        <span class="app-detail-label">Referral Source</span>
+        <span class="app-detail-value">
+          {{ selectedPatientDetails.mode_of_referral_name ?? "N/A" }}
+        </span>
+      </div>
+
+      <div class="flex items-start justify-between gap-4">
+        <span class="app-detail-label">Referring Doctor</span>
+        <span class="app-detail-value">
+          {{
+            selectedPatientDetails.referred_by_staff_name ??
+            selectedPatientDetails.referred_by ??
+            "N/A"
+          }}
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Contact Information -->
+  <div class="app-detail-card app-detail-card-secondary">
+    <div class="mb-4 flex items-center gap-3">
+      <div class="app-brand-icon app-brand-icon-secondary h-10 w-10">
+        <i class="pi pi-phone text-base"></i>
+      </div>
+
+      <div>
+        <div class="app-detail-card-title">
+          Contact Information
+        </div>
+        <div class="app-detail-card-copy text-xs">
+          Patient communication details
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-3 text-sm">
+      <div class="flex items-start justify-between gap-4">
+        <span class="app-detail-label">Phone Number</span>
+        <span class="app-detail-value">
+          {{ selectedPatientDetails.phone_number }}
+        </span>
+      </div>
+
+      <div class="flex items-start justify-between gap-4">
+        <span class="app-detail-label">Email</span>
+        <span class="app-detail-value max-w-[14rem] truncate">
+          {{ selectedPatientDetails.email ?? "N/A" }}
+        </span>
+      </div>
+
+      <div class="flex items-start justify-between gap-4">
+        <span class="app-detail-label">Facebook Link</span>
+        <span class="app-detail-value max-w-[14rem] truncate">
+          {{ selectedPatientDetails.fb_link ?? "N/A" }}
+        </span>
+      </div>
+    </div>
+  </div>
+
+<!-- Address Information -->
+<div class="app-detail-card app-detail-card-accent md:col-span-2">
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div class="flex items-start gap-3">
+      <div class="app-brand-icon app-brand-icon-accent h-10 w-10 shrink-0">
+        <i class="pi pi-map-marker text-base"></i>
+      </div>
+
+      <div>
+        <div class="app-detail-card-title">
+          Address Information
+        </div>
+        <div class="app-detail-card-copy text-xs">
+          Complete patient address
+        </div>
+      </div>
+    </div>
+
+    <div class="hidden rounded-full border border-[rgb(var(--patient-detail-address-border))] bg-[rgb(var(--patient-detail-address-bg))] px-3 py-1 text-xs font-semibold text-[rgb(var(--patient-detail-address-fg))] sm:inline-flex">
+      Location Details
+    </div>
+  </div>
+
+  <div class="app-detail-address mt-4">
+    <div class="flex items-start gap-3">
+      <i class="pi pi-map-marker mt-0.5 text-sm opacity-70"></i>
+
+      <p class="m-0 flex-1 text-sm font-medium leading-relaxed">
+        {{ formatPatientAddress(selectedPatientDetails) || "No address provided" }}
+      </p>
+    </div>
+  </div>
+</div>
+</div>
+          <div class="app-detail-card app-detail-card-secondary">
+            <div class="app-detail-card-copy mb-3 text-sm font-semibold uppercase tracking-wide">Attachments</div>
+            <div class="app-muted-text mb-3 text-sm">
               Keep static patient attachments limited to identification files. Visit-based clinical files are now handled under Evaluation Visit Log.
             </div>
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:max-w-xl">
@@ -138,8 +244,8 @@
             :medical-diagnosis-options="medicalDiagnosisOptions"
           />
 
-          <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4">
-            <div class="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Call To Actions</div>
+          <div class="app-detail-card app-detail-card-primary">
+            <div class="app-detail-card-copy mb-2 text-sm font-semibold uppercase tracking-wide">Call To Actions</div>
             <Menu :model="menuButtons(selectedPatientDetails)" />
           </div>
         </div>

@@ -43,6 +43,275 @@
   color: rgb(var(--app-fg));
 }
 
+.app-brand-required {
+  color: rgb(var(--patient-form-required));
+  font-weight: 700;
+}
+
+.app-brand-icon {
+  @apply flex shrink-0 items-center justify-center rounded-xl;
+}
+
+.app-brand-icon-primary {
+  background: rgba(var(--app-primary), 0.15);
+  color: rgb(var(--app-primary));
+}
+
+.app-brand-icon-secondary {
+  background: rgba(var(--app-secondary), 0.18);
+  color: rgb(var(--app-primary));
+}
+
+.app-brand-icon-accent {
+  background: rgba(var(--app-accent), 0.18);
+  color: rgb(var(--app-accent));
+}
+
+.app-brand-form-guide {
+  @apply rounded-2xl border px-4 py-3 shadow-sm;
+  border-color: rgb(var(--patient-form-guide-border));
+  background: rgb(var(--patient-form-guide-bg));
+  color: rgb(var(--patient-form-guide-fg));
+}
+
+.app-brand-form-section {
+  @apply overflow-hidden rounded-2xl border shadow-sm;
+}
+
+.app-brand-form-section-primary {
+  border-color: rgb(var(--patient-form-primary-border));
+  background: rgb(var(--patient-form-primary-bg));
+}
+
+.app-brand-form-section-secondary {
+  border-color: rgb(var(--patient-form-secondary-border));
+  background: rgb(var(--patient-form-secondary-bg));
+}
+
+.app-brand-form-section-accent {
+  border-color: rgb(var(--patient-form-accent-border));
+  background: rgb(var(--patient-form-accent-bg));
+}
+
+.app-brand-form-section-header {
+  @apply flex items-start gap-3 border-b px-4 py-4 sm:px-5;
+}
+
+.app-brand-form-section-header-primary {
+  border-color: rgb(var(--patient-form-primary-border));
+  background: rgb(var(--patient-form-primary-bg));
+}
+
+.app-brand-form-section-header-secondary {
+  border-color: rgb(var(--patient-form-secondary-border));
+  background: rgb(var(--patient-form-secondary-bg));
+}
+
+.app-brand-form-section-header-accent {
+  border-color: rgb(var(--patient-form-accent-border));
+  background: rgb(var(--patient-form-accent-bg));
+}
+
+.app-brand-form-section-title {
+  @apply m-0 text-sm font-bold uppercase tracking-wide;
+  color: rgb(var(--patient-form-heading));
+}
+
+.app-brand-form-section-copy {
+  @apply m-0 mt-1 text-xs;
+  color: rgba(var(--patient-form-heading-muted), 0.70);
+}
+
+.app-brand-form-section-title-accent {
+  color: rgb(var(--patient-form-heading));
+}
+
+.app-brand-form-section-copy-accent {
+  color: rgba(var(--patient-form-heading-muted), 0.80);
+}
+
+.app-brand-warning {
+  @apply rounded-2xl border px-3 py-2 text-xs;
+  border-color: rgb(var(--patient-form-warning-border));
+  background: rgb(var(--patient-form-warning-bg));
+  color: rgb(var(--patient-form-warning-fg));
+}
+
+.app-brand-form-guide-icon {
+  @apply flex shrink-0 items-center justify-center rounded-xl;
+  background: rgba(var(--patient-form-guide-icon-bg), 0.40);
+  color: rgb(var(--patient-form-guide-icon-fg));
+}
+
+.app-brand-form-section-icon-primary {
+  @apply flex shrink-0 items-center justify-center rounded-xl;
+  background: rgba(var(--patient-form-primary-icon-bg), 0.70);
+  color: rgb(var(--patient-form-primary-icon-fg));
+}
+
+.app-brand-form-section-icon-secondary {
+  @apply flex shrink-0 items-center justify-center rounded-xl shadow-sm;
+  background: rgb(var(--patient-form-secondary-icon-bg));
+  color: rgb(var(--patient-form-secondary-icon-fg));
+}
+
+.app-brand-form-section-icon-accent {
+  @apply flex shrink-0 items-center justify-center rounded-xl shadow-sm;
+  background: rgb(var(--patient-form-accent-icon-bg));
+  color: rgb(var(--patient-form-accent-icon-fg));
+}
+
+.app-form-muted-label {
+  color: rgb(var(--patient-form-muted-label));
+}
+
+.app-primary-action {
+  @apply rounded-xl px-4 text-sm font-semibold text-white transition focus:ring-0 focus:shadow-none;
+  border: 1px solid rgba(var(--app-button-primary-to), 0.20);
+  background: linear-gradient(
+    90deg,
+    rgb(var(--app-button-primary-from)),
+    rgb(var(--app-button-primary-via)),
+    rgb(var(--app-button-primary-to))
+  );
+  color: rgb(var(--app-button-primary-fg));
+  box-shadow: 0 12px 28px rgba(var(--brand-navy), 0.18);
+}
+
+.app-primary-action:hover {
+  opacity: 0.95;
+}
+
+.app-primary-action:active {
+  transform: scale(0.99);
+}
+
+.app-muted-text {
+  color: rgba(var(--app-fg), 0.62);
+}
+
+.app-subtle-text {
+  color: rgba(var(--app-fg), 0.48);
+}
+
+.app-brand-gradient {
+  background: linear-gradient(
+    90deg,
+    rgb(var(--app-button-primary-from)),
+    rgb(var(--app-button-primary-via)),
+    rgb(var(--app-button-primary-to))
+  );
+}
+
+.app-brand-gradient-diagonal {
+  background: linear-gradient(
+    135deg,
+    rgb(var(--app-button-primary-from)),
+    rgb(var(--app-button-primary-via)),
+    rgb(var(--app-button-primary-to))
+  );
+}
+
+.app-auth-page {
+  @apply relative min-h-screen w-screen overflow-hidden;
+  background:
+    radial-gradient(circle at 12% 10%, rgba(var(--app-secondary), 0.20), transparent 30rem),
+    radial-gradient(circle at 88% 90%, rgba(var(--app-accent), 0.18), transparent 28rem),
+    rgb(var(--app-bg));
+  color: rgb(var(--app-fg));
+}
+
+.app-auth-card {
+  @apply w-full max-w-4xl overflow-hidden rounded-3xl border backdrop-blur-xl;
+  border-color: rgb(var(--app-border));
+  background: rgba(var(--app-card), 0.90);
+  box-shadow: 0 25px 80px -20px rgba(0, 0, 0, 0.40);
+}
+
+.app-auth-brand-panel {
+  @apply hidden flex-col justify-between p-10 text-white lg:flex;
+  background: linear-gradient(
+    135deg,
+    rgb(var(--app-button-primary-from)),
+    rgb(var(--app-button-primary-via)),
+    rgb(var(--app-button-primary-to))
+  );
+}
+
+.app-auth-logo-frame {
+  @apply grid place-items-center overflow-hidden rounded-2xl border;
+  border-color: rgba(255, 255, 255, 0.20);
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.app-auth-mobile-accent {
+  @apply absolute inset-x-0 top-0 h-1.5 rounded-t-3xl;
+  background: linear-gradient(
+    90deg,
+    rgb(var(--app-button-primary-from)),
+    rgb(var(--app-button-primary-via)),
+    rgb(var(--app-button-primary-to))
+  );
+}
+
+.app-auth-mobile-logo {
+  @apply grid place-items-center overflow-hidden rounded-2xl text-white shadow-md;
+  background: linear-gradient(
+    135deg,
+    rgb(var(--app-button-primary-from)),
+    rgb(var(--app-button-primary-via)),
+    rgb(var(--app-button-primary-to))
+  );
+}
+
+.app-oauth-button {
+  @apply relative flex h-14 w-full items-center justify-center rounded-2xl border px-5 shadow-sm transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-60;
+  border-color: rgb(var(--app-border));
+  background: rgb(var(--app-button-secondary-bg));
+  color: rgb(var(--app-fg));
+}
+
+.app-oauth-button:hover {
+  border-color: rgba(var(--app-secondary), 0.50);
+  background: rgba(var(--app-secondary), 0.08);
+  box-shadow: 0 12px 28px rgba(var(--brand-navy), 0.12);
+}
+
+.app-oauth-button:active {
+  transform: scale(0.98);
+}
+
+.app-oauth-button-overlay {
+  @apply absolute inset-0 rounded-2xl opacity-0 transition-opacity;
+  background: linear-gradient(90deg, rgba(var(--app-secondary), 0.10), transparent, rgba(var(--app-accent), 0.10));
+}
+
+.group:hover .app-oauth-button-overlay {
+  opacity: 1;
+}
+
+.app-link {
+  @apply font-medium underline underline-offset-4 transition-colors;
+  color: rgb(var(--app-fg));
+  text-decoration-color: rgba(var(--app-fg), 0.25);
+}
+
+.app-link:hover {
+  color: rgb(var(--app-secondary));
+  text-decoration-color: rgb(var(--app-secondary));
+}
+
+html.dark .app-brand-icon-primary,
+html.dark .app-brand-icon-secondary {
+  background: rgba(var(--app-primary), 0.20);
+  color: rgb(var(--app-primary));
+}
+
+html.dark .app-brand-icon-accent {
+  background: rgba(var(--app-accent), 0.20);
+  color: rgb(var(--app-accent));
+}
+
 .app-table-header {
   @apply flex flex-col gap-3;
   color: rgb(var(--app-fg));
@@ -65,27 +334,412 @@
   background: rgb(var(--app-border));
 }
 
+.app-filter-pill {
+  @apply rounded-full border px-3 py-2 text-xs;
+  border-color: rgb(var(--app-border));
+  background: rgb(var(--app-surface-soft));
+  color: rgba(var(--app-fg), 0.72);
+}
+
+.app-dashboard-kpi-card {
+  @apply rounded-2xl border p-4 shadow-sm transition;
+  border-color: rgba(var(--app-secondary), 0.24);
+  background: linear-gradient(135deg, rgba(var(--app-secondary), 0.12), rgb(var(--app-surface)), rgba(var(--app-accent), 0.08));
+  color: rgb(var(--app-fg));
+}
+
+.app-dashboard-kpi-card:hover {
+  border-color: rgba(var(--app-secondary), 0.45);
+  box-shadow: 0 14px 32px rgba(var(--brand-navy), 0.10);
+}
+
+.app-dashboard-panel {
+  @apply rounded-2xl border p-4;
+  border-color: rgba(var(--app-secondary), 0.22);
+  background: linear-gradient(135deg, rgba(var(--app-secondary), 0.10), rgb(var(--app-surface)), rgba(var(--brand-cyan-soft), 0.16));
+}
+
+.app-chart-track {
+  @apply rounded-xl border;
+  border-color: rgba(var(--app-secondary), 0.22);
+  background: rgb(var(--app-surface-soft));
+}
+
+.app-chart-bar {
+  background: linear-gradient(180deg, rgb(var(--app-secondary)), rgb(var(--app-accent)));
+}
+
+.app-progress-track {
+  @apply rounded-full border overflow-hidden;
+  border-color: rgba(var(--app-border), 0.85);
+  background: rgb(var(--app-surface-soft));
+}
+
+.app-status-unbilled {
+  background: rgb(var(--app-secondary));
+}
+
+.app-status-pending {
+  background: rgb(var(--brand-cyan-soft));
+}
+
+.app-status-partial {
+  background: rgb(var(--brand-purple));
+}
+
+.app-status-paid {
+  background: rgb(var(--app-accent));
+}
+
+.app-section-icon {
+  color: rgb(var(--app-secondary));
+}
+
+.app-data-table {
+  @apply overflow-hidden rounded-2xl border;
+  border-color: rgb(var(--app-table-border));
+}
+
+.app-data-table :is(.p-datatable, .p-datatable-table) {
+  background: rgb(var(--app-table-bg));
+  color: rgb(var(--app-fg));
+}
+
+.app-data-table :is(.p-datatable-thead > tr > th) {
+  border-color: rgb(var(--app-table-border));
+  background: rgb(var(--app-table-header-bg));
+  color: rgb(var(--app-table-header-fg));
+}
+
+.app-data-table :is(.p-datatable-tbody > tr) {
+  background: rgb(var(--app-table-row-bg));
+  color: rgb(var(--app-fg));
+}
+
+.app-data-table :is(.p-datatable-tbody > tr:nth-child(even)) {
+  background: rgb(var(--app-table-row-alt-bg));
+}
+
+.app-data-table :is(.p-datatable-tbody > tr:hover) {
+  background: rgb(var(--app-table-row-hover-bg));
+}
+
+.app-data-table :is(.p-datatable-tbody > tr > td) {
+  border-color: rgb(var(--app-table-border));
+}
+
+.app-patient-table-shell {
+  @apply flex h-full flex-col overflow-hidden rounded-2xl border shadow-sm;
+  border-color: rgba(var(--app-secondary), 0.32);
+  background: linear-gradient(135deg, rgba(var(--app-secondary), 0.10), rgb(var(--app-surface)), rgba(var(--brand-cyan-soft), 0.12));
+}
+
+.app-patient-table-header {
+  @apply border-b px-4 py-3;
+  border-color: rgba(var(--app-secondary), 0.28);
+  background: rgba(var(--app-secondary), 0.16);
+}
+
+.app-patient-table-footer {
+  @apply border-t px-2 py-2;
+  border-color: rgb(var(--app-border));
+  background: rgba(var(--app-surface-soft), 0.82);
+}
+
+.app-patient-table-pt-header {
+  border-bottom: 1px solid rgb(var(--app-table-border));
+  background: rgb(var(--app-table-bg));
+}
+
+.app-patient-table-pt-thead {
+  background: rgb(var(--app-table-header-bg));
+}
+
+.app-patient-table-pt-th {
+  @apply border-b py-4 text-xs uppercase tracking-wider;
+  border-color: rgb(var(--app-table-border));
+  background: rgb(var(--app-table-header-bg));
+  color: rgb(var(--app-table-header-fg));
+}
+
+.app-patient-table-pt-td {
+  @apply border-b px-4 py-4 text-sm;
+  border-color: rgb(var(--app-table-border));
+}
+
+.app-patient-table-shell :is(.p-paginator-current) {
+  margin-right: auto;
+  color: rgba(var(--app-fg), 0.65);
+  font-size: 0.875rem;
+}
+
+.app-empty-state {
+  @apply flex flex-col items-center justify-center px-4 py-20 text-center;
+  color: rgba(var(--app-fg), 0.62);
+}
+
+.app-empty-state-icon {
+  @apply mb-4 flex h-16 w-16 items-center justify-center rounded-2xl;
+  background: rgba(var(--app-primary), 0.10);
+  color: rgb(var(--app-primary));
+}
+
+.app-patient-avatar {
+  @apply flex shrink-0 items-center justify-center rounded-2xl font-bold;
+  background: rgba(var(--app-primary), 0.10);
+  color: rgb(var(--app-primary));
+  box-shadow: inset 0 0 0 1px rgba(var(--app-primary), 0.20);
+}
+
+.app-record-badge {
+  @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide;
+  border-color: rgba(var(--app-primary), 0.20);
+  background: rgba(var(--app-primary), 0.08);
+  color: rgb(var(--app-primary));
+}
+
+.app-value-pill {
+  @apply inline-flex items-center rounded-xl px-3 py-1 text-xs font-semibold;
+  border: 1px solid rgb(var(--app-border));
+  background: rgb(var(--app-surface-soft));
+  color: rgb(var(--app-fg));
+}
+
+.app-age-pill {
+  @apply inline-flex h-8 min-w-8 items-center justify-center rounded-xl px-2 text-sm font-bold;
+  background: rgb(var(--app-surface-soft));
+  color: rgb(var(--app-fg));
+}
+
+.app-copy-button {
+  @apply inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold shadow-sm transition;
+  border-color: rgb(var(--app-border));
+  background: rgb(var(--app-card));
+  color: rgb(var(--app-fg));
+}
+
+.app-copy-button:hover {
+  border-color: rgba(var(--app-primary), 0.35);
+  background: rgba(var(--app-primary), 0.08);
+  color: rgb(var(--app-primary));
+}
+
+.app-copy-button-icon {
+  color: rgba(var(--app-fg), 0.45);
+}
+
+.app-copy-button:hover .app-copy-button-icon {
+  color: rgb(var(--app-primary));
+}
+
+.app-detail-card {
+  @apply rounded-2xl border p-4 shadow-sm transition;
+}
+
+.app-detail-card:hover {
+  box-shadow: 0 14px 28px rgba(var(--brand-navy), 0.10);
+}
+
+.app-detail-card-primary {
+  border-color: rgb(var(--patient-detail-primary-border));
+  background: rgb(var(--patient-detail-primary-bg));
+}
+
+.app-detail-card-secondary {
+  border-color: rgb(var(--patient-detail-secondary-border));
+  background: rgb(var(--patient-detail-secondary-bg));
+}
+
+.app-detail-card-accent {
+  border-color: rgb(var(--patient-detail-accent-border));
+  background: rgb(var(--patient-detail-accent-bg));
+}
+
+.app-detail-card-title {
+  @apply text-sm font-bold uppercase tracking-wide;
+  color: rgb(var(--patient-detail-heading));
+}
+
+.app-detail-card-copy,
+.app-detail-label {
+  color: rgba(var(--patient-detail-muted), 0.68);
+}
+
+.app-detail-label {
+  @apply text-sm;
+}
+
+.app-detail-value {
+  @apply text-right font-semibold;
+  color: rgb(var(--patient-detail-value));
+}
+
+.app-detail-address {
+  @apply rounded-xl border p-3 text-sm font-medium leading-relaxed;
+  border-color: rgb(var(--patient-detail-address-border));
+  background: rgb(var(--patient-detail-address-bg));
+  color: rgb(var(--patient-detail-address-fg));
+}
+
+.app-patient-detail-hero {
+  @apply rounded-2xl border p-4;
+  border-color: rgb(var(--patient-detail-hero-border));
+  background: linear-gradient(100deg, rgb(var(--patient-detail-hero-bg-from)), rgb(var(--patient-detail-hero-bg-to)));
+}
+
+.app-sticky-form-footer {
+  @apply sticky bottom-0 z-10 -mx-1 flex justify-end gap-2 border-t px-1 pt-4 backdrop-blur;
+  border-color: rgb(var(--app-border));
+  background: rgba(var(--app-bg), 0.90);
+}
+
+.app-appointment-summary-card {
+  @apply rounded-2xl border p-3 shadow-sm backdrop-blur;
+  border-color: rgb(var(--appointment-chip-border));
+  background: rgba(var(--appointment-chip-bg), 0.78);
+  color: rgb(var(--appointment-value));
+}
+
+.app-appointment-chip {
+  @apply min-w-0 rounded-full border px-3 py-1 text-xs;
+  border-color: rgb(var(--appointment-chip-border));
+  background: rgba(var(--appointment-chip-bg), 0.78);
+  color: rgb(var(--appointment-chip-fg));
+}
+
+.app-appointment-branch-pill {
+  @apply rounded-2xl border px-3 py-2 text-xs shadow-sm;
+  border-color: rgb(var(--appointment-chip-border));
+  background: rgb(var(--appointment-chip-bg));
+  color: rgba(var(--appointment-muted), 0.72);
+}
+
+.app-appointment-card {
+  @apply rounded-2xl border p-4 shadow-sm;
+  border-color: rgb(var(--appointment-panel-border));
+  background: rgb(var(--appointment-panel-bg));
+}
+
+.app-appointment-card-secondary {
+  border-color: rgb(var(--appointment-panel-secondary-border));
+  background: rgb(var(--appointment-panel-secondary-bg));
+}
+
+.app-appointment-card-accent {
+  border-color: rgb(var(--appointment-panel-accent-border));
+  background: rgb(var(--appointment-panel-accent-bg));
+}
+
+.app-appointment-title {
+  @apply font-semibold;
+  color: rgb(var(--appointment-heading));
+}
+
+.app-appointment-muted {
+  color: rgba(var(--appointment-muted), 0.68);
+}
+
+.app-appointment-value {
+  color: rgb(var(--appointment-value));
+}
+
+.app-appointment-table-shell {
+  @apply overflow-x-auto rounded-2xl border;
+  border-color: rgb(var(--appointment-table-border));
+  background: rgba(var(--appointment-table-bg), 0.82);
+}
+
+.app-appointment-table-th {
+  @apply px-4 py-3 text-xs font-semibold uppercase tracking-wide;
+  color: rgba(var(--appointment-muted), 0.72);
+}
+
+.app-appointment-table-td {
+  @apply px-4 py-3 text-sm;
+  color: rgb(var(--appointment-value));
+}
+
+.app-appointment-empty {
+  @apply py-8 text-center text-sm;
+  color: rgba(var(--appointment-muted), 0.68);
+}
+
+.app-appointment-legend {
+  @apply inline-flex items-center gap-2 rounded-full border px-3 py-1;
+}
+
+.app-appointment-legend-danger {
+  border-color: rgba(239, 68, 68, 0.28);
+  background: rgba(239, 68, 68, 0.10);
+}
+
+.app-appointment-legend-info {
+  border-color: rgba(59, 130, 246, 0.28);
+  background: rgba(59, 130, 246, 0.10);
+}
+
+.app-appointment-legend-warning {
+  border-color: rgba(249, 115, 22, 0.28);
+  background: rgba(249, 115, 22, 0.10);
+}
+
+.app-appointment-legend-amber {
+  border-color: rgba(245, 158, 11, 0.28);
+  background: rgba(245, 158, 11, 0.10);
+}
+
+.app-appointment-legend-success {
+  border-color: rgba(16, 185, 129, 0.28);
+  background: rgba(16, 185, 129, 0.10);
+}
+
+.app-appointment-legend-dot {
+  @apply h-2.5 w-2.5 rounded-full;
+}
+
+.app-appointment-legend-dot-danger {
+  background: rgb(239 68 68);
+}
+
+.app-appointment-legend-dot-info {
+  background: rgb(59 130 246);
+}
+
+.app-appointment-legend-dot-warning {
+  background: rgb(249 115 22);
+}
+
+.app-appointment-legend-dot-amber {
+  background: rgb(245 158 11);
+}
+
+.app-appointment-legend-dot-success {
+  background: rgb(16 185 129);
+}
+
 /* ─── Hero banner variants ───────────────────────────────────────────────── */
 
 /* Standard hero section header (used by Settings, Staffs, PtSchedule, etc.) */
 .app-hero-banner {
-  @apply rounded-3xl border p-5 shadow-[0_18px_40px_rgba(36,39,87,0.08)];
-  border-color: rgba(169, 29, 139, 0.20);
-  background: linear-gradient(120deg, rgba(36,39,87,0.12), rgba(94,24,105,0.08), rgba(169,29,139,0.12));
+  @apply rounded-3xl border p-5;
+  border-color: rgba(var(--app-accent), 0.20);
+  background: linear-gradient(120deg, rgba(var(--app-primary), 0.12), rgba(var(--brand-purple), 0.08), rgba(var(--app-accent), 0.12));
+  box-shadow: 0 18px 40px rgba(var(--brand-navy), 0.08);
 }
 
 /* Vivid hero section header (used by Appointments, Reports, PatientDailyLog) */
 .app-hero-banner-vivid {
-  @apply rounded-3xl border p-5 shadow-[0_18px_40px_rgba(36,39,87,0.10)];
-  border-color: rgba(169, 29, 139, 0.25);
-  background: linear-gradient(120deg, rgba(36,39,87,0.14), rgba(94,24,105,0.10), rgba(169,29,139,0.18));
+  @apply rounded-3xl border p-5;
+  border-color: rgba(var(--app-accent), 0.25);
+  background: linear-gradient(120deg, rgba(var(--app-primary), 0.14), rgba(var(--brand-purple), 0.10), rgba(var(--app-accent), 0.18));
+  box-shadow: 0 18px 40px rgba(var(--brand-navy), 0.10);
 }
 
 /* Subtle inner panel gradient (used inside cards) */
 .app-hero-panel {
   @apply rounded-2xl border p-4;
-  border-color: rgba(169, 29, 139, 0.20);
-  background: linear-gradient(120deg, rgba(36,39,87,0.08), rgba(94,24,105,0.06), rgba(169,29,139,0.10));
+  border-color: rgba(var(--app-accent), 0.20);
+  background: linear-gradient(120deg, rgba(var(--app-primary), 0.08), rgba(var(--brand-purple), 0.06), rgba(var(--app-accent), 0.10));
 }
 
 /* ─── Status summary pills ───────────────────────────────────────────────── */

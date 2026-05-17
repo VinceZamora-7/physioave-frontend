@@ -1,9 +1,48 @@
 html {
-  @apply font-poppins font-light;
+  @apply font-poppins;
+  color-scheme: light;
+  background: rgb(var(--app-bg));
+  color: rgb(var(--app-fg));
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html.dark {
+  color-scheme: dark;
+  background: rgb(var(--app-bg));
+  color: rgb(var(--app-fg));
 }
 
 body {
-  @apply m-0 flex h-screen max-w-screen flex-col;
+  @apply m-0 flex h-screen max-w-screen flex-col font-light;
   background: rgb(var(--app-bg));
+  color: rgb(var(--app-fg));
+  font-family: var(--font-poppins), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+html.dark body {
+  background: rgb(var(--app-bg));
+  color: rgb(var(--app-fg));
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: rgb(var(--app-primary));
+}
+
+html.dark a {
+  color: rgb(var(--app-primary));
+}
+
+::selection {
+  background: rgba(var(--app-accent), 0.22);
   color: rgb(var(--app-fg));
 }
