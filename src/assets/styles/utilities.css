@@ -717,6 +717,133 @@ html.dark .app-brand-icon-accent {
   background: rgb(16 185 129);
 }
 
+.app-sidebar-backdrop {
+  @apply fixed inset-0 z-40 backdrop-blur-sm md:hidden;
+  background: rgba(0, 0, 0, 0.40);
+}
+
+.app-sidebar-shell {
+  border-color: rgb(var(--sidebar-border));
+  background: rgb(var(--sidebar-bg));
+  color: rgb(var(--sidebar-fg));
+}
+
+.app-sidebar-logo-frame,
+.app-sidebar-icon-button,
+.app-sidebar-user-card,
+.app-sidebar-logout-icon {
+  border-color: rgb(var(--sidebar-border));
+  background: rgb(var(--sidebar-surface));
+  color: rgb(var(--sidebar-fg));
+}
+
+.app-sidebar-icon-button {
+  @apply grid h-10 w-10 place-items-center rounded-2xl border transition;
+}
+
+.app-sidebar-icon-button:hover,
+.app-sidebar-logout:hover,
+.app-sidebar-nav-item:hover {
+  background: rgb(var(--sidebar-surface-hover));
+}
+
+.app-sidebar-logo-frame {
+  @apply grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-2xl border;
+}
+
+.app-sidebar-title {
+  color: rgb(var(--sidebar-fg));
+}
+
+.app-sidebar-muted,
+.app-sidebar-section-label {
+  color: rgb(var(--sidebar-muted));
+}
+
+.app-sidebar-section-label {
+  @apply flex w-full items-center justify-between px-2 text-[11px] font-semibold tracking-wider;
+}
+
+.app-sidebar-divider {
+  background: rgb(var(--sidebar-border));
+}
+
+.app-sidebar-footer {
+  border-color: rgb(var(--sidebar-border));
+}
+
+.app-sidebar-user-card {
+  @apply flex items-center gap-3 rounded-2xl border px-2 py-2;
+}
+
+.app-sidebar-avatar,
+.app-sidebar-theme-button {
+  background: linear-gradient(
+    135deg,
+    rgb(var(--app-button-primary-from)),
+    rgb(var(--app-button-primary-via)),
+    rgb(var(--app-button-primary-to))
+  );
+  color: rgb(var(--app-button-primary-fg));
+}
+
+.app-sidebar-avatar {
+  @apply grid h-10 w-10 place-items-center rounded-2xl text-sm font-semibold;
+}
+
+.app-sidebar-logout {
+  @apply flex flex-1 items-center gap-3 rounded-2xl border px-3 py-2 text-sm font-semibold transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60;
+  border-color: rgb(var(--sidebar-border));
+  background: rgb(var(--sidebar-bg));
+  color: rgb(var(--sidebar-fg));
+}
+
+.app-sidebar-logout-icon {
+  @apply grid h-9 w-9 place-items-center rounded-2xl transition;
+}
+
+.app-sidebar-status-dot {
+  background: rgb(var(--sidebar-status-dot));
+}
+
+.app-sidebar-theme-button {
+  @apply grid place-items-center rounded-2xl shadow-sm transition active:scale-[0.99];
+}
+
+.app-sidebar-theme-button:hover {
+  opacity: 0.95;
+}
+
+.app-sidebar-nav-item {
+  @apply flex w-full items-center gap-3 rounded-2xl border border-transparent px-2 py-2 text-sm font-medium transition focus:outline-none;
+  color: rgb(var(--sidebar-fg));
+}
+
+.app-sidebar-nav-item:focus {
+  box-shadow: 0 0 0 4px rgba(var(--sidebar-focus-ring), 0.18);
+}
+
+.app-sidebar-nav-item-active {
+  border-color: rgb(var(--sidebar-active-border));
+  background: rgb(var(--sidebar-active-bg));
+  color: rgb(var(--sidebar-active-fg));
+}
+
+.app-sidebar-icon-wrap {
+  @apply grid h-10 w-10 shrink-0 place-items-center rounded-2xl transition;
+  background: rgb(var(--sidebar-icon-bg));
+  color: rgb(var(--sidebar-fg));
+}
+
+.app-sidebar-nav-item:hover .app-sidebar-icon-wrap {
+  background: rgba(var(--sidebar-active-border), 0.22);
+}
+
+.app-sidebar-icon-wrap-active {
+  background: rgb(var(--sidebar-icon-active-bg));
+  color: rgb(var(--sidebar-active-fg));
+}
+
 /* ─── Hero banner variants ───────────────────────────────────────────────── */
 
 /* Standard hero section header (used by Settings, Staffs, PtSchedule, etc.) */

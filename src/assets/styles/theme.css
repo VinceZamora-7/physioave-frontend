@@ -124,6 +124,21 @@
   --appointment-chip-bg: 238 248 251;
   --appointment-chip-border: 163 217 232;
   --appointment-chip-fg: 15 23 42;
+
+  /* sidebar */
+  --sidebar-bg: 255 255 255;
+  --sidebar-fg: 15 23 42;
+  --sidebar-muted: 100 116 139;
+  --sidebar-border: 226 232 240;
+  --sidebar-surface: 249 248 250;
+  --sidebar-surface-hover: 238 248 251;
+  --sidebar-active-bg: 238 248 251;
+  --sidebar-active-border: 163 217 232;
+  --sidebar-active-fg: 36 39 87;
+  --sidebar-icon-bg: 249 248 250;
+  --sidebar-icon-active-bg: 232 246 251;
+  --sidebar-focus-ring: 60 136 177;
+  --sidebar-status-dot: 169 29 139;
 }
 
 /* ✅ Semantic tokens (DARK) */
@@ -232,6 +247,21 @@ html.dark {
   --appointment-chip-bg: 14 42 58;
   --appointment-chip-border: 60 136 177;
   --appointment-chip-fg: 215 236 246;
+
+  /* sidebar */
+  --sidebar-bg: 18 20 48;
+  --sidebar-fg: 235 241 250;
+  --sidebar-muted: 148 163 184;
+  --sidebar-border: 49 52 92;
+  --sidebar-surface: 13 16 38;
+  --sidebar-surface-hover: 26 30 66;
+  --sidebar-active-bg: 31 52 77;
+  --sidebar-active-border: 163 217 232;
+  --sidebar-active-fg: 235 241 250;
+  --sidebar-icon-bg: 13 16 38;
+  --sidebar-icon-active-bg: 31 52 77;
+  --sidebar-focus-ring: 163 217 232;
+  --sidebar-status-dot: 219 101 198;
 }
 
 /* Sidebar scrollbar (scoped by class) */

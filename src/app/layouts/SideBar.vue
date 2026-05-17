@@ -2,101 +2,154 @@
   <!-- Backdrop (mobile only) -->
   <div
     v-if="mobileOpen"
-    class="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm md:hidden"
+    class="app-sidebar-backdrop backdrop-blur-sm"
     @click="closeMobile"
   />
 
   <aside :class="asideClass">
     <!-- HEADER / BRAND -->
-    <div class="px-2 pt-1">
-      <div class="flex items-center gap-3">
-        <!-- logo -->
-        <div
-          class="h-10 w-10 shrink-0 grid place-items-center rounded-2xl overflow-hidden
-                 border border-[rgb(var(--app-border))]
-                 bg-[rgb(var(--app-bg))]"
-        >
-          <img
-            src="@/assets/img/app-logo.png"
-            alt="PhysioAve logo"
-            class="h-full w-full object-contain p-1.5"
-          />
-        </div>
-
-        <!-- company -->
-        <div v-if="!collapsed" class="min-w-0 leading-tight">
-          <p class="truncate text-sm font-semibold text-[rgb(var(--app-fg))]">PhysioAve</p>
-          <p class="truncate text-xs text-slate-500 dark:text-slate-400">Management System</p>
-        </div>
-
-        <!-- actions (right) -->
-        <div class="ml-auto flex items-center gap-2">
-          <!-- collapse (desktop) -->
-          <button
-            type="button"
-            class="hidden md:grid h-10 w-10 place-items-center rounded-2xl transition
-                   border border-[rgb(var(--app-border))]
-                   bg-[rgb(var(--app-bg))] text-[rgb(var(--app-fg))]
-                   hover:bg-[rgba(60,136,177,0.12)]"
-            :aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-            :title="collapsed ? 'Expand' : 'Collapse'"
-            @click="toggleCollapsed"
-          >
-            <i class="pi text-[16px]" :class="collapsed ? 'pi-angle-right' : 'pi-angle-left'" />
-          </button>
-
-          <!-- close (mobile) -->
-          <button
-            type="button"
-            class="md:hidden grid h-10 w-10 place-items-center rounded-2xl transition
-                   border border-[rgb(var(--app-border))]
-                   bg-[rgb(var(--app-bg))] text-[rgb(var(--app-fg))]
-                   hover:bg-[rgba(60,136,177,0.12)]"
-            aria-label="Close sidebar"
-            @click="closeMobile"
-          >
-            <i class="pi pi-times text-[16px]" />
-          </button>
-        </div>
+<!-- HEADER / BRAND -->
+<div class="px-2 pt-3">
+  <!-- Expanded header -->
+  <div
+    v-if="!collapsed"
+    class="rounded-2xl border border-[#A3D9E8]/50 bg-gradient-to-br from-[#EEF8FB] to-white p-2 shadow-sm"
+  >
+    <div class="flex items-center gap-3">
+      <!-- Logo -->
+      <div
+        class="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#3C88B1] shadow-sm"
+      >
+        <img
+          src="@/assets/img/physioave-logo-white.png"
+          alt="PhysioAve logo"
+          class="h-full w-full object-contain p-1.5"
+        />
       </div>
 
-      <div class="mt-4 h-px w-full bg-[rgb(var(--app-border))]" />
+      <!-- Company -->
+      <div class="min-w-0 flex-1 leading-tight">
+        <div class="flex items-center gap-2">
+          <p class="truncate text-sm font-bold text-[#242757]">
+            PhysioAve
+          </p>
+
+          <span
+            class="rounded-full bg-[#3C88B1]/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#3C88B1]"
+          >
+            PAMS
+          </span>
+        </div>
+
+        <p class="mt-0.5 truncate text-xs text-slate-500">
+          Management System
+        </p>
+      </div>
+
+      <!-- Collapse desktop -->
+      <button
+        type="button"
+        class="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-[#A3D9E8]/60 bg-white text-[#3C88B1] shadow-sm transition hover:bg-[#E8F6FB] hidden md:grid"
+        aria-label="Collapse sidebar"
+        title="Collapse"
+        @click="toggleCollapsed"
+      >
+        <i class="pi pi-angle-left text-[16px]" />
+      </button>
+
+      <!-- Close mobile -->
+      <button
+        type="button"
+        class="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-[#A3D9E8]/60 bg-white text-[#3C88B1] shadow-sm transition hover:bg-[#E8F6FB] md:hidden"
+        aria-label="Close sidebar"
+        @click="closeMobile"
+      >
+        <i class="pi pi-times text-[16px]" />
+      </button>
+    </div>
+  </div>
+
+  <!-- Collapsed header -->
+  <div
+    v-else
+    class="flex flex-col items-center gap-2 rounded-2xl border border-[#A3D9E8]/50 bg-gradient-to-br from-[#EEF8FB] to-white p-2 shadow-sm"
+  >
+    <!-- Logo -->
+    <div
+      class="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#3C88B1] shadow-sm"
+    >
+      <img
+        src="@/assets/img/physioave-logo-white.png"
+        alt="PhysioAve logo"
+        class="h-full w-full object-contain p-1.5"
+      />
     </div>
 
-    <!-- NAV (scrolls) -->
-    <nav class="mt-4 flex-1 min-h-0 overflow-y-auto px-2 pb-4 app-scrollbar">
-      <div v-if="isPhysicalTherapistUser" class="space-y-6">
-        <div>
-          <button
-            type="button"
-            class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
-          >
-            <span v-if="!collapsed">My Work</span>
-          </button>
+    <!-- Expand desktop -->
+    <button
+      type="button"
+      class="grid h-8 w-8 place-items-center rounded-xl border border-[#A3D9E8]/60 bg-white text-[#3C88B1] shadow-sm transition hover:bg-[#E8F6FB] hidden md:grid"
+      aria-label="Expand sidebar"
+      title="Expand"
+      @click="toggleCollapsed"
+    >
+      <i class="pi pi-angle-right text-[15px]" />
+    </button>
 
-          <ul class="mt-2 space-y-1">
+    <!-- Close mobile -->
+    <button
+      type="button"
+      class="grid h-8 w-8 place-items-center rounded-xl border border-[#A3D9E8]/60 bg-white text-[#3C88B1] shadow-sm transition hover:bg-[#E8F6FB] md:hidden"
+      aria-label="Close sidebar"
+      @click="closeMobile"
+    >
+      <i class="pi pi-times text-[15px]" />
+    </button>
+  </div>
+</div>
+
+    <!-- NAV -->
+    <nav class="mt-4 min-h-0 flex-1 overflow-y-auto px-3 pb-4 app-scrollbar">
+      <!-- PT USER NAV -->
+      <div v-if="isPhysicalTherapistUser" class="space-y-5">
+        <div>
+          <div
+            v-if="!collapsed"
+            class="mb-2 flex items-center gap-2 px-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#3C88B1]"
+          >
+            <span class="h-1.5 w-1.5 rounded-full bg-[#3C88B1]"></span>
+            My Work
+          </div>
+
+          <ul class="space-y-1.5">
             <li v-if="canAccessRoute('dashboard')">
               <button
                 type="button"
+                class="group relative w-full"
                 @click="goToAndClose('dashboard')"
                 :class="itemClass('dashboard')"
                 aria-label="Dashboard"
                 title="Dashboard"
               >
-                <span :class="iconWrapClass('dashboard')"><i class="pi pi-chart-line text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">Dashboards</span>
+                <span :class="iconWrapClass('dashboard')">
+                  <i class="pi pi-chart-line text-[16px]" />
+                </span>
+                <span v-if="!collapsed" class="truncate">Dashboard</span>
               </button>
             </li>
 
             <li>
               <button
                 type="button"
+                class="group relative w-full"
                 @click="goToAndClose('pt-schedule')"
                 :class="itemClass('pt-schedule')"
                 aria-label="My Schedule"
                 title="My Schedule"
               >
-                <span :class="iconWrapClass('pt-schedule')"><i class="pi pi-directions text-[16px]" /></span>
+                <span :class="iconWrapClass('pt-schedule')">
+                  <i class="pi pi-directions text-[16px]" />
+                </span>
                 <span v-if="!collapsed" class="truncate">My Schedule</span>
               </button>
             </li>
@@ -104,25 +157,31 @@
             <li v-if="canAccessRoute('patients')">
               <button
                 type="button"
+                class="group relative w-full"
                 @click="goToAndClose('patients')"
                 :class="itemClass('patients')"
-                aria-label="Patient"
-                title="Patient"
+                aria-label="Patients"
+                title="Patients"
               >
-                <span :class="iconWrapClass('patients')"><i class="pi pi-users text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">Patient</span>
+                <span :class="iconWrapClass('patients')">
+                  <i class="pi pi-users text-[16px]" />
+                </span>
+                <span v-if="!collapsed" class="truncate">Patients</span>
               </button>
             </li>
 
             <li v-if="canAccessRoute('appointments')">
               <button
                 type="button"
+                class="group relative w-full"
                 @click="goToAndClose('appointments')"
                 :class="itemClass('appointments')"
                 aria-label="Appointments"
                 title="Appointments"
               >
-                <span :class="iconWrapClass('appointments')"><i class="pi pi-calendar text-[16px]" /></span>
+                <span :class="iconWrapClass('appointments')">
+                  <i class="pi pi-calendar text-[16px]" />
+                </span>
                 <span v-if="!collapsed" class="truncate">Appointments</span>
               </button>
             </li>
@@ -130,79 +189,101 @@
             <li v-if="canAccessRoute('patient-daily-log')">
               <button
                 type="button"
+                class="group relative w-full"
                 @click="goToAndClose('patient-daily-log')"
                 :class="itemClass('patient-daily-log')"
                 aria-label="Patient Daily Log"
                 title="Patient Daily Log"
               >
-                <span :class="iconWrapClass('patient-daily-log')"><i class="pi pi-clipboard text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">Patient Daily Log</span>
+                <span :class="iconWrapClass('patient-daily-log')">
+                  <i class="pi pi-clipboard text-[16px]" />
+                </span>
+                <span v-if="!collapsed" class="truncate">Daily Log</span>
               </button>
             </li>
           </ul>
         </div>
       </div>
 
-      <div v-else class="space-y-6">
+      <!-- ADMIN / NON-PT NAV -->
+      <div v-else class="space-y-5">
+        <!-- Overview -->
         <div>
-          <button
-            type="button"
-            class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
+          <div
+            v-if="!collapsed"
+            class="mb-2 flex items-center gap-2 px-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#3C88B1]"
           >
-            <span v-if="!collapsed">Overview</span>
-          </button>
+            <span class="h-1.5 w-1.5 rounded-full bg-[#3C88B1]"></span>
+            Overview
+          </div>
 
-          <ul class="mt-2 space-y-1">
+          <ul class="space-y-1.5">
             <li v-if="canAccessRoute('dashboard')">
               <button
                 type="button"
+                class="group relative w-full"
                 @click="goToAndClose('dashboard')"
                 :class="itemClass('dashboard')"
                 aria-label="Dashboard"
                 title="Dashboard"
               >
-                <span :class="iconWrapClass('dashboard')"><i class="pi pi-chart-line text-[16px]" /></span>
+                <span :class="iconWrapClass('dashboard')">
+                  <i class="pi pi-chart-line text-[16px]" />
+                </span>
                 <span v-if="!collapsed" class="truncate">Dashboard</span>
               </button>
             </li>
           </ul>
         </div>
 
-
+        <!-- Patient Care -->
         <div>
           <button
+            v-if="!collapsed"
             type="button"
-            class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
+            class="mb-2 flex w-full items-center justify-between rounded-xl px-2 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-[#3C88B1] transition hover:bg-[#3C88B1]/10"
             @click="patientCareOpen = !patientCareOpen"
           >
-            <span v-if="!collapsed">Patient Care</span>
-            <i class="pi text-[11px]" :class="patientCareOpen ? 'pi-chevron-down' : 'pi-chevron-right'" />
+            <span class="flex items-center gap-2">
+              <span class="h-1.5 w-1.5 rounded-full bg-[#3C88B1]"></span>
+              Patient Care
+            </span>
+
+            <i
+              class="pi text-[11px] transition-transform"
+              :class="patientCareOpen ? 'pi-chevron-down' : 'pi-chevron-right'"
+            />
           </button>
 
-          <ul v-show="patientCareOpen" class="mt-2 space-y-1">
-
+          <ul v-show="collapsed || patientCareOpen" class="space-y-1.5">
             <li v-if="canAccessRoute('patients')">
               <button
                 type="button"
+                class="group relative w-full"
                 @click="goToAndClose('patients')"
                 :class="itemClass('patients')"
-                aria-label="Patient"
-                title="Patient"
+                aria-label="Patients"
+                title="Patients"
               >
-                <span :class="iconWrapClass('patients')"><i class="pi pi-users text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">Patient</span>
+                <span :class="iconWrapClass('patients')">
+                  <i class="pi pi-users text-[16px]" />
+                </span>
+                <span v-if="!collapsed" class="truncate">Patients</span>
               </button>
             </li>
 
             <li v-if="canAccessRoute('appointments')">
               <button
                 type="button"
+                class="group relative w-full"
                 @click="goToAndClose('appointments')"
                 :class="itemClass('appointments')"
                 aria-label="Appointments"
                 title="Appointments"
               >
-                <span :class="iconWrapClass('appointments')"><i class="pi pi-calendar text-[16px]" /></span>
+                <span :class="iconWrapClass('appointments')">
+                  <i class="pi pi-calendar text-[16px]" />
+                </span>
                 <span v-if="!collapsed" class="truncate">Appointments</span>
               </button>
             </li>
@@ -210,41 +291,53 @@
             <li v-if="canAccessRoute('patient-daily-log')">
               <button
                 type="button"
+                class="group relative w-full"
                 @click="goToAndClose('patient-daily-log')"
                 :class="itemClass('patient-daily-log')"
                 aria-label="Patient Daily Log"
                 title="Patient Daily Log"
               >
-                <span :class="iconWrapClass('patient-daily-log')"><i class="pi pi-clipboard text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">Patient Daily Log</span>
+                <span :class="iconWrapClass('patient-daily-log')">
+                  <i class="pi pi-clipboard text-[16px]" />
+                </span>
+                <span v-if="!collapsed" class="truncate">Daily Log</span>
               </button>
             </li>
-
           </ul>
         </div>
 
-
-
+        <!-- Finance -->
         <div>
           <button
+            v-if="!collapsed"
             type="button"
-            class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
+            class="mb-2 flex w-full items-center justify-between rounded-xl px-2 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-[#5E1869] transition hover:bg-[#5E1869]/10"
             @click="billingOpen = !billingOpen"
           >
-            <span v-if="!collapsed">Finance &amp; Closeout</span>
-            <i class="pi text-[11px]" :class="billingOpen ? 'pi-chevron-down' : 'pi-chevron-right'" />
+            <span class="flex items-center gap-2">
+              <span class="h-1.5 w-1.5 rounded-full bg-[#5E1869]"></span>
+              Finance
+            </span>
+
+            <i
+              class="pi text-[11px] transition-transform"
+              :class="billingOpen ? 'pi-chevron-down' : 'pi-chevron-right'"
+            />
           </button>
 
-          <ul v-show="billingOpen" class="mt-2 space-y-1">
+          <ul v-show="collapsed || billingOpen" class="space-y-1.5">
             <li v-if="canAccessRoute('billing')">
               <button
                 type="button"
+                class="group relative w-full"
                 @click="goToAndClose('billing')"
                 :class="itemClass('billing')"
                 aria-label="Billing"
                 title="Billing"
               >
-                <span :class="iconWrapClass('billing')"><i class="pi pi-receipt text-[16px]" /></span>
+                <span :class="iconWrapClass('billing')">
+                  <i class="pi pi-receipt text-[16px]" />
+                </span>
                 <span v-if="!collapsed" class="truncate">Billing</span>
               </button>
             </li>
@@ -252,38 +345,53 @@
             <li v-if="canAccessRoute('reports')">
               <button
                 type="button"
+                class="group relative w-full"
                 @click="goToAndClose('reports')"
                 :class="itemClass('reports')"
-                aria-label="Finance and Closeout Reports"
-                title="Finance and Closeout Reports"
+                aria-label="Finance and Reports"
+                title="Finance and Reports"
               >
-                <span :class="iconWrapClass('reports')"><i class="pi pi-chart-bar text-[16px]" /></span>
+                <span :class="iconWrapClass('reports')">
+                  <i class="pi pi-chart-bar text-[16px]" />
+                </span>
                 <span v-if="!collapsed" class="truncate">Finance &amp; Reports</span>
               </button>
             </li>
           </ul>
         </div>
 
+        <!-- Offers & Coverage -->
         <div>
           <button
+            v-if="!collapsed"
             type="button"
-            class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
+            class="mb-2 flex w-full items-center justify-between rounded-xl px-2 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-[#A91D8B] transition hover:bg-[#A91D8B]/10"
             @click="promosOffersOpen = !promosOffersOpen"
           >
-            <span v-if="!collapsed">Offers &amp; Coverage</span>
-            <i class="pi text-[11px]" :class="promosOffersOpen ? 'pi-chevron-down' : 'pi-chevron-right'" />
+            <span class="flex items-center gap-2">
+              <span class="h-1.5 w-1.5 rounded-full bg-[#A91D8B]"></span>
+              Offers &amp; Coverage
+            </span>
+
+            <i
+              class="pi text-[11px] transition-transform"
+              :class="promosOffersOpen ? 'pi-chevron-down' : 'pi-chevron-right'"
+            />
           </button>
 
-          <ul v-show="promosOffersOpen" class="mt-2 space-y-1">
+          <ul v-show="collapsed || promosOffersOpen" class="space-y-1.5">
             <li v-if="canAccessRoute('promos-offers')">
               <button
                 type="button"
+                class="group relative w-full"
                 @click="goToAndClose('promos-offers')"
                 :class="itemClass('promos-offers')"
                 aria-label="Offers Overview"
                 title="Offers Overview"
               >
-                <span :class="iconWrapClass('promos-offers')"><i class="pi pi-briefcase text-[16px]" /></span>
+                <span :class="iconWrapClass('promos-offers')">
+                  <i class="pi pi-briefcase text-[16px]" />
+                </span>
                 <span v-if="!collapsed" class="truncate">Offers Overview</span>
               </button>
             </li>
@@ -291,38 +399,47 @@
             <li v-if="canAccessRoute('promos-offers-single-service')">
               <button
                 type="button"
+                class="group relative w-full"
                 @click="goToAndClose('promos-offers-single-service')"
                 :class="itemClass('promos-offers-single-service')"
                 aria-label="Single Pay: Single Service"
                 title="Single Pay: Single Service"
               >
-                <span :class="iconWrapClass('promos-offers-single-service')"><i class="pi pi-bolt text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">Single Pay: Single Service</span>
+                <span :class="iconWrapClass('promos-offers-single-service')">
+                  <i class="pi pi-bolt text-[16px]" />
+                </span>
+                <span v-if="!collapsed" class="truncate">Single Service</span>
               </button>
             </li>
 
             <li v-if="canAccessRoute('promos-offers-package-service')">
               <button
                 type="button"
+                class="group relative w-full"
                 @click="goToAndClose('promos-offers-package-service')"
                 :class="itemClass('promos-offers-package-service')"
                 aria-label="Self-Pay: Package Service"
                 title="Self-Pay: Package Service"
               >
-                <span :class="iconWrapClass('promos-offers-package-service')"><i class="pi pi-box text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">Self-Pay: Package Service</span>
+                <span :class="iconWrapClass('promos-offers-package-service')">
+                  <i class="pi pi-box text-[16px]" />
+                </span>
+                <span v-if="!collapsed" class="truncate">Package Service</span>
               </button>
             </li>
 
             <li v-if="canAccessRoute('promos-offers-hmo')">
               <button
                 type="button"
+                class="group relative w-full"
                 @click="goToAndClose('promos-offers-hmo')"
                 :class="itemClass('promos-offers-hmo')"
                 aria-label="HMO"
                 title="HMO"
               >
-                <span :class="iconWrapClass('promos-offers-hmo')"><i class="pi pi-briefcase text-[16px]" /></span>
+                <span :class="iconWrapClass('promos-offers-hmo')">
+                  <i class="pi pi-briefcase text-[16px]" />
+                </span>
                 <span v-if="!collapsed" class="truncate">HMO</span>
               </button>
             </li>
@@ -330,38 +447,53 @@
             <li v-if="canAccessRoute('promos-offers-lgu')">
               <button
                 type="button"
+                class="group relative w-full"
                 @click="goToAndClose('promos-offers-lgu')"
                 :class="itemClass('promos-offers-lgu')"
                 aria-label="LGU"
                 title="LGU"
               >
-                <span :class="iconWrapClass('promos-offers-lgu')"><i class="pi pi-building-columns text-[16px]" /></span>
+                <span :class="iconWrapClass('promos-offers-lgu')">
+                  <i class="pi pi-building-columns text-[16px]" />
+                </span>
                 <span v-if="!collapsed" class="truncate">LGU</span>
               </button>
             </li>
           </ul>
         </div>
 
+        <!-- Administration -->
         <div>
           <button
+            v-if="!collapsed"
             type="button"
-            class="w-full flex items-center justify-between px-2 text-[11px] font-semibold tracking-wider text-slate-500 dark:text-slate-400"
+            class="mb-2 flex w-full items-center justify-between rounded-xl px-2 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-[#242757] transition hover:bg-[#242757]/10"
             @click="operationsOpen = !operationsOpen"
           >
-            <span v-if="!collapsed">Administration</span>
-            <i class="pi text-[11px]" :class="operationsOpen ? 'pi-chevron-down' : 'pi-chevron-right'" />
+            <span class="flex items-center gap-2">
+              <span class="h-1.5 w-1.5 rounded-full bg-[#242757]"></span>
+              Administration
+            </span>
+
+            <i
+              class="pi text-[11px] transition-transform"
+              :class="operationsOpen ? 'pi-chevron-down' : 'pi-chevron-right'"
+            />
           </button>
 
-          <ul v-show="operationsOpen" class="mt-2 space-y-1">
+          <ul v-show="collapsed || operationsOpen" class="space-y-1.5">
             <li v-if="canAccessRoute('general-settings')">
               <button
                 type="button"
+                class="group relative w-full"
                 @click="goToAndClose('general-settings')"
                 :class="itemClass('general-settings')"
                 aria-label="General Settings"
                 title="General Settings"
               >
-                <span :class="iconWrapClass('general-settings')"><i class="pi pi-cog text-[16px]" /></span>
+                <span :class="iconWrapClass('general-settings')">
+                  <i class="pi pi-cog text-[16px]" />
+                </span>
                 <span v-if="!collapsed" class="truncate">General Settings</span>
               </button>
             </li>
@@ -369,12 +501,15 @@
             <li v-if="canAccessRoute('admin-setup')">
               <button
                 type="button"
+                class="group relative w-full"
                 @click="goToAndClose('admin-setup')"
                 :class="itemClass('admin-setup')"
                 aria-label="Admin Setup"
                 title="Admin Setup"
               >
-                <span :class="iconWrapClass('admin-setup')"><i class="pi pi-users text-[16px]" /></span>
+                <span :class="iconWrapClass('admin-setup')">
+                  <i class="pi pi-users text-[16px]" />
+                </span>
                 <span v-if="!collapsed" class="truncate">Admin Setup</span>
               </button>
             </li>
@@ -382,12 +517,15 @@
             <li v-if="canAccessRoute('pt-team-setup')">
               <button
                 type="button"
+                class="group relative w-full"
                 @click="goToAndClose('pt-team-setup')"
                 :class="itemClass('pt-team-setup')"
                 aria-label="PT Team Setup"
                 title="PT Team Setup"
               >
-                <span :class="iconWrapClass('pt-team-setup')"><i class="pi pi-sliders-h text-[16px]" /></span>
+                <span :class="iconWrapClass('pt-team-setup')">
+                  <i class="pi pi-sliders-h text-[16px]" />
+                </span>
                 <span v-if="!collapsed" class="truncate">PT Team Setup</span>
               </button>
             </li>
@@ -395,44 +533,50 @@
             <li v-if="canAccessRoute('clinics')">
               <button
                 type="button"
+                class="group relative w-full"
                 @click="goToAndClose('clinics')"
                 :class="itemClass('clinics')"
-                aria-label="Clinic"
-                title="Clinic"
+                aria-label="Clinics"
+                title="Clinics"
               >
-                <span :class="iconWrapClass('clinics')"><i class="pi pi-map-marker text-[16px]" /></span>
-                <span v-if="!collapsed" class="truncate">Clinic</span>
+                <span :class="iconWrapClass('clinics')">
+                  <i class="pi pi-map-marker text-[16px]" />
+                </span>
+                <span v-if="!collapsed" class="truncate">Clinics</span>
               </button>
             </li>
-
           </ul>
         </div>
       </div>
     </nav>
 
-    <!-- FOOTER (always bottom) -->
-    <div class="mt-auto px-2 pb-4 pt-3 border-t border-[rgb(var(--app-border))]">
+    <!-- FOOTER -->
+    <div class="mt-auto border-t border-[#A3D9E8]/40 px-3 pb-4 pt-3">
       <div class="space-y-3">
-        <!-- USER -->
+        <!-- User Card -->
         <div
-          class="flex items-center gap-3 rounded-2xl px-2 py-2
-                 border border-[rgb(var(--app-border))]
-                 bg-[rgb(var(--app-bg))]"
+          :class="[
+            'rounded-2xl border border-[#A3D9E8]/50 bg-gradient-to-br from-white to-[#EEF8FB] p-2 shadow-sm',
+            collapsed ? 'flex justify-center' : ''
+          ]"
         >
-          <div
-            class="grid h-10 w-10 place-items-center rounded-2xl text-white text-sm font-semibold
-                   bg-gradient-to-br from-[#242757] via-[#5E1869] to-[#A91D8B]"
-          >
-            {{ userInitials }}
-          </div>
+          <div class="flex items-center gap-3">
+            <div class="app-sidebar-avatar shrink-0 ring-2 ring-[#A3D9E8]/70">
+              {{ userInitials }}
+            </div>
 
-          <div v-if="!collapsed" class="min-w-0">
-            <p class="truncate text-sm font-semibold text-[rgb(var(--app-fg))]">{{ displayName }}</p>
-            <p class="truncate text-xs text-slate-500 dark:text-slate-400">{{ displayRole }}</p>
+            <div v-if="!collapsed" class="min-w-0">
+              <p class="app-sidebar-title truncate text-sm font-bold text-[#242757]">
+                {{ displayName }}
+              </p>
+              <p class="app-sidebar-muted truncate text-xs">
+                {{ displayRole }}
+              </p>
+            </div>
           </div>
         </div>
 
-        <!-- ACTION ROW (stack when collapsed) -->
+        <!-- Actions -->
         <div :class="['flex items-stretch gap-2', collapsed ? 'flex-col' : 'flex-row']">
           <!-- Logout -->
           <button
@@ -441,34 +585,23 @@
             :disabled="isPending"
             aria-label="Logout"
             title="Logout"
-            class="group flex flex-1 items-center gap-3 rounded-2xl px-3 py-2 text-sm font-semibold
-                   border border-[rgb(var(--app-border))]
-                   bg-[rgb(var(--app-card))]
-                   text-[rgb(var(--app-fg))]
-                   hover:bg-[rgb(var(--app-bg))]
-                   active:scale-[0.99] transition disabled:cursor-not-allowed disabled:opacity-60"
+            class="app-sidebar-logout group"
           >
-            <span
-              class="grid h-9 w-9 place-items-center rounded-2xl transition
-                     bg-[rgb(var(--app-bg))]
-                     text-[rgb(var(--app-fg))]
-                     group-hover:bg-white/60 dark:group-hover:bg-white/10"
-            >
+            <span class="app-sidebar-logout-icon">
               <i class="pi pi-sign-out text-[16px]" />
             </span>
 
             <span v-if="!collapsed" class="flex-1 text-left">Logout</span>
-            <span class="h-2 w-2 rounded-full bg-[rgb(var(--app-accent))] opacity-70" />
+            <span class="app-sidebar-status-dot h-2 w-2 rounded-full opacity-70" />
           </button>
 
-          <!-- Theme toggle -->
+          <!-- Theme Toggle -->
           <button
             type="button"
             @click="toggleTheme"
             :class="[
-              'grid place-items-center rounded-2xl text-white shadow-sm transition active:scale-[0.99] hover:opacity-95',
-              'bg-gradient-to-r from-[#242757] via-[#5E1869] to-[#A91D8B]',
-              collapsed ? 'w-full h-10' : 'w-10'
+              'app-sidebar-theme-button',
+              collapsed ? 'h-10 w-full' : 'w-10'
             ]"
             :aria-label="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
             :title="isDark ? 'Light mode' : 'Dark mode'"
@@ -774,7 +907,7 @@ const asideClass = computed(() => [
   "flex flex-col",
   "shadow-sm",
   "transition-[transform,width] duration-300",
-  "border-r border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))]",
+  "app-sidebar-shell border-r",
   collapsed.value ? "w-[84px]" : "w-[260px]",
   mobileOpen.value ? "translate-x-0" : "-translate-x-full",
   "md:translate-x-0",
@@ -790,21 +923,16 @@ const goToAndClose = async (name: string) => {
 const itemClass = (name: string) => {
   const active = currentRouteName.value === name
   return [
-    "group flex w-full items-center gap-3 rounded-2xl px-2 py-2 text-sm font-medium transition",
-    "focus:outline-none focus:ring-4 focus:ring-[rgba(60,136,177,0.18)]",
-    active
-      ? "bg-[rgb(var(--app-bg))] text-[rgb(var(--app-fg))] border border-[rgb(var(--app-border))]"
-      : "text-[rgb(var(--app-fg))] hover:bg-[rgba(60,136,177,0.10)]",
+    "app-sidebar-nav-item group",
+    active ? "app-sidebar-nav-item-active" : "",
   ].join(" ")
 }
 
 const iconWrapClass = (name: string) => {
   const active = currentRouteName.value === name
   return [
-    "grid h-10 w-10 place-items-center rounded-2xl transition shrink-0",
-    active
-      ? "bg-[rgba(60,136,177,0.14)] text-[rgb(var(--app-fg))]"
-      : "bg-[rgb(var(--app-bg))] text-[rgb(var(--app-fg))] group-hover:bg-white/60 dark:group-hover:bg-white/10",
+    "app-sidebar-icon-wrap",
+    active ? "app-sidebar-icon-wrap-active" : "",
   ].join(" ")
 }
 
