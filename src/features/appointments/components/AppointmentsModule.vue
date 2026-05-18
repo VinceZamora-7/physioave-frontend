@@ -1516,6 +1516,7 @@ type BundledService = {
 type PackageServiceOffer = {
   id: string
   name: string
+  offerScope?: "GLOBAL" | "LGU"
   bundleId?: string
   bundleQty: number
   machineIds?: string[]
@@ -1834,6 +1835,7 @@ const normalizePackageServiceOffer = (value: unknown): PackageServiceOffer | nul
   return {
     id,
     name,
+    offerScope: String(raw.offerScope ?? raw.offer_scope ?? "GLOBAL").trim().toUpperCase() === "LGU" ? "LGU" : "GLOBAL",
     bundleId: toOptionalStringId(raw.bundleId ?? raw.bundle_template_id),
     bundleQty: normalizePositiveInt(raw.bundleQty ?? raw.bundle_qty, 1),
     machineIds: normalizeStringIdArray(raw.machineIds ?? raw.machine_ids ?? raw.machine_ids_json),
@@ -2231,7 +2233,10 @@ const activeBundledServices = computed(() =>
 )
 
 const activePackageServiceOffers = computed(() =>
-  allPackageServiceOffers.value.filter(p => p.status !== "Inactive")
+  allPackageServiceOffers.value.filter(p =>
+    p.status !== "Inactive" &&
+    (createBillingType.value === "LGU_BILLING" || p.offerScope !== "LGU")
+  )
 )
 
 const formatLocalDateKey = (date: Date): string => {
@@ -2700,7 +2705,7 @@ const loadSinglePayServices = async (): Promise<void> => {
 
   try {
     const { data } = await pamsAPI.get<Pageable<Record<string, unknown>>>("/package-service-offers", {
-      params: { page: 1, size: 500, name: "", status: Status.ACTIVE }
+      params: { page: 1, size: 500, name: "", status: Status.ACTIVE, scope: "ALL" }
     })
     const dbPackageOffers = (data?.content ?? [])
       .map(normalizePackageServiceOffer)

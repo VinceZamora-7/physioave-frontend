@@ -438,20 +438,82 @@ const openAddServiceDialog = (): void => {
   successToast(toast, "Enable LGU coverage for existing services using the checkboxes above")
 }
 
+
+import { pamsAPI } from "@/utils/axios-interceptor"
+
 const saveLguConfiguration = async (): Promise<void> => {
   try {
-    // Prepare payload
-    const lguServices = Object.keys(lguCoverage.value)
-      .filter(id => lguCoverage.value[id])
-      .map(id => ({
-        service_id: id,
-        monthly_budget: Number(lguBudget.value[id]) || 0,
-        session_limit: Number(lguSessionLimit.value[id]) || 0
-      }))
+    // Collect selected services
+    const selectedServiceIds = Object.keys(lguCoverage.value).filter(id => lguCoverage.value[id])
+    if (selectedServiceIds.length === 0) {
+      errorToast(toast, "Select at least one service for LGU coverage")
+      return
+    }
 
-    successToast(toast, `Saved LGU configuration for ${lguServices.length} service${lguServices.length !== 1 ? 's' : ''}`)
-  } catch {
-    errorToast(toast, "Failed to save LGU configuration")
+    // Prepare payload for backend
+    // We'll treat each selected service as a machine, technique, or evaluation based on its type
+    // For demo, we'll only support 'machine' type for LGU (adjust as needed)
+    const machineIds: number[] = []
+    const techniqueIds: number[] = []
+    const evaluationIds: number[] = []
+    const machineItems: { id: number; qty: number }[] = []
+    const techniqueItems: { id: number; qty: number }[] = []
+    const evaluationItems: { id: number; qty: number }[] = []
+
+
+    selectedServiceIds.forEach(id => {
+      const numericId = Number(id)
+      if (!Number.isFinite(numericId) || numericId <= 0) return
+      const svc = allServices.value.find(s => Number(s.id) === numericId)
+      if (!svc) return
+      const qty = Math.max(1, Number(lguSessionLimit.value[id]) || 1)
+      if (svc.type === "machine") {
+        machineIds.push(numericId)
+        machineItems.push({ id: numericId, qty })
+      } else if (svc.type === "technique") {
+        techniqueIds.push(numericId)
+        techniqueItems.push({ id: numericId, qty })
+      } else if (svc.type === "evaluation") {
+        evaluationIds.push(numericId)
+        evaluationItems.push({ id: numericId, qty })
+      }
+    })
+
+    // Compose payload
+
+    // Generate a unique LGU package name (e.g., include timestamp)
+    const uniqueName = `LGU Package - ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`
+    const payload = {
+      name: uniqueName,
+      offer_scope: "LGU",
+      bundle_template_id: null,
+      bundle_qty: 1,
+      machine_ids: machineIds,
+      machine_qty: 1,
+      machine_items: machineItems,
+      technique_ids: techniqueIds,
+      technique_qty: 1,
+      technique_items: techniqueItems,
+      evaluation_ids: evaluationIds,
+      evaluation_qty: 1,
+      evaluation_items: evaluationItems,
+      add_on_ids: [],
+      add_on_qty: 1,
+      add_on_items: [],
+      session_ids: [],
+      session_qty: 1,
+      session_items: [],
+      package_price: selectedServiceIds.reduce((sum, id) => sum + (Number(lguBudget.value[id]) || 0), 0)
+    }
+
+    await pamsAPI.post("/package-service-offers", payload)
+    successToast(toast, `Saved LGU package for ${selectedServiceIds.length} service${selectedServiceIds.length !== 1 ? 's' : ''}`)
+  } catch (err: any) {
+    if (err?.response?.data?.message) {
+      errorToast(toast, err.response.data.message)
+    } else {
+      errorToast(toast, "Failed to save LGU configuration")
+    }
   }
 }
 

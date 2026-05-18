@@ -204,6 +204,7 @@ export type PackageService = {
   evaluationQty?: number
   evaluationItems?: Array<{ id: string; qty: number }>
   packagePrice: number
+  offerScope?: "GLOBAL" | "LGU"
   status: "Active" | "Inactive"
 }
 
@@ -213,6 +214,7 @@ const props = defineProps<{
   title: string
   description: string
   canEdit: boolean
+  offerScope?: "GLOBAL" | "LGU"
   machineOptions: OptionRow[]
   techniqueOptions: OptionRow[]
   evaluationOptions: OptionRow[]
@@ -346,11 +348,28 @@ const loadBundles = async (): Promise<void> => {
 const loadPackages = async (): Promise<void> => {
   isLoading.value = true
   try {
-    const res = await pamsAPI.get<Pageable<PackageDTO>>("/package-service-offers", {
-      params: { page: 1, size: 1000, name: "", status: "ALL" }
-    })
-    const raw = (res.data?.content ?? []) as any[]
-    packages.value = raw.map((row) => ({
+    let allRows: any[] = []
+    if (props.offerScope === "LGU") {
+      // Load both GLOBAL and LGU packages
+      const [globalRes, lguRes] = await Promise.all([
+        pamsAPI.get<Pageable<PackageDTO>>("/package-service-offers", {
+          params: { page: 1, size: 1000, name: "", status: "ALL", scope: "GLOBAL" }
+        }),
+        pamsAPI.get<Pageable<PackageDTO>>("/package-service-offers", {
+          params: { page: 1, size: 1000, name: "", status: "ALL", scope: "LGU" }
+        })
+      ])
+      allRows = [
+        ...(globalRes.data?.content ?? []),
+        ...(lguRes.data?.content ?? [])
+      ]
+    } else {
+      const res = await pamsAPI.get<Pageable<PackageDTO>>("/package-service-offers", {
+        params: { page: 1, size: 1000, name: "", status: "ALL", scope: props.offerScope ?? "GLOBAL" }
+      })
+      allRows = res.data?.content ?? []
+    }
+    packages.value = allRows.map((row: any) => ({
       id: Number(row.id),
       name: row.name,
       bundleId: row.bundle_template_id ?? row.bundleId ?? null,
@@ -362,12 +381,11 @@ const loadPackages = async (): Promise<void> => {
       evaluationIds: (row.evaluation_ids ?? row.evaluationIds ?? []).map((id: number) => `evaluation-${id}`),
       evaluationQty: Number(row.evaluation_qty ?? row.evaluationQty ?? 1),
       packagePrice: Number(row.package_price ?? row.packagePrice ?? 0),
-      status: row.is_active ? "Active" : "Inactive"
+      status: row.is_active === false ? "Inactive" : (row.status ?? "Active"),
+      offerScope: row.offer_scope ?? row.offerScope ?? "GLOBAL",
     }))
-    emit("refreshed")
   } catch {
     packages.value = []
-    errorToast(toast, "Failed to load packages")
   } finally {
     isLoading.value = false
   }
@@ -402,8 +420,18 @@ const save = async (): Promise<void> => {
       evaluation_qty: Number(form.evaluationQty ?? 1),
       session_ids: [],
       session_qty: 1,
-      package_price: Number(form.packagePrice ?? 0)
+      package_price: Number(form.packagePrice ?? 0),
+      offer_scope: props.offerScope ?? "GLOBAL"
     }
+
+
+    // If LGU, always generate a unique name for backend, but do not show suffix in UI
+    let lguSuffix = ""
+    if (apiPayload.offer_scope === "LGU" && !editingId.value) {
+      lguSuffix = ` (LGU ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()})`
+      apiPayload.name = `${apiPayload.name}${lguSuffix}`
+    }
+
 
     if (editingId.value) {
       await pamsAPI.put(`/package-service-offers/${editingId.value}`, apiPayload)
@@ -415,8 +443,15 @@ const save = async (): Promise<void> => {
 
     dialogVisible.value = false
     await loadPackages()
-  } catch {
-    errorToast(toast, "Failed to save package")
+  } catch (err) {
+    // Show clearer backend error messages
+    let msg = "Failed to save package"
+    if (err && err.response && err.response.data && err.response.data.message) {
+      msg = err.response.data.message
+      // Clean up duplicate LGU suffix in error message if present
+      msg = msg.replace(lguSuffix, "")
+    }
+    errorToast(toast, msg)
   } finally {
     isLoading.value = false
   }
