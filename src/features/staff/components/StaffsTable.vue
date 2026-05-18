@@ -65,6 +65,18 @@
       </template>
     </Column>
 
+    <Column header="Presence" field="is_online">
+      <template #body="slotProps">
+        <SkeletonLoader :loading="isLoading">
+          <Tag
+            :severity="slotProps.data?.is_online ? 'success' : 'secondary'"
+            :value="slotProps.data?.is_online ? 'Online' : 'Offline'"
+            v-tooltip="formatLastSeen(slotProps.data?.last_seen_at)"
+          />
+        </SkeletonLoader>
+      </template>
+    </Column>
+
     <Column header="Status" field="is_active">
       <template #body="slotProps">
         <SkeletonLoader :loading="isLoading">
@@ -126,6 +138,13 @@ defineEmits<{
 }>()
 
 const { copy } = useClipboard()
+
+const formatLastSeen = (value?: string | null): string => {
+  if (!value) return "No recent activity"
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return "No recent activity"
+  return `Last seen ${parsed.toLocaleString()}`
+}
 
 const pt = {
   root: { class: "flex flex-col h-full" },

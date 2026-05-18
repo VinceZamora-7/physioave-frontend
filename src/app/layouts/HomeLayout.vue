@@ -87,11 +87,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, ref } from "vue"
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref } from "vue"
 import { useRoute } from "vue-router"
 import Select from "primevue/select"
 import { storeToRefs } from "pinia"
 import { clinicStore } from "@/stores/clinic.store"
+import { pamsAPI } from "@/utils/axios-interceptor"
 
 type SideBarExpose = {
   toggleMobile: () => void
@@ -120,6 +121,29 @@ const selectedClinicIdProxy = computed<number>({
 })
 
 const route = useRoute()
+let presenceTimer: number | undefined
+
+const touchPresence = async (): Promise<void> => {
+  try {
+    await pamsAPI.post("/auth/presence")
+  } catch {
+    // Auth errors are handled by normal API flows; presence should not interrupt navigation.
+  }
+}
+
+onMounted(() => {
+  void touchPresence()
+  presenceTimer = window.setInterval(() => {
+    void touchPresence()
+  }, 60_000)
+})
+
+onUnmounted(() => {
+  if (presenceTimer !== undefined) {
+    window.clearInterval(presenceTimer)
+  }
+})
+
 const pageTitle = computed(() => {
   const name = String(route.name ?? "")
   const map: Record<string, string> = {
