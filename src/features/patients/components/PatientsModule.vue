@@ -434,9 +434,10 @@ import {
 import {IndexedDBKey} from "@/utils/keys/indexeddb-key.ts";
 import {patientTanstackService} from "@/features/patients/queries/patient.tanstack.service";
 import {fileServerTanstackService} from "@/services/file-server.tanstack.service.ts";
-import {hmoTanstackService} from "@/features/hmos/queries/hmo.tanstack.service";
+import {hmoService} from "@/features/hmos/api/hmo.service";
 import {staffService} from "@/features/staff/api/staff.service";
 import {pamsAPI} from "@/utils/axios-interceptor.ts";
+import {billingPhase1Service} from "@/features/billing/api/billing-phase1.service";
 
 type ToggleDialogExpose = {
   toggleDialog: () => void
@@ -474,17 +475,31 @@ const patientHMOInformationForm = useTemplateRef<ToggleDialogExpose>('patientHMO
 
 const registerSponsorInfoVisible = ref(false)
 const sponsorContext = ref<"HMO" | "LGU">("HMO")
+const loadSponsorDropdowns = async (): Promise<void> => {
+  const [fetchedHMOs, fetchedLguPrograms] = await Promise.allSettled([
+    hmoService.getAllLookup({
+      page: 1,
+      size: 1000,
+      name: "",
+      status: Status.ACTIVE
+    }),
+    billingPhase1Service.getLguPrograms()
+  ])
+
+  hmos.value = fetchedHMOs.status === "fulfilled" ? (fetchedHMOs.value?.content ?? []) : []
+  lguPrograms.value = fetchedLguPrograms.status === "fulfilled" ? (fetchedLguPrograms.value ?? []) : []
+}
+
 const openHmoRegistration = (): void => {
   registerSponsorInfoVisible.value = false
   sponsorContext.value = "HMO"
-  patientHMOInformationForm.value?.toggleDialog()
+  void loadSponsorDropdowns().finally(() => patientHMOInformationForm.value?.toggleDialog())
 }
 
-// For now LGU uses the same dialog as HMO until requirements are finalized.
 const openLguRegistration = (): void => {
   registerSponsorInfoVisible.value = false
   sponsorContext.value = "LGU"
-  patientHMOInformationForm.value?.toggleDialog()
+  void loadSponsorDropdowns().finally(() => patientHMOInformationForm.value?.toggleDialog())
 }
 
 const skipSponsorRegistration = (): void => {
@@ -728,6 +743,7 @@ const medicalDiagnosisOptions = computed<string[]>(() => {
 
 const hmos = ref<Lookup[]>([])
 const hmoTypes = ref<HMOType[]>([])
+const lguPrograms = ref<Lookup[]>([])
 
 const patientFormProps = computed(() => ({
   selectedPatient: selectedPatient.value,
@@ -753,6 +769,7 @@ const patientHMOInformationFormProps = computed(() => ({
   patient: selectedPatient.value,
   hmoTypes: hmoTypes.value,
   hmos: hmos.value,
+  lguPrograms: lguPrograms.value,
   sponsor_context: sponsorContext.value
 }) satisfies PatientHMOInformationFormProps)
 
@@ -1083,8 +1100,7 @@ const initializeDropdowns = async (): Promise<void> => {
     fetchedMedicalDiagnoses,
     fetchedMedicalHistories,
     fetchedMedicalImagings,
-    fetchedHMOTypes,
-    fetchedHMOs
+    fetchedHMOTypes
   ] = await Promise.allSettled([
     createReferenceQueryService<Gender>(queryClient, ReferenceTanstackKey.GENDERS, requestParams),
     createReferenceQueryService<CivilStatus>(queryClient, ReferenceTanstackKey.CIVIL_STATUSES, requestParams),
@@ -1105,8 +1121,7 @@ const initializeDropdowns = async (): Promise<void> => {
     createReferenceQueryService<MedicalDiagnose>(queryClient, ReferenceTanstackKey.MEDICAL_DIAGNOSES, requestParams),
     createReferenceQueryService<MedicalHistory>(queryClient, ReferenceTanstackKey.MEDICAL_HISTORIES, requestParams),
     createReferenceQueryService<MedicalImaging>(queryClient, ReferenceTanstackKey.MEDICAL_IMAGINGS, requestParams),
-    createReferenceQueryService<HMOType>(queryClient, ReferenceTanstackKey.HMO_TYPES, requestParams),
-    hmoTanstackService.getAllLookup(queryClient, defaultPage, undefined)
+    createReferenceQueryService<HMOType>(queryClient, ReferenceTanstackKey.HMO_TYPES, requestParams)
   ])
 
   const contentOrEmpty = <T>(result: PromiseSettledResult<Pageable<T> | undefined>): T[] =>
@@ -1133,7 +1148,7 @@ const initializeDropdowns = async (): Promise<void> => {
   medicalImagings.value = contentOrEmpty(fetchedMedicalImagings)
 
   hmoTypes.value = contentOrEmpty(fetchedHMOTypes)
-  hmos.value = contentOrEmpty(fetchedHMOs)
+  await loadSponsorDropdowns()
 }
 
 const resetQueries = async (): Promise<void> => {

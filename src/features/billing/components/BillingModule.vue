@@ -1567,6 +1567,7 @@ import {renderLguInvoiceWindow} from "@/features/billing/invoices/lgu-invoice.ut
 import {renderPatientCopyInvoiceWindow} from "@/features/billing/invoices/patient-copy-invoice.util"
 import {readActivePromosServiceCatalog} from "@/features/promos-offers/composables/promos-storage.composable"
 import { hasAnyStoredPermission, readStoredAuthSnapshot } from "@/utils/auth-user.util"
+import {authMeService, type AuthMe} from "@/services/auth-me.service"
 
 const route = useRoute()
 const toast = useToast()
@@ -1624,6 +1625,103 @@ const lguBudgetSummaryError = ref("")
 // ── Role ──────────────────────────────────────────────────────────────────────
 const roleName = ref("")
 const permissionSet = ref<Set<string>>(new Set())
+const currentUser = ref<AuthMe | null>(null)
+
+const OWNER_EQUIVALENT_REQUIRED_AUTHORITIES = [
+  "Dashboard::READ",
+  "AccessMatrix::READ",
+  "AccessMatrix::CREATE",
+  "AccessMatrix::UPDATE",
+  "AccessMatrix::DELETE",
+  "Reference::LOOKUP",
+  "Reference::READ",
+  "Reference::CREATE",
+  "Reference::UPDATE",
+  "Reference::DELETE",
+  "Clinic::LOOKUP",
+  "Clinic::READ",
+  "Clinic::CREATE",
+  "Clinic::UPDATE",
+  "Clinic::DELETE",
+  "Clinic::MANAGE_STAFFS",
+  "Clinic::MANAGE_PATIENTS",
+  "Staff::LOOKUP",
+  "Staff::READ",
+  "Staff::CREATE",
+  "Staff::UPDATE",
+  "Staff::DELETE",
+  "Staff::MANAGE_APPOINTMENTS",
+  "Staff::MANAGE_STATUS",
+  "Patient::LOOKUP",
+  "Patient::READ",
+  "Patient::CREATE",
+  "Patient::UPDATE",
+  "Patient::DELETE",
+  "Patient::MANAGE_BILLS",
+  "Patient::MANAGE_APPOINTMENTS",
+  "Patient::MANAGE_ATTACHMENTS",
+  "Patient::MANAGE_MEDICAL_INFORMATION",
+  "Appointment::LOOKUP",
+  "Appointment::READ",
+  "Appointment::CREATE",
+  "Appointment::UPDATE",
+  "Appointment::DELETE",
+  "Appointment::MANAGE_BILL",
+  "Appointment::MANAGE_STATUS",
+  "Appointment::OVERRIDE_RESCHEDULE_LIMIT",
+  "Service::LOOKUP",
+  "Service::READ",
+  "Service::CREATE",
+  "Service::UPDATE",
+  "Service::DELETE",
+  "HMO::LOOKUP",
+  "HMO::READ",
+  "HMO::CREATE",
+  "HMO::UPDATE",
+  "HMO::DELETE",
+  "HMO::MANAGE_EVALUATIONS",
+  "HMO::MANAGE_MACHINES",
+  "HMO::MANAGE_TECHNIQUES",
+  "CashBill::LOOKUP",
+  "CashBill::READ",
+  "CashBill::CREATE",
+  "CashBill::UPDATE",
+  "CashBill::DELETE",
+  "CashBill::MANAGE_STATUS",
+  "CashBill::APPLY_DISCOUNT",
+  "CashBill::MANAGE_CONFORMED_DETAILS",
+  "CashBill::MANAGE_PAYMENT_DETAILS",
+  "CashBill::MANAGE_SERVICE_ITEMS",
+  "CashBill::MANAGE_ADD_ON_ITEMS",
+  "HMOBill::LOOKUP",
+  "HMOBill::READ",
+  "HMOBill::CREATE",
+  "HMOBill::UPDATE",
+  "HMOBill::DELETE",
+  "HMOBill::MANAGE_STATUS",
+  "HMOBill::APPLY_DISCOUNT",
+  "HMOBill::MANAGE_CONFORMED_DETAILS",
+  "HMOBill::MANAGE_PAYMENT_DETAILS",
+  "HMOBill::MANAGE_LOA_DETAILS",
+  "HMOBill::MANAGE_SERVICE_ITEMS"
+] as const
+
+const isOwnerOrOwnerEquivalent = computed(() =>
+  roleName.value.trim().toLowerCase() === "owner" ||
+  OWNER_EQUIVALENT_REQUIRED_AUTHORITIES.every(permission => permissionSet.value.has(permission))
+)
+
+const invoiceApprovalSignature = computed(() => {
+  if (!currentUser.value || !isOwnerOrOwnerEquivalent.value) return {}
+  const approvedBy = currentUser.value.name.trim()
+  const approverTitle = currentUser.value.role_name.trim()
+  if (!approvedBy) return {}
+
+  return {
+    approvedBy,
+    approverTitle
+  }
+})
 
 const billingDetailCardClass = "rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3"
 
@@ -1754,6 +1852,14 @@ const syncRoleFromStorage = (): void => {
   const snapshot = readStoredAuthSnapshot()
   roleName.value = snapshot.roleName
   permissionSet.value = snapshot.permissions
+}
+
+const loadCurrentUser = async (): Promise<void> => {
+  currentUser.value = await authMeService.get() ?? null
+  if (!currentUser.value) return
+
+  localStorage.setItem("auth_user", JSON.stringify(currentUser.value))
+  syncRoleFromStorage()
 }
 
 // ── Local catalog ─────────────────────────────────────────────────────────────
@@ -2823,6 +2929,7 @@ const printSelectedBillingReceipt = (): void => {
         paymentReferenceNo: detail.payment_reference || detail.receipt_number,
         subtotal: Number(detail.subtotal_amount ?? detail.amount_due ?? detail.total_amount ?? 0),
         discount: Number(detail.discount_amount ?? 0), grandTotal: selectedBillingTotalDue.value,
+        ...invoiceApprovalSignature.value,
         lines: selectedBillingReceiptLines.value.map(l => ({name: l.name, quantity: l.quantity, unitPrice: l.unitPrice, lineTotal: l.lineTotal}))
       }, {title: "Single Service Invoice", fileName: getReceiptDisplayNumber(detail)}); return
     }
@@ -2837,6 +2944,7 @@ const printSelectedBillingReceipt = (): void => {
         paymentReferenceNo: detail.payment_reference || detail.receipt_number,
         subtotal: Number(detail.subtotal_amount ?? detail.amount_due ?? detail.total_amount ?? 0),
         discount: Number(detail.discount_amount ?? 0), grandTotal: selectedBillingTotalDue.value,
+        ...invoiceApprovalSignature.value,
         lines: selectedBillingReceiptLines.value.map(l => {
           const subItems = (l.breakdownGroups ?? []).flatMap(g => g.items.map(i => ({name: i.name, quantity: i.quantity})))
           return {name: l.name, quantity: l.quantity, unitPrice: l.unitPrice, lineTotal: l.lineTotal, subItems}
@@ -2855,6 +2963,7 @@ const printSelectedBillingReceipt = (): void => {
         hmoApprovalCode: detail.hmo_approval_code, hmoValidityStart: detail.hmo_validity_start, hmoValidityEnd: detail.hmo_validity_end,
         subtotal: Number(detail.subtotal_amount ?? detail.amount_due ?? detail.total_amount ?? 0),
         discount: Number(detail.discount_amount ?? 0), grandTotal: selectedBillingTotalDue.value,
+        ...invoiceApprovalSignature.value,
         lines: selectedBillingReceiptLines.value.map((l, idx) => ({
           name: l.name, quantity: l.quantity, unitPrice: l.unitPrice, lineTotal: l.lineTotal,
           treatmentDate: detail.created_at, laterality: String(rawLines[idx]?.laterality ?? ""), bodyArea: String(rawLines[idx]?.body_area ?? "")
@@ -2873,6 +2982,7 @@ const printSelectedBillingReceipt = (): void => {
         lguProgramName: detail.lgu_program_name, lguReferenceLabel: detail.lgu_reference_label, lguDateIssued: detail.lgu_date_issued,
         subtotal: Number(detail.subtotal_amount ?? detail.amount_due ?? detail.total_amount ?? 0),
         discount: Number(detail.discount_amount ?? 0), grandTotal: selectedBillingTotalDue.value,
+        ...invoiceApprovalSignature.value,
         lines: selectedBillingReceiptLines.value.map(l => {
           const subItems = (l.breakdownGroups ?? []).flatMap(g => g.items.map(i => ({name: i.name, quantity: i.quantity})))
           return {name: l.name, quantity: l.quantity, unitPrice: l.unitPrice, lineTotal: l.lineTotal, treatmentDate: detail.created_at, sessionSequence: sessionSeqLabel, subItems}
@@ -2939,6 +3049,7 @@ const printSelectedPatientInvoiceCopy = (): void => {
       billingTypeLabel: normalizedBillingType === "HMO_BILLING" ? "HMO Billing" : "LGU Billing",
       sponsorName,
       sponsorReference,
+      ...invoiceApprovalSignature.value,
       lines: selectedBillingReceiptLines.value.map((line, index) => ({
         name: line.name,
         quantity: line.quantity,
@@ -3104,6 +3215,7 @@ watch(editingBillingId, (v) => {
 // ── Mount ─────────────────────────────────────────────────────────────────────
 onMounted(async () => {
   syncRoleFromStorage()
+  await loadCurrentUser()
   await fetchBillings()
   await applyRouteBillingContext()
 })

@@ -91,7 +91,7 @@ export const FIRST_DEGREE_FAMILY_RELATIONSHIPS = [
 ] as const
 
 export const patientHMOInformationSchema = z.strictObject({
-  company_name: z.string("Company name is required").max(100, "Company name must be 100 characters and below only"),
+  company_name: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().max(100, "Company name must be 100 characters and below only").optional()),
   member_id: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().max(100).optional()),
   card_number: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().max(100).optional()),
   plan_name: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().max(100).optional()),
@@ -106,8 +106,9 @@ export const patientHMOInformationSchema = z.strictObject({
   validity_start_date: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD format").optional()),
   validity_end_date: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD format").optional()),
   notes: z.preprocess(value => value === "" || value == null ? undefined : value, z.string().trim().max(255).optional()),
-  hmo: lookupSchema('HMO is required'),
-  hmo_type: lookupSchema('HMO Type is required')
+  hmo: z.preprocess(value => value ?? undefined, lookupSchema('HMO is required').optional()),
+  hmo_type: z.preprocess(value => value ?? undefined, lookupSchema('HMO Type is required').optional()),
+  lgu_program: z.preprocess(value => value ?? undefined, lookupSchema('LGU Name is required').optional())
 })
 
 export type PatientHMOInformationFormState = z.infer<typeof patientHMOInformationSchema>

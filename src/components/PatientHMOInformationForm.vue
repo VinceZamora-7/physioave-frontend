@@ -14,23 +14,46 @@
           class="flex flex-col gap-2"
           ref="form">
 
-      <FormField v-slot="$field" name="company_name">
+
+
+
+      <FormField v-if="!isLguSponsor" v-slot="$field" name="hmo">
         <IftaLabel>
-          <InputText
-            id="company_name"
+          <Select
+            id="hmo"
             v-model="$field.value"
+            :fluid="true"
+            :loading="isLoading"
             :disabled="isReadOnly || isLoading"
-            fluid
-            :placeholder="`Enter ${sponsorLabel} name`"
-          />
-          <label for="company_name">{{ sponsorLabel }} name</label>
+            :options="hmos"
+            placeholder="Select HMO name"
+            :filter="true"
+            :filter-fields="['name']"
+            optionLabel="name"
+          >
+            <template #value="slotProps">
+              <div v-if="slotProps.value" class="flex items-center">
+                <div>{{ slotProps.value?.name }}</div>
+              </div>
+              <span v-else>
+                {{ slotProps.placeholder }}
+              </span>
+            </template>
+            <template #option="slotProps">
+              <div class="flex items-center">
+                <div>{{ slotProps.option?.name }}</div>
+              </div>
+            </template>
+          </Select>
+          <label for="hmo">HMO Name</label>
           <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
             {{ $field.error.message }}
           </Message>
         </IftaLabel>
       </FormField>
 
-      <FormField v-slot="$field" name="hmo_type">
+
+      <FormField v-if="!isLguSponsor" v-slot="$field" name="hmo_type">
         <IftaLabel>
           <Select
             id="hmo_type"
@@ -56,23 +79,23 @@
               </div>
             </template>
           </Select>
-          <label for="hmo_type">{{ sponsorLabel }} Type</label>
+          <label for="hmo_type">HMO Type</label>
           <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
             {{ $field.error.message }}
           </Message>
         </IftaLabel>
       </FormField>
 
-      <FormField v-slot="$field" name="hmo">
+      <FormField v-if="isLguSponsor" v-slot="$field" name="lgu_program">
         <IftaLabel>
           <Select
-            id="hmo"
+            id="lgu_program"
             v-model="$field.value"
             :fluid="true"
             :loading="isLoading"
             :disabled="isReadOnly || isLoading"
-            :options="hmos"
-            placeholder="Select HMO"
+            :options="lguPrograms"
+            placeholder="Select LGU name"
             :filter="true"
             :filter-fields="['name']"
             optionLabel="name"
@@ -91,7 +114,23 @@
               </div>
             </template>
           </Select>
-          <label for="hmo">{{ sponsorLabel }}</label>
+          <label for="lgu_program">LGU Name</label>
+          <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
+            {{ $field.error.message }}
+          </Message>
+        </IftaLabel>
+      </FormField>
+
+      <FormField v-if="!isLguSponsor" v-slot="$field" name="company_name">
+        <IftaLabel>
+          <InputText
+            id="company_name"
+            v-model="$field.value"
+            :disabled="isReadOnly || isLoading"
+            fluid
+            placeholder="Enter HMO company"
+          />
+          <label for="company_name">HMO Company</label>
           <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
             {{ $field.error.message }}
           </Message>
@@ -99,106 +138,40 @@
       </FormField>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-        <FormField v-slot="$field" name="member_id">
+        <FormField v-if="!isLguSponsor" v-slot="$field" name="card_number">
           <IftaLabel>
-            <InputText id="member_id" v-model="$field.value" :disabled="isReadOnly || isLoading" fluid placeholder="Enter member ID" />
-            <label for="member_id">Member ID</label>
+            <InputText id="card_number" v-model="$field.value" :disabled="isReadOnly || isLoading" fluid placeholder="Enter HMO card number" />
+            <label for="card_number">HMO Card Number</label>
             <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
               {{ $field.error.message }}
             </Message>
           </IftaLabel>
         </FormField>
 
-        <FormField v-slot="$field" name="card_number">
+        <FormField v-if="isLguSponsor" v-slot="$field" name="approval_code">
           <IftaLabel>
-            <InputText id="card_number" v-model="$field.value" :disabled="isReadOnly || isLoading" fluid placeholder="Enter card number" />
-            <label for="card_number">Card Number</label>
+            <InputText id="approval_code" v-model="$field.value" :disabled="isReadOnly || isLoading" fluid placeholder="Enter referral form number" />
+            <label for="approval_code">Referral Form No.</label>
             <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
               {{ $field.error.message }}
             </Message>
           </IftaLabel>
         </FormField>
 
-        <FormField v-slot="$field" name="plan_name">
-          <IftaLabel>
-            <InputText id="plan_name" v-model="$field.value" :disabled="isReadOnly || isLoading" fluid placeholder="Enter plan name" />
-            <label for="plan_name">Plan Name</label>
-            <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
-              {{ $field.error.message }}
-            </Message>
-          </IftaLabel>
-        </FormField>
-
-        <FormField v-slot="$field" name="principal_name">
-          <IftaLabel>
-            <InputText id="principal_name" v-model="$field.value" :disabled="isReadOnly || isLoading" fluid placeholder="Enter principal name" />
-            <label for="principal_name">Principal Name</label>
-            <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
-              {{ $field.error.message }}
-            </Message>
-          </IftaLabel>
-        </FormField>
-
-<FormField v-slot="$field" name="relationship_to_principal">
-  <div class="flex flex-col gap-1">
-
-    <label
-      for="relationship_to_principal"
-      class="text-xs text-surface-500"
-    >
-      Relationship to Principal (First-degree only)
-    </label>
-
-    <Select
-      id="relationship_to_principal"
-      v-model="$field.value"
-      :fluid="true"
-      :options="firstDegreeFamilyRelationshipOptions"
-      optionLabel="label"
-      optionValue="value"
-      placeholder="Select relationship"
-      :disabled="isReadOnly || isLoading"
-      showClear
-      filter
-      class="w-full"
-    />
-
-    <Message
-      v-if="$field?.invalid"
-      severity="error"
-      size="small"
-      variant="simple"
-    >
-      {{ $field.error.message }}
-    </Message>
-
-  </div>
-</FormField>
-
-        <FormField v-slot="$field" name="approval_code">
-          <IftaLabel>
-            <InputText id="approval_code" v-model="$field.value" :disabled="isReadOnly || isLoading" fluid placeholder="Enter approval/reference code" />
-            <label for="approval_code">Approval Code</label>
-            <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
-              {{ $field.error.message }}
-            </Message>
-          </IftaLabel>
-        </FormField>
-
-        <FormField v-slot="$field" name="validity_start_date">
+        <FormField v-if="isLguSponsor" v-slot="$field" name="validity_start_date">
           <IftaLabel>
             <InputText id="validity_start_date" v-model="$field.value" :disabled="isReadOnly || isLoading" type="date" fluid />
-            <label for="validity_start_date">Validity Start Date</label>
+            <label for="validity_start_date">Date of Referral Issued</label>
             <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
               {{ $field.error.message }}
             </Message>
           </IftaLabel>
         </FormField>
 
-        <FormField v-slot="$field" name="validity_end_date">
+        <FormField v-if="!isLguSponsor" v-slot="$field" name="validity_end_date">
           <IftaLabel>
             <InputText id="validity_end_date" v-model="$field.value" :disabled="isReadOnly || isLoading" type="date" fluid />
-            <label for="validity_end_date">Validity End Date</label>
+            <label for="validity_end_date">Expiration Date</label>
             <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
               {{ $field.error.message }}
             </Message>
@@ -206,17 +179,7 @@
         </FormField>
       </div>
 
-      <FormField v-slot="$field" name="notes">
-        <IftaLabel>
-          <InputText id="notes" v-model="$field.value" :disabled="isReadOnly || isLoading" fluid placeholder="Enter processing notes" />
-          <label for="notes">Processing Notes</label>
-          <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
-            {{ $field.error.message }}
-          </Message>
-        </IftaLabel>
-      </FormField>
-
-      <section class="mt-4 rounded-xl border border-surface-200 bg-surface-50 p-4">
+      <section v-if="!isLguSponsor" class="mt-4 rounded-xl border border-surface-200 bg-surface-50 p-4">
         <div class="mb-3 flex items-center justify-between gap-2">
           <div>
             <div class="text-sm font-semibold text-surface-900">Previous HMO Details</div>
@@ -324,11 +287,9 @@ import {useConfirm} from "primevue/useconfirm";
 	import InputText from "primevue/inputtext";
 	import IftaLabel from "primevue/iftalabel";
 	import Select from "primevue/select";
-	import SelectButton from "primevue/selectbutton";
 	import {useQueryClient} from "@tanstack/vue-query";
 	import { getApiErrorMessage } from "@/utils/actionable-error.util";
 	import {errorToast, successToast} from "@/utils/toast.util.ts";
-	import { FIRST_DEGREE_FAMILY_RELATIONSHIPS } from "@/schema/patient.schema";
 
 const toast = useToast()
 const confirm = useConfirm()
@@ -337,16 +298,17 @@ const form = useTemplateRef<FormInstance>('form')
 
 const emit = defineEmits<PatientHMOInformationFormEmits>()
 const props = defineProps<PatientHMOInformationFormProps>()
-const {patient, hmoTypes, hmos, isLoading: isParentLoading, sponsor_context} = toRefs(props)
+const {patient, hmoTypes, hmos, lguPrograms, isLoading: isParentLoading, sponsor_context} = toRefs(props)
 
-const sponsorLabel = computed(() => sponsor_context?.value === "LGU" ? "LGU" : "HMO")
+const isLguSponsor = computed(() => sponsor_context?.value === "LGU")
+const sponsorLabel = computed(() => isLguSponsor.value ? "LGU" : "HMO")
 
 	const isPatientHMOInformationLoading = useIsLoading(PatientTanstackKey.PATIENT_HMO_INFORMATION)
 	const isPatientHMOHistoryLoading = useIsLoading(PatientTanstackKey.PATIENT_HMO_INFORMATION_HISTORY)
 	const isLoading = computed<boolean>(() => isParentLoading.value || isPatientHMOInformationLoading.value || isPatientHMOHistoryLoading.value)
-	
+
 	const [visible, toggle] = useToggle()
-	
+
 	const patientId = computed<number>(() => patient.value?.id ?? 0)
 
 	const historyLoadError = ref<string>("")
@@ -378,23 +340,6 @@ const sponsorLabel = computed(() => sponsor_context?.value === "LGU" ? "LGU" : "
 	}))
 
 	const resolver = ref(zodResolver(patientHMOInformationSchema))
-
-const firstDegreeFamilyRelationshipOptions = FIRST_DEGREE_FAMILY_RELATIONSHIPS.map((relationship) => ({
-  label: relationship,
-  value: relationship
-}))
-
-type FirstDegreeFamilyRelationship = typeof FIRST_DEGREE_FAMILY_RELATIONSHIPS[number]
-
-const relationshipToPrincipalMap = new Map<string, FirstDegreeFamilyRelationship>(
-  FIRST_DEGREE_FAMILY_RELATIONSHIPS.map((relationship) => [relationship.toLowerCase(), relationship])
-)
-
-const normalizeRelationshipToPrincipal = (value?: string | null): FirstDegreeFamilyRelationship | undefined => {
-  if (!value) return undefined
-  const normalizedKey = value.trim().toLowerCase()
-  return relationshipToPrincipalMap.get(normalizedKey)
-}
 
 const formatDate = (value?: string | null): string => {
   if (!value) return 'N/A'
@@ -461,6 +406,17 @@ const onSubmit = (event: FormSubmitEvent) => {
   if (isReadOnly.value) return
   if (!event.valid) return
 
+  const eventt: FormSubmitEvent<PatientHMOInformationFormState> = event as FormSubmitEvent<PatientHMOInformationFormState>
+  if (isLguSponsor.value) {
+    if (!eventt.values?.lgu_program?.id || !eventt.values?.approval_code || !eventt.values?.validity_start_date) {
+      errorToast(toast, "LGU Name, Referral Form No., and Date of Referral Issued are required.")
+      return
+    }
+  } else if (!eventt.values?.hmo?.id || !eventt.values?.hmo_type?.id || !eventt.values?.company_name || !eventt.values?.card_number || !eventt.values?.validity_end_date) {
+    errorToast(toast, "HMO Name, HMO Type, HMO Company, HMO Card Number, and Expiration Date are required.")
+    return
+  }
+
   confirm.require({
     message: 'Are you sure you want to proceed?',
     header: `${buttonProps.value?.label} Confirmation`,
@@ -476,24 +432,28 @@ const onSubmit = (event: FormSubmitEvent) => {
 	      severity: `${buttonProps.value?.severity}`,
 	      icon: `${buttonProps.value?.icon}`,
 	      loading: isLoading.value
-	    },
+    },
     accept: (): void => {
-      const eventt: FormSubmitEvent<PatientHMOInformationFormState> = event as FormSubmitEvent<PatientHMOInformationFormState>
-      const payload: PatientHMOInformationPayload = {
-        company_name: eventt.values?.company_name,
-        member_id: eventt.values?.member_id,
-        card_number: eventt.values?.card_number,
-        plan_name: eventt.values?.plan_name,
-        principal_name: eventt.values?.principal_name,
-        relationship_to_principal: eventt.values?.relationship_to_principal,
-        approval_code: eventt.values?.approval_code,
-        validity_start_date: eventt.values?.validity_start_date,
-        validity_end_date: eventt.values?.validity_end_date,
-        notes: eventt.values?.notes,
-        hmo_id: eventt.values?.hmo.id,
-        hmo_type_id: eventt.values?.hmo_type.id,
-        patient_id: patientId.value
-      }
+      const payload: PatientHMOInformationPayload = isLguSponsor.value
+        ? {
+            sponsor_context: "LGU",
+            company_name: eventt.values?.lgu_program?.name,
+            lgu_program_id: eventt.values?.lgu_program?.id,
+            referral_form_no: eventt.values?.approval_code,
+            referral_issued_date: eventt.values?.validity_start_date,
+            approval_code: eventt.values?.approval_code,
+            validity_start_date: eventt.values?.validity_start_date,
+            patient_id: patientId.value
+          }
+        : {
+            sponsor_context: "HMO",
+            company_name: eventt.values?.company_name,
+            card_number: eventt.values?.card_number,
+            validity_end_date: eventt.values?.validity_end_date,
+            hmo_id: eventt.values?.hmo?.id,
+            hmo_type_id: eventt.values?.hmo_type?.id,
+            patient_id: patientId.value
+          }
 
       if (isEditing.value) {
         editMutation(payload, {
@@ -546,18 +506,18 @@ const onShow = async (): Promise<void> => {
   }
 
   const initialValues: Partial<PatientHMOInformationFormState> = {
-    company_name: patientHMOInformation.value?.company_name,
-    member_id: patientHMOInformation.value?.member_id,
-    card_number: patientHMOInformation.value?.card_number,
-    plan_name: patientHMOInformation.value?.plan_name,
-    principal_name: patientHMOInformation.value?.principal_name,
-    relationship_to_principal: normalizeRelationshipToPrincipal(patientHMOInformation.value?.relationship_to_principal),
-    approval_code: patientHMOInformation.value?.approval_code,
-    validity_start_date: patientHMOInformation.value?.validity_start_date,
-    validity_end_date: patientHMOInformation.value?.validity_end_date,
-    notes: patientHMOInformation.value?.notes,
+    company_name: patientHMOInformation.value?.company_name ?? undefined,
+    member_id: patientHMOInformation.value?.member_id ?? undefined,
+    card_number: patientHMOInformation.value?.card_number ?? undefined,
+    plan_name: patientHMOInformation.value?.plan_name ?? undefined,
+    principal_name: patientHMOInformation.value?.principal_name ?? undefined,
+    approval_code: patientHMOInformation.value?.referral_form_no ?? patientHMOInformation.value?.approval_code ?? undefined,
+    validity_start_date: patientHMOInformation.value?.referral_issued_date ?? patientHMOInformation.value?.validity_start_date ?? undefined,
+    validity_end_date: patientHMOInformation.value?.validity_end_date ?? undefined,
+    notes: patientHMOInformation.value?.notes ?? undefined,
     hmo: hmos.value?.find(h => h.id === patientHMOInformation.value?.hmo_id),
-    hmo_type: hmoTypes.value?.find(ht => ht.id === patientHMOInformation.value?.hmo_type_id)
+    hmo_type: hmoTypes.value?.find(ht => ht.id === patientHMOInformation.value?.hmo_type_id),
+    lgu_program: lguPrograms.value?.find(lgu => lgu.id === patientHMOInformation.value?.lgu_program_id)
   }
   form.value?.setValues(initialValues)
 }

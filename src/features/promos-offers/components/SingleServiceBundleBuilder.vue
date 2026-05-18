@@ -387,13 +387,24 @@
           <label>Service Type</label>
         </IftaLabel>
 
-        <IftaLabel>
+        <IftaLabel v-if="formData.type !== 'add-on-home-service'">
           <InputText
             v-model="formData.name"
             fluid
             :placeholder="serviceNamePlaceholder"
           />
           <label>Service Name</label>
+        </IftaLabel>
+
+        <IftaLabel v-else>
+          <InputNumber
+            v-model="formData.homeServiceStart"
+            fluid
+            :min="1"
+            suffix=" km"
+            placeholder="Starting distance"
+          />
+          <label>Home Service Distance</label>
         </IftaLabel>
         <small class="block opacity-70">{{ serviceTypeGuidance }}</small>
 
@@ -604,6 +615,8 @@ interface SingleService {
   name: string
   price: number
   status: string
+  sourceId?: string
+  homeServiceStart?: number
 }
 
 interface BundledService {
@@ -651,11 +664,15 @@ const formData = reactive<{
   name: string
   price: number
   status: string
+  linkedServiceId: string | null
+  homeServiceStart: number | null
 }>({
   type: "evaluation",
   name: "",
   price: 0,
-  status: "Active"
+  status: "Active",
+  linkedServiceId: null,
+  homeServiceStart: null
 })
 
 // Bundle state
@@ -752,7 +769,7 @@ const bundlePreviewOriginalPrice = computed(() => {
 const serviceNamePlaceholder = computed(() => {
   if (formData.type === "machine") return "Example: Ultrasound Machine, Traction Device"
   if (formData.type === "technique") return "Example: Manual Therapy, Hot Compress"
-  if (formData.type === "add-on-home-service") return "Example: Add-on: Home Service - 1 km"
+  if (formData.type === "add-on-machine") return "Example: Kinesio Tape, Additional Area"
   return "Enter service name"
 })
 
@@ -762,9 +779,9 @@ const serviceTypeGuidance = computed(() => {
   if (formData.type === "technique")
     return "Create a treatment technique that can be paired with machines and assigned to sessions."
   if (formData.type === "add-on-home-service")
-    return "Home Service add-ons are used for travel tiers and will mark Appointments as Home Care when selected."
+    return "Enter the starting distance for this travel tier. Appointments will treat this type as Home Care automatically."
   if (formData.type === "add-on-machine")
-    return "Use this for regular add-ons that should stay under the Add-ons picker."
+    return "Create a standalone add-on with its own name and price. It will appear under the Add-ons picker."
   return "Choose a clear service name so staff can find it quickly during booking and billing."
 })
 
@@ -886,13 +903,13 @@ const loadServices = async (): Promise<void> => {
       pamsAPI.get<Pageable<{ id: number; name: string; price: number; is_active: boolean }>>("/evaluations", {
         params: { page: 1, size: 1000, name: "", status: "ALL" }
       }),
-      pamsAPI.get<Pageable<{ id: number; name: string; price: number; is_active: boolean }>>("/add-on-machines", {
+      pamsAPI.get<Pageable<{ id: number; name: string; machine_id?: number | null; machine_name?: string | null; add_on_price: number; is_active: boolean }>>("/add-on-machines", {
         params: { page: 1, size: 1000, name: "", status: "ALL" }
       }),
-      pamsAPI.get<Pageable<{ id: number; name: string; price: number; is_active: boolean }>>("/add-on-techniques", {
+      pamsAPI.get<Pageable<{ id: number; technique_id: number; technique_name: string; add_on_price: number; is_active: boolean }>>("/add-on-techniques", {
         params: { page: 1, size: 1000, name: "", status: "ALL" }
       }),
-      pamsAPI.get<Pageable<{ id: number; name: string; price: number; is_active: boolean }>>("/add-on-home-services", {
+      pamsAPI.get<Pageable<{ id: number; start: number; label: string; add_on_price: number; is_active: boolean }>>("/add-on-home-services", {
         params: { page: 1, size: 1000, name: "", status: "ALL" }
       })
     ])
@@ -907,23 +924,25 @@ const loadServices = async (): Promise<void> => {
     const addOnMachineServices: SingleService[] = (addOnMachinesRes.data?.content ?? []).map(item => ({
       id: `add-on-machine-${item.id}`,
       type: "add-on-machine",
-      name: item.name,
-      price: Number(item.price ?? 0),
+      name: `Add-on: ${item.name || item.machine_name || item.id}`,
+      price: Number(item.add_on_price ?? 0),
       status: item.is_active ? "Active" : "Inactive"
     }))
     const addOnTechniqueServices: SingleService[] = (addOnTechniquesRes.data?.content ?? []).map(item => ({
       id: `add-on-technique-${item.id}`,
       type: "add-on-technique",
-      name: item.name,
-      price: Number(item.price ?? 0),
-      status: item.is_active ? "Active" : "Inactive"
+      name: `Add-on: ${item.technique_name}`,
+      price: Number(item.add_on_price ?? 0),
+      status: item.is_active ? "Active" : "Inactive",
+      sourceId: `technique-${item.technique_id}`
     }))
     const addOnHomeServices: SingleService[] = (addOnHomeRes.data?.content ?? []).map(item => ({
       id: `add-on-home-service-${item.id}`,
       type: "add-on-home-service",
-      name: item.name,
-      price: Number(item.price ?? 0),
-      status: item.is_active ? "Active" : "Inactive"
+      name: item.label,
+      price: Number(item.add_on_price ?? 0),
+      status: item.is_active ? "Active" : "Inactive",
+      homeServiceStart: Number(item.start ?? 0)
     }))
 
     customServices.value = [...evalServices, ...addOnMachineServices, ...addOnTechniqueServices, ...addOnHomeServices]
@@ -962,6 +981,8 @@ const openAddDialog = (): void => {
   formData.name = ""
   formData.price = 0
   formData.status = "Active"
+  formData.linkedServiceId = null
+  formData.homeServiceStart = null
   dialogVisible.value = true
 }
 
@@ -971,15 +992,12 @@ const openEditDialog = (service: SingleService): void => {
     return
   }
   editingId.value = service.id
-  formData.type =
-    service.type === "add-on-home-service"
-      ? "add-on-home-service"
-      : service.type.startsWith("add-on")
-        ? "add-on-machine"
-        : service.type
+  formData.type = service.type
   formData.name = service.name
   formData.price = service.price
   formData.status = service.status
+  formData.linkedServiceId = service.sourceId ?? null
+  formData.homeServiceStart = service.homeServiceStart ?? null
   dialogVisible.value = true
 }
 
@@ -990,12 +1008,21 @@ const parseNumericId = (value: string, prefix: string): number => {
 }
 
 const saveService = async (): Promise<void> => {
-  if (!formData.name.trim()) {
+  if (formData.type !== "add-on-home-service" && !formData.name.trim()) {
     errorToast(toast, "Service name is required")
     return
   }
-  if (formData.price < 0) {
-    errorToast(toast, "Price must be 0 or greater")
+  const price = Number(formData.price ?? 0)
+  if (price < 0 || (formData.type.startsWith("add-on") && price <= 0)) {
+    errorToast(toast, formData.type.startsWith("add-on") ? "Add-on price must be greater than 0" : "Price must be 0 or greater")
+    return
+  }
+  if (formData.type === "add-on-home-service" && Number(formData.homeServiceStart ?? 0) <= 0) {
+    errorToast(toast, "Home Service distance must be greater than 0")
+    return
+  }
+  if (formData.type === "add-on-technique" && !formData.linkedServiceId) {
+    errorToast(toast, "This technique-linked add-on is missing its source technique")
     return
   }
 
@@ -1011,7 +1038,14 @@ const saveService = async (): Promise<void> => {
     }
 
     const endpoint = endpoints[formData.type]
-    const payload = { name: formData.name, price: Number(formData.price ?? 0) }
+    const payload =
+      formData.type === "add-on-machine"
+        ? { name: formData.name, price }
+        : formData.type === "add-on-technique"
+          ? { technique_id: parseNumericId(String(formData.linkedServiceId ?? ""), "technique-"), add_on_price: price }
+          : formData.type === "add-on-home-service"
+            ? { start: Number(formData.homeServiceStart ?? 0), add_on_price: price }
+            : { name: formData.name, price }
 
     if (editingId.value) {
       const id =

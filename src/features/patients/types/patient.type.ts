@@ -97,6 +97,7 @@ export interface PatientHMOInformationFormProps {
   patient: Patient | undefined
   hmoTypes: HMOType[]
   hmos: Lookup[]
+  lguPrograms: Lookup[]
   sponsor_context?: "HMO" | "LGU"
 }
 
