@@ -294,14 +294,14 @@
               <Message v-if="loadingLguBudgetSummary" severity="secondary" :closable="false" size="small">
                 Loading active LGU fund summary…
               </Message>
-              <Message v-else-if="activeLguBudgetSummary" :severity="lguWillExceedRemainingFund ? 'error' : 'info'" :closable="false" size="small">
+              <Message v-else-if="activeLguBudgetSummary" severity="info" :closable="false" size="small">
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <span class="font-medium">{{ activeLguBudgetSummary.program_name }}</span>
                   <span class="opacity-70">{{ activeLguBudgetSummary.period_year }}-{{ String(activeLguBudgetSummary.period_month).padStart(2, "0") }}</span>
                   <span>Remaining: <strong>{{ asCurrency(activeLguBudgetSummary.remaining_amount) }}</strong></span>
                   <template v-if="lguProjectedRemainingAfterSave != null">
                     <span class="opacity-60">→</span>
-                    <span :class="lguWillExceedRemainingFund ? 'text-red-600 font-semibold' : ''">
+                    <span :class="lguProjectedRemainingAfterSave != null && lguProjectedRemainingAfterSave < 0 ? 'text-amber-600 font-semibold' : ''">
                       After save: {{ asCurrency(lguProjectedRemainingAfterSave) }}
                     </span>
                   </template>
@@ -314,7 +314,7 @@
                 {{ lguBudgetSummaryError }}
               </Message>
               <Message v-else-if="form.patient_id && !activeLguBudgetSummary && !loadingLguBudgetSummary" severity="warn" :closable="false" size="small">
-                No active LGU budget period configured. LGU billing cannot be saved until a budget period is opened.
+                No active LGU budget period is configured yet. Saving an appointment-linked LGU billing will create a tracking ledger automatically.
               </Message>
             </template>
 
@@ -726,8 +726,6 @@
                 <Button
                   :label="editingBillingId ? 'Update Billing' : 'Create Billing'"
                   icon="pi pi-save"
-                  :disabled="lguWillExceedRemainingFund"
-                  v-tooltip.top="lguWillExceedRemainingFund ? 'LGU fund exceeded — cannot save until budget is increased' : undefined"
                   @click="createBilling"
                 />
                 <Button v-if="editingBillingId" label="Cancel Edit" icon="pi pi-times" text @click="resetBillingForm" />
@@ -2663,10 +2661,6 @@ const lguAvailableBeforeSave = computed(() =>
 const lguProjectedRemainingAfterSave = computed(() =>
   lguAvailableBeforeSave.value != null ? Number((lguAvailableBeforeSave.value - posSummary.value.totalDue).toFixed(2)) : null
 )
-const lguWillExceedRemainingFund = computed(() =>
-  lguProjectedRemainingAfterSave.value != null && lguProjectedRemainingAfterSave.value < 0
-)
-
 // ── Service lookup fetchers ───────────────────────────────────────────────────
 const fetchLookup = async (path: string): Promise<BillingPickerLookup[]> => {
   const {data} = await pamsAPI.get<Pageable<OfferLookupDTO>>(path, {params: {page: 1, size: 500, status: Status.ACTIVE}})
@@ -2785,8 +2779,6 @@ const saveBundleFromSelection = (): void => {
 const createBilling = async (): Promise<void> => {
   if (!form.value.patient_id)        { errorToast(toast, "Patient is required"); return }
   if (!selectedLines.value.length)   { errorToast(toast, "Add at least one service"); return }
-  if (lguWillExceedRemainingFund.value) { errorToast(toast, "LGU fund exceeded — cannot save until budget is increased"); return }
-
   const summary = posSummary.value
   const payload: BillingRequest = {
     patient_id: form.value.patient_id,
