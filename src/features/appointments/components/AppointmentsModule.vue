@@ -2650,6 +2650,21 @@ const loadSinglePayServices = async (): Promise<void> => {
     allPackageServiceOffers.value = []
   }
 
+  try {
+    const { data } = await pamsAPI.get<Pageable<Record<string, unknown>>>("/package-service-offers", {
+      params: { page: 1, size: 500, name: "", status: Status.ACTIVE }
+    })
+    const dbPackageOffers = (data?.content ?? [])
+      .map(normalizePackageServiceOffer)
+      .filter((item): item is PackageServiceOffer => item !== null)
+
+    if (dbPackageOffers.length > 0) {
+      allPackageServiceOffers.value = dbPackageOffers
+    }
+  } catch {
+    // Keep local cache fallback for offline/stale deployments.
+  }
+
   // Fallback: booking users might not have Promos/Offers module access that populates localStorage,
   // or may have stale/partial cached data (e.g. evaluation only). In either case, load lookup APIs.
   const hasMachineCatalog = allSinglePayServices.value.some(service => service.type === "machine")
@@ -3322,6 +3337,8 @@ const openCreateDialog = async (): Promise<void> => {
     createLookupsClinicId.value !== selectedClinicId.value
   ) {
     await loadCreateLookups()
+  } else {
+    await loadSinglePayServices()
   }
   createPatient.value = undefined
   createDoctor.value = undefined

@@ -32,7 +32,6 @@
       :machine-options="bundleMachineOptions"
       :technique-options="bundleTechniqueOptions"
       :evaluation-options="bundleEvaluationOptions"
-      :session-options="sessionServices.map(s => ({ id: s.id, name: s.name, price: s.price }))"
       :get-service-name="getServiceName"
       :get-service-price="getServicePrice"
       @refreshed="refreshAll"
