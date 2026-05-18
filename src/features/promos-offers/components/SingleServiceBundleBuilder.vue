@@ -57,6 +57,14 @@
 
         <div class="flex flex-wrap gap-2">
           <Button
+            :label="showInactiveServices ? 'Show Active' : 'Show Inactive'"
+            :icon="showInactiveServices ? 'pi pi-check-circle' : 'pi pi-eye'"
+            size="small"
+            :severity="showInactiveServices ? 'secondary' : 'warning'"
+            :outlined="!showInactiveServices"
+            @click="showInactiveServices = !showInactiveServices"
+          />
+          <Button
             v-for="option in serviceCatalogFilterOptions"
             :key="option.value"
             :label="option.label"
@@ -658,6 +666,7 @@ const customServices = ref<SingleService[]>([])
 const machineServices = ref<SingleService[]>([])
 const techniqueServices = ref<SingleService[]>([])
 const selectedServiceCatalogFilters = ref<ServiceCatalogFilter[]>([])
+const showInactiveServices = ref(false)
 
 const formData = reactive<{
   type: ServiceType
@@ -724,19 +733,25 @@ const allServices = computed<SingleService[]>(() => [
   ...customServices.value
 ])
 
+const displayedServices = computed<SingleService[]>(() =>
+  allServices.value.filter(service =>
+    showInactiveServices.value ? service.status === "Inactive" : service.status !== "Inactive"
+  )
+)
+
 const hasServiceCatalogFilters = computed(() => selectedServiceCatalogFilters.value.length > 0)
 
 const filteredServiceCatalogItems = computed(() =>
-  allServices.value.filter(service =>
+  displayedServices.value.filter(service =>
     selectedServiceCatalogFilters.value.includes(normalizeServiceCatalogFilter(service.type))
   )
 )
 
 const serviceCatalogBuckets = computed(() => ({
-  machine: allServices.value.filter(s => normalizeServiceCatalogFilter(s.type) === "machine"),
-  technique: allServices.value.filter(s => normalizeServiceCatalogFilter(s.type) === "technique"),
-  evaluation: allServices.value.filter(s => normalizeServiceCatalogFilter(s.type) === "evaluation"),
-  "add-ons": allServices.value.filter(s => normalizeServiceCatalogFilter(s.type) === "add-ons")
+  machine: displayedServices.value.filter(s => normalizeServiceCatalogFilter(s.type) === "machine"),
+  technique: displayedServices.value.filter(s => normalizeServiceCatalogFilter(s.type) === "technique"),
+  evaluation: displayedServices.value.filter(s => normalizeServiceCatalogFilter(s.type) === "evaluation"),
+  "add-ons": displayedServices.value.filter(s => normalizeServiceCatalogFilter(s.type) === "add-ons")
 }))
 
 const serviceCatalogMatrixRows = computed<ServiceCatalogMatrixRow[]>(() => {

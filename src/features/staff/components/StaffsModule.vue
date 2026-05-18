@@ -165,7 +165,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue"
+import { computed, onMounted, onUnmounted, ref } from "vue"
 import { storeToRefs } from "pinia"
 import Button from "primevue/button"
 import Message from "primevue/message"
@@ -293,6 +293,7 @@ const adminRoles = computed(() =>
 	)
 
 const { data: staffs, isError, error, refetch } = staffTanstackService.getAll(requestParams)
+let presenceRefreshTimer: number | undefined
 
 useRefreshToken<Pageable<Staff> | undefined>(error, refetch)
 
@@ -547,5 +548,14 @@ const syncRoleFromStorage = () => {
 onMounted(async () => {
   syncRoleFromStorage()
   await initializeDropdowns()
+  presenceRefreshTimer = window.setInterval(() => {
+    void refetch()
+  }, 60_000)
+})
+
+onUnmounted(() => {
+  if (presenceRefreshTimer !== undefined) {
+    window.clearInterval(presenceRefreshTimer)
+  }
 })
 </script>

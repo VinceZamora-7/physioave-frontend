@@ -1769,6 +1769,9 @@ const normalizeStringIdArray = (value: unknown): string[] =>
     .map(entry => toOptionalStringId(entry))
     .filter((entry): entry is string => !!entry)
 
+const normalizePrefixedStringIdArray = (value: unknown, prefix: string): string[] =>
+  normalizeStringIdArray(value).map(id => id.startsWith(prefix) ? id : `${prefix}${id}`)
+
 const normalizeQtyItems = (value: unknown): Array<{id: string; qty: number}> =>
   parseMaybeJsonArray(value).flatMap(entry => {
     if (!entry || typeof entry !== "object") return []
@@ -1780,6 +1783,31 @@ const normalizeQtyItems = (value: unknown): Array<{id: string; qty: number}> =>
       qty: normalizePositiveInt(raw.qty ?? raw.quantity, 1)
     }]
   })
+
+const normalizeBundledService = (value: unknown): BundledService | null => {
+  if (!value || typeof value !== "object") return null
+
+  const raw = value as Record<string, unknown>
+  const id = toOptionalStringId(raw.id)
+  const name = typeof raw.name === "string" ? raw.name.trim() : ""
+  if (!id || !name) return null
+
+  return {
+    id,
+    name,
+    machineIds: normalizePrefixedStringIdArray(raw.machineIds ?? raw.machine_ids, "machine-"),
+    techniqueIds: normalizePrefixedStringIdArray(raw.techniqueIds ?? raw.technique_ids, "technique-"),
+    evaluationIds: normalizePrefixedStringIdArray(raw.evaluationIds ?? raw.evaluation_ids, "evaluation-"),
+    addOnIds: [
+      ...normalizePrefixedStringIdArray(raw.addOnMachineIds ?? raw.add_on_machine_ids, "add-on-machine-"),
+      ...normalizePrefixedStringIdArray(raw.addOnTechniqueIds ?? raw.add_on_technique_ids, "add-on-technique-"),
+      ...normalizePrefixedStringIdArray(raw.addOnHomeServiceIds ?? raw.add_on_home_service_ids, "add-on-home-service-"),
+      ...normalizeStringIdArray(raw.addOnIds ?? raw.add_on_ids),
+    ],
+    bundledPrice: normalizeNonNegativeNumber(raw.bundledPrice ?? raw.bundled_price),
+    status: normalizePackageStatus(raw)
+  }
+}
 
 const normalizePackageStatus = (raw: Record<string, unknown>): string => {
   if (typeof raw.status === "string" && raw.status.trim()) {
@@ -2634,7 +2662,12 @@ const loadSinglePayServices = async (): Promise<void> => {
   }
   try {
     const stored = localStorage.getItem("bundledServices")
-    allBundledServices.value = stored ? JSON.parse(stored) : []
+    const parsed = stored ? JSON.parse(stored) : []
+    allBundledServices.value = Array.isArray(parsed)
+      ? parsed
+          .map(normalizeBundledService)
+          .filter((item): item is BundledService => item !== null)
+      : []
   } catch {
     allBundledServices.value = []
   }
@@ -2648,6 +2681,21 @@ const loadSinglePayServices = async (): Promise<void> => {
       : []
   } catch {
     allPackageServiceOffers.value = []
+  }
+
+  try {
+    const { data } = await pamsAPI.get<Pageable<Record<string, unknown>>>("/service-bundles", {
+      params: { page: 1, size: 500, name: "", status: Status.ACTIVE }
+    })
+    const dbBundles = (data?.content ?? [])
+      .map(normalizeBundledService)
+      .filter((item): item is BundledService => item !== null)
+
+    if (dbBundles.length > 0) {
+      allBundledServices.value = dbBundles
+    }
+  } catch {
+    // Keep local cache fallback for offline/stale deployments.
   }
 
   try {

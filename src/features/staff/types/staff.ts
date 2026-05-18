@@ -22,6 +22,8 @@ export interface Staff extends BaseStaff {
   secondary_appointment_provider_type?: AppointmentProviderType
   specialty_tag_name?: string
   can_view_all_branches?: boolean
+  last_seen_at?: string | null
+  is_online?: boolean
   is_active: boolean
 }
 
