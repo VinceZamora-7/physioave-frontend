@@ -14,7 +14,7 @@
       :value="activePackages"
       dataKey="id"
       paginator
-      :rows="25"
+      :rows="5"
       :loading="isLoading"
       class="rounded-lg border border-[rgb(var(--app-border))]"
     >
@@ -187,7 +187,32 @@ import { errorToast, successToast } from "@/utils/toast.util"
 import type { Pageable } from "@/models/paging"
 
 type BundleLookup = { id: number; name: string; bundled_price?: number; is_active: boolean }
-type PackageDTO = any
+type PackageDTO = {
+  id: number
+  name: string
+  bundle_template_id?: number | null
+  bundleId?: number | null
+  bundle_qty?: number
+  bundleQty?: number
+  machine_ids?: number[]
+  machineIds?: number[]
+  machine_qty?: number
+  machineQty?: number
+  technique_ids?: number[]
+  techniqueIds?: number[]
+  technique_qty?: number
+  techniqueQty?: number
+  evaluation_ids?: number[]
+  evaluationIds?: number[]
+  evaluation_qty?: number
+  evaluationQty?: number
+  package_price?: number
+  packagePrice?: number
+  is_active?: boolean
+  status?: string
+  offer_scope?: "GLOBAL" | "LGU"
+  offerScope?: "GLOBAL" | "LGU"
+}
 
 export type PackageService = {
   id: number
@@ -222,7 +247,7 @@ const props = defineProps<{
   getServicePrice: (id: string) => number
 }>()
 
-const emit = defineEmits<{ refreshed: [] }>()
+// Removed unused emit
 
 const toast = useToast()
 const confirm = useConfirm()
@@ -254,7 +279,7 @@ const getCategoryTotalQty = (
   return Number((ids ?? []).length) * Number(fallbackQty ?? 1)
 }
 
-const calcPackageRegularTotal = (item: any): number => {
+const calcPackageRegularTotal = (item: PackageService): number => {
   const bundleIdRaw = item.bundleId
   const bundleId = bundleIdRaw === undefined || bundleIdRaw === null || String(bundleIdRaw).trim() === "" ? null : Number(bundleIdRaw)
   const bundle = bundleId ? bundles.value.find(b => b.id === bundleId) : undefined
@@ -263,34 +288,37 @@ const calcPackageRegularTotal = (item: any): number => {
   const machineRegularTotal = (item.machineItems?.length
     ? item.machineItems
     : (item.machineIds ?? []).map((id: string) => ({ id, qty: Number(item.machineQty ?? 1) }))
-  ).reduce((sum: number, entry: any) => sum + (props.getServicePrice(entry.id) * Number(entry.qty ?? 1)), 0)
+  ).reduce((sum: number, entry) => sum + (props.getServicePrice(entry.id) * Number(entry.qty ?? 1)), 0)
 
   const techniqueRegularTotal = (item.techniqueItems?.length
     ? item.techniqueItems
     : (item.techniqueIds ?? []).map((id: string) => ({ id, qty: Number(item.techniqueQty ?? 1) }))
-  ).reduce((sum: number, entry: any) => sum + (props.getServicePrice(entry.id) * Number(entry.qty ?? 1)), 0)
+  ).reduce((sum: number, entry) => sum + (props.getServicePrice(entry.id) * Number(entry.qty ?? 1)), 0)
 
   const evaluationRegularTotal = (item.evaluationItems?.length
     ? item.evaluationItems
     : (item.evaluationIds ?? []).map((id: string) => ({ id, qty: Number(item.evaluationQty ?? 1) }))
-  ).reduce((sum: number, entry: any) => sum + (props.getServicePrice(entry.id) * Number(entry.qty ?? 1)), 0)
+  ).reduce((sum: number, entry) => sum + (props.getServicePrice(entry.id) * Number(entry.qty ?? 1)), 0)
 
   return bundleRegularTotal + machineRegularTotal + techniqueRegularTotal + evaluationRegularTotal
 }
 
 const dialogVisible = ref(false)
 const editingId = ref<number | null>(null)
-const form = reactive<any>({
+const form = reactive<PackageService>({
+  id: 0,
   name: "",
   bundleId: null,
   bundleQty: 1,
-  machineIds: [] as string[],
+  machineIds: [],
   machineQty: 1,
-  techniqueIds: [] as string[],
+  techniqueIds: [],
   techniqueQty: 1,
-  evaluationIds: [] as string[],
+  evaluationIds: [],
   evaluationQty: 1,
   packagePrice: 0,
+  status: "Active",
+  offerScope: "GLOBAL"
 })
 
 const openAddDialog = (): void => {
@@ -334,11 +362,11 @@ const loadBundles = async (): Promise<void> => {
     const res = await pamsAPI.get<Pageable<BundleLookup>>("/service-bundles", {
       params: { page: 1, size: 1000, name: "", status: "ALL" }
     })
-    bundles.value = (res.data?.content ?? []).map(row => ({
-      id: Number((row as any).id),
-      name: (row as any).name,
-      bundledPrice: Number((row as any).bundled_price ?? 0),
-      status: (row as any).is_active ? "Active" : "Inactive"
+    bundles.value = (res.data?.content ?? []).map((row) => ({
+      id: Number(row.id),
+      name: row.name,
+      bundledPrice: typeof row.bundled_price === "number" ? row.bundled_price : 0,
+      status: typeof row.is_active === "boolean" ? (row.is_active ? "Active" : "Inactive") : "Inactive"
     }))
   } catch {
     bundles.value = []
@@ -348,7 +376,7 @@ const loadBundles = async (): Promise<void> => {
 const loadPackages = async (): Promise<void> => {
   isLoading.value = true
   try {
-    let allRows: any[] = []
+    let allRows: PackageDTO[] = []
     if (props.offerScope === "LGU") {
       // Load both GLOBAL and LGU packages
       const [globalRes, lguRes] = await Promise.all([
@@ -369,7 +397,7 @@ const loadPackages = async (): Promise<void> => {
       })
       allRows = res.data?.content ?? []
     }
-    packages.value = allRows.map((row: any) => ({
+    packages.value = allRows.map((row) => ({
       id: Number(row.id),
       name: row.name,
       bundleId: row.bundle_template_id ?? row.bundleId ?? null,
@@ -381,7 +409,7 @@ const loadPackages = async (): Promise<void> => {
       evaluationIds: (row.evaluation_ids ?? row.evaluationIds ?? []).map((id: number) => `evaluation-${id}`),
       evaluationQty: Number(row.evaluation_qty ?? row.evaluationQty ?? 1),
       packagePrice: Number(row.package_price ?? row.packagePrice ?? 0),
-      status: row.is_active === false ? "Inactive" : (row.status ?? "Active"),
+      status: row.is_active === false ? "Inactive" : ((row.status === "Inactive" || row.status === "Active") ? row.status : "Active"),
       offerScope: row.offer_scope ?? row.offerScope ?? "GLOBAL",
     }))
   } catch {
@@ -424,14 +452,13 @@ const save = async (): Promise<void> => {
       offer_scope: props.offerScope ?? "GLOBAL"
     }
 
-
     // If LGU, always generate a unique name for backend, but do not show suffix in UI
-    let lguSuffix = ""
-    if (apiPayload.offer_scope === "LGU" && !editingId.value) {
-      lguSuffix = ` (LGU ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()})`
+    const lguSuffix = (apiPayload.offer_scope === "LGU" && !editingId.value)
+      ? ` (LGU ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()})`
+      : ""
+    if (lguSuffix) {
       apiPayload.name = `${apiPayload.name}${lguSuffix}`
     }
-
 
     if (editingId.value) {
       await pamsAPI.put(`/package-service-offers/${editingId.value}`, apiPayload)
@@ -443,12 +470,23 @@ const save = async (): Promise<void> => {
 
     dialogVisible.value = false
     await loadPackages()
-  } catch (err) {
+  } catch (err: unknown) {
     // Show clearer backend error messages
     let msg = "Failed to save package"
-    if (err && err.response && err.response.data && err.response.data.message) {
-      msg = err.response.data.message
+    let lguSuffix = ""
+    if (
+      typeof err === "object" &&
+      err !== null &&
+      "response" in err &&
+      (err as { response?: { data?: { message?: string } } }).response &&
+      (err as { response: { data?: { message?: string } } }).response.data &&
+      (err as { response: { data: { message?: string } } }).response.data.message
+    ) {
+      msg = (err as { response: { data: { message: string } } }).response.data.message
       // Clean up duplicate LGU suffix in error message if present
+      lguSuffix = (props.offerScope === "LGU" && !editingId.value)
+        ? ` (LGU ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()})`
+        : ""
       msg = msg.replace(lguSuffix, "")
     }
     errorToast(toast, msg)

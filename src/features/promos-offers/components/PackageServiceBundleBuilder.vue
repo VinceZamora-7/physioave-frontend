@@ -52,7 +52,7 @@
         :value="allPackages"
         dataKey="id"
         paginator
-        :rows="25"
+        :rows="10"
         :loading="isLoading"
         class="rounded-lg border border-[rgb(var(--app-border))]"
       >
@@ -170,7 +170,7 @@
         :value="filteredServiceCatalogItems"
         dataKey="id"
         paginator
-        :rows="25"
+        :rows="10"
         :loading="isLoading"
         class="rounded-lg border border-[rgb(var(--app-border))]"
       >
@@ -204,7 +204,7 @@
         :value="serviceCatalogMatrixRows"
         dataKey="key"
         paginator
-        :rows="15"
+        :rows="10"
         :loading="isLoading"
         class="rounded-lg border border-[rgb(var(--app-border))]"
       >
