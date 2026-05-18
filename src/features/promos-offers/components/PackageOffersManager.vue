@@ -66,18 +66,6 @@
         <template #body="{ data }">{{ getCategoryTotalQty(data.evaluationItems, data.evaluationIds, data.evaluationQty) }}</template>
       </Column>
 
-      <Column header="Recurring PT Sessions">
-        <template #body="{ data }">
-          <div class="flex flex-wrap gap-1">
-            <Tag v-for="id in (data.sessionIds ?? [])" :key="id" :value="getServiceName(id)" severity="info" class="text-xs" />
-            <span v-if="!(data.sessionIds ?? []).length" class="text-xs opacity-40">—</span>
-          </div>
-        </template>
-      </Column>
-      <Column header="Qty" style="width: 80px">
-        <template #body="{ data }">{{ getCategoryTotalQty(data.sessionItems, data.sessionIds, data.sessionQty) }}</template>
-      </Column>
-
       <Column header="Regular Total (Automatically Calculated by the system)" style="width: 300px">
         <template #body="{ data }">
           <span class="opacity-70">{{ asCurrency(calcPackageRegularTotal(data)) }}</span>
@@ -161,14 +149,6 @@
             <label>Evaluation Qty</label>
           </IftaLabel>
 
-          <IftaLabel>
-            <MultiSelect v-model="form.sessionIds" :options="sessionOptions" optionLabel="name" optionValue="id" filter display="chip" fluid />
-            <label>Recurring PT Sessions</label>
-          </IftaLabel>
-          <IftaLabel>
-            <InputNumber v-model="form.sessionQty" :min="1" :maxFractionDigits="0" fluid />
-            <label>Session Qty</label>
-          </IftaLabel>
         </div>
 
         <div class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3 text-sm">
@@ -223,9 +203,6 @@ export type PackageService = {
   evaluationIds: string[]
   evaluationQty?: number
   evaluationItems?: Array<{ id: string; qty: number }>
-  sessionIds?: string[]
-  sessionQty?: number
-  sessionItems?: Array<{ id: string; qty: number }>
   packagePrice: number
   status: "Active" | "Inactive"
 }
@@ -239,7 +216,6 @@ const props = defineProps<{
   machineOptions: OptionRow[]
   techniqueOptions: OptionRow[]
   evaluationOptions: OptionRow[]
-  sessionOptions: OptionRow[]
   getServiceName: (id: string) => string
   getServicePrice: (id: string) => number
 }>()
@@ -297,12 +273,7 @@ const calcPackageRegularTotal = (item: any): number => {
     : (item.evaluationIds ?? []).map((id: string) => ({ id, qty: Number(item.evaluationQty ?? 1) }))
   ).reduce((sum: number, entry: any) => sum + (props.getServicePrice(entry.id) * Number(entry.qty ?? 1)), 0)
 
-  const sessionRegularTotal = (item.sessionItems?.length
-    ? item.sessionItems
-    : (item.sessionIds ?? []).map((id: string) => ({ id, qty: Number(item.sessionQty ?? 1) }))
-  ).reduce((sum: number, entry: any) => sum + (props.getServicePrice(entry.id) * Number(entry.qty ?? 1)), 0)
-
-  return bundleRegularTotal + machineRegularTotal + techniqueRegularTotal + evaluationRegularTotal + sessionRegularTotal
+  return bundleRegularTotal + machineRegularTotal + techniqueRegularTotal + evaluationRegularTotal
 }
 
 const dialogVisible = ref(false)
@@ -317,8 +288,6 @@ const form = reactive<any>({
   techniqueQty: 1,
   evaluationIds: [] as string[],
   evaluationQty: 1,
-  sessionIds: [] as string[],
-  sessionQty: 1,
   packagePrice: 0,
 })
 
@@ -333,8 +302,6 @@ const openAddDialog = (): void => {
   form.techniqueQty = 1
   form.evaluationIds = []
   form.evaluationQty = 1
-  form.sessionIds = []
-  form.sessionQty = 1
   form.packagePrice = 0
   dialogVisible.value = true
 }
@@ -350,8 +317,6 @@ const openEditDialog = (row: PackageService): void => {
   form.techniqueQty = Number(row.techniqueQty ?? 1)
   form.evaluationIds = [...(row.evaluationIds ?? [])]
   form.evaluationQty = Number(row.evaluationQty ?? 1)
-  form.sessionIds = [...(row.sessionIds ?? [])]
-  form.sessionQty = Number(row.sessionQty ?? 1)
   form.packagePrice = Number(row.packagePrice ?? 0)
   dialogVisible.value = true
 }
@@ -388,7 +353,7 @@ const loadPackages = async (): Promise<void> => {
     packages.value = raw.map((row) => ({
       id: Number(row.id),
       name: row.name,
-      bundleId: row.bundle_id ?? row.bundleId ?? null,
+      bundleId: row.bundle_template_id ?? row.bundleId ?? null,
       bundleQty: Number(row.bundle_qty ?? row.bundleQty ?? 1),
       machineIds: (row.machine_ids ?? row.machineIds ?? []).map((id: number) => `machine-${id}`),
       machineQty: Number(row.machine_qty ?? row.machineQty ?? 1),
@@ -396,8 +361,6 @@ const loadPackages = async (): Promise<void> => {
       techniqueQty: Number(row.technique_qty ?? row.techniqueQty ?? 1),
       evaluationIds: (row.evaluation_ids ?? row.evaluationIds ?? []).map((id: number) => `evaluation-${id}`),
       evaluationQty: Number(row.evaluation_qty ?? row.evaluationQty ?? 1),
-      sessionIds: (row.session_ids ?? row.sessionIds ?? []).map((id: number) => `session-${id}`),
-      sessionQty: Number(row.session_qty ?? row.sessionQty ?? 1),
       packagePrice: Number(row.package_price ?? row.packagePrice ?? 0),
       status: row.is_active ? "Active" : "Inactive"
     }))
@@ -420,7 +383,7 @@ const save = async (): Promise<void> => {
     errorToast(toast, "Package price must be 0 or greater")
     return
   }
-  if ((form.evaluationIds ?? []).length === 0 && (form.machineIds ?? []).length === 0 && (form.techniqueIds ?? []).length === 0 && (form.sessionIds ?? []).length === 0 && !form.bundleId) {
+  if ((form.evaluationIds ?? []).length === 0 && (form.machineIds ?? []).length === 0 && (form.techniqueIds ?? []).length === 0 && !form.bundleId) {
     errorToast(toast, "Select at least one service or a bundle")
     return
   }
@@ -429,7 +392,7 @@ const save = async (): Promise<void> => {
   try {
     const apiPayload = {
       name: String(form.name).trim(),
-      bundle_id: form.bundleId ? Number(form.bundleId) : null,
+      bundle_template_id: form.bundleId ? Number(form.bundleId) : null,
       bundle_qty: Number(form.bundleQty ?? 1),
       machine_ids: (form.machineIds ?? []).map((id: string) => parseNumericId(id, "machine-")).filter(Boolean),
       machine_qty: Number(form.machineQty ?? 1),
@@ -437,8 +400,8 @@ const save = async (): Promise<void> => {
       technique_qty: Number(form.techniqueQty ?? 1),
       evaluation_ids: (form.evaluationIds ?? []).map((id: string) => parseNumericId(id, "evaluation-")).filter(Boolean),
       evaluation_qty: Number(form.evaluationQty ?? 1),
-      session_ids: (form.sessionIds ?? []).map((id: string) => parseNumericId(id, "session-")).filter(Boolean),
-      session_qty: Number(form.sessionQty ?? 1),
+      session_ids: [],
+      session_qty: 1,
       package_price: Number(form.packagePrice ?? 0)
     }
 
@@ -484,4 +447,3 @@ onMounted(async () => {
   await Promise.all([loadBundles(), loadPackages()])
 })
 </script>
-
