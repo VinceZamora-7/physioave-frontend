@@ -7,6 +7,7 @@
       pageDescription="Uses the same centralized Package Builder as Self Pay: Package Service to avoid data mismatches across billing routes."
       bundledSectionTitle="LGU Bundled Services"
       bundledSectionDescription="Create and manage bundled services using the same logic and saved data as Package Service."
+      packageOfferScope="LGU"
     />
   </main>
 </template>

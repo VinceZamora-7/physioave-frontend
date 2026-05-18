@@ -29,6 +29,7 @@
       title="Package Builder"
       description="Regular Total = (Bundled Price x Qty/Sessions) + (Evaluation original Price x Qty)."
       :can-edit="true"
+      :offer-scope="props.packageOfferScope"
       :machine-options="bundleMachineOptions"
       :technique-options="bundleTechniqueOptions"
       :evaluation-options="bundleEvaluationOptions"
@@ -627,11 +628,13 @@ const props = withDefaults(defineProps<{
   pageDescription?: string
   bundledSectionTitle?: string
   bundledSectionDescription?: string
+  packageOfferScope?: "GLOBAL" | "LGU"
 }>(), {
   pageTitle: "Self Pay: Package Service Management",
   pageDescription: "Manage the same service inventory used by single-service billing, reuse service bundles, and assemble package offers with session counts, evaluations, regular totals, and package prices.",
   bundledSectionTitle: "Bundled Services",
   bundledSectionDescription: "Same bundled-services table and logic used in Self Pay: Single Service.",
+  packageOfferScope: "GLOBAL",
 })
 const isLoading = ref(false)
 const dialogVisible = ref(false)

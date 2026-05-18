@@ -204,6 +204,7 @@ export type PackageService = {
   evaluationQty?: number
   evaluationItems?: Array<{ id: string; qty: number }>
   packagePrice: number
+  offerScope?: "GLOBAL" | "LGU"
   status: "Active" | "Inactive"
 }
 
@@ -213,6 +214,7 @@ const props = defineProps<{
   title: string
   description: string
   canEdit: boolean
+  offerScope?: "GLOBAL" | "LGU"
   machineOptions: OptionRow[]
   techniqueOptions: OptionRow[]
   evaluationOptions: OptionRow[]
@@ -347,7 +349,7 @@ const loadPackages = async (): Promise<void> => {
   isLoading.value = true
   try {
     const res = await pamsAPI.get<Pageable<PackageDTO>>("/package-service-offers", {
-      params: { page: 1, size: 1000, name: "", status: "ALL" }
+      params: { page: 1, size: 1000, name: "", status: "ALL", scope: props.offerScope ?? "GLOBAL" }
     })
     const raw = (res.data?.content ?? []) as any[]
     packages.value = raw.map((row) => ({
@@ -362,6 +364,7 @@ const loadPackages = async (): Promise<void> => {
       evaluationIds: (row.evaluation_ids ?? row.evaluationIds ?? []).map((id: number) => `evaluation-${id}`),
       evaluationQty: Number(row.evaluation_qty ?? row.evaluationQty ?? 1),
       packagePrice: Number(row.package_price ?? row.packagePrice ?? 0),
+      offerScope: row.offer_scope ?? row.offerScope ?? "GLOBAL",
       status: row.is_active ? "Active" : "Inactive"
     }))
     emit("refreshed")
@@ -402,7 +405,8 @@ const save = async (): Promise<void> => {
       evaluation_qty: Number(form.evaluationQty ?? 1),
       session_ids: [],
       session_qty: 1,
-      package_price: Number(form.packagePrice ?? 0)
+      package_price: Number(form.packagePrice ?? 0),
+      offer_scope: props.offerScope ?? "GLOBAL"
     }
 
     if (editingId.value) {
