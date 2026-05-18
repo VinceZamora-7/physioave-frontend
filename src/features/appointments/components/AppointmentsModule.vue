@@ -2875,7 +2875,11 @@ const addServiceLine = (type: string): void => {
 
   if (!serviceId) return
 
-  const service = allSinglePayServices.value.find(s => s.id === serviceId)
+  const service = allSinglePayServices.value.find(s => {
+    if (s.id !== serviceId) return false
+    if (type === "add-on-machine") return s.type === "add-on-machine" || s.type === "add-on-technique"
+    return s.type === type
+  })
   if (!service) return
 
   if (service.type === "add-on-home-service") {
