@@ -443,6 +443,11 @@ export interface DropoutStatusUpdateResult {
   dropout_billing_public_id?: string
 }
 
+export interface DropoutStatusUpdatePayload {
+  dropout_status: string
+  reason?: string
+}
+
 const APPOINTMENTS_PATH = "/appointments"
 const REFRESH_TOKENS_PATH = "/refresh-tokens"
 const AUTH_ERROR_STATUSES = new Set<number>([HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden])
@@ -660,10 +665,17 @@ export const appointmentPhase1Service = {
     )
   },
 
-  updateDropoutStatus(id: number, dropoutStatus: string): Promise<DropoutStatusUpdateResult> {
-    return patchData<DropoutStatusUpdateResult>(`${APPOINTMENTS_PATH}/${id}/dropout-status`, {
-      dropout_status: dropoutStatus
-    })
+  updateDropoutStatus(
+    id: number,
+    dropoutStatusOrPayload: string | DropoutStatusUpdatePayload
+  ): Promise<DropoutStatusUpdateResult> {
+    const payload = typeof dropoutStatusOrPayload === "string"
+      ? {dropout_status: dropoutStatusOrPayload}
+      : dropoutStatusOrPayload
+    return patchData<DropoutStatusUpdateResult, DropoutStatusUpdatePayload>(
+      `${APPOINTMENTS_PATH}/${id}/dropout-status`,
+      payload
+    )
   },
 
   exportCsv(params: QueryParams): Promise<AxiosResponse<Blob>> {

@@ -3208,6 +3208,13 @@ watch(editingBillingId, (v) => {
 onMounted(async () => {
   syncRoleFromStorage()
   await loadCurrentUser()
+
+  // Initialize billing type filter from route query if present
+  const billingTypeFromRoute = normalizeBillingTypeValue(getRouteQueryValue(route.query.billing_type))
+  if (billingTypeFromRoute) {
+    tableFilterBillingType.value = billingTypeFromRoute
+  }
+
   await fetchBillings()
   await applyRouteBillingContext()
 })

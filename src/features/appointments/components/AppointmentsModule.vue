@@ -1,13 +1,13 @@
 <template>
   <main class="app-page-shell space-y-5">
-    <section class="app-hero-banner-vivid p-4 sm:p-5">
+    <section class="app-appointment-card app-appointment-card-accent p-4 sm:p-5">
       <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
 <div class="space-y-2">
-  <div class="app-section-title">
+  <div class="app-appointment-title text-xl">
     Appointments Overview
   </div>
 
-  <p class="app-muted-text max-w-2xl text-sm leading-6">
+  <p class="app-appointment-muted max-w-2xl text-sm leading-6">
     Manage daily clinic appointments, filter schedules, export records, and review reports from one view.
   </p>
 
@@ -91,7 +91,7 @@
         Clinic Calendar
       </h3>
 
-      <p class="app-muted-text max-w-2xl text-sm leading-6">
+      <p class="app-appointment-muted max-w-2xl text-sm leading-6">
         View valid booking days, monthly appointment status, and branch schedule availability.
       </p>
 
@@ -197,7 +197,7 @@
         Appointments Table
       </h3>
 
-      <p class="app-muted-text max-w-2xl text-sm leading-6">
+        <p class="app-appointment-muted max-w-2xl text-sm leading-6">
         Filter, review, page through, and export appointment records for the selected date.
       </p>
     </div>
@@ -279,7 +279,7 @@
 
     <p
       v-if="recordFilter.trim()"
-      class="app-muted-text text-xs leading-5 md:col-span-2 xl:col-span-6"
+      class="app-appointment-muted text-xs leading-5 md:col-span-2 xl:col-span-6"
     >
       Record search checks across clinics, assigned PTs, statuses, and dates. Clear the search to return to the selected table filters.
     </p>
@@ -673,7 +673,7 @@
     <div class="space-y-4">
 
       <!-- ── Essentials ── -->
-      <section :class="createModalCardClass">
+      <section :class="createModalEssentialsClass">
         <div class="flex items-start justify-between gap-3">
           <div>
             <h4 :class="createModalSectionTitleClass">Essentials</h4>
@@ -981,7 +981,7 @@
       </section>
 
       <!-- ── Services ── -->
-      <section :class="createModalCardClass">
+      <section :class="createModalServicesClass">
         <div class="flex items-center justify-between gap-3">
           <div>
             <h4 :class="createModalSectionTitleClass">Services</h4>
@@ -1221,7 +1221,7 @@
     </div>
 
     <!-- ── Schedule (sidebar) ── -->
-<section :class="createModalCardClass">
+<section :class="createModalScheduleClass">
   <div>
     <h4 :class="createModalSectionTitleClass">Schedule</h4>
     <p class="mt-1 text-sm leading-6 text-[rgb(var(--app-fg))]/65">
@@ -1386,7 +1386,6 @@ import Message from "primevue/message";
 import Select from "primevue/select";
 import SelectButton from "primevue/selectbutton";
 import Tag from "primevue/tag";
-import PatientSignaturePad from "@/features/appointments/components/PatientSignaturePad.vue";
 import TreatmentAreaChip from "@/features/appointments/components/TreatmentAreaChip.vue";
 import {billingPhase1Service} from "@/features/billing/api/billing-phase1.service";
 import {
@@ -1863,7 +1862,10 @@ function filterServicesByHmoIds<T extends { id: string; type: string }>(services
   return services.filter(s => allowed.has(Number(s.id)))
 }
 
-const createModalCardClass = "app-appointment-card"
+const createModalCardClass = "app-create-modal-section"
+const createModalEssentialsClass = `${createModalCardClass} app-create-modal-section-care`
+const createModalServicesClass = `${createModalCardClass} app-create-modal-section-services`
+const createModalScheduleClass = `${createModalCardClass} app-create-modal-section-schedule`
 const createModalSectionTitleClass = "app-appointment-title text-base"
 
 const formatCreateLineType = (type: string): string => {
@@ -2247,8 +2249,8 @@ const formatLocalDateKey = (date: Date): string => {
 }
 
 const selectedDateIso = computed(() => formatLocalDateKey(calendarDate.value))
-const sectionCardClass = "app-section-card-comfy space-y-4"
-const sectionTitleClass = "app-section-title"
+const sectionCardClass = "app-appointment-card space-y-4"
+const sectionTitleClass = "app-appointment-title text-lg"
 const detailCardClass = "app-appointment-card p-3"
 const selectedCheckoutSummary = computed(() => selectedDetail.value?.checkout_summary)
 const patientWalletAmountToCollect = computed(() =>

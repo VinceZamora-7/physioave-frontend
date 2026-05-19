@@ -165,6 +165,89 @@
   color: rgb(var(--patient-form-muted-label));
 }
 
+
+.app-create-modal-section {
+  @apply rounded-2xl border p-4 shadow-sm;
+}
+
+.app-create-modal-section-required {
+  border-color: rgb(var(--patient-form-guide-border));
+  background: rgb(var(--patient-form-secondary-bg));
+}
+
+.app-create-modal-section-care {
+  border-color: rgb(var(--patient-form-guide-border));
+  background: rgb(var(--patient-form-guide-bg));
+}
+
+.app-create-modal-section-services {
+  border-color: rgb(var(--patient-form-primary-border));
+  background: rgb(var(--patient-form-primary-bg));
+}
+
+.app-create-modal-section-schedule {
+  border-color: rgb(var(--patient-form-accent-border));
+  background: rgb(var(--patient-form-accent-bg));
+}
+
+.app-create-modal-panel {
+  @apply rounded-2xl border p-3 shadow-sm;
+  border-color: rgb(var(--app-border));
+  background: rgba(var(--app-card), 0.82);
+}
+
+.app-create-modal-panel-required {
+  border-color: rgba(var(--patient-form-required), 0.24);
+  background: rgba(var(--patient-form-required), 0.06);
+}
+
+.app-create-modal-label {
+  @apply text-xs font-bold uppercase tracking-widest;
+  color: rgba(var(--app-fg), 0.55);
+}
+
+.app-create-modal-label-required {
+  color: rgb(var(--app-active-fg));
+}
+
+.app-create-modal-required-pill {
+  @apply rounded-full px-2 py-0.5 text-[10px] font-bold uppercase;
+  background: rgba(var(--patient-form-required), 0.10);
+  color: rgb(var(--patient-form-required));
+}
+
+.app-create-modal-segment {
+  @apply rounded-2xl border p-1;
+  border-color: rgba(var(--app-primary), 0.20);
+  background: rgba(var(--app-primary), 0.06);
+}
+
+.app-create-modal-segment-required {
+  border-color: rgba(var(--app-secondary), 0.28);
+  background: rgba(var(--app-secondary), 0.08);
+}
+
+.app-create-modal-button-active {
+  background: rgb(var(--app-primary));
+  color: rgb(var(--app-button-primary-fg));
+  box-shadow: 0 8px 18px rgba(var(--brand-navy), 0.12);
+}
+
+.app-create-modal-button-active-required {
+  background: rgb(var(--app-secondary));
+  color: rgb(var(--app-button-primary-fg));
+  box-shadow: 0 8px 18px rgba(var(--app-secondary), 0.16);
+}
+
+.app-create-modal-button-muted {
+  color: rgba(var(--app-fg), 0.58);
+}
+
+.app-create-modal-button-muted:hover {
+  background: rgba(var(--app-card), 0.90);
+  color: rgb(var(--app-fg));
+}
+
 .app-primary-action {
   @apply rounded-xl px-4 text-sm font-semibold text-white transition focus:ring-0 focus:shadow-none;
   border: 1px solid rgba(var(--app-button-primary-to), 0.20);
