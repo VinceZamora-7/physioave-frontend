@@ -1345,6 +1345,69 @@
       </div>
     </div>
 
+    <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-4 py-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Time Slots</div>
+          <div class="mt-1 text-sm font-medium text-[rgb(var(--app-fg))]">
+            {{ createSlotAvailabilityTitle }}
+          </div>
+        </div>
+        <Button
+          icon="pi pi-refresh"
+          size="small"
+          text
+          rounded
+          aria-label="Refresh time slots"
+          @click="loadCreateDayAppointments"
+        />
+      </div>
+
+      <div class="mt-3 flex flex-wrap gap-2 text-xs">
+        <span class="inline-flex items-center gap-1.5 text-[rgb(var(--app-fg))]/60">
+          <span class="h-2 w-2 rounded-full bg-emerald-500" />
+          Available
+        </span>
+        <span class="inline-flex items-center gap-1.5 text-[rgb(var(--app-fg))]/60">
+          <span class="h-2 w-2 rounded-full bg-rose-500" />
+          Taken
+        </span>
+      </div>
+
+      <div v-if="isCreateSlotsLoading" class="mt-3 text-sm text-[rgb(var(--app-fg))]/60">
+        Loading slots...
+      </div>
+
+      <div
+        v-else-if="createSlotOptions.length"
+        class="mt-3 grid max-h-72 grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3"
+      >
+        <button
+          v-for="slot in createSlotOptions"
+          :key="slot.key"
+          type="button"
+          :disabled="slot.isTaken"
+          :title="slot.tooltip"
+          :class="[
+            'rounded-xl border px-3 py-2 text-left text-xs transition-all',
+            slot.isSelected
+              ? 'border-blue-400 bg-blue-50 text-blue-900 ring-2 ring-blue-200 dark:border-blue-300 dark:bg-blue-400/20 dark:text-blue-50'
+              : slot.isTaken
+                ? 'cursor-not-allowed border-rose-200 bg-rose-50 text-rose-700 opacity-75 dark:border-rose-400/30 dark:bg-rose-500/10 dark:text-rose-200'
+                : 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:border-emerald-400 hover:bg-emerald-100 dark:border-emerald-400/25 dark:bg-emerald-500/10 dark:text-emerald-100 dark:hover:bg-emerald-500/20'
+          ]"
+          @click="selectCreateSlot(slot)"
+        >
+          <span class="block font-semibold">{{ slot.label }}</span>
+          <span class="mt-1 block truncate opacity-75">{{ slot.statusLabel }}</span>
+        </button>
+      </div>
+
+      <div v-else class="mt-3 rounded-xl border border-dashed border-[rgb(var(--app-border))] px-3 py-4 text-sm text-[rgb(var(--app-fg))]/60">
+        No valid slots for this clinic schedule and slot length.
+      </div>
+    </div>
+
   </div>
 
 </section>
@@ -1647,6 +1710,9 @@ const calendarDayStatusMap = ref<Map<string, CalendarDayStatus>>(new Map())
 const bookedMonthCache = ref<Map<string, Map<string, CalendarDayStatus>>>(new Map())
 const visibleMonth = ref<number>(new Date().getMonth())
 const visibleYear = ref<number>(new Date().getFullYear())
+const createDayAppointments = ref<AppointmentListItem[]>([])
+const createDayAppointmentsKey = ref("")
+const isCreateSlotsLoading = ref(false)
 
 const needsOverrideReason = computed(() => (activeAppointment.value?.reschedule_count ?? 0) >= 3)
 const canDeleteAppointments = computed(() => hasAnyStoredPermission(permissionSet.value, "Appointment::DELETE"))
@@ -2994,6 +3060,18 @@ type CalendarSlotDate = {
   selectable?: boolean
 }
 
+type CreateScheduleSlot = {
+  key: string
+  startsAt: Date
+  endsAt: Date
+  label: string
+  statusLabel: string
+  tooltip: string
+  isTaken: boolean
+  isSelected: boolean
+  conflicts: AppointmentListItem[]
+}
+
 const calendarDayStatusStyles: Record<CalendarDayStatus, {cell: string; dot: string}> = {
   unfinished_unbilled: {
     cell: "bg-red-100 text-red-700 ring-1 ring-red-300 dark:bg-red-500/20 dark:text-red-100 dark:ring-red-400/40",
@@ -3214,6 +3292,134 @@ const alignToClinicStart = (date: Date): Date => {
     return snapToSlotBoundary(result)
   }
   return snapToSlotBoundary(result)
+}
+
+const createSlotDateKey = computed(() => formatLocalDateKey(createStart.value))
+const createSlotAvailabilityTitle = computed(() => {
+  const dateLabel = createStart.value.toLocaleDateString("en-PH", {month: "short", day: "numeric", year: "numeric"})
+  if (selectedCreateProvider.value) return `${selectedCreateProvider.value.name} on ${dateLabel}`
+  return `All scheduled bookings on ${dateLabel}`
+})
+
+const formatTimeOnly = (value: Date): string =>
+  value.toLocaleTimeString("en-PH", {hour: "2-digit", minute: "2-digit"})
+
+const buildDateAtClinicMinute = (baseDate: Date, minuteOfDay: number): Date => {
+  const result = new Date(baseDate)
+  result.setHours(0, 0, 0, 0)
+  result.setMinutes(minuteOfDay)
+  return result
+}
+
+const doAppointmentsOverlap = (start: Date, end: Date, appointment: AppointmentListItem): boolean => {
+  const appointmentStart = new Date(appointment.starts_at)
+  const appointmentEnd = new Date(appointment.ends_at)
+  return appointmentStart < end && appointmentEnd > start
+}
+
+const isCreateSlotRelevantAppointment = (appointment: AppointmentListItem): boolean => {
+  if (isFinishedAppointmentStatus(appointment.appointment_status)) return false
+
+  const hasSpecificResource = Boolean(createDoctor.value || createPatient.value || createSupportStaff.value)
+  if (!hasSpecificResource) return true
+  if (createDoctor.value && appointment.doctor_id === createDoctor.value) return true
+  if (createPatient.value && appointment.patient_id === createPatient.value) return true
+  if (createSupportStaff.value && appointment.support_staff_id === createSupportStaff.value) return true
+  return false
+}
+
+const getCreateSlotConflicts = (start: Date, end: Date): AppointmentListItem[] =>
+  createDayAppointments.value.filter(appointment =>
+    isCreateSlotRelevantAppointment(appointment) && doAppointmentsOverlap(start, end, appointment)
+  )
+
+const getCreateSlotConflictLabel = (conflicts: AppointmentListItem[]): string => {
+  const first = conflicts[0]
+  if (!first) return "Available"
+  if (createDoctor.value && first.doctor_id === createDoctor.value) {
+    return `Taken by ${first.patient_name}`
+  }
+  if (createPatient.value && first.patient_id === createPatient.value) {
+    return "Patient already booked"
+  }
+  if (createSupportStaff.value && first.support_staff_id === createSupportStaff.value) {
+    return "Assistant already booked"
+  }
+  return `${conflicts.length} booking${conflicts.length === 1 ? "" : "s"} scheduled`
+}
+
+const createSlotOptions = computed<CreateScheduleSlot[]>(() => {
+  const clinicStart = getClinicStartMinutes()
+  const clinicEnd = getClinicEndMinutes()
+  if (clinicStart == null || clinicEnd == null) return []
+
+  const endMinute = clinicEnd >= clinicStart ? clinicEnd : clinicEnd + 24 * 60
+  const options: CreateScheduleSlot[] = []
+  const baseDate = createStart.value
+
+  for (let minute = clinicStart; minute + createSlotDuration.value <= endMinute; minute += slotMinuteStep) {
+    const startsAt = buildDateAtClinicMinute(baseDate, minute)
+    const endsAt = addMinutes(startsAt, createSlotDuration.value)
+    const conflicts = getCreateSlotConflicts(startsAt, endsAt)
+    const isTaken = conflicts.length > 0
+    const label = `${formatTimeOnly(startsAt)} - ${formatTimeOnly(endsAt)}`
+    const statusLabel = getCreateSlotConflictLabel(conflicts)
+
+    options.push({
+      key: startsAt.toISOString(),
+      startsAt,
+      endsAt,
+      label,
+      statusLabel,
+      tooltip: isTaken ? `${label}: ${statusLabel}` : `Select ${label}`,
+      isTaken,
+      isSelected: createStart.value.getTime() === startsAt.getTime(),
+      conflicts
+    })
+  }
+
+  return options
+})
+
+const loadCreateDayAppointments = async (): Promise<void> => {
+  const clinicId = selectedClinicId.value
+  const dateKey = createSlotDateKey.value
+  if (!clinicId || !dateKey) {
+    createDayAppointments.value = []
+    createDayAppointmentsKey.value = ""
+    return
+  }
+
+  const cacheKey = `${dateKey}::${clinicId}`
+  isCreateSlotsLoading.value = true
+  createDayAppointments.value = []
+  try {
+    createDayAppointments.value = await appointmentPhase1Service.getDay(dateKey, {clinic_id: clinicId})
+    createDayAppointmentsKey.value = cacheKey
+  } catch (error: unknown) {
+    createDayAppointments.value = []
+    createDayAppointmentsKey.value = ""
+    errorToast(toast, extractApiErrorMessage(error, "Could not load appointment time slots"))
+  } finally {
+    isCreateSlotsLoading.value = false
+  }
+}
+
+const ensureCreateDayAppointmentsLoaded = (): void => {
+  if (!createVisible.value || !selectedClinicId.value) return
+  const cacheKey = `${createSlotDateKey.value}::${selectedClinicId.value}`
+  if (createDayAppointmentsKey.value !== cacheKey) {
+    void loadCreateDayAppointments()
+  }
+}
+
+const selectCreateSlot = (slot: CreateScheduleSlot): void => {
+  if (slot.isTaken) return
+  createStart.value = new Date(slot.startsAt)
+  createEnd.value = new Date(slot.endsAt)
+  if (selectedPackageHasSessionSchedules.value && packageSessionSchedules.value.length > 0) {
+    updatePackageSessionStart(0, slot.startsAt)
+  }
 }
 
 const fetchBookedDatesForMonth = async (year: number, month: number): Promise<void> => {
@@ -3439,6 +3645,7 @@ const openCreateDialog = async (): Promise<void> => {
   createStart.value = base
   createEnd.value = addMinutes(base, createSlotDuration.value)
   createVisible.value = true
+  await loadCreateDayAppointments()
 }
 
 const submitCreateAppointment = async (): Promise<void> => {
@@ -3816,10 +4023,17 @@ watch(createStart, (value) => {
   if (selectedPackageOfferDetail.value && packageSessionSchedules.value.length === 0 && selectedPackageSessionExpectedCount.value > 0) {
     syncSelectedPackageSessionSchedules()
   }
+  ensureCreateDayAppointmentsLoaded()
 })
 
 watch(createSlotDuration, (duration) => {
   createEnd.value = addMinutes(snapToSlotBoundary(new Date(createStart.value)), duration)
+})
+
+watch(selectedClinicId, () => {
+  createDayAppointments.value = []
+  createDayAppointmentsKey.value = ""
+  ensureCreateDayAppointmentsLoaded()
 })
 
 watch(rescheduleStart, (value) => {
