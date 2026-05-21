@@ -9,6 +9,8 @@ import {
 export interface LguInvoiceSubItem {
   name: string
   quantity: number
+  unitPrice?: number
+  children?: LguInvoiceSubItem[]
 }
 
 export interface LguInvoiceLine {
@@ -34,6 +36,7 @@ export interface LguInvoiceData {
   lguProgramName?: string
   lguReferenceLabel?: string
   lguDateIssued?: string
+  lguStatus?: string
   subtotal: number
   discount: number
   surchargeAmount?: number
@@ -45,27 +48,28 @@ export interface LguInvoiceData {
 }
 
 function buildLineRows(lines: LguInvoiceLine[]): string {
+  const renderSubItems = (items: LguInvoiceSubItem[], depth = 0): string =>
+    items.map(sub => `
+      <div class="sub-item sub-item-depth-${depth}">
+        - ${sub.quantity} ${escapeHtml(sub.name)}${sub.unitPrice != null ? ` - ${escapeHtml(asCurrency(sub.unitPrice))}` : ""}
+      </div>
+      ${sub.children?.length ? renderSubItems(sub.children, depth + 1) : ""}
+    `).join("")
+
   return lines.map((line, index) => {
-    const subItemRows = (line.subItems ?? [])
-      .map(sub => `
-        <tr class="sub-item-row">
-          <td></td>
-          <td></td>
-          <td class="sub-item">-${sub.quantity} ${escapeHtml(sub.name)}</td>
-          <td></td>
-          <td></td>
-        </tr>
-      `).join("")
+    const subItems = renderSubItems(line.subItems ?? [])
 
     return `
       <tr>
         <td class="text-center">${index + 1}</td>
         <td class="text-center">${escapeHtml(formatDate(line.treatmentDate))}</td>
-        <td>${escapeHtml(line.name)}</td>
+        <td>
+          <div class="package-line">${escapeHtml(line.name)}</div>
+          ${subItems}
+        </td>
         <td class="text-center">${escapeHtml(line.sessionSequence || "-")}</td>
-        <td class="text-right">${escapeHtml(asCurrency(line.unitPrice))}</td>
+        <td class="text-right">${line.unitPrice > 0 ? escapeHtml(asCurrency(line.unitPrice)) : "-"}</td>
       </tr>
-      ${subItemRows}
     `
   }).join("")
 }
@@ -78,7 +82,8 @@ export function renderLguInvoiceWindow(
   const detailRows: InvoiceDetailRow[] = [
     { label: "Billing To", value: invoice.lguProgramName || "N/A" },
     { label: "Referral Form No.", value: invoice.lguReferenceLabel || "N/A" },
-    { label: "Date Issued", value: formatDate(invoice.lguDateIssued) }
+    { label: "Date Issued", value: formatDate(invoice.lguDateIssued) },
+    { label: "Patient Program Status", value: invoice.lguStatus || "N/A" }
   ]
 
   renderStandardInvoiceWindow(printWindow, {

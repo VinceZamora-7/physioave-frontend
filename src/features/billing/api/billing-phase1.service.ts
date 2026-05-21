@@ -1,6 +1,32 @@
 import {pamsAPI} from "@/utils/axios-interceptor";
 import type {Pageable} from "@/models/paging";
 import type {AxiosResponse} from "axios";
+import {
+  lguBillingService,
+  type LguBudgetSummary,
+  type LguDashboardBudget,
+  type LguDashboardBudgetSaveRequest,
+  type LguDashboardHistoryItem,
+  type LguDashboardRefreshResult,
+  type LguMonthlyClaimResult,
+  type LguPatientCreditDetail,
+  type LguProgramLookup
+} from "@/features/lgu-billing/api/lgu-billing.service";
+export type {
+  LguBudgetSummary,
+  LguDashboardBudget,
+  LguDashboardBudgetSaveRequest,
+  LguDashboardHistoryItem,
+  LguDashboardRefreshResult,
+  LguMonthlyClaimResult,
+  LguPatientAuthorization,
+  LguPatientBilling,
+  LguPatientCreditDetail,
+  LguPatientSession,
+  LguPatientAppointmentStatus,
+  LguPatientPackageAvailment,
+  LguProgramLookup
+} from "@/features/lgu-billing/api/lgu-billing.service";
 
 export type BillingType =
   | "SELF_PAY_SINGLE"
@@ -68,6 +94,7 @@ export interface BillingListItem {
   // LGU enrichment (populated on detail fetch for LGU billings)
   lgu_program_name?: string
   lgu_reference_label?: string
+  lgu_patient_referral_form_no?: string
   lgu_date_issued?: string
   dropout_adjustment_count?: number
   dropout_adjustment_total?: number
@@ -96,6 +123,7 @@ export interface BillingEncounterTicket {
   patient_acknowledged_by: string
   deduction_authorized: boolean
   patient_signature_data_url?: string
+  pt_signature_data_url?: string
   slip_number?: string
   signed_off_at: string
   record_locked: boolean
@@ -181,140 +209,6 @@ export interface PackageLookup {
 export interface PaymentMethodLookup {
   id: number
   name: string
-}
-
-export interface LguProgramLookup {
-  id: number
-  name: string
-  clinic_id?: number | null
-}
-
-export interface LguBudgetSummary {
-  period_id: number
-  program_id: number
-  clinic_id?: number | null
-  program_name: string
-  period_year: number
-  period_month: number
-  period_status: string
-  total_budget: number
-  used_amount: number
-  remaining_amount: number
-  reference_date: string
-}
-
-export interface LguDashboardBudget {
-  period_id: number
-  program_id: number
-  clinic_id?: number | null
-  program_name: string
-  period_year: number
-  period_month: number
-  base_budget: number
-  rollover_amount: number
-  total_budget: number
-  used_amount: number
-  remaining_amount: number
-  period_status: string
-}
-
-export interface LguDashboardBudgetSaveRequest {
-  base_budget: number
-  rollover_amount: number
-  period_year?: number
-  period_month?: number
-  program_id?: number
-  program_name?: string
-}
-
-export interface LguDashboardRefreshResult {
-  reversed_entries: number
-  refreshed_periods: number
-}
-
-export interface LguPatientSession {
-  id: number
-  appointment_id: number
-  session_sequence: number
-  service_name: string
-  appointment_date: string
-  billing_month: string
-  is_dropout_billed: boolean
-  is_monthly_billed: boolean
-  dropout_billing_id?: number | null
-  monthly_billing_id?: number | null
-}
-
-export interface LguPatientBilling {
-  id: number
-  public_id?: string
-  service_name?: string | null
-  amount_due: number
-  billing_status: string
-  pricing_source?: string | null
-  created_at: string
-}
-
-export interface LguPatientAuthorization {
-  authorization_id: number
-  package_name: string
-  authorization_status: string
-  total_sessions: number
-  consumed_sessions: number
-  billed_sessions: number
-  expires_at?: string | null
-  sessions: LguPatientSession[]
-}
-
-export interface LguPatientAppointmentStatus {
-  appointment_id: number
-  appointment_date: string
-  package_name?: string | null
-  availed_services: string[]
-  status: "COMPLETED" | "PENDING" | "DROPPED_OUT"
-}
-
-export interface LguPatientPackageAvailment {
-  authorization_id: number
-  package_name: string
-  availed_count: number
-  used_count: number
-  available_balance: number
-  expiry_date?: string | null
-  status: string
-}
-
-export interface LguPatientCreditDetail {
-  patient_id: number
-  patient_name: string
-  dropout_status?: string | null
-  appointments: LguPatientAppointmentStatus[]
-  package_availments: LguPatientPackageAvailment[]
-  authorizations: LguPatientAuthorization[]
-  billings: LguPatientBilling[]
-}
-
-export interface LguDashboardHistoryItem {
-  id: number
-  created_at: string
-  program_name: string
-  period_year: number
-  period_month: number
-  patient_id?: number | null
-  patient_public_id?: string | null
-  patient_name?: string | null
-  phase1_billing_id?: number | null
-  phase1_billing_public_id?: string | null
-  billing_status?: string | null
-  service_name?: string | null
-  receipt_number?: string | null
-  entry_type: string
-  usage_status: string
-  amount_in: number
-  amount_out: number
-  balance_after?: number | null
-  reference_label?: string | null
-  notes?: string | null
 }
 
 export interface HmoRecentHistoryItem {
@@ -415,13 +309,6 @@ export interface MonthlyIncomeExpenseReport {
   days: MonthlyIncomeExpenseDay[]
 }
 
-export interface LguMonthlyClaimResult {
-  billing_id: number
-  billing_public_id: string
-  consumed_count: number
-  billing_month: string
-}
-
 export interface DailyExpenseRequest {
   expense_date: string
   clinic_id?: number
@@ -452,6 +339,16 @@ export interface RecordPaymentRequest {
   note?: string
 }
 
+export interface MarkAppointmentBilledRequest {
+  appointment_id: number
+}
+
+export interface MarkAppointmentBilledResult {
+  appointment_id: number
+  billing_status: string
+  session_scoped: boolean
+}
+
 export const billingPhase1Service = {
   async getAll(params: Record<string, unknown>): Promise<Pageable<BillingListItem> | undefined> {
     const {data} = await pamsAPI.get<Pageable<BillingListItem>>("/billings", {params})
@@ -467,6 +364,10 @@ export const billingPhase1Service = {
   },
   async update(id: number, payload: BillingRequest): Promise<void> {
     await pamsAPI.put(`/billings/${id}`, payload)
+  },
+  async markAppointmentBilled(id: number, payload: MarkAppointmentBilledRequest): Promise<MarkAppointmentBilledResult | undefined> {
+    const {data} = await pamsAPI.post<MarkAppointmentBilledResult>(`/billings/${id}/appointment-billed`, payload)
+    return data
   },
   async getPaymentLog(id: number): Promise<BillingPaymentLogEntry[]> {
     const {data} = await pamsAPI.get<BillingPaymentLogEntry[]>(`/billings/${id}/payment-log`)
@@ -487,62 +388,25 @@ export const billingPhase1Service = {
     return data
   },
   async getLguPrograms(clinicId?: number): Promise<LguProgramLookup[] | undefined> {
-    const {data} = await pamsAPI.get<LguProgramLookup[]>("/billings/lgu-programs", {
-      params: {
-        clinic_id: clinicId
-      }
-    })
-    return data
+    return lguBillingService.getPrograms(clinicId)
   },
   async createLguProgram(name: string, clinicId?: number): Promise<LguProgramLookup | undefined> {
-    const {data} = await pamsAPI.post<LguProgramLookup>("/billings/lgu-programs", {
-      name,
-      ...(clinicId ? { clinic_id: clinicId } : {})
-    })
-    return data
+    return lguBillingService.createProgram(name, clinicId)
   },
   async getLguBudgetSummary(patientId?: number, appointmentId?: number): Promise<LguBudgetSummary | null | undefined> {
-    if (!patientId) return null
-    const {data} = await pamsAPI.get<LguBudgetSummary | null>("/billings/lgu-budget-summary", {
-      params: {
-        patient_id: patientId,
-        appointment_id: appointmentId
-      }
-    })
-    return data
+    return lguBillingService.getBudgetSummary(patientId, appointmentId)
   },
   async getLguDashboardBudget(periodYear?: number, periodMonth?: number, programId?: number): Promise<LguDashboardBudget | null | undefined> {
-    const {data} = await pamsAPI.get<LguDashboardBudget | null>("/billings/lgu-dashboard-budget", {
-      params: {
-        period_year: periodYear,
-        period_month: periodMonth,
-        program_id: programId
-      }
-    })
-    return data
+    return lguBillingService.getDashboardBudget(periodYear, periodMonth, programId)
   },
   async saveLguDashboardBudget(payload: LguDashboardBudgetSaveRequest): Promise<LguDashboardBudget | null | undefined> {
-    const {data} = await pamsAPI.post<LguDashboardBudget | null>("/billings/lgu-dashboard-budget", payload)
-    return data
+    return lguBillingService.saveDashboardBudget(payload)
   },
   async refreshLguDashboardBudget(periodYear?: number, periodMonth?: number, programId?: number): Promise<LguDashboardRefreshResult | undefined> {
-    const {data} = await pamsAPI.post<LguDashboardRefreshResult>("/billings/lgu-dashboard-budget/refresh", {
-      period_year: periodYear,
-      period_month: periodMonth,
-      program_id: programId
-    })
-    return data
+    return lguBillingService.refreshDashboardBudget(periodYear, periodMonth, programId)
   },
   async getLguDashboardHistory(limit = 100, periodYear?: number, periodMonth?: number, programId?: number): Promise<LguDashboardHistoryItem[] | undefined> {
-    const {data} = await pamsAPI.get<LguDashboardHistoryItem[]>("/billings/lgu-dashboard-history", {
-      params: {
-        limit,
-        period_year: periodYear,
-        period_month: periodMonth,
-        program_id: programId
-      }
-    })
-    return data
+    return lguBillingService.getDashboardHistory(limit, periodYear, periodMonth, programId)
   },
   async getHmoRecentHistory(limit = 25): Promise<HmoRecentHistoryItem[] | undefined> {
     const { data } = await pamsAPI.get<HmoRecentHistoryItem[]>("/billings/hmo-recent-history", {
@@ -555,14 +419,10 @@ export const billingPhase1Service = {
     return data
   },
   async getLguSoa(params: { from: string; to: string; limit?: number; program_id?: number }): Promise<LguDashboardHistoryItem[] | undefined> {
-    const { data } = await pamsAPI.get<LguDashboardHistoryItem[]>("/billings/lgu-soa", { params })
-    return data
+    return lguBillingService.getSoa(params)
   },
-    async getLguPatientCreditDetail(patientId: number): Promise<LguPatientCreditDetail | null | undefined> {
-      const {data} = await pamsAPI.get<LguPatientCreditDetail | null>("/billings/lgu-patient-credit-detail", {
-        params: {patient_id: patientId}
-      })
-      return data
+    async getLguPatientCreditDetail(patientId: number, periodYear?: number, periodMonth?: number): Promise<LguPatientCreditDetail | null | undefined> {
+      return lguBillingService.getPatientCreditDetail(patientId, periodYear, periodMonth)
     },
   async getDailyIncomeExpense(date?: string, clinic_id?: number): Promise<DailyIncomeExpenseReport | undefined> {
     const {data} = await pamsAPI.get<DailyIncomeExpenseReport>("/billings/daily-income-expense", {
@@ -584,12 +444,10 @@ export const billingPhase1Service = {
     await pamsAPI.delete(`/billings/daily-income-expense/expenses/${id}`)
   },
   async createLguMonthlyClaim(payload: { appointment_id?: number; billing_id?: number; billing_month: string }): Promise<LguMonthlyClaimResult | undefined> {
-    const { data } = await pamsAPI.post<LguMonthlyClaimResult>("/billings/lgu-monthly-claims", payload)
-    return data
+    return lguBillingService.createMonthlyClaim(payload)
   },
   async createLguPatientClaim(payload: { patient_id: number; billing_month: string }): Promise<LguMonthlyClaimResult | undefined> {
-    const { data } = await pamsAPI.post<LguMonthlyClaimResult>("/billings/lgu-patient-claims", payload)
-    return data
+    return lguBillingService.createPatientClaim(payload)
   },
   async exportCsv(params: Record<string, unknown>): Promise<AxiosResponse<Blob> | undefined> {
     return await pamsAPI.get("/billings/export/csv", {

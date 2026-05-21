@@ -110,6 +110,8 @@ export function renderBillingReceiptWindow(
   const title = options?.title?.trim() || "Receipt Copy"
   const fileName = options?.fileName?.trim() || receipt.receiptNumber
   const isLguClaimReceipt = receipt.receiptMode === "lgu_claim"
+  const shouldSuppressMainLinePrice = (line: BillingReceiptPrintLine): boolean =>
+    isLguClaimReceipt && Boolean(line.breakdownGroups?.some(group => group.items.length > 0))
 
   const lineRows = receipt.lines.map((line) => `
     <tr>
@@ -137,9 +139,9 @@ export function renderBillingReceiptWindow(
           : ""}
       </td>
       <td class="text-right">${line.quantity}</td>
-      <td class="text-right">${escapeHtml(asCurrency(line.unitPrice))}</td>
+      <td class="text-right">${shouldSuppressMainLinePrice(line) ? "-" : escapeHtml(asCurrency(line.unitPrice))}</td>
       <td class="text-right">
-        <div>${escapeHtml(asCurrency(line.lineTotal))}</div>
+        <div>${shouldSuppressMainLinePrice(line) ? "-" : escapeHtml(asCurrency(line.lineTotal))}</div>
         ${line.originalLineTotal && line.originalLineTotal > line.lineTotal
           ? `<div class="line-original">${escapeHtml(asCurrency(line.originalLineTotal))}</div>`
           : ""}

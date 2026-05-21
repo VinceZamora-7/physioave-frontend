@@ -79,7 +79,8 @@
 import { computed, onMounted, ref } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import Button from "primevue/button"
-import { billingPhase1Service, type HmoRecentHistoryItem, type LguDashboardHistoryItem } from "@/features/billing/api/billing-phase1.service"
+import { billingPhase1Service, type HmoRecentHistoryItem } from "@/features/billing/api/billing-phase1.service"
+import { lguBillingService, type LguDashboardHistoryItem } from "@/features/lgu-billing/api/lgu-billing.service"
 import { getApiErrorMessage } from "@/utils/actionable-error.util"
 
 type Payer = "hmo" | "lgu"
@@ -166,7 +167,7 @@ const load = async (): Promise<void> => {
     }
 
     // LGU: use dashboard history (already contains in/out ledger amounts)
-    const lgu = await billingPhase1Service.getLguSoa({ from, to, limit: 5000, program_id: programId.value }) ?? []
+    const lgu = await lguBillingService.getSoa({ from, to, limit: 5000, program_id: programId.value }) ?? []
     rows.value = (lgu as LguDashboardHistoryItem[]).map(item => ({
       id: Number(item.id),
       created_at: item.created_at ?? null,

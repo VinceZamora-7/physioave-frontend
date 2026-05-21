@@ -437,7 +437,7 @@ import {fileServerTanstackService} from "@/services/file-server.tanstack.service
 import {hmoService} from "@/features/hmos/api/hmo.service";
 import {staffService} from "@/features/staff/api/staff.service";
 import {pamsAPI} from "@/utils/axios-interceptor.ts";
-import {billingPhase1Service} from "@/features/billing/api/billing-phase1.service";
+import {lguBillingService} from "@/features/lgu-billing/api/lgu-billing.service";
 
 type ToggleDialogExpose = {
   toggleDialog: () => void
@@ -483,7 +483,7 @@ const loadSponsorDropdowns = async (): Promise<void> => {
       name: "",
       status: Status.ACTIVE
     }),
-    billingPhase1Service.getLguPrograms()
+    lguBillingService.getPrograms()
   ])
 
   hmos.value = fetchedHMOs.status === "fulfilled" ? (fetchedHMOs.value?.content ?? []) : []

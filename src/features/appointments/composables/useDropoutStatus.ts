@@ -82,11 +82,12 @@ export function useDropoutStatus(
         reason: trimmedReason || undefined
       })
       const baseMessage = `Status updated to ${nextStatus === "DROPPED_OUT" ? "Dropped Out" : "Returned"}`
+      const clearedCount = result?.cleared_appointment_ids?.length ?? 0
       successToast(
         toast,
         result?.dropout_billing_public_id
-          ? `${baseMessage}. Dropout claim ${result.dropout_billing_public_id} was created.`
-          : baseMessage
+          ? `${baseMessage}. Dropout claim ${result.dropout_billing_public_id} was created.${clearedCount ? ` ${clearedCount} future appointment${clearedCount === 1 ? "" : "s"} cleared.` : ""}`
+          : `${baseMessage}.${clearedCount ? ` ${clearedCount} future appointment${clearedCount === 1 ? "" : "s"} cleared.` : ""}`
       )
 
       const refreshed = await appointmentPhase1Service.getById(appointmentId)

@@ -12,6 +12,7 @@ export interface PatientCopyInvoiceLine {
   sessionSequence?: string
   laterality?: string
   bodyArea?: string
+  subItems?: PatientCopyInvoiceLine[]
 }
 
 export interface PatientCopyInvoiceData {
@@ -38,11 +39,25 @@ export function renderPatientCopyInvoiceWindow(
   invoice: PatientCopyInvoiceData,
   options?: { title?: string; fileName?: string }
 ): void {
+  const renderServiceName = (line: PatientCopyInvoiceLine): string => {
+    const subItems = (line.subItems ?? []).map(sub => `
+      <div class="sub-item">
+        - ${sub.quantity} ${escapeHtml(sub.name)}
+      </div>
+      ${(sub.subItems ?? []).map(child => `
+        <div class="sub-item sub-item-depth-1">
+          - ${child.quantity} ${escapeHtml(child.name)}
+        </div>
+      `).join("")}
+    `).join("")
+    return `<div class="package-line">${escapeHtml(line.name)}</div>${subItems}`
+  }
+
   const lineRows = invoice.lines.map((line, index) => `
     <tr>
       <td class="text-center">${index + 1}</td>
       <td class="text-center">${escapeHtml(formatDate(line.treatmentDate))}</td>
-      <td>${escapeHtml(line.name)}</td>
+      <td>${renderServiceName(line)}</td>
       <td class="text-center">${line.quantity}</td>
       <td class="text-center">${escapeHtml(line.sessionSequence || line.laterality || "N/A")}</td>
       <td class="text-center">${escapeHtml(line.bodyArea || "N/A")}</td>

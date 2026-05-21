@@ -1412,6 +1412,7 @@ const savePackage = async (): Promise<void> => {
   try {
     const apiPayload = {
       name: packageFormData.name,
+      offer_scope: props.packageOfferScope,
       bundle_template_id: (typeof packageFormData.bundleId === "number" && Number.isFinite(packageFormData.bundleId) && packageFormData.bundleId > 0)
         ? packageFormData.bundleId
         : null,

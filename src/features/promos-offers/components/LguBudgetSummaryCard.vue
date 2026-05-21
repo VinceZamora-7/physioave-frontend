@@ -175,11 +175,11 @@
         <div class="flex items-center gap-2">
           <Tag :value="`${lguTransactionHistory.length} record${lguTransactionHistory.length === 1 ? '' : 's'}`" severity="contrast" />
           <Button
-            label="Create SOA"
-            icon="pi pi-file"
+            label="Exports"
+            icon="pi pi-arrow-up-right"
             outlined
             size="small"
-            @click="soaVisible = true"
+            @click="exportsModalVisible = true"
           />
           <Button
             label="Refresh History"
@@ -277,18 +277,49 @@
         </Column>
       </DataTable>
 
-      <Dialog v-model:visible="soaVisible" header="Create Statement Of Account (LGU)" modal :style="{ width: '520px' }">
-        <div class="space-y-3">
-          <IftaLabel>
-            <DatePicker v-model="soaRange" selectionMode="range" dateFormat="yy-mm-dd" :manualInput="false" showIcon fluid />
-            <label>Date Range</label>
-          </IftaLabel>
+      <Dialog v-model:visible="exportsModalVisible" header="LGU Exports" modal :style="{ width: '560px' }">
+        <div class="space-y-4">
 
-          <div class="flex justify-end gap-2 pt-2">
-            <Button label="Cancel" text @click="soaVisible = false" />
-            <Button label="Generate" icon="pi pi-print" :disabled="!hasValidSoaRange" @click="generateSoa" />
+          <!-- Create SOA -->
+          <div class="rounded-xl border border-[rgb(var(--app-border))] p-4 space-y-3">
+            <div class="space-y-1">
+              <h4 class="text-sm font-semibold">Create Statement of Account (SOA)</h4>
+              <p class="text-xs opacity-70">Generate a printable SOA summarising LGU billing activity for the selected date range.</p>
+            </div>
+            <IftaLabel>
+              <DatePicker v-model="soaRange" selectionMode="range" dateFormat="yy-mm-dd" :manualInput="false" showIcon fluid />
+              <label>Date Range</label>
+            </IftaLabel>
+            <div class="flex justify-end">
+              <Button label="Generate SOA" icon="pi pi-print" :disabled="!hasValidSoaRange" @click="generateSoa" />
+            </div>
           </div>
+
+          <!-- Export Encounter Tickets -->
+          <div class="rounded-xl border border-[rgb(var(--app-border))] p-4 space-y-3">
+            <div class="space-y-1">
+              <h4 class="text-sm font-semibold">Export Bulk Encounter Tickets</h4>
+              <p class="text-xs opacity-70">Export all locked encounter tickets from LGU billings created within the selected date range.</p>
+            </div>
+            <IftaLabel>
+              <DatePicker v-model="bulkTicketRange" selectionMode="range" dateFormat="yy-mm-dd" :manualInput="false" showIcon fluid />
+              <label>Date Range</label>
+            </IftaLabel>
+            <div class="flex justify-end">
+              <Button
+                label="Export PDF"
+                icon="pi pi-download"
+                :disabled="!hasValidBulkTicketRange"
+                :loading="exportingBulkTickets"
+                @click="exportBulkLguEncounterTickets"
+              />
+            </div>
+          </div>
+
         </div>
+        <template #footer>
+          <Button label="Close" text @click="exportsModalVisible = false" />
+        </template>
       </Dialog>
     </div>
 
@@ -309,8 +340,8 @@
       <template v-else-if="selectedPatientDetail">
         <div class="flex flex-wrap items-center gap-2">
           <Tag
-            :value="selectedPatientDetail.dropout_status ?? selectedPatientDetail.authorizations[0]?.authorization_status ?? 'UNKNOWN'"
-            :severity="selectedPatientDetail.dropout_status === 'DROPPED_OUT' ? 'danger' : selectedPatientDetail.authorizations[0]?.authorization_status === 'COMPLETED' ? 'success' : 'info'"
+            :value="formatLguStatus(selectedPatientDetail.package_availments[0]?.status ?? selectedPatientDetail.dropout_status ?? selectedPatientDetail.authorizations[0]?.authorization_status)"
+            :severity="lguStatusSeverity(selectedPatientDetail.package_availments[0]?.status ?? selectedPatientDetail.dropout_status ?? selectedPatientDetail.authorizations[0]?.authorization_status)"
           />
           <span class="text-xs opacity-60">Patient ID: {{ selectedPatientDetail.patient_id }}</span>
         </div>
@@ -357,8 +388,8 @@
                   <td class="px-3 py-2">
                     <div class="flex flex-wrap items-center gap-2">
                       <Tag
-                        :value="appointment.status"
-                        :severity="appointment.status === 'COMPLETED' ? 'success' : appointment.status === 'DROPPED_OUT' ? 'danger' : 'warn'"
+                        :value="formatLguStatus(appointment.status)"
+                        :severity="lguStatusSeverity(appointment.status)"
                         class="text-xs"
                       />
                       <span
@@ -402,8 +433,8 @@
                   <td class="px-3 py-2 text-xs">{{ pkg.expiry_date || '-' }}</td>
                   <td class="px-3 py-2">
                     <Tag
-                      :value="pkg.status"
-                      :severity="pkg.status === 'COMPLETED' ? 'success' : pkg.status === 'DROPPED_OUT' ? 'danger' : pkg.status === 'ACTIVE' ? 'info' : 'secondary'"
+                      :value="formatLguStatus(pkg.status)"
+                      :severity="lguStatusSeverity(pkg.status)"
                       class="text-xs"
                     />
                   </td>
@@ -426,6 +457,7 @@
                   <th class="px-3 py-2 font-medium text-right">Amount</th>
                   <th class="px-3 py-2 font-medium">Status</th>
                   <th class="px-3 py-2 font-medium">Date</th>
+                  <th class="px-3 py-2 font-medium">PDF</th>
                 </tr>
               </thead>
               <tbody>
@@ -456,6 +488,16 @@
                     />
                   </td>
                   <td class="px-3 py-2 text-xs opacity-60">{{ formatDateTime(billing.created_at) }}</td>
+                  <td class="px-3 py-2">
+                    <Button
+                      label="PDF"
+                      icon="pi pi-file-pdf"
+                      size="small"
+                      outlined
+                      :loading="printingClaimBillingId === billing.id"
+                      @click="downloadClaimPdf(billing.id)"
+                    />
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -484,13 +526,25 @@ import { useToast } from "primevue/usetoast"
 import { useRouter } from "vue-router"
 import {
   billingPhase1Service,
+  type BillingListItem
+} from "@/features/billing/api/billing-phase1.service"
+import type { Pageable } from "@/models/paging"
+import {
+  lguBillingService,
   type LguDashboardBudget,
   type LguDashboardHistoryItem,
   type LguPatientCreditDetail,
   type LguProgramLookup
-} from "@/features/billing/api/billing-phase1.service"
+} from "@/features/lgu-billing/api/lgu-billing.service"
+import { renderLguInvoiceWindow } from "@/features/lgu-billing/invoices/lgu-invoice.util"
+import { pamsAPI } from "@/utils/axios-interceptor"
 import { getApiErrorMessage } from "@/utils/actionable-error.util"
 import { errorToast, successToast } from "@/utils/toast.util"
+import {
+  openEncounterTicketPdfWindow,
+  renderEncounterTicketBulkPdfWindow,
+  type EncounterTicketPdfCard
+} from "@/utils/encounter-ticket-pdf.util"
 
 type LocalLguBudgetDraft = {
   baseMonthlyBudget?: number
@@ -525,11 +579,58 @@ const selectedPatientDetail = ref<LguPatientCreditDetail | null>(null)
 const loadingPatientDetail = ref(false)
 const patientDetailError = ref("")
 const isCreatingClaims = ref(false)
-const soaVisible = ref(false)
+const printingClaimBillingId = ref<number | null>(null)
+const exportsModalVisible = ref(false)
 const soaRange = ref<Date[] | null>(null)
+const bulkTicketRange = ref<Date[] | null>(null)
+const exportingBulkTickets = ref(false)
+
+type LocalService = { id: string; type?: string; name: string; price?: number; status?: string }
+type LocalBundle = {
+  id: string
+  name: string
+  machineIds?: string[]
+  techniqueIds?: string[]
+  evaluationIds?: string[]
+  addOnIds?: string[]
+}
+type LguInvoiceSubItem = { name: string; quantity: number; unitPrice?: number; children?: LguInvoiceSubItem[] }
+type LocalPackageOffer = {
+  id: string
+  name: string
+  bundleId?: string
+  bundleQty?: number
+  machineIds?: string[]
+  machineQty?: number
+  machineItems?: Array<{id: string; qty: number}>
+  techniqueIds?: string[]
+  techniqueQty?: number
+  techniqueItems?: Array<{id: string; qty: number}>
+  evaluationIds?: string[]
+  evaluationQty?: number
+  evaluationItems?: Array<{id: string; qty: number}>
+  addOnIds?: string[]
+  addOnQty?: number
+  addOnItems?: Array<{id: string; qty: number}>
+  sessionIds?: string[]
+  sessionQty?: number
+  sessionItems?: Array<{id: string; qty: number}>
+  invoiceSubItems?: LguInvoiceSubItem[]
+  status?: string
+}
+
+const localServices = ref<LocalService[]>([])
+const localBundles = ref<LocalBundle[]>([])
+const localPackageOffers = ref<LocalPackageOffer[]>([])
+const lguInvoiceCatalogLoaded = ref(false)
 
 const hasValidSoaRange = computed(() => {
   const r = soaRange.value
+  return Array.isArray(r) && r.length === 2 && r[0] instanceof Date && r[1] instanceof Date
+})
+
+const hasValidBulkTicketRange = computed(() => {
+  const r = bulkTicketRange.value
   return Array.isArray(r) && r.length === 2 && r[0] instanceof Date && r[1] instanceof Date
 })
 
@@ -549,11 +650,346 @@ const formatDateTime = (value?: string): string => {
   return new Date(value).toLocaleString("en-PH")
 }
 
+const getClaimReferenceNumber = (detail: BillingListItem): string =>
+  detail.receipt_number?.trim() || detail.public_id || `BILL-${detail.id}`
+
+const parseMaybeJsonArray = (value: unknown): unknown[] => {
+  if (Array.isArray(value)) return value
+  if (typeof value !== "string") return []
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+const toOptionalStringId = (value: unknown): string | undefined => {
+  const text = String(value ?? "").trim()
+  return text || undefined
+}
+
+const normalizePositiveInt = (value: unknown, fallback = 1): number => {
+  const parsed = Math.trunc(Number(value))
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+const normalizeStringIdArray = (value: unknown): string[] =>
+  parseMaybeJsonArray(value).map(item => toOptionalStringId(item)).filter((item): item is string => Boolean(item))
+
+const normalizeQtyItems = (value: unknown): Array<{id: string; qty: number}> =>
+  parseMaybeJsonArray(value).flatMap(item => {
+    if (!item || typeof item !== "object") return []
+    const raw = item as Record<string, unknown>
+    const id = toOptionalStringId(raw.id ?? raw.item_id ?? raw.service_id ?? raw.session_id)
+    return id ? [{ id, qty: normalizePositiveInt(raw.qty ?? raw.quantity, 1) }] : []
+  })
+
+const normalizeInvoiceSubItems = (value: unknown): LguInvoiceSubItem[] =>
+  parseMaybeJsonArray(value).flatMap(item => {
+    if (!item || typeof item !== "object") return []
+    const raw = item as Record<string, unknown>
+    const name = String(raw.name ?? "").trim()
+    return name
+      ? [{
+          name,
+          quantity: normalizePositiveInt(raw.quantity, 1),
+          unitPrice: Number(raw.unitPrice ?? raw.unit_price ?? raw.price ?? 0) > 0
+            ? Number(raw.unitPrice ?? raw.unit_price ?? raw.price)
+            : undefined,
+          children: normalizeInvoiceSubItems(raw.children)
+        }]
+      : []
+  })
+
+const normalizePackageOffer = (value: unknown): LocalPackageOffer | null => {
+  if (!value || typeof value !== "object") return null
+  const raw = value as Record<string, unknown>
+  const id = toOptionalStringId(raw.id)
+  const name = String(raw.name ?? "").trim()
+  if (!id || !name) return null
+
+  return {
+    id,
+    name,
+    bundleId: toOptionalStringId(raw.bundleId ?? raw.bundle_template_id),
+    bundleQty: normalizePositiveInt(raw.bundleQty ?? raw.bundle_qty, 1),
+    machineIds: normalizeStringIdArray(raw.machineIds ?? raw.machine_ids ?? raw.machine_ids_json),
+    machineQty: normalizePositiveInt(raw.machineQty ?? raw.machine_qty, 1),
+    machineItems: normalizeQtyItems(raw.machineItems ?? raw.machine_items ?? raw.machine_items_json),
+    techniqueIds: normalizeStringIdArray(raw.techniqueIds ?? raw.technique_ids ?? raw.technique_ids_json),
+    techniqueQty: normalizePositiveInt(raw.techniqueQty ?? raw.technique_qty, 1),
+    techniqueItems: normalizeQtyItems(raw.techniqueItems ?? raw.technique_items ?? raw.technique_items_json),
+    evaluationIds: normalizeStringIdArray(raw.evaluationIds ?? raw.evaluation_ids ?? raw.evaluation_ids_json),
+    evaluationQty: normalizePositiveInt(raw.evaluationQty ?? raw.evaluation_qty, 1),
+    evaluationItems: normalizeQtyItems(raw.evaluationItems ?? raw.evaluation_items ?? raw.evaluation_items_json),
+    addOnIds: normalizeStringIdArray(raw.addOnIds ?? raw.add_on_ids ?? raw.add_on_ids_json),
+    addOnQty: normalizePositiveInt(raw.addOnQty ?? raw.add_on_qty, 1),
+    addOnItems: normalizeQtyItems(raw.addOnItems ?? raw.add_on_items ?? raw.add_on_items_json),
+    sessionIds: normalizeStringIdArray(raw.sessionIds ?? raw.session_ids ?? raw.session_ids_json),
+    sessionQty: normalizePositiveInt(raw.sessionQty ?? raw.session_qty, 1),
+    sessionItems: normalizeQtyItems(raw.sessionItems ?? raw.session_items ?? raw.session_items_json),
+    invoiceSubItems: normalizeInvoiceSubItems(raw.invoiceSubItems ?? raw.invoice_sub_items),
+    status: typeof raw.status === "string" ? raw.status : undefined
+  }
+}
+
+const loadLguInvoiceCatalog = async (): Promise<void> => {
+  if (lguInvoiceCatalogLoaded.value) return
+
+  try {
+    localServices.value = JSON.parse(localStorage.getItem("singlePayServices") || "[]") as LocalService[]
+  } catch {
+    localServices.value = []
+  }
+  try {
+    localBundles.value = JSON.parse(localStorage.getItem("bundledServices") || "[]") as LocalBundle[]
+  } catch {
+    localBundles.value = []
+  }
+  try {
+    const parsed = JSON.parse(localStorage.getItem("packageServiceOffers") || "[]") as unknown[]
+    localPackageOffers.value = Array.isArray(parsed)
+      ? parsed.map(normalizePackageOffer).filter((item): item is LocalPackageOffer => item !== null)
+      : []
+  } catch {
+    localPackageOffers.value = []
+  }
+
+  try {
+    const [globalResponse, lguResponse] = await Promise.all([
+      pamsAPI.get<Pageable<unknown>>("/package-service-offers", { params: { page: 1, size: 1000, status: "ALL", scope: "GLOBAL" } }),
+      pamsAPI.get<Pageable<unknown>>("/package-service-offers", { params: { page: 1, size: 1000, status: "ALL", scope: "LGU" } })
+    ])
+    const merged = [
+      ...(globalResponse.data?.content ?? []),
+      ...(lguResponse.data?.content ?? [])
+    ].map(normalizePackageOffer).filter((item): item is LocalPackageOffer => item !== null)
+    const byId = new Map(localPackageOffers.value.map(item => [item.id, item]))
+    merged.forEach(item => byId.set(item.id, item))
+    localPackageOffers.value = Array.from(byId.values())
+  } catch {
+    // Local package catalog is enough for printing older saved packages.
+  } finally {
+    lguInvoiceCatalogLoaded.value = true
+  }
+}
+
+const findPackageOffer = (pkgId?: string | number, pkgName?: string): LocalPackageOffer | undefined => {
+  const id = String(pkgId ?? "").trim()
+  if (id) {
+    const match = localPackageOffers.value.find(item => item.id === id)
+    if (match) return match
+  }
+  const normalizeName = (value?: string): string =>
+    String(value ?? "").trim().replace(/\s+\(LGU\s+.*?\)\s*$/i, "").toLowerCase()
+  const name = normalizeName(pkgName)
+  return name
+    ? localPackageOffers.value.find(item => {
+        const candidate = normalizeName(item.name)
+        return candidate === name || candidate.startsWith(name) || name.startsWith(candidate)
+      })
+    : undefined
+}
+
+const findBundle = (bundleId?: string | number): LocalBundle | undefined => {
+  const id = String(bundleId ?? "").trim()
+  return id ? localBundles.value.find(bundle => bundle.id === id) : undefined
+}
+
+const getServiceName = (id?: string): string | undefined =>
+  id ? localServices.value.find(service => service.id === id)?.name : undefined
+
+const getServicePrice = (id?: string): number | undefined => {
+  if (!id) return undefined
+  const price = Number(localServices.value.find(service => service.id === id)?.price ?? 0)
+  return price > 0 ? price : undefined
+}
+
+const getServicePriceByName = (name?: string): number | undefined => {
+  const normalized = String(name ?? "").trim().toLowerCase()
+  if (!normalized) return undefined
+  const price = Number(localServices.value.find(service => service.name.trim().toLowerCase() === normalized)?.price ?? 0)
+  return price > 0 ? price : undefined
+}
+
+const enrichSubItemPrices = (items?: LguInvoiceSubItem[]): LguInvoiceSubItem[] | undefined => {
+  if (!items?.length) return items
+  return items.map(item => ({
+    ...item,
+    unitPrice: item.children?.length ? undefined : item.unitPrice ?? getServicePriceByName(item.name),
+    children: enrichSubItemPrices(item.children)
+  }))
+}
+
+const hasNestedSubItems = (items?: LguInvoiceSubItem[]): boolean =>
+  Boolean(items?.some(item => (item.children?.length ?? 0) > 0 || hasNestedSubItems(item.children)))
+
+const expandPackageItemIds = (
+  items: Array<{id: string; qty: number}> | undefined,
+  ids: string[] | undefined,
+  fallbackQty: number | undefined,
+  multiplier: number,
+  includePrices: boolean
+): LguInvoiceSubItem[] =>
+  (items?.length ? items : (ids ?? []).map(id => ({ id, qty: normalizePositiveInt(fallbackQty, 1) })))
+    .flatMap(item => {
+      const name = getServiceName(item.id)
+      return name
+        ? [{
+            name,
+            quantity: Math.max(1, normalizePositiveInt(item.qty, 1) * multiplier),
+            unitPrice: includePrices ? getServicePrice(item.id) : undefined
+          }]
+        : []
+    })
+
+const getPackageInvoiceSubItems = (pkgId?: string | number, pkgName?: string, multiplier = 1, includePrices = false): LguInvoiceSubItem[] => {
+  const pkg = findPackageOffer(pkgId, pkgName)
+  if (!pkg) return []
+
+  if (pkg.invoiceSubItems?.length) {
+    const multiply = (items: LguInvoiceSubItem[]): LguInvoiceSubItem[] =>
+      items.map(item => ({
+        name: item.name,
+        quantity: Math.max(1, normalizePositiveInt(item.quantity, 1) * multiplier),
+        unitPrice: includePrices ? item.unitPrice : undefined,
+        children: item.children?.length ? multiply(item.children) : undefined
+      }))
+    return multiply(pkg.invoiceSubItems)
+  }
+
+  const subItems: LguInvoiceSubItem[] = []
+  const bundle = findBundle(pkg.bundleId)
+  if (bundle) {
+    const bundleIds = [
+      ...(bundle.machineIds ?? []),
+      ...(bundle.techniqueIds ?? []),
+      ...(bundle.evaluationIds ?? []),
+      ...(bundle.addOnIds ?? [])
+    ]
+    subItems.push({
+      name: bundle.name,
+      quantity: Math.max(1, normalizePositiveInt(pkg.bundleQty, 1) * multiplier),
+      children: bundleIds.flatMap(id => {
+        const name = getServiceName(id)
+        return name
+          ? [{
+              name,
+              quantity: Math.max(1, normalizePositiveInt(pkg.bundleQty, 1) * multiplier),
+              unitPrice: includePrices ? getServicePrice(id) : undefined
+            }]
+          : []
+      })
+    })
+  }
+
+  subItems.push(
+    ...expandPackageItemIds(pkg.machineItems, pkg.machineIds, pkg.machineQty, multiplier, includePrices),
+    ...expandPackageItemIds(pkg.techniqueItems, pkg.techniqueIds, pkg.techniqueQty, multiplier, includePrices),
+    ...expandPackageItemIds(pkg.evaluationItems, pkg.evaluationIds, pkg.evaluationQty, multiplier, includePrices),
+    ...expandPackageItemIds(pkg.addOnItems, pkg.addOnIds, pkg.addOnQty, multiplier, includePrices),
+    ...expandPackageItemIds(pkg.sessionItems, pkg.sessionIds, pkg.sessionQty, multiplier, includePrices)
+  )
+  return subItems
+}
+
+const parseClaimLineItems = (raw?: string): Array<{
+  id?: string | number
+  type?: string
+  name: string
+  quantity: number
+  unitPrice: number
+  lineTotal: number
+  treatmentDate?: string
+  sessionSequence?: string
+  totalSessions?: number
+  claimStatus?: string
+  subItems?: LguInvoiceSubItem[]
+}> => {
+  if (!raw) return []
+  try {
+    type RawLguSubItem = {name?: string; quantity?: number; price?: number; unitPrice?: number; unit_price?: number; children?: RawLguSubItem[]}
+    const normalizeSubItems = (items?: RawLguSubItem[]): LguInvoiceSubItem[] =>
+      (items ?? []).map(item => ({
+        name: String(item.name ?? "Service"),
+        quantity: Math.max(1, Number(item.quantity ?? 1)),
+        unitPrice: Number(item.unitPrice ?? item.unit_price ?? item.price ?? 0) > 0
+          ? Number(item.unitPrice ?? item.unit_price ?? item.price)
+          : undefined,
+        children: normalizeSubItems(item.children)
+      }))
+    const parsed = JSON.parse(raw) as Array<{
+      id?: string | number
+      name?: string
+      type?: string
+      quantity?: number
+      price?: number
+      treatmentDate?: string
+      sessionSequenceLabel?: string
+      sessionSequence?: string | number
+      totalSessions?: string | number
+      claimStatus?: string
+      subItems?: RawLguSubItem[]
+    }>
+    if (!Array.isArray(parsed)) return []
+    return parsed.map(line => {
+      const quantity = Math.max(1, Number(line.quantity ?? 1))
+      const unitPrice = Number(line.price ?? 0)
+      const sequence = line.sessionSequenceLabel
+        || (
+          line.sessionSequence && line.totalSessions
+            ? `Session ${line.sessionSequence} of ${line.totalSessions}`
+            : undefined
+        )
+      return {
+        id: line.id,
+        type: line.type,
+        name: String(line.name ?? "LGU Session"),
+        quantity,
+        unitPrice,
+        lineTotal: quantity * unitPrice,
+        treatmentDate: line.treatmentDate,
+        sessionSequence: sequence,
+        totalSessions: Number(line.totalSessions ?? 0) > 0 ? Number(line.totalSessions) : undefined,
+        claimStatus: line.claimStatus,
+        subItems: Array.isArray(line.subItems)
+          ? normalizeSubItems(line.subItems)
+          : undefined
+      }
+    })
+  } catch {
+    return []
+  }
+}
+
+const openClaimPrintWindow = (title: string): Window => {
+  const popup = window.open("", "_blank")
+  if (!popup || popup.closed) {
+    throw new Error("Please allow pop-ups so the LGU claim PDF can open.")
+  }
+  popup.document.open()
+  popup.document.write(`
+    <!doctype html>
+    <html>
+      <head><title>${title}</title><meta charset="utf-8" /></head>
+      <body style="font-family: Arial, sans-serif; padding: 24px;">Preparing LGU claim PDF...</body>
+    </html>
+  `)
+  popup.document.close()
+  return popup
+}
+
 const formatYmd = (value: Date): string => {
   const y = value.getFullYear()
   const m = String(value.getMonth() + 1).padStart(2, "0")
   const d = String(value.getDate()).padStart(2, "0")
   return `${y}-${m}-${d}`
+}
+
+const inferLguPackageTotalSessions = (name?: string, fallback = 1): number => {
+  const match = String(name ?? "").match(/\((\d+)\)\s*Sessions?/i)
+  return match ? Math.max(1, Number(match[1])) : Math.max(1, fallback)
 }
 
 const generateSoa = (): void => {
@@ -570,13 +1006,154 @@ const generateSoa = (): void => {
     }
   }).href
   window.open(url, "_blank", "noopener,noreferrer")
-  soaVisible.value = false
+}
+
+const buildEncounterTicketCards = (detail: BillingListItem): EncounterTicketPdfCard[] => {
+  const billingRoute = (() => {
+    const n = String(detail.billing_type ?? "").trim().toUpperCase()
+    if (n === "LGU_BILLING" || n === "LGU") return "LGU"
+    if (n === "HMO_BILLING" || n === "HMO") return "HMO"
+    if (n.includes("SELF_PAY")) return "Self Pay"
+    return detail.billing_type?.trim() || "N/A"
+  })()
+  return (detail.encounter_tickets ?? [])
+    .filter(ticket => ticket.record_locked)
+    .map(ticket => {
+      const snap = ticket.billing_snapshot
+      const snapBillingType = snap?.billing_type ?? detail.billing_type
+
+      const pkgName   = ticket.active_billing_package_name?.trim()   || snap?.active_billing_package_name?.trim()   || ""
+      const pkgId     = ticket.active_billing_package_id?.trim()     || snap?.active_billing_package_id?.trim()     || ""
+      const pkgSource = ticket.active_billing_package_source?.trim() || snap?.active_billing_package_source?.trim() || ""
+
+      const describePackageLabel = (): string => {
+        if (pkgName && pkgId && pkgName !== pkgId) return `${pkgName} (${pkgId})`
+        return pkgName || pkgId || "No active billing package linked"
+      }
+      const formatPkgSource = (src: string): string => {
+        const n = src.trim().toUpperCase()
+        if (n === "PATIENT_PACKAGE_SERVICE_PURCHASE") return "Linked from patient package service purchase"
+        if (n === "PATIENT_PACKAGE_PURCHASE")         return "Linked from patient package purchase"
+        if (n === "PHASE1_BILLING_PACKAGE")           return "Linked from the billing package record"
+        if (n === "BILLING_LINE_ITEM_PACKAGE")        return "Linked from the saved billing package line item"
+        return src.trim() || "Linked billing package"
+      }
+      const describePackageSource = (): string | undefined => {
+        if (!pkgSource) return undefined
+        return pkgId ? `${formatPkgSource(pkgSource)} · Linked ID ${pkgId}` : formatPkgSource(pkgSource)
+      }
+      const buildDeductionSummary = (): string => {
+        const n = String(snapBillingType ?? "").trim().toUpperCase().replace(/[: -]/g, "_")
+        if (["HMO", "HMO_BILLING"].includes(n))  return "Deducting 1 Session from HMO Allocation"
+        if (["LGU", "LGU_BILLING"].includes(n))  return "Deducting 1 Session from LGU Authorization"
+        if (n === "SELF_PAY_PACKAGE")             return "Recording 1 Attended Package Session"
+        return "Attendance record only"
+      }
+
+      return {
+        slipNumber: ticket.slip_number || `ETS-${ticket.id}`,
+        encounterTicketId: ticket.id,
+        patientName: snap?.patient_name || detail.patient_name || "Patient",
+        providerName: snap?.provider_name || detail.physical_therapist || "Unassigned",
+        serviceName: snap?.service_name || detail.service_name || "Therapy Session",
+        specialtyName: snap?.specialty_tag_name,
+        specialtyIsActive: snap?.specialty_tag_is_active,
+        treatmentAreaName: snap?.treatment_area_name,
+        treatmentAreaColor: snap?.treatment_area_color,
+        treatmentAreaIsActive: snap?.treatment_area_is_active,
+        billingRoute,
+        attendanceStatus: ticket.attendance_status === "ATTENDED" ? "Attended" : "No Show",
+        attendedAt: ticket.attended_at,
+        signedOffAt: ticket.signed_off_at,
+        lockedAt: ticket.locked_at,
+        appointmentId: snap?.appointment_public_id ?? ticket.appointment_public_id ?? detail.appointment_public_id ?? detail.appointment_id,
+        billingId: ticket.phase1_billing_public_id ?? detail.public_id ?? detail.id,
+        activeBillingPackageLabel: describePackageLabel(),
+        activeBillingPackageSource: describePackageSource(),
+        deductionSummary: buildDeductionSummary(),
+        signatureDataUrl: ticket.patient_signature_data_url,
+        ptSignatureDataUrl: ticket.pt_signature_data_url,
+        sessionSequenceLabel: snap?.session_sequence_label
+      } as EncounterTicketPdfCard
+    })
+}
+
+const exportBulkLguEncounterTickets = async (): Promise<void> => {
+  if (!hasValidBulkTicketRange.value) return
+  const [from, to] = bulkTicketRange.value as Date[]
+  const fromStr = formatYmd(from)
+  const toStr = formatYmd(to)
+
+  let popup: Window
+  try {
+    popup = openEncounterTicketPdfWindow("LGU Bulk Encounter Ticket PDF")
+  } catch {
+    errorToast(toast, "Unable to open PDF window. Allow pop-ups for this site, then try again.")
+    return
+  }
+
+  exportingBulkTickets.value = true
+  try {
+    const response = await billingPhase1Service.getAll({
+      page: 1,
+      size: 500,
+      billing_type: "LGU_BILLING",
+      from_date: fromStr,
+      to_date: toStr
+    })
+    const billingIds = (response?.content ?? []).map(b => b.id).filter(id => Number.isFinite(id) && id > 0)
+    if (!billingIds.length) {
+      popup.close()
+      errorToast(toast, `No LGU billings found between ${fromStr} and ${toStr}`)
+      return
+    }
+
+    const details = (await Promise.all(billingIds.map(id => billingPhase1Service.getById(id)))).filter((d): d is BillingListItem => !!d)
+    const cards = details
+      .flatMap(d => buildEncounterTicketCards(d))
+      .sort((a, b) => new Date(a.signedOffAt).getTime() - new Date(b.signedOffAt).getTime())
+
+    if (!cards.length) {
+      popup.close()
+      errorToast(toast, "No locked encounter tickets found for the selected date range")
+      return
+    }
+
+    renderEncounterTicketBulkPdfWindow(popup, cards, {
+      title: "LGU Bulk Encounter Tickets",
+      subtitle: `LGU billings from ${fromStr} to ${toStr} · ${cards.length} ticket${cards.length === 1 ? "" : "s"}`,
+      fileName: `lgu-encounter-tickets-${fromStr}-to-${toStr}`
+    })
+  } catch (e) {
+    popup.close()
+    errorToast(toast, getApiErrorMessage(e, {baseMessage: "Failed to export LGU encounter tickets"}))
+  } finally {
+    exportingBulkTickets.value = false
+  }
 }
 
 const firstDroppedOutAppointmentId = computed<number | null>(() => {
   const appointments = selectedPatientDetail.value?.appointments ?? []
-  return appointments.find(appointment => appointment.status === "DROPPED_OUT")?.appointment_id ?? null
+  return appointments.find(appointment =>
+    appointment.status === "DROPPED_OUT" || appointment.status === "CROSS_MONTH_DROPPED_OUT"
+  )?.appointment_id ?? null
 })
+
+const formatLguStatus = (value?: string | null): string => {
+  const normalized = String(value ?? "PENDING").trim().toUpperCase()
+  if (normalized === "CROSS_MONTH_DROPPED_OUT") return "Cross Month Dropped Out"
+  if (normalized === "DROPPED_OUT") return "Dropped Out"
+  if (normalized === "COMPLETED") return "Completed"
+  return "Pending"
+}
+
+const lguStatusSeverity = (value?: string | null): "success" | "warn" | "danger" | "info" | "secondary" => {
+  const normalized = String(value ?? "").trim().toUpperCase()
+  if (normalized === "COMPLETED") return "success"
+  if (normalized === "DROPPED_OUT" || normalized === "CROSS_MONTH_DROPPED_OUT") return "danger"
+  if (normalized === "PENDING" || normalized === "ACTIVE") return "warn"
+  return "secondary"
+}
 
 const formatBudgetPeriod = (year: number, month: number): string =>
   new Date(year, month - 1, 1).toLocaleDateString("en-PH", {
@@ -766,7 +1343,7 @@ const loadDashboardBudget = async (): Promise<void> => {
     return
   }
   try {
-    const serverBudget = await billingPhase1Service.getLguDashboardBudget(
+    const serverBudget = await lguBillingService.getDashboardBudget(
       selectedBudgetPeriodYear.value,
       selectedBudgetPeriodMonth.value,
       selectedProgramId.value ?? undefined
@@ -799,7 +1376,11 @@ const loadDashboardBudget = async (): Promise<void> => {
     showPatientDetailDialog.value = true
     loadingPatientDetail.value = true
     try {
-      selectedPatientDetail.value = await billingPhase1Service.getLguPatientCreditDetail(patientId) ?? null
+      selectedPatientDetail.value = await lguBillingService.getPatientCreditDetail(
+        patientId,
+        selectedBudgetPeriodYear.value,
+        selectedBudgetPeriodMonth.value
+      ) ?? null
     } catch (error: unknown) {
       patientDetailError.value = extractApiErrorMessage(error, "Failed to load patient LGU credit details")
     } finally {
@@ -811,9 +1392,118 @@ const loadDashboardBudget = async (): Promise<void> => {
     const patientId = selectedPatientDetail.value?.patient_id
     if (!patientId) return
     try {
-      selectedPatientDetail.value = await billingPhase1Service.getLguPatientCreditDetail(patientId) ?? null
+      selectedPatientDetail.value = await lguBillingService.getPatientCreditDetail(
+        patientId,
+        selectedBudgetPeriodYear.value,
+        selectedBudgetPeriodMonth.value
+      ) ?? null
     } catch (error: unknown) {
       patientDetailError.value = extractApiErrorMessage(error, "Failed to refresh patient LGU credit details")
+    }
+  }
+
+  const downloadClaimPdf = async (billingId: number): Promise<void> => {
+    if (!billingId || printingClaimBillingId.value) return
+    printingClaimBillingId.value = billingId
+    let popup: Window | null = null
+    try {
+      const detail = await billingPhase1Service.getById(billingId)
+      if (!detail) {
+        errorToast(toast, "LGU claim billing could not be loaded")
+        return
+      }
+
+      await loadLguInvoiceCatalog()
+      const referenceNumber = getClaimReferenceNumber(detail)
+      popup = openClaimPrintWindow(referenceNumber)
+      const lines = parseClaimLineItems(detail.line_items_json)
+      const total = Number(detail.total_amount ?? detail.amount_due ?? 0)
+      const isDropoutClaim = String(detail.pricing_source ?? "").toUpperCase().includes("DROPOUT")
+        || lines.some(line => String(line.claimStatus ?? "").toUpperCase() === "DROPPED_OUT")
+      const lockedTickets = (detail.encounter_tickets ?? [])
+        .filter(ticket => ticket.record_locked)
+        .sort((left, right) => {
+          const leftDate = String(left.billing_snapshot?.starts_at ?? left.attended_at ?? "")
+          const rightDate = String(right.billing_snapshot?.starts_at ?? right.attended_at ?? "")
+          return leftDate.localeCompare(rightDate)
+        })
+      const shouldExpandSinglePackageLine = lines.length === 1
+        && lockedTickets.length > 1
+        && String(lines[0]?.type ?? "").toLowerCase() === "package"
+      const invoiceLines = shouldExpandSinglePackageLine
+        ? (() => {
+            const line = lines[0]
+            const sourceTotal = Number(line.unitPrice || line.lineTotal || total || 0)
+            const unitPrice = lockedTickets.length > 0 ? sourceTotal / lockedTickets.length : sourceTotal
+            const totalSessions = line.totalSessions ?? inferLguPackageTotalSessions(line.name, lockedTickets.length)
+
+            return lockedTickets.map((ticket, index) => ({
+              name: line.name,
+              quantity: 1,
+              unitPrice,
+              lineTotal: unitPrice,
+              treatmentDate: ticket.billing_snapshot?.starts_at || ticket.attended_at || detail.created_at,
+              sessionSequence: `Session ${index + 1} of ${totalSessions}`,
+              subItems: isDropoutClaim
+                ? (
+                    hasNestedSubItems(line.subItems)
+                      ? enrichSubItemPrices(line.subItems)
+                      : getPackageInvoiceSubItems(line.id, line.name, line.quantity, true).length
+                      ? getPackageInvoiceSubItems(line.id, line.name, line.quantity, true)
+                      : enrichSubItemPrices(line.subItems)
+                  )
+                : line.subItems?.length
+                  ? line.subItems
+                  : getPackageInvoiceSubItems(line.id, line.name, line.quantity)
+            }))
+          })()
+        : lines.map((line, index) => ({
+            name: line.name,
+            quantity: line.quantity,
+            unitPrice: isDropoutClaim ? 0 : line.unitPrice,
+            lineTotal: isDropoutClaim ? 0 : line.lineTotal,
+            treatmentDate: line.treatmentDate || lockedTickets[index]?.billing_snapshot?.starts_at || lockedTickets[index]?.attended_at || detail.created_at,
+            sessionSequence: line.sessionSequence || lockedTickets[index]?.billing_snapshot?.session_sequence_label || String(index + 1),
+            subItems: isDropoutClaim
+              ? (
+                  hasNestedSubItems(line.subItems)
+                    ? enrichSubItemPrices(line.subItems)
+                    : getPackageInvoiceSubItems(line.id, line.name, line.quantity, true).length
+                    ? getPackageInvoiceSubItems(line.id, line.name, line.quantity, true)
+                    : enrichSubItemPrices(line.subItems)
+                )
+              : line.subItems?.length
+                ? line.subItems
+                : String(line.type ?? "").toLowerCase() === "package"
+                  ? getPackageInvoiceSubItems(line.id, line.name, line.quantity)
+                  : undefined
+          }))
+      const lguStatus = selectedPatientDetail.value?.package_availments[0]?.status
+        || lines.find(line => line.claimStatus)?.claimStatus
+        || detail.billing_status
+      renderLguInvoiceWindow(popup, {
+        billingDate: detail.created_at,
+        referenceNumber,
+        patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
+        patientAddress: detail.patient_address,
+        patientAge: detail.patient_age,
+        patientGender: detail.patient_gender,
+        physicalTherapist: detail.physical_therapist,
+        doctor: detail.doctor,
+        lguProgramName: detail.lgu_program_name || selectedProgramName.value,
+        lguReferenceLabel: detail.lgu_patient_referral_form_no || detail.lgu_reference_label || detail.service_name || selectedBillingMonth.value,
+        lguDateIssued: detail.lgu_date_issued || detail.created_at,
+        lguStatus: formatLguStatus(lguStatus),
+        subtotal: Number(detail.subtotal_amount ?? total),
+        discount: Number(detail.discount_amount ?? 0),
+        grandTotal: total,
+        lines: invoiceLines
+      }, { title: "LGU Claim PDF", fileName: referenceNumber })
+    } catch (error: unknown) {
+      if (popup && !popup.closed) popup.close()
+      errorToast(toast, extractApiErrorMessage(error, "Failed to download LGU claim PDF"))
+    } finally {
+      printingClaimBillingId.value = null
     }
   }
 
@@ -821,7 +1511,7 @@ const loadDashboardBudget = async (): Promise<void> => {
     if (isCreatingClaims.value || !selectedPatientDetail.value) return
     isCreatingClaims.value = true
     try {
-      const result = await billingPhase1Service.createLguPatientClaim({
+      const result = await lguBillingService.createPatientClaim({
         patient_id: selectedPatientDetail.value.patient_id,
         billing_month: selectedBillingMonth.value
       })
@@ -832,6 +1522,9 @@ const loadDashboardBudget = async (): Promise<void> => {
           : `Claim created for ${selectedBillingMonth.value}.`
       )
       await Promise.all([loadTransactionHistory(), refreshSelectedPatientDetail()])
+      if (result?.billing_id) {
+        await downloadClaimPdf(result.billing_id)
+      }
     } catch (error: unknown) {
       errorToast(toast, extractApiErrorMessage(error, "Failed to create LGU claim"))
     } finally {
@@ -848,7 +1541,7 @@ const loadTransactionHistory = async (): Promise<void> => {
     return
   }
   try {
-    lguTransactionHistory.value = await billingPhase1Service.getLguDashboardHistory(
+    lguTransactionHistory.value = await lguBillingService.getDashboardHistory(
       100,
       selectedBudgetPeriodYear.value,
       selectedBudgetPeriodMonth.value,
@@ -871,7 +1564,7 @@ const saveDashboardBudget = async (): Promise<void> => {
   savingDashboardBudget.value = true
   budgetSyncError.value = ""
   try {
-    const savedBudget = await billingPhase1Service.saveLguDashboardBudget({
+    const savedBudget = await lguBillingService.saveDashboardBudget({
       base_budget: Number(baseMonthlyBudget.value ?? 0),
       rollover_amount: Number(rolloverAmount.value ?? 0),
       period_year: selectedBudgetPeriodYear.value,
@@ -901,7 +1594,7 @@ const refreshDashboardBudget = async (): Promise<void> => {
   budgetSyncError.value = ""
   try {
     if (canManageLguDashboard.value) {
-      const result = await billingPhase1Service.refreshLguDashboardBudget(
+      const result = await lguBillingService.refreshDashboardBudget(
         selectedBudgetPeriodYear.value,
         selectedBudgetPeriodMonth.value,
         selectedProgramId.value ?? undefined
@@ -965,7 +1658,7 @@ watch(selectedProgramId, () => {
 const loadLguPrograms = async (): Promise<void> => {
   loadingPrograms.value = true
   try {
-    const programs = await billingPhase1Service.getLguPrograms()
+    const programs = await lguBillingService.getPrograms()
     lguPrograms.value = programs ?? []
     if (lguPrograms.value.length > 0 && !selectedProgramId.value) {
       selectedProgramId.value = lguPrograms.value[0].id
@@ -985,7 +1678,7 @@ const createNewProgram = async (): Promise<void> => {
   if (!name) return
   creatingProgram.value = true
   try {
-    const created = await billingPhase1Service.createLguProgram(name)
+    const created = await lguBillingService.createProgram(name)
     if (created) {
       await loadLguPrograms()
       selectedProgramId.value = created.id

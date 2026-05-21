@@ -141,9 +141,10 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
             font-family: "Canva Sans", sans-serif;
           }
           .top {
-            display: grid;
-            grid-template-columns: auto 1fr;
+            display: flex;
             gap: 10px;
+            width: 100%;
+            justify-content: space-between;
             align-items: start;
             margin-bottom: 8px;
           }
@@ -179,8 +180,9 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
           }
           .patient-doctor-grid {
             margin-top: 8px;
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
             gap: 16px;
             font-size: 12px;
             line-height: 1.5;
@@ -233,15 +235,20 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
           .text-right {
             text-align: right;
           }
-          .sub-item-row td {
-            border-bottom: none;
-            padding-top: 0;
-            padding-bottom: 1px;
+          .package-line {
+            font-weight: 700;
+            margin-bottom: 2px;
           }
           .sub-item {
             padding-left: 16px;
             font-size: 11px;
             color: #374151;
+          }
+          .sub-item-depth-1 {
+            padding-left: 32px;
+          }
+          .sub-item-depth-2 {
+            padding-left: 48px;
           }
           .totals {
             margin-top: 6px;
@@ -249,9 +256,11 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
             width: 280px;
           }
           .totals-row {
-            display: grid;
-            grid-template-columns: 1fr auto;
-            gap: 12px;
+          border-left: 1px solid #d1d5db;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+            gap: 5px;
             padding: 2px 0;
             font-size: 12px;
             font-weight: 700;
@@ -259,17 +268,16 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
           }
           .grand-total {
             color: #d31d6e;
-            font-size: 18px;
+            font-size: 12px;
           }
           .bottom {
             margin-top: 10px;
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-            gap: 12px;
-            align-items: start;
+           display: flex;
+           justify-content: space-between;
+            align-items: center;
           }
           .payment-box {
-            border: 3px solid #d31d6e;
+          width: 540px;
             padding: 8px;
             min-height: 80px;
             font-size: 12px;
@@ -282,6 +290,7 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
             font-family: "Montserrat", sans-serif;
           }
           .approval {
+          width: 200px;
             text-align: center;
             padding-top: 8px;
             font-size: 11px;
@@ -300,7 +309,6 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
           .approval .signed {
             margin-top: 6px;
             font-size: 10px;
-            text-align: right;
           }
           .footer {
             margin-top: 8px;
@@ -339,7 +347,7 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
             </div>
             <div class="meta-grid">
               <strong>BILLING DATE:</strong><span>${escapeHtml(formatDate(invoice.billingDate))}</span>
-              <strong>REFERENCE NO.:</strong><span>${escapeHtml(invoice.referenceNumber)}</span>
+              <strong>BILLING RECORD ID:</strong><span>${escapeHtml(invoice.referenceNumber)}</span>
             </div>
           </div>
 
@@ -351,8 +359,8 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
               <div class="line"><span class="label">Gender:</span><span>${escapeHtml(invoice.patientGender || "N/A")}</span></div>
             </div>
             <div>
-              <div class="line"><span class="label">Physical Therapist:</span><span>${escapeHtml(invoice.physicalTherapist || "N/A")}</span></div>
-              <div class="line"><span class="label">Doctor:</span><span>${escapeHtml(invoice.doctor || "N/A")}</span></div>
+              <div class="line"><span class="label">Physical <br /> Therapist:</span><span>${escapeHtml(invoice.doctor || "N/A")}</span></div>
+              <div class="line"><span class="label">Doctor:</span><span>${escapeHtml(invoice.physicalTherapist || "N/A")}</span></div>
               <div class="line"><span class="label">Diagnosis:</span><span>${escapeHtml(invoice.diagnosis || "N/A")}</span></div>
             </div>
           </div>
@@ -373,12 +381,14 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
           ${invoice.hideFinancialSummary
             ? ""
             : `<div class="totals">
-                <div class="totals-row"><span>Discount:</span><span>${escapeHtml(asCurrency(invoice.discount))}</span></div>
                 ${Number(invoice.surchargeAmount ?? 0) > 0
                   ? `<div class="totals-row"><span>${escapeHtml(invoice.surchargeLabel || "Surcharge")}:</span><span>${escapeHtml(asCurrency(Number(invoice.surchargeAmount ?? 0)))}</span></div>`
                   : ""}
                 <div class="totals-row grand-total"><span>Grand Total:</span><span>${escapeHtml(asCurrency(invoice.grandTotal))}</span></div>
               </div>`}
+
+                        <div class="divider"></div>
+
 
           <div class="bottom">
             <section class="payment-box">

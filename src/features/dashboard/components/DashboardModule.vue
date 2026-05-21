@@ -3,13 +3,25 @@
     <section class="app-section-card-comfy  space-y-3">
       <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h2 class="app-section-title">Dashboard</h2>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <h2 class="app-section-title">Dashboard</h2>
+                      <Button
+              :icon="hideSensitiveDashboardData ? 'pi pi-eye-slash' : 'pi pi-eye'"
+              severity="secondary"
+              outlined
+              rounded
+              :aria-label="hideSensitiveDashboardData ? 'Show sensitive dashboard data' : 'Hide sensitive dashboard data'"
+              :title="hideSensitiveDashboardData ? 'Show sensitive data' : 'Hide sensitive data'"
+              @click="toggleSensitiveDashboardData"
+            />
+          </div>
           <p class="app-muted-text text-sm">Clinic overview, trends, and operational report snapshot</p>
         </div>
         <div class="flex flex-wrap items-end gap-2">
           <span class="app-filter-pill">
             Branch: {{ selectedClinic?.name || "All branches" }}
           </span>
+
           <Button label="Refresh" icon="pi pi-refresh" severity="secondary" outlined :loading="isLoading" @click="refreshDashboard" />
         </div>
       </div>
@@ -205,10 +217,19 @@ const recentAppointments = ref<DashboardRecentAppointment[]>([])
 const ptPerformance = ref<Array<{pt_name: string; bookings: number; documentationReminderCount: number; redAlertCount: number}>>([])
 const referringDoctorSummary = ref<ReferringDoctorCompletedSessionsItem[]>([])
 const canViewConfidentialRevenueCards = ref(false)
+const hideSensitiveDashboardData = ref(localStorage.getItem("dashboard.hideSensitiveData") === "true")
 
 const formatDateTime = (value: string): string => new Date(value).toLocaleString()
 const formatCurrency = (value: number): string =>
   new Intl.NumberFormat("en-PH", {style: "currency", currency: "PHP", maximumFractionDigits: 0}).format(value || 0)
+const sensitivePlaceholder = "••••••"
+const formatSensitiveCurrency = (value: number): string =>
+  hideSensitiveDashboardData.value ? sensitivePlaceholder : formatCurrency(value)
+
+const toggleSensitiveDashboardData = (): void => {
+  hideSensitiveDashboardData.value = !hideSensitiveDashboardData.value
+  localStorage.setItem("dashboard.hideSensitiveData", String(hideSensitiveDashboardData.value))
+}
 
 const kpiCards = computed(() => {
   const cards = [
@@ -220,14 +241,14 @@ const kpiCards = computed(() => {
     {label: "LGU (Bookings) Monthly Total", value: metrics.value.lguBookingsMonthlyTotal},
     {label: "Pending Billings", value: metrics.value.pendingBillings},
     {label: "Paid Billings", value: metrics.value.paidBillings},
-    {label: "HMO Revenue", value: formatCurrency(metrics.value.hmoRevenue)},
+    {label: "HMO Revenue", value: formatSensitiveCurrency(metrics.value.hmoRevenue)},
   ]
 
   if (canViewConfidentialRevenueCards.value) {
     cards.push(
-      {label: "LGU Revenue", value: formatCurrency(metrics.value.lguRevenue)},
-      {label: "Online Marketing Revenue", value: formatCurrency(metrics.value.onlineMarketingRevenue)},
-      {label: "Direct Marketing Revenue", value: formatCurrency(metrics.value.directMarketingRevenue)},
+      {label: "LGU Revenue", value: formatSensitiveCurrency(metrics.value.lguRevenue)},
+      {label: "Online Marketing Revenue", value: formatSensitiveCurrency(metrics.value.onlineMarketingRevenue)},
+      {label: "Direct Marketing Revenue", value: formatSensitiveCurrency(metrics.value.directMarketingRevenue)},
     )
   }
 

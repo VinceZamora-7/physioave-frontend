@@ -1363,6 +1363,27 @@
         />
       </div>
 
+      <div
+        v-if="selectedPackageHasSessionSchedules && packageSessionSchedules.length"
+        class="mt-3 flex gap-2 overflow-x-auto pb-1"
+      >
+        <button
+          v-for="(schedule, index) in packageSessionSchedules"
+          :key="`slot-target-${schedule.key}`"
+          type="button"
+          :class="[
+            'shrink-0 rounded-xl border px-3 py-2 text-left text-xs transition-all',
+            createActiveScheduleIndex === index
+              ? 'border-blue-400 bg-blue-50 text-blue-900 ring-2 ring-blue-200 dark:border-blue-300 dark:bg-blue-400/20 dark:text-blue-50'
+              : 'border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] text-[rgb(var(--app-fg))]/70 hover:bg-[rgb(var(--app-card))]'
+          ]"
+          @click="setCreateActiveScheduleIndex(index)"
+        >
+          <span class="block font-semibold">#{{ index + 1 }} {{ schedule.sessionName }}</span>
+          <span class="mt-1 block opacity-75">{{ formatDateTime(schedule.startsAt) }}</span>
+        </button>
+      </div>
+
       <div class="mt-3 flex flex-wrap gap-2 text-xs">
         <span class="inline-flex items-center gap-1.5 text-[rgb(var(--app-fg))]/60">
           <span class="h-2 w-2 rounded-full bg-emerald-500" />
@@ -1416,7 +1437,14 @@
 </div>
       <template #footer>
         <Button label="Cancel" text @click="createVisible = false" />
-        <Button label="Create Appointment" icon="pi pi-check" :pt="ptPrimaryBtn" @click="submitCreateAppointment" />
+        <Button
+          label="Create Appointment"
+          icon="pi pi-check"
+          :pt="ptPrimaryBtn"
+          :loading="isCreatingAppointment"
+          :disabled="isCreatingAppointment"
+          @click="submitCreateAppointment"
+        />
       </template>
     </Dialog>
 
@@ -1450,7 +1478,7 @@ import Select from "primevue/select";
 import SelectButton from "primevue/selectbutton";
 import Tag from "primevue/tag";
 import TreatmentAreaChip from "@/features/appointments/components/TreatmentAreaChip.vue";
-import {billingPhase1Service} from "@/features/billing/api/billing-phase1.service";
+import {lguBillingService} from "@/features/lgu-billing/api/lgu-billing.service";
 import {
   appointmentPhase1Service,
   type AppointmentEncounterTicket,
@@ -1684,6 +1712,7 @@ const selectedPackageOfferId = ref<string>()
 const selectedServiceLines = ref<SelectedServiceLine[]>([])
 const selectedPackageOfferDetail = ref<PackageServiceOffer | null>(null)
 const packageSessionSchedules = ref<PackageSessionSchedule[]>([])
+const isCreatingAppointment = ref(false)
 const createPatientHmoId = ref<number | null>(null)
 const createPatientHmoInfo = ref<PatientHMOInformation | null>(null)
 const syncingCreateHmoRates = ref(false)
@@ -1713,6 +1742,7 @@ const visibleYear = ref<number>(new Date().getFullYear())
 const createDayAppointments = ref<AppointmentListItem[]>([])
 const createDayAppointmentsKey = ref("")
 const isCreateSlotsLoading = ref(false)
+const createActiveScheduleIndex = ref(0)
 
 const needsOverrideReason = computed(() => (activeAppointment.value?.reschedule_count ?? 0) >= 3)
 const canDeleteAppointments = computed(() => hasAnyStoredPermission(permissionSet.value, "Appointment::DELETE"))
@@ -2132,6 +2162,9 @@ const syncSelectedPackageSessionSchedules = (): void => {
     selectedPackageOfferDetail.value,
     packageSessionSchedules.value
   )
+  if (createActiveScheduleIndex.value >= packageSessionSchedules.value.length) {
+    createActiveScheduleIndex.value = 0
+  }
 }
 
 const getPackageSessionEnd = (startsAt: Date): Date =>
@@ -2187,6 +2220,7 @@ const updatePackageSessionStart = (
   if (!packageSessionSchedules.value[index]) return
 
   const nextStart = snapToSlotBoundary(new Date(value))
+  createActiveScheduleIndex.value = index
   packageSessionSchedules.value[index].startsAt = nextStart
 
   if (index === 0) {
@@ -2484,10 +2518,17 @@ const toggleDropoutStatus = async () => {
   try {
     const result = await appointmentPhase1Service.updateDropoutStatus(selectedDetail.value.id, nextStatus)
     const baseMessage = `Status updated to ${nextStatus === "DROPPED_OUT" ? "Dropped Out" : "Returned"}`
+    const clearedCount = result?.cleared_appointment_ids?.length ?? 0
     if (result?.dropout_billing_public_id) {
-      successToast(toast, `${baseMessage}. Dropout claim ${result.dropout_billing_public_id} was created.`)
+      successToast(
+        toast,
+        `${baseMessage}. Dropout claim ${result.dropout_billing_public_id} was created.${clearedCount ? ` ${clearedCount} future appointment${clearedCount === 1 ? "" : "s"} cleared.` : ""}`
+      )
     } else {
-      successToast(toast, baseMessage)
+      successToast(
+        toast,
+        `${baseMessage}.${clearedCount ? ` ${clearedCount} future appointment${clearedCount === 1 ? "" : "s"} cleared.` : ""}`
+      )
     }
     // Refresh detail
     selectedDetail.value = await appointmentPhase1Service.getById(selectedDetail.value.id)
@@ -2534,7 +2575,7 @@ const submitLguMonthlyClaim = async (): Promise<void> => {
 
   try {
     isLguMonthlyClaimSaving.value = true
-    const result = await billingPhase1Service.createLguMonthlyClaim({
+    const result = await lguBillingService.createMonthlyClaim({
       appointment_id: selectedDetail.value.id,
       billing_month: lguMonthlyClaimMonth.value
     })
@@ -3294,11 +3335,20 @@ const alignToClinicStart = (date: Date): Date => {
   return snapToSlotBoundary(result)
 }
 
-const createSlotDateKey = computed(() => formatLocalDateKey(createStart.value))
+const createSlotBaseDate = computed(() => {
+  if (selectedPackageHasSessionSchedules.value) {
+    return packageSessionSchedules.value[createActiveScheduleIndex.value]?.startsAt ?? createStart.value
+  }
+  return createStart.value
+})
+const createSlotDateKey = computed(() => formatLocalDateKey(createSlotBaseDate.value))
 const createSlotAvailabilityTitle = computed(() => {
-  const dateLabel = createStart.value.toLocaleDateString("en-PH", {month: "short", day: "numeric", year: "numeric"})
-  if (selectedCreateProvider.value) return `${selectedCreateProvider.value.name} on ${dateLabel}`
-  return `All scheduled bookings on ${dateLabel}`
+  const dateLabel = createSlotBaseDate.value.toLocaleDateString("en-PH", {month: "short", day: "numeric", year: "numeric"})
+  const sessionLabel = selectedPackageHasSessionSchedules.value
+    ? `Session ${createActiveScheduleIndex.value + 1}`
+    : "Appointment"
+  if (selectedCreateProvider.value) return `${sessionLabel}: ${selectedCreateProvider.value.name} on ${dateLabel}`
+  return `${sessionLabel}: all scheduled bookings on ${dateLabel}`
 })
 
 const formatTimeOnly = (value: Date): string =>
@@ -3355,7 +3405,7 @@ const createSlotOptions = computed<CreateScheduleSlot[]>(() => {
 
   const endMinute = clinicEnd >= clinicStart ? clinicEnd : clinicEnd + 24 * 60
   const options: CreateScheduleSlot[] = []
-  const baseDate = createStart.value
+  const baseDate = createSlotBaseDate.value
 
   for (let minute = clinicStart; minute + createSlotDuration.value <= endMinute; minute += slotMinuteStep) {
     const startsAt = buildDateAtClinicMinute(baseDate, minute)
@@ -3373,7 +3423,7 @@ const createSlotOptions = computed<CreateScheduleSlot[]>(() => {
       statusLabel,
       tooltip: isTaken ? `${label}: ${statusLabel}` : `Select ${label}`,
       isTaken,
-      isSelected: createStart.value.getTime() === startsAt.getTime(),
+      isSelected: createSlotBaseDate.value.getTime() === startsAt.getTime(),
       conflicts
     })
   }
@@ -3415,11 +3465,18 @@ const ensureCreateDayAppointmentsLoaded = (): void => {
 
 const selectCreateSlot = (slot: CreateScheduleSlot): void => {
   if (slot.isTaken) return
+  if (selectedPackageHasSessionSchedules.value && packageSessionSchedules.value.length > 0) {
+    updatePackageSessionStart(createActiveScheduleIndex.value, slot.startsAt)
+    return
+  }
   createStart.value = new Date(slot.startsAt)
   createEnd.value = new Date(slot.endsAt)
-  if (selectedPackageHasSessionSchedules.value && packageSessionSchedules.value.length > 0) {
-    updatePackageSessionStart(0, slot.startsAt)
-  }
+}
+
+const setCreateActiveScheduleIndex = (index: number): void => {
+  if (index < 0 || index >= packageSessionSchedules.value.length) return
+  createActiveScheduleIndex.value = index
+  ensureCreateDayAppointmentsLoaded()
 }
 
 const fetchBookedDatesForMonth = async (year: number, month: number): Promise<void> => {
@@ -3622,6 +3679,7 @@ const openCreateDialog = async (): Promise<void> => {
   selectedPackageOfferId.value = undefined
   selectedPackageOfferDetail.value = null
   packageSessionSchedules.value = []
+  createActiveScheduleIndex.value = 0
   serviceMode.value = "individual"
   selectedServiceLines.value = []
   createPatientHmoId.value = null
@@ -3649,6 +3707,7 @@ const openCreateDialog = async (): Promise<void> => {
 }
 
 const submitCreateAppointment = async (): Promise<void> => {
+  if (isCreatingAppointment.value) return
   if (!createPatient.value) {
     errorToast(toast, "Patient is required")
     return
@@ -3743,6 +3802,7 @@ const submitCreateAppointment = async (): Promise<void> => {
   }
 
   try {
+    isCreatingAppointment.value = true
     const created = await appointmentPhase1Service.create(appointmentPayload)
     const createdCount = created?.appointment_ids?.length ?? appointmentSchedules.length
     successToast(
@@ -3762,6 +3822,8 @@ const submitCreateAppointment = async (): Promise<void> => {
         "Could not create appointment. Verify patient, PT, services, and schedule, then try again."
       )
     )
+  } finally {
+    isCreatingAppointment.value = false
   }
 }
 
@@ -4036,6 +4098,10 @@ watch(selectedClinicId, () => {
   ensureCreateDayAppointmentsLoaded()
 })
 
+watch(createActiveScheduleIndex, () => {
+  ensureCreateDayAppointmentsLoaded()
+})
+
 watch(rescheduleStart, (value) => {
   const normalized = snapToSlotBoundary(new Date(value))
   if (normalized.getTime() !== value.getTime()) {
@@ -4158,7 +4224,7 @@ watch(createBillingType, (billingType) => {
   }
 
   if (billingType === "LGU_BILLING" && lguProgramOptions.value.length === 0) {
-    billingPhase1Service.getLguPrograms().then(programs => {
+    lguBillingService.getPrograms().then(programs => {
       lguProgramOptions.value = programs ?? []
     }).catch(() => { /* silently ignore */ })
   }

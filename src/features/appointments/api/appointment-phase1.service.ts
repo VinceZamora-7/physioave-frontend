@@ -441,6 +441,7 @@ export interface DropoutStatusUpdateResult {
   dropout_status: string
   dropout_billing_id?: number
   dropout_billing_public_id?: string
+  cleared_appointment_ids?: number[]
 }
 
 export interface DropoutStatusUpdatePayload {

@@ -1,6 +1,7 @@
 ﻿import {
   asCurrency,
   escapeHtml,
+  formatDate,
   renderStandardInvoiceWindow,
   type InvoiceDetailRow
 } from "./invoice-layout.util"
@@ -8,6 +9,7 @@
 export interface PackageInvoiceSubItem {
   name: string
   quantity: number
+  children?: PackageInvoiceSubItem[]
 }
 
 export interface PackageInvoiceLine {
@@ -15,6 +17,8 @@ export interface PackageInvoiceLine {
   quantity: number
   unitPrice: number
   lineTotal: number
+  treatmentDate?: string
+  sessionSequence?: string
   subItems?: PackageInvoiceSubItem[]
 }
 
@@ -40,25 +44,27 @@ export interface PackageServiceInvoiceData {
 }
 
 function buildLineRows(lines: PackageInvoiceLine[]): string {
-  return lines.map((line, index) => {
-    const subItemRows = (line.subItems ?? [])
-      .map(sub => `
-        <tr class="sub-item-row">
-          <td></td>
-          <td class="sub-item">-${sub.quantity} ${escapeHtml(sub.name)}</td>
-          <td></td>
-          <td></td>
-        </tr>
-      `).join("")
+  const renderSubItems = (items: PackageInvoiceSubItem[], depth = 0): string =>
+    items.map(sub => `
+      <div class="sub-item sub-item-depth-${depth}">
+        - ${sub.quantity} ${escapeHtml(sub.name)}
+      </div>
+      ${sub.children?.length ? renderSubItems(sub.children, depth + 1) : ""}
+    `).join("")
 
+  return lines.map((line, index) => {
+    const subItems = renderSubItems(line.subItems ?? [])
     return `
       <tr>
         <td class="text-center">${index + 1}</td>
-        <td>${escapeHtml(line.name)}</td>
-        <td class="text-center">${line.quantity}</td>
+        <td class="text-center">${escapeHtml(formatDate(line.treatmentDate))}</td>
+        <td>
+          <div class="package-line">${escapeHtml(line.name)}</div>
+          ${subItems}
+        </td>
+        <td class="text-center">${escapeHtml(line.sessionSequence || "-")}</td>
         <td class="text-right">${escapeHtml(asCurrency(line.unitPrice))}</td>
       </tr>
-      ${subItemRows}
     `
   }).join("")
 }
@@ -88,12 +94,13 @@ export function renderPackageServiceInvoiceWindow(
     diagnosis: invoice.diagnosis,
     columns: [
       { label: "ITEM No.", width: "68px", align: "center" },
+      { label: "TREATMENT DATE", width: "110px", align: "center" },
       { label: "PT SERVICE RENDERED" },
-      { label: "QTY", width: "72px", align: "center" },
+      { label: "SESSION SEQUENCE", width: "120px", align: "center" },
       { label: "UNIT PRICE", width: "126px", align: "right" }
     ],
     tableRowsHtml: buildLineRows(invoice.lines),
-    emptyStateColspan: 3,
+    emptyStateColspan: 4,
     discount: invoice.discount,
     grandTotal: invoice.grandTotal,
     detailBoxTitle: "PAYMENT DETAILS",
