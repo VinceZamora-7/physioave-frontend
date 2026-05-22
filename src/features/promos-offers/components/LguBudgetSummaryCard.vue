@@ -3,166 +3,179 @@
     <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
       <div class="space-y-1">
         <h3 class="text-sm font-semibold">Manager LGU Dashboard{{ selectedProgramName ? ` — ${selectedProgramName}` : '' }}</h3>
-        <p class="text-xs opacity-70">Select an LGU program and set the monthly budget. Each program and month is tracked independently.</p>
+        <p class="text-xs opacity-70">Budget setup is hidden by default so recent LGU transactions stay front and center.</p>
       </div>
-      <Tag :value="canManageLguDashboard ? 'Manager Access' : 'Read-only'" :severity="canManageLguDashboard ? 'success' : 'secondary'" />
+      <div class="flex flex-wrap items-center gap-2">
+        <Tag :value="canManageLguDashboard ? 'Manager Access' : 'Read-only'" :severity="canManageLguDashboard ? 'success' : 'secondary'" />
+        <Button
+          :label="budgetLedgerVisible ? 'Hide Budget Ledger' : 'Show Budget Ledger'"
+          :icon="budgetLedgerVisible ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
+          outlined
+          size="small"
+          aria-controls="lgu-budget-ledger-panel"
+          :aria-expanded="budgetLedgerVisible"
+          @click="budgetLedgerVisible = !budgetLedgerVisible"
+        />
+      </div>
     </div>
 
-    <Message v-if="!canManageLguDashboard" severity="warn" :closable="false" size="small">
-      Budget controls are available to Manager/Operations leadership roles. Totals remain visible.
-    </Message>
+    <div v-if="budgetLedgerVisible" id="lgu-budget-ledger-panel" class="space-y-3">
+      <Message v-if="!canManageLguDashboard" severity="warn" :closable="false" size="small">
+        Budget controls are available to Manager/Operations leadership roles. Totals remain visible.
+      </Message>
 
-    <Message v-if="budgetSyncError" severity="warn" :closable="false" size="small">
-      {{ budgetSyncError }}
-    </Message>
-    <Message v-else-if="loadingDashboardBudget" severity="secondary" :closable="false" size="small">
-      Loading live LGU budget for {{ budgetMonthLabel }}...
-    </Message>
-    <Message v-else-if="hasLocalOnlyBudgetDraft" severity="warn" :closable="false" size="small">
-      This budget was only saved in this browser before. Click <strong>Save Budget</strong> to publish it to appointments and LGU billing for {{ budgetMonthLabel }}.
-    </Message>
-    <Message v-else-if="lguDashboardBudget" severity="info" :closable="false" size="small">
-      Live LGU budget is open for {{ budgetMonthLabel }}. Used so far: <strong>{{ asCurrency(usedLguFund) }}</strong>.
-    </Message>
-    <Message v-else severity="secondary" :closable="false" size="small">
-      No live LGU budget is open for {{ budgetMonthLabel }} yet. Save this month’s budget here to make LGU appointments billable.
-    </Message>
+      <Message v-if="budgetSyncError" severity="warn" :closable="false" size="small">
+        {{ budgetSyncError }}
+      </Message>
+      <Message v-else-if="loadingDashboardBudget" severity="secondary" :closable="false" size="small">
+        Loading live LGU budget for {{ budgetMonthLabel }}...
+      </Message>
+      <Message v-else-if="hasLocalOnlyBudgetDraft" severity="warn" :closable="false" size="small">
+        This budget was only saved in this browser before. Click <strong>Save Budget</strong> to publish it to appointments and LGU billing for {{ budgetMonthLabel }}.
+      </Message>
+      <Message v-else-if="lguDashboardBudget" severity="info" :closable="false" size="small">
+        Live LGU budget is open for {{ budgetMonthLabel }}. Used so far: <strong>{{ asCurrency(usedLguFund) }}</strong>.
+      </Message>
+      <Message v-else severity="secondary" :closable="false" size="small">
+        No live LGU budget is open for {{ budgetMonthLabel }} yet. Save this month’s budget here to make LGU appointments billable.
+      </Message>
 
-    <Message v-if="isFutureBudgetMonth" severity="info" :closable="false" size="small">
-      You are preparing the LGU budget for {{ budgetMonthLabel }} in advance. This stays separate from {{ currentMonthLabel }} and will not add into the current month fund.
-    </Message>
+      <Message v-if="isFutureBudgetMonth" severity="info" :closable="false" size="small">
+        You are preparing the LGU budget for {{ budgetMonthLabel }} in advance. This stays separate from {{ currentMonthLabel }} and will not add into the current month fund.
+      </Message>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
-      <div class="flex flex-col gap-1">
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
+        <div class="flex flex-col gap-1">
+          <IftaLabel>
+            <Select
+              v-model="selectedProgramId"
+              :options="lguProgramOptions"
+              optionLabel="label"
+              optionValue="id"
+              placeholder="Select LGU Program"
+              :loading="loadingPrograms"
+              :disabled="savingDashboardBudget"
+              fluid
+            />
+            <label>LGU</label>
+          </IftaLabel>
+          <div class="flex items-center gap-2">
+            <InputText
+              v-if="showNewProgramInput"
+              v-model="newProgramName"
+              placeholder="e.g. Gapan"
+              size="small"
+              fluid
+              @keyup.enter="createNewProgram"
+            />
+            <Button
+              v-if="showNewProgramInput"
+              icon="pi pi-check"
+              size="small"
+              :loading="creatingProgram"
+              :disabled="!newProgramName.trim()"
+              @click="createNewProgram"
+            />
+            <Button
+              :label="showNewProgramInput ? 'Cancel' : 'Add LGU'"
+              :icon="showNewProgramInput ? 'pi pi-times' : 'pi pi-plus'"
+              size="small"
+              :severity="showNewProgramInput ? 'secondary' : 'info'"
+              text
+              :disabled="!canManageLguDashboard"
+              @click="showNewProgramInput = !showNewProgramInput; newProgramName = ''"
+            />
+          </div>
+        </div>
+
         <IftaLabel>
-          <Select
-            v-model="selectedProgramId"
-            :options="lguProgramOptions"
-            optionLabel="label"
-            optionValue="id"
-            placeholder="Select LGU Program"
-            :loading="loadingPrograms"
+          <DatePicker
+            v-model="selectedBudgetMonthDate"
+            view="month"
+            dateFormat="MM yy"
+            :manualInput="false"
+            showIcon
+            fluid
+            :minDate="currentMonthStart"
             :disabled="savingDashboardBudget"
-            fluid
           />
-          <label>LGU</label>
+          <label>Budget Month</label>
         </IftaLabel>
-        <div class="flex items-center gap-2">
-          <InputText
-            v-if="showNewProgramInput"
-            v-model="newProgramName"
-            placeholder="e.g. Gapan"
-            size="small"
+
+        <IftaLabel>
+          <InputNumber
+            v-model="baseMonthlyBudget"
+            :disabled="!canManageLguDashboard || savingDashboardBudget"
+            :min="0"
+            mode="currency"
+            currency="PHP"
+            locale="en-PH"
             fluid
-            @keyup.enter="createNewProgram"
+          />
+          <label>Base Monthly Budget</label>
+        </IftaLabel>
+
+        <IftaLabel>
+          <InputNumber
+            v-model="rolloverInput"
+            :disabled="!canManageLguDashboard || savingDashboardBudget"
+            :min="0"
+            mode="currency"
+            currency="PHP"
+            locale="en-PH"
+            fluid
+          />
+          <label>Rollover Amount to Add</label>
+        </IftaLabel>
+
+        <div class="flex flex-wrap items-end gap-2">
+          <Button
+            label="Refresh Budget"
+            icon="pi pi-refresh"
+            outlined
+            :loading="refreshingDashboardBudget"
+            :disabled="loadingDashboardBudget || loadingTransactionHistory || savingDashboardBudget"
+            @click="refreshDashboardBudget"
           />
           <Button
-            v-if="showNewProgramInput"
-            icon="pi pi-check"
-            size="small"
-            :loading="creatingProgram"
-            :disabled="!newProgramName.trim()"
-            @click="createNewProgram"
+            label="Add Rollover"
+            icon="pi pi-plus"
+            outlined
+            :disabled="!canManageLguDashboard || savingDashboardBudget"
+            @click="addRolloverAmount"
           />
           <Button
-            :label="showNewProgramInput ? 'Cancel' : 'Add LGU'"
-            :icon="showNewProgramInput ? 'pi pi-times' : 'pi pi-plus'"
-            size="small"
-            :severity="showNewProgramInput ? 'secondary' : 'info'"
-            text
-            :disabled="!canManageLguDashboard"
-            @click="showNewProgramInput = !showNewProgramInput; newProgramName = ''"
+            label="Save Budget"
+            icon="pi pi-save"
+            :disabled="!canManageLguDashboard || loadingDashboardBudget || savingDashboardBudget"
+            :loading="savingDashboardBudget"
+            @click="saveDashboardBudget"
           />
+        </div>
+
+        <div class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3 space-y-1">
+          <p class="text-xs opacity-70">Tracked Rollover Amount</p>
+          <p class="text-base font-semibold">{{ asCurrency(rolloverAmount) }}</p>
         </div>
       </div>
 
-      <IftaLabel>
-        <DatePicker
-          v-model="selectedBudgetMonthDate"
-          view="month"
-          dateFormat="MM yy"
-          :manualInput="false"
-          showIcon
-          fluid
-          :minDate="currentMonthStart"
-          :disabled="savingDashboardBudget"
-        />
-        <label>Budget Month</label>
-      </IftaLabel>
-
-      <IftaLabel>
-        <InputNumber
-          v-model="baseMonthlyBudget"
-          :disabled="!canManageLguDashboard || savingDashboardBudget"
-          :min="0"
-          mode="currency"
-          currency="PHP"
-          locale="en-PH"
-          fluid
-        />
-        <label>Base Monthly Budget</label>
-      </IftaLabel>
-
-      <IftaLabel>
-        <InputNumber
-          v-model="rolloverInput"
-          :disabled="!canManageLguDashboard || savingDashboardBudget"
-          :min="0"
-          mode="currency"
-          currency="PHP"
-          locale="en-PH"
-          fluid
-        />
-        <label>Rollover Amount to Add</label>
-      </IftaLabel>
-
-      <div class="flex flex-wrap items-end gap-2">
-        <Button
-          label="Refresh Budget"
-          icon="pi pi-refresh"
-          outlined
-          :loading="refreshingDashboardBudget"
-          :disabled="loadingDashboardBudget || loadingTransactionHistory || savingDashboardBudget"
-          @click="refreshDashboardBudget"
-        />
-        <Button
-          label="Add Rollover"
-          icon="pi pi-plus"
-          outlined
-          :disabled="!canManageLguDashboard || savingDashboardBudget"
-          @click="addRolloverAmount"
-        />
-        <Button
-          label="Save Budget"
-          icon="pi pi-save"
-          :disabled="!canManageLguDashboard || loadingDashboardBudget || savingDashboardBudget"
-          :loading="savingDashboardBudget"
-          @click="saveDashboardBudget"
-        />
-      </div>
-
-      <div class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3 space-y-1">
-        <p class="text-xs opacity-70">Tracked Rollover Amount</p>
-        <p class="text-base font-semibold">{{ asCurrency(rolloverAmount) }}</p>
-      </div>
-    </div>
-
-    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-      <div class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3">
-        <p class="text-xs opacity-70">Total Available Fund</p>
-        <p class="text-lg font-semibold">{{ asCurrency(totalAvailableFund) }}</p>
-      </div>
-      <div class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3">
-        <p class="text-xs opacity-70">Used LGU Fund</p>
-        <p class="text-lg font-semibold">{{ asCurrency(usedLguFund) }}</p>
-      </div>
-      <div class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3">
-        <p class="text-xs opacity-70">Pending Used LGU Fund</p>
-        <p class="text-lg font-semibold text-amber-600">{{ asCurrency(pendingUsedLguFund) }}</p>
-      </div>
-      <div class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3">
-        <p class="text-xs opacity-70">Remaining Available Fund</p>
-        <p class="text-lg font-semibold" :class="remainingAvailableFund < 0 ? 'text-red-600' : ''">{{ asCurrency(remainingAvailableFund) }}</p>
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+        <div class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3">
+          <p class="text-xs opacity-70">Total Available Fund</p>
+          <p class="text-lg font-semibold">{{ asCurrency(totalAvailableFund) }}</p>
+        </div>
+        <div class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3">
+          <p class="text-xs opacity-70">Used LGU Fund</p>
+          <p class="text-lg font-semibold">{{ asCurrency(usedLguFund) }}</p>
+        </div>
+        <div class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3">
+          <p class="text-xs opacity-70">Pending Used LGU Fund</p>
+          <p class="text-lg font-semibold text-amber-600">{{ asCurrency(pendingUsedLguFund) }}</p>
+        </div>
+        <div class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3">
+          <p class="text-xs opacity-70">Remaining Available Fund</p>
+          <p class="text-lg font-semibold" :class="remainingAvailableFund < 0 ? 'text-red-600' : ''">{{ asCurrency(remainingAvailableFund) }}</p>
+        </div>
       </div>
     </div>
 
@@ -280,38 +293,31 @@
       <Dialog v-model:visible="exportsModalVisible" header="LGU Exports" modal :style="{ width: '560px' }">
         <div class="space-y-4">
 
-          <!-- Create SOA -->
           <div class="rounded-xl border border-[rgb(var(--app-border))] p-4 space-y-3">
             <div class="space-y-1">
-              <h4 class="text-sm font-semibold">Create Statement of Account (SOA)</h4>
-              <p class="text-xs opacity-70">Generate a printable SOA summarising LGU billing activity for the selected date range.</p>
+              <h4 class="text-sm font-semibold">SOA</h4>
+              <p class="text-xs opacity-70">Generate a printable SOA for {{ selectedProgramName || "the selected LGU" }} using the selected date range.</p>
             </div>
             <IftaLabel>
               <DatePicker v-model="soaRange" selectionMode="range" dateFormat="yy-mm-dd" :manualInput="false" showIcon fluid />
-              <label>Date Range</label>
+              <label>Transaction Period</label>
             </IftaLabel>
             <div class="flex justify-end">
               <Button label="Generate SOA" icon="pi pi-print" :disabled="!hasValidSoaRange" @click="generateSoa" />
             </div>
           </div>
 
-          <!-- Export Encounter Tickets -->
           <div class="rounded-xl border border-[rgb(var(--app-border))] p-4 space-y-3">
             <div class="space-y-1">
-              <h4 class="text-sm font-semibold">Export Bulk Encounter Tickets</h4>
-              <p class="text-xs opacity-70">Export all locked encounter tickets from LGU billings created within the selected date range.</p>
+              <h4 class="text-sm font-semibold">Copy of Patients</h4>
+              <p class="text-xs opacity-70">Print all patients with saved LGU Information.</p>
             </div>
-            <IftaLabel>
-              <DatePicker v-model="bulkTicketRange" selectionMode="range" dateFormat="yy-mm-dd" :manualInput="false" showIcon fluid />
-              <label>Date Range</label>
-            </IftaLabel>
             <div class="flex justify-end">
               <Button
-                label="Export PDF"
-                icon="pi pi-download"
-                :disabled="!hasValidBulkTicketRange"
-                :loading="exportingBulkTickets"
-                @click="exportBulkLguEncounterTickets"
+                label="Print Patient Copy"
+                icon="pi pi-users"
+                :loading="exportingLguPatients"
+                @click="exportLguPatientCopy"
               />
             </div>
           </div>
@@ -344,6 +350,16 @@
             :severity="lguStatusSeverity(selectedPatientDetail.package_availments[0]?.status ?? selectedPatientDetail.dropout_status ?? selectedPatientDetail.authorizations[0]?.authorization_status)"
           />
           <span class="text-xs opacity-60">Patient ID: {{ selectedPatientDetail.patient_id }}</span>
+        </div>
+
+        <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3">
+          <div class="mb-2 text-xs font-semibold uppercase opacity-60">Patient Exports</div>
+          <div class="flex flex-wrap gap-2">
+            <Button label="Invoices" icon="pi pi-file-pdf" size="small" outlined @click="openInvoiceSessionPicker" />
+            <Button label="Billing Summary" icon="pi pi-chart-bar" size="small" outlined @click="exportPatientBillingSummary" />
+            <Button label="SOA" icon="pi pi-file" size="small" outlined @click="openPatientSoaPicker" />
+            <Button label="LGU Details" icon="pi pi-id-card" size="small" outlined @click="exportPatientLguDetails" />
+          </div>
         </div>
 
         <div class="space-y-2">
@@ -506,6 +522,84 @@
         <div v-else class="text-xs opacity-60">No LGU claim billings generated yet.</div>
       </template>
     </Dialog>
+
+    <Dialog
+      v-model:visible="patientSoaPickerVisible"
+      header="Select SOA Transaction Period"
+      modal
+      :style="{ width: 'min(92vw, 520px)' }"
+    >
+      <div class="space-y-3">
+        <IftaLabel>
+          <DatePicker v-model="patientSoaRange" selectionMode="range" dateFormat="yy-mm-dd" :manualInput="false" showIcon fluid />
+          <label>Transaction Period</label>
+        </IftaLabel>
+        <Message severity="secondary" :closable="false" size="small">
+          Choose the date range to include in the patient SOA.
+        </Message>
+      </div>
+      <template #footer>
+        <Button label="Cancel" text @click="patientSoaPickerVisible = false" />
+        <Button label="Open SOA" icon="pi pi-print" :disabled="!hasValidPatientSoaRange" @click="exportPatientSoa" />
+      </template>
+    </Dialog>
+
+    <Dialog
+      v-model:visible="invoiceSessionPickerVisible"
+      header="Select Session Invoice"
+      modal
+      :style="{ width: 'min(92vw, 760px)' }"
+    >
+      <div class="space-y-3">
+        <Message v-if="!invoiceSessionOptions.length" severity="secondary" :closable="false" size="small">
+          No LGU sessions are available for this patient yet.
+        </Message>
+        <div v-else class="overflow-x-auto rounded-xl border border-[rgb(var(--app-border))]">
+          <table class="min-w-full text-sm">
+            <thead class="bg-black/5 text-left text-xs uppercase tracking-wide opacity-70 dark:bg-white/5">
+              <tr>
+                <th class="px-3 py-2 font-medium">Session</th>
+                <th class="px-3 py-2 font-medium">Date</th>
+                <th class="px-3 py-2 font-medium">Package / Service</th>
+                <th class="px-3 py-2 font-medium">Claim</th>
+                <th class="px-3 py-2 font-medium">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="option in invoiceSessionOptions"
+                :key="option.key"
+                class="border-t border-[rgb(var(--app-border))]"
+              >
+                <td class="px-3 py-2 font-medium">{{ option.label }}</td>
+                <td class="px-3 py-2 text-xs">{{ formatDateTime(option.appointmentDate) }}</td>
+                <td class="px-3 py-2 text-xs">
+                  <div>{{ option.packageName }}</div>
+                  <div class="opacity-60">{{ option.serviceName }}</div>
+                </td>
+                <td class="px-3 py-2">
+                  <Tag :value="option.claimLabel" :severity="option.billingId ? 'success' : 'secondary'" class="text-xs" />
+                </td>
+                <td class="px-3 py-2">
+                  <Button
+                    label="Print"
+                    icon="pi pi-print"
+                    size="small"
+                    outlined
+                    :disabled="!option.billingId"
+                    :loading="printingClaimBillingId === option.billingId"
+                    @click="printSessionInvoice(option)"
+                  />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <template #footer>
+        <Button label="Close" text @click="invoiceSessionPickerVisible = false" />
+      </template>
+    </Dialog>
   </section>
 </template>
 
@@ -523,7 +617,6 @@ import Message from "primevue/message"
 import Select from "primevue/select"
 import Tag from "primevue/tag"
 import { useToast } from "primevue/usetoast"
-import { useRouter } from "vue-router"
 import {
   billingPhase1Service,
   type BillingListItem
@@ -534,6 +627,7 @@ import {
   type LguDashboardBudget,
   type LguDashboardHistoryItem,
   type LguPatientCreditDetail,
+  type LguPatientSession,
   type LguProgramLookup
 } from "@/features/lgu-billing/api/lgu-billing.service"
 import { renderLguInvoiceWindow } from "@/features/lgu-billing/invoices/lgu-invoice.util"
@@ -545,6 +639,13 @@ import {
   renderEncounterTicketBulkPdfWindow,
   type EncounterTicketPdfCard
 } from "@/utils/encounter-ticket-pdf.util"
+import {
+  renderStandardInvoiceWindow,
+  type InvoiceDetailRow
+} from "@/features/billing/invoices/invoice-layout.util"
+import type { Patient } from "@/features/patients/types/patient"
+import type { PatientHMOInformation } from "@/models/hmo-information"
+import { patientHMOInformationService } from "@/services/patient-hmo-information.service"
 
 type LocalLguBudgetDraft = {
   baseMonthlyBudget?: number
@@ -552,8 +653,8 @@ type LocalLguBudgetDraft = {
 }
 
 const toast = useToast()
-const router = useRouter()
 const currentRoleName = ref<string>("")
+const budgetLedgerVisible = ref(false)
 const lguPrograms = ref<LguProgramLookup[]>([])
 const loadingPrograms = ref(false)
 const selectedProgramId = ref<number | null>(null)
@@ -580,10 +681,14 @@ const loadingPatientDetail = ref(false)
 const patientDetailError = ref("")
 const isCreatingClaims = ref(false)
 const printingClaimBillingId = ref<number | null>(null)
+const invoiceSessionPickerVisible = ref(false)
+const patientSoaPickerVisible = ref(false)
 const exportsModalVisible = ref(false)
 const soaRange = ref<Date[] | null>(null)
+const patientSoaRange = ref<Date[] | null>(null)
 const bulkTicketRange = ref<Date[] | null>(null)
 const exportingBulkTickets = ref(false)
+const exportingLguPatients = ref(false)
 
 type LocalService = { id: string; type?: string; name: string; price?: number; status?: string }
 type LocalBundle = {
@@ -619,6 +724,20 @@ type LocalPackageOffer = {
   status?: string
 }
 
+type LguInvoiceSessionOption = {
+  key: string
+  label: string
+  packageName: string
+  serviceName: string
+  appointmentId: number
+  appointmentDate: string
+  sessionSequence: number
+  totalSessions: number
+  billingId: number | null
+  claimLabel: string
+  session: LguPatientSession
+}
+
 const localServices = ref<LocalService[]>([])
 const localBundles = ref<LocalBundle[]>([])
 const localPackageOffers = ref<LocalPackageOffer[]>([])
@@ -629,10 +748,44 @@ const hasValidSoaRange = computed(() => {
   return Array.isArray(r) && r.length === 2 && r[0] instanceof Date && r[1] instanceof Date
 })
 
+const hasValidPatientSoaRange = computed(() => {
+  const r = patientSoaRange.value
+  return Array.isArray(r) && r.length === 2 && r[0] instanceof Date && r[1] instanceof Date
+})
+
 const hasValidBulkTicketRange = computed(() => {
   const r = bulkTicketRange.value
   return Array.isArray(r) && r.length === 2 && r[0] instanceof Date && r[1] instanceof Date
 })
+
+const invoiceSessionOptions = computed<LguInvoiceSessionOption[]>(() =>
+  (selectedPatientDetail.value?.authorizations ?? []).flatMap(authorization => {
+    const totalSessions = Math.max(authorization.total_sessions, authorization.sessions.length, 1)
+    return authorization.sessions.map(session => {
+      const dropoutBillingId = Number(session.dropout_billing_id ?? 0) > 0 ? Number(session.dropout_billing_id) : null
+      const monthlyBillingId = Number(session.monthly_billing_id ?? 0) > 0 ? Number(session.monthly_billing_id) : null
+      const billingId = dropoutBillingId ?? monthlyBillingId
+      const claimLabel = dropoutBillingId
+        ? "Dropout Claim"
+        : monthlyBillingId
+          ? "Monthly Claim"
+          : "Not Claimed"
+      return {
+        key: `${authorization.authorization_id}-${session.id}`,
+        label: `Session ${session.session_sequence} of ${totalSessions}`,
+        packageName: authorization.package_name || "LGU Package",
+        serviceName: session.service_name || "LGU Session",
+        appointmentId: session.appointment_id,
+        appointmentDate: session.appointment_date,
+        sessionSequence: session.session_sequence,
+        totalSessions,
+        billingId,
+        claimLabel,
+        session
+      }
+    })
+  })
+)
 
 const MANAGER_ROLE_KEYWORDS = [
   "manager",
@@ -649,6 +802,16 @@ const formatDateTime = (value?: string): string => {
   if (!value) return "N/A"
   return new Date(value).toLocaleString("en-PH")
 }
+
+const formatDateOnly = (value: Date): string =>
+  value.toLocaleDateString("en-PH", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  })
+
+const getMonthEndDate = (value: Date): Date =>
+  new Date(value.getFullYear(), value.getMonth() + 1, 0)
 
 const getClaimReferenceNumber = (detail: BillingListItem): string =>
   detail.receipt_number?.trim() || detail.public_id || `BILL-${detail.id}`
@@ -987,25 +1150,728 @@ const formatYmd = (value: Date): string => {
   return `${y}-${m}-${d}`
 }
 
+const escapeHtml = (value: unknown): string =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;")
+
+type PatientLguDetailsExportContext = {
+  patientDetails: Patient | null
+  lguInformation: PatientHMOInformation | null
+  profileImageDataUrl: string | null
+  transactions: LguDashboardHistoryItem[]
+}
+
+const patientExportFileName = (suffix: string): string => {
+  const patient = selectedPatientDetail.value
+  const name = String(patient?.patient_name || `patient-${patient?.patient_id ?? "lgu"}`)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+  return `${name || "lgu-patient"}-${suffix}-${selectedBillingMonth.value}`
+}
+
+const selectedPatientStatusLabel = (): string =>
+  formatLguStatus(
+    selectedPatientDetail.value?.package_availments[0]?.status
+    ?? selectedPatientDetail.value?.dropout_status
+    ?? selectedPatientDetail.value?.authorizations[0]?.authorization_status
+  )
+
+const blobToDataUrl = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ""))
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(blob)
+  })
+
+const getPatientInitials = (fullName?: string): string => {
+  if (!fullName?.trim()) return "NA"
+  const parts = fullName.trim().split(/\s+/).filter(Boolean)
+  const first = parts[0]?.[0] ?? ""
+  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : ""
+  return `${first}${last}`.toUpperCase() || "NA"
+}
+
+const formatReferralChannel = (channel?: string | null): string => {
+  if (channel === "ONLINE") return "Online"
+  if (channel === "OFFLINE") return "Offline"
+  return "N/A"
+}
+
+const formatPatientAddress = (patient?: Patient | null): string => {
+  if (!patient) return "N/A"
+  const addressParts = [
+    patient.details,
+    patient.baranggay_name,
+    patient.city_name,
+    patient.province_name,
+    patient.region_name
+  ].filter(Boolean)
+
+  return addressParts.length ? addressParts.join(", ") : "N/A"
+}
+
+const loadPatientLguDetailsExportContext = async (patientId: number): Promise<PatientLguDetailsExportContext> => {
+  const [patientResult, imageResult, transactionsResult, lguInformationResult] = await Promise.allSettled([
+    pamsAPI.get<Patient>(`/patients/${patientId}`).then(response => response.data),
+    pamsAPI.get<Blob>(`/patients/${patientId}/profile-image/file?t=${Date.now()}`, {
+      responseType: "blob"
+    }).then(response => blobToDataUrl(response.data)),
+    lguBillingService.getDashboardHistory(
+      200,
+      selectedBudgetPeriodYear.value,
+      selectedBudgetPeriodMonth.value,
+      selectedProgramId.value ?? undefined
+    ),
+    patientHMOInformationService.getByPatientId(patientId)
+  ])
+
+  const transactions = transactionsResult.status === "fulfilled"
+    ? (transactionsResult.value ?? []).filter(entry => Number(entry.patient_id ?? 0) === patientId)
+    : lguTransactionHistory.value.filter(entry => Number(entry.patient_id ?? 0) === patientId)
+
+  return {
+    patientDetails: patientResult.status === "fulfilled" ? patientResult.value : null,
+    lguInformation: lguInformationResult.status === "fulfilled" && lguInformationResult.value?.sponsor_context === "LGU"
+      ? lguInformationResult.value
+      : null,
+    profileImageDataUrl: imageResult.status === "fulfilled" ? imageResult.value : null,
+    transactions
+  }
+}
+
+const renderEmptyRow = (colspan: number, label: string): string =>
+  `<tr><td colspan="${colspan}" class="muted">${escapeHtml(label)}</td></tr>`
+
+const renderBillingRows = (): string => {
+  const billings = selectedPatientDetail.value?.billings ?? []
+  if (!billings.length) return renderEmptyRow(6, "No LGU claim billings generated yet.")
+  return billings.map(billing => `
+    <tr>
+      <td>${escapeHtml(billing.public_id || `BILL-${billing.id}`)}</td>
+      <td>${escapeHtml(billing.service_name || "-")}</td>
+      <td>${escapeHtml(billing.pricing_source || "-")}</td>
+      <td>${escapeHtml(billing.billing_status || "-")}</td>
+      <td>${escapeHtml(formatDateTime(billing.created_at))}</td>
+      <td class="right">${escapeHtml(asCurrency(billing.amount_due))}</td>
+    </tr>
+  `).join("")
+}
+
+const renderAppointmentRows = (): string => {
+  const appointments = selectedPatientDetail.value?.appointments ?? []
+  if (!appointments.length) return renderEmptyRow(4, "No appointments recorded yet.")
+  return appointments.map((appointment, index) => `
+    <tr>
+      <td>Session ${index + 1}<br /><span class="muted">APT-${escapeHtml(appointment.appointment_id)}</span></td>
+      <td>${escapeHtml(formatDateTime(appointment.appointment_date))}</td>
+      <td>${escapeHtml(appointment.package_name || "-")}</td>
+      <td>${escapeHtml(formatLguStatus(appointment.status))}</td>
+    </tr>
+  `).join("")
+}
+
+const renderAvailedSessionRows = (): string => {
+  const sessions = invoiceSessionOptions.value
+  if (!sessions.length) return renderEmptyRow(7, "No availed LGU sessions recorded yet.")
+  return sessions.map(option => {
+    const appointmentStatus = selectedPatientDetail.value?.appointments.find(appointment =>
+      appointment.appointment_id === option.appointmentId
+    )?.status
+    const reference = option.billingId
+      ? selectedPatientDetail.value?.billings.find(billing => billing.id === option.billingId)?.public_id ?? `BILLING-${option.billingId}`
+      : "-"
+    return `
+      <tr>
+        <td>${escapeHtml(option.label)}</td>
+        <td>${escapeHtml(formatDateTime(option.appointmentDate))}</td>
+        <td>${escapeHtml(option.packageName)}</td>
+        <td>${escapeHtml(option.serviceName)}</td>
+        <td>${escapeHtml(formatLguStatus(appointmentStatus))}</td>
+        <td>${escapeHtml(option.claimLabel)}</td>
+        <td>${escapeHtml(reference)}</td>
+      </tr>
+    `
+  }).join("")
+}
+
+const getSessionUnitTotal = (option: LguInvoiceSessionOption): number => {
+  if (!option.billingId) return 0
+  const billingTotal = Number(selectedPatientDetail.value?.billings.find(billing => billing.id === option.billingId)?.amount_due ?? 0)
+  const sessionCount = invoiceSessionOptions.value.filter(session => session.billingId === option.billingId).length || 1
+  return Number((billingTotal / sessionCount).toFixed(2))
+}
+
+const renderBillingSummaryInvoiceRows = (): string => {
+  const sessions = invoiceSessionOptions.value
+  if (!sessions.length) return renderEmptyRow(5, "No availed LGU sessions recorded yet.")
+  return sessions.map((option, index) => `
+    <tr>
+      <td class="text-center">${index + 1}</td>
+      <td class="text-center">${escapeHtml(new Date(option.appointmentDate).toLocaleDateString("en-PH"))}</td>
+      <td>${escapeHtml(option.serviceName || option.packageName || "LGU Session")}</td>
+      <td class="text-center">${escapeHtml(option.label)}</td>
+      <td class="text-right">${getSessionUnitTotal(option) > 0 ? escapeHtml(asCurrency(getSessionUnitTotal(option))) : "-"}</td>
+    </tr>
+  `).join("")
+}
+
+const getSessionBilling = (option: LguInvoiceSessionOption) =>
+  option.billingId ? selectedPatientDetail.value?.billings.find(billing => billing.id === option.billingId) : undefined
+
+const renderStatementOfAccountRows = (sessions = invoiceSessionOptions.value): string => {
+  if (!sessions.length) return renderEmptyRow(9, "No SOA records for this patient.")
+  return sessions.map((option, index) => {
+    const billing = getSessionBilling(option)
+    const appointmentStatus = selectedPatientDetail.value?.appointments.find(appointment =>
+      appointment.appointment_id === option.appointmentId
+    )?.status
+    const programStatus = appointmentStatus ? formatLguStatus(appointmentStatus) : selectedPatientStatusLabel()
+    return `
+      <tr>
+        <td class="text-center">${index + 1}</td>
+        <td>${escapeHtml(selectedPatientDetail.value?.patient_name ?? "-")}</td>
+        <td>${escapeHtml(selectedBillingMonth.value)}</td>
+        <td>${escapeHtml(billing?.public_id || (option.billingId ? `BILLING-${option.billingId}` : "-"))}</td>
+        <td>${escapeHtml(programStatus)}</td>
+        <td class="text-center">${escapeHtml(new Date(option.appointmentDate).toLocaleDateString("en-PH"))}</td>
+        <td>${escapeHtml(option.serviceName || option.packageName || "LGU Session")}</td>
+        <td class="text-center">${escapeHtml(option.label)}</td>
+        <td class="text-right">${getSessionUnitTotal(option) > 0 ? escapeHtml(asCurrency(getSessionUnitTotal(option))) : "-"}</td>
+      </tr>
+    `
+  }).join("")
+}
+
+const renderPackageRows = (): string => {
+  const packages = selectedPatientDetail.value?.package_availments ?? []
+  if (!packages.length) return renderEmptyRow(6, "No package availment records yet.")
+  return packages.map(pkg => `
+    <tr>
+      <td>${escapeHtml(pkg.package_name)}</td>
+      <td class="right">${escapeHtml(pkg.availed_count)}</td>
+      <td class="right">${escapeHtml(pkg.used_count)}</td>
+      <td class="right">${escapeHtml(pkg.available_balance)}</td>
+      <td>${escapeHtml(pkg.expiry_date || "-")}</td>
+      <td>${escapeHtml(formatLguStatus(pkg.status))}</td>
+    </tr>
+  `).join("")
+}
+
+const renderProfileField = (label: string, value: unknown, className = ""): string =>
+  `<div class="profile-field ${className}"><strong>${escapeHtml(label)}</strong>${escapeHtml(value === null || value === undefined || value === "" ? "N/A" : value)}</div>`
+
+const formatProfileDate = (value?: string | null): string => {
+  if (!value) return "N/A"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleDateString("en-PH", {
+    year: "numeric",
+    month: "short",
+    day: "numeric"
+  })
+}
+
+const renderProfileSummaryHtml = (context: PatientLguDetailsExportContext): string => {
+  const patient = selectedPatientDetail.value
+  if (!patient) return ""
+  const details = context.patientDetails
+  const lguName = context.lguInformation?.lgu_program_name || context.lguInformation?.company_name || selectedProgramName.value || "LGU"
+  const displayName = details?.full_name || patient.patient_name
+  const profileVisual = context.profileImageDataUrl
+    ? `<img src="${escapeHtml(context.profileImageDataUrl)}" alt="${escapeHtml(displayName)} profile" class="profile-photo" />`
+    : `<div class="profile-photo-fallback">${escapeHtml(getPatientInitials(displayName))}</div>`
+
+  return `
+    <section class="profile-summary">
+      ${profileVisual}
+      <div>
+        <h2 class="profile-name">${escapeHtml(displayName)}</h2>
+        <p class="profile-subtitle">
+          ${escapeHtml(details?.public_id || `Patient ${patient.patient_id}`)} &middot;
+          ${escapeHtml(details?.age == null ? "Age N/A" : `${details.age} years old`)} &middot;
+          ${escapeHtml(details?.gender_name || "Gender N/A")} &middot;
+          ${escapeHtml(details?.is_active === false ? "Inactive" : "Active")}
+        </p>
+        <p class="profile-subtitle">
+          ${escapeHtml(lguName)} &middot;
+          ${escapeHtml(selectedBillingMonth.value)} &middot;
+          ${escapeHtml(selectedPatientStatusLabel())}
+        </p>
+      </div>
+    </section>
+  `
+}
+
+const renderProfileIdentityHtml = (context: PatientLguDetailsExportContext): string => {
+  const details = context.patientDetails
+  return `
+    <section class="profile-section">
+      <h2>Patient Profile</h2>
+      <div class="profile-grid">
+        ${renderProfileField("Civil Status", details?.civil_status_name)}
+        ${renderProfileField("Occupation", details?.occupation)}
+        ${renderProfileField("Religion", details?.religion_name)}
+        ${renderProfileField("Phone", details?.phone_number)}
+        ${renderProfileField("Email", details?.email)}
+        ${renderProfileField("Facebook", details?.fb_link)}
+        ${renderProfileField("Referral Source", details?.mode_of_referral_name, "profile-field-wide")}
+        ${renderProfileField("Referring Doctor", details?.referred_by_staff_name || details?.referred_by)}
+        ${renderProfileField("Address", formatPatientAddress(details), "profile-field-full")}
+      </div>
+    </section>
+  `
+}
+
+const renderProfileLguProgramHtml = (context: PatientLguDetailsExportContext): string => {
+  const patient = selectedPatientDetail.value
+  if (!patient) return ""
+  const lguInfo = context.lguInformation
+  const activePackage = patient.package_availments[0]
+  const totalBillings = patient.billings.reduce((sum, billing) => sum + Number(billing.amount_due ?? 0), 0)
+  const usedSessionKeys = new Set<string>()
+  patient.authorizations.forEach(authorization => {
+    authorization.sessions.forEach(session => {
+      usedSessionKeys.add(String(session.id || `${session.appointment_id}-${session.session_sequence}`))
+    })
+  })
+  const usedSessions = usedSessionKeys.size || patient.authorizations.reduce((sum, authorization) => sum + Number(authorization.consumed_sessions ?? 0), 0)
+  const totalSessions = patient.authorizations.reduce((sum, authorization) => sum + Number(authorization.total_sessions ?? 0), 0)
+    || patient.package_availments.reduce((sum, pkg) => sum + Number(pkg.availed_count ?? 0), 0)
+  const remainingSessions = Math.max(0, totalSessions - usedSessions)
+  const recentAppointment = patient.appointments[patient.appointments.length - 1]
+  const lguName = lguInfo?.lgu_program_name || lguInfo?.company_name || selectedProgramName.value || "LGU"
+
+  return `
+    <section class="profile-section">
+      <h2>LGU Information</h2>
+      <div class="profile-grid">
+        ${renderProfileField("LGU Name", lguName)}
+        ${renderProfileField("Referral Form No.", lguInfo?.referral_form_no || lguInfo?.approval_code)}
+        ${renderProfileField("Date of Referral Issued", formatProfileDate(lguInfo?.referral_issued_date || lguInfo?.validity_start_date))}
+        ${renderProfileField("Billing Month", selectedBillingMonth.value)}
+        ${renderProfileField("Program Status", selectedPatientStatusLabel())}
+        ${renderProfileField("Current Package", activePackage?.package_name || "N/A")}
+        ${renderProfileField("Sessions Used / Remaining", `${usedSessions} used / ${remainingSessions} remaining${totalSessions ? ` (${totalSessions} authorized)` : ""}`)}
+        ${renderProfileField("Total Claim Billings", asCurrency(totalBillings))}
+        ${renderProfileField("Recent Appointment", recentAppointment ? formatDateTime(recentAppointment.appointment_date) : "N/A")}
+        ${renderProfileField("LGU Notes", lguInfo?.notes, "profile-field-full")}
+      </div>
+    </section>
+  `
+}
+
+const renderProfileAppointmentsHtml = (): string => {
+  const sessions = [...invoiceSessionOptions.value].sort((left, right) =>
+    String(right.appointmentDate ?? "").localeCompare(String(left.appointmentDate ?? ""))
+  )
+  const rows = sessions.map((option, index) => `
+    <tr>
+      <td class="text-center">${index + 1}</td>
+      <td class="text-center">${escapeHtml(new Date(option.appointmentDate).toLocaleDateString("en-PH"))}</td>
+      <td>${escapeHtml(option.serviceName || option.packageName || "LGU Session")}</td>
+      <td class="text-center">${escapeHtml(option.label)}</td>
+      <td class="text-right">${getSessionUnitTotal(option) > 0 ? escapeHtml(asCurrency(getSessionUnitTotal(option))) : "-"}</td>
+    </tr>
+  `).join("")
+
+  return `
+    <section class="profile-section">
+      <h2>Recent Appointment</h2>
+      <table class="compact-table">
+        <thead><tr><th>ITEM No.</th><th>TREATMENT DATE</th><th>PT SERVICE RENDERED</th><th>SESSION SEQUENCE</th><th>UNIT TOTAL</th></tr></thead>
+        <tbody>${rows || renderEmptyRow(5, "No LGU appointments found for this patient.")}</tbody>
+      </table>
+    </section>
+  `
+}
+
+const renderLguProfileBodyHtml = (context: PatientLguDetailsExportContext): string => `
+  ${renderProfileSummaryHtml(context)}
+  ${renderProfileIdentityHtml(context)}
+  ${renderProfileLguProgramHtml(context)}
+  ${renderProfileAppointmentsHtml()}
+`
+
+const exportPatientBillingSummary = (): void => {
+  const patient = selectedPatientDetail.value
+  if (!patient) return
+  const sessions = invoiceSessionOptions.value
+  const referenceNumber = `LGU-SUMMARY-${patient.patient_id}-${selectedBillingMonth.value}`
+  const grandTotal = sessions.reduce((sum, option) => sum + getSessionUnitTotal(option), 0)
+  let popup: Window
+  try {
+    popup = openClaimPrintWindow(referenceNumber)
+  } catch {
+    errorToast(toast, "Unable to open billing summary. Allow pop-ups for this site, then try again.")
+    return
+  }
+
+  const detailRows: InvoiceDetailRow[] = [
+    { label: "Billing To", value: selectedProgramName.value || "LGU" },
+    { label: "Referral Form No.", value: "N/A" },
+    { label: "Date Issued", value: new Date().toLocaleDateString("en-PH") },
+    { label: "Patient Program Status", value: selectedPatientStatusLabel() }
+  ]
+
+  renderStandardInvoiceWindow(popup, {
+    title: "Patient Billing Summary",
+    headerTitle: "PATIENT BILLING SUMMARY",
+    fileName: patientExportFileName("billing-summary"),
+    billingDate: new Date().toISOString(),
+    referenceNumber,
+    patientName: patient.patient_name,
+    columns: [
+      { label: "ITEM No.", width: "68px", align: "center" },
+      { label: "TREATMENT DATE", width: "110px", align: "center" },
+      { label: "PT SERVICE RENDERED" },
+      { label: "SESSION SEQUENCE", width: "120px", align: "center" },
+      { label: "UNIT TOTAL", width: "126px", align: "right" }
+    ],
+    tableRowsHtml: renderBillingSummaryInvoiceRows(),
+    emptyStateColspan: 5,
+    discount: 0,
+    grandTotal,
+    detailBoxTitle: "LGU DETAILS",
+    detailRows,
+    hideFinancialSummary: true,
+    renderErrorMessage: "The LGU billing summary could not be rendered. Please try again."
+  })
+}
+
+const exportPatientSoa = (): void => {
+  const patient = selectedPatientDetail.value
+  if (!patient) return
+  if (!hasValidPatientSoaRange.value) {
+    errorToast(toast, "Select the SOA transaction period before printing.")
+    return
+  }
+
+  const [fromDate, toDate] = patientSoaRange.value as Date[]
+  const from = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate())
+  const to = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate(), 23, 59, 59, 999)
+  const sessions = invoiceSessionOptions.value.filter(option => {
+    const appointmentDate = new Date(option.appointmentDate)
+    return !Number.isNaN(appointmentDate.getTime()) && appointmentDate >= from && appointmentDate <= to
+  })
+  const transactionPeriod = `${formatDateOnly(fromDate)} - ${formatDateOnly(toDate)}`
+  const billingDate = formatDateOnly(getMonthEndDate(toDate))
+  const lguName = selectedProgramName.value || "LGU"
+  const referenceNumber = `LGU-SOA-${patient.patient_id}-${formatYmd(fromDate)}-${formatYmd(toDate)}`
+  const grandTotal = sessions.reduce((sum, option) => sum + getSessionUnitTotal(option), 0)
+  let popup: Window
+  try {
+    popup = openClaimPrintWindow(referenceNumber)
+  } catch {
+    errorToast(toast, "Unable to open statement of account. Allow pop-ups for this site, then try again.")
+    return
+  }
+
+  const detailRows: InvoiceDetailRow[] = [
+    { label: "Billing To", value: selectedProgramName.value || "LGU" },
+    { label: "Referral Form No.", value: selectedBillingMonth.value },
+    { label: "Date Issued", value: new Date().toLocaleDateString("en-PH") },
+    { label: "Patient Program Status", value: selectedPatientStatusLabel() }
+  ]
+
+  renderStandardInvoiceWindow(popup, {
+    title: "Statement of the Account",
+    headerTitle: "STATEMENT OF THE ACCOUNT",
+    fileName: patientExportFileName("soa"),
+    billingDate: toDate.toISOString(),
+    referenceNumber,
+    topMetaRows: [
+      { label: "Partner Institution", value: lguName },
+      { label: "Billing Date", value: billingDate },
+      { label: "Transaction Period", value: transactionPeriod }
+    ],
+    patientName: patient.patient_name,
+    columns: [
+      { label: "ITEM No.", width: "58px", align: "center" },
+      { label: "PATIENT NAME", width: "140px" },
+      { label: "REFERRAL FORM NO.", width: "120px" },
+      { label: "REFERENCE NO.", width: "120px" },
+      { label: "PROGRAM STATUS", width: "110px" },
+      { label: "TREATMENT DATE", width: "105px", align: "center" },
+      { label: "PT SERVICE RENDERED" },
+      { label: "SESSION SEQUENCE", width: "110px", align: "center" },
+      { label: "INVOICE BILLING TOTAL", width: "130px", align: "right" }
+    ],
+    tableRowsHtml: renderStatementOfAccountRows(sessions),
+    emptyStateColspan: 9,
+    discount: 0,
+    grandTotal,
+    detailBoxTitle: "LGU DETAILS",
+    detailRows,
+    renderErrorMessage: "The statement of the account could not be rendered. Please try again.",
+    pageSize: "A4 landscape",
+    maxWidthPx: 1320
+  })
+  patientSoaPickerVisible.value = false
+}
+
+const exportPatientLguDetails = async (): Promise<void> => {
+  const patient = selectedPatientDetail.value
+  if (!patient) return
+
+  let popup: Window
+  try {
+    popup = openClaimPrintWindow("LGU Patient Details")
+  } catch {
+    errorToast(toast, "Unable to open LGU details. Allow pop-ups for this site, then try again.")
+    return
+  }
+
+  let context: PatientLguDetailsExportContext
+  try {
+    context = await loadPatientLguDetailsExportContext(patient.patient_id)
+  } catch (error: unknown) {
+    popup.close()
+    errorToast(toast, extractApiErrorMessage(error, "Failed to prepare LGU patient details"))
+    return
+  }
+
+  const details = context.patientDetails
+  const lguInfo = context.lguInformation
+  const totalBillings = patient.billings.reduce((sum, billing) => sum + Number(billing.amount_due ?? 0), 0)
+  const lguName = lguInfo?.lgu_program_name || lguInfo?.company_name || selectedProgramName.value || "LGU"
+
+  renderStandardInvoiceWindow(popup, {
+    title: "LGU Patient Details",
+    headerTitle: "LGU PATIENT DETAILS",
+    fileName: patientExportFileName("lgu-details"),
+    billingDate: new Date().toISOString(),
+    referenceNumber: `LGU-DETAILS-${patient.patient_id}-${selectedBillingMonth.value}`,
+    topMetaRows: [
+      { label: "TRANSACTION PERIOD", value: selectedBillingMonth.value },
+      { label: "BILLING DATE", value: new Date().toLocaleDateString("en-PH") }
+    ],
+    patientName: details?.full_name || patient.patient_name,
+    patientAddress: formatPatientAddress(details),
+    patientAge: details?.age == null ? "N/A" : String(details.age),
+    patientGender: details?.gender_name || "N/A",
+    hidePatientDoctorHeader: true,
+    columns: [
+      { label: "SECTION", width: "120px" },
+      { label: "RECORD", width: "170px" },
+      { label: "DETAILS" },
+      { label: "STATUS", width: "130px" },
+      { label: "AMOUNT / BALANCE", width: "150px", align: "right" }
+    ],
+    tableRowsHtml: "",
+    customBodyHtml: renderLguProfileBodyHtml(context),
+    emptyStateColspan: 5,
+    discount: 0,
+    grandTotal: totalBillings,
+    detailBoxTitle: "LGU DETAILS",
+    detailRows: [
+      { label: "LGU Name", value: lguName },
+      { label: "Referral Form No.", value: lguInfo?.referral_form_no || lguInfo?.approval_code || "N/A" },
+      { label: "Date of Referral Issued", value: lguInfo?.referral_issued_date || lguInfo?.validity_start_date || "N/A" },
+      { label: "Billing Month", value: selectedBillingMonth.value },
+      { label: "Patient Program Status", value: selectedPatientStatusLabel() },
+      { label: "Total Claim Billings", value: asCurrency(totalBillings) }
+    ],
+    hideFinancialSummary: true,
+    renderErrorMessage: "The LGU patient details could not be rendered. Please try again.",
+    pageSize: "A4 landscape",
+    maxWidthPx: 1320
+  })
+}
+
 const inferLguPackageTotalSessions = (name?: string, fallback = 1): number => {
   const match = String(name ?? "").match(/\((\d+)\)\s*Sessions?/i)
   return match ? Math.max(1, Number(match[1])) : Math.max(1, fallback)
 }
 
-const generateSoa = (): void => {
+const renderDashboardStatementOfAccountRows = (rows: LguDashboardHistoryItem[]): string => {
+  if (!rows.length) return renderEmptyRow(9, "No SOA records found for the selected period.")
+  return rows.map((row, index) => `
+    <tr>
+      <td class="text-center">${index + 1}</td>
+      <td>${escapeHtml(row.patient_name || "-")}</td>
+      <td>${escapeHtml(row.reference_label || "-")}</td>
+      <td>${escapeHtml(row.phase1_billing_public_id || row.receipt_number || "-")}</td>
+      <td>${escapeHtml(formatLguStatus(row.billing_status || row.usage_status || "-"))}</td>
+      <td class="text-center">${escapeHtml(new Date(row.created_at).toLocaleDateString("en-PH"))}</td>
+      <td>${escapeHtml(row.service_name || "LGU Session")}</td>
+      <td class="text-center">-</td>
+      <td class="text-right">${Number(row.amount_out ?? 0) > 0 ? escapeHtml(asCurrency(Number(row.amount_out ?? 0))) : "-"}</td>
+    </tr>
+  `).join("")
+}
+
+const generateSoa = async (): Promise<void> => {
   if (!hasValidSoaRange.value) return
   const [from, to] = soaRange.value as Date[]
-  const url = router.resolve({
-    name: "soa-print",
-    params: { payer: "lgu" },
-    query: {
+  const lguName = selectedProgramName.value || "LGU"
+  const transactionPeriod = `${formatDateOnly(from)} - ${formatDateOnly(to)}`
+  const billingDate = formatDateOnly(getMonthEndDate(to))
+  const referenceNumber = `LGU-SOA-${formatYmd(from)}-${formatYmd(to)}`
+  let popup: Window
+  try {
+    popup = openClaimPrintWindow(referenceNumber)
+  } catch {
+    errorToast(toast, "Unable to open statement of account. Allow pop-ups for this site, then try again.")
+    return
+  }
+
+  try {
+    const rows = await lguBillingService.getSoa({
       from: formatYmd(from),
       to: formatYmd(to),
-      ...(selectedProgramId.value ? { program_id: String(selectedProgramId.value) } : {}),
-      ...(selectedProgramName.value ? { program_name: selectedProgramName.value } : {})
+      limit: 5000,
+      program_id: selectedProgramId.value ?? undefined
+    }) ?? []
+    const grandTotal = rows.reduce((sum, row) => sum + Number(row.amount_out ?? 0), 0)
+    const detailRows: InvoiceDetailRow[] = [
+      { label: "Billing To", value: lguName },
+      { label: "Date Issued", value: new Date().toLocaleDateString("en-PH") },
+      { label: "Record Count", value: String(rows.length) }
+    ]
+
+    renderStandardInvoiceWindow(popup, {
+      title: "Statement of the Account",
+      headerTitle: "STATEMENT OF THE ACCOUNT",
+      fileName: `soa-${formatYmd(from)}-${formatYmd(to)}`,
+      billingDate: to.toISOString(),
+      referenceNumber,
+      topMetaRows: [
+        { label: "Partner Institution", value: lguName },
+        { label: "Billing Date", value: billingDate },
+        { label: "Transaction Period", value: transactionPeriod }
+      ],
+      patientName: lguName,
+      hidePatientDoctorHeader: true,
+      columns: [
+        { label: "ITEM No.", width: "58px", align: "center" },
+        { label: "PATIENT NAME", width: "140px" },
+        { label: "REFERRAL FORM NO.", width: "120px" },
+        { label: "REFERENCE NO.", width: "120px" },
+        { label: "PROGRAM STATUS", width: "110px" },
+        { label: "TREATMENT DATE", width: "105px", align: "center" },
+        { label: "PT SERVICE RENDERED" },
+        { label: "SESSION SEQUENCE", width: "110px", align: "center" },
+        { label: "INVOICE BILLING TOTAL", width: "130px", align: "right" }
+      ],
+      tableRowsHtml: renderDashboardStatementOfAccountRows(rows),
+      emptyStateColspan: 9,
+      discount: 0,
+      grandTotal,
+      detailBoxTitle: "LGU DETAILS",
+      detailRows,
+      renderErrorMessage: "The statement of the account could not be rendered. Please try again.",
+      pageSize: "A4 landscape",
+      maxWidthPx: 1320
+    })
+    exportsModalVisible.value = false
+  } catch (error: unknown) {
+    if (!popup.closed) popup.close()
+    errorToast(toast, extractApiErrorMessage(error, "Failed to generate SOA"))
+  }
+}
+
+const renderLguPatientCopyHtml = (patients: Patient[]): string => {
+  const lguName = "All LGU Patients"
+  const rows = patients.map((patient, index) => `
+    <tr>
+      <td class="center">${index + 1}</td>
+      <td>${escapeHtml(patient.public_id || `PATIENT-${patient.id}`)}</td>
+      <td>${escapeHtml(patient.full_name)}</td>
+      <td class="center">${escapeHtml(patient.age ?? "N/A")}</td>
+      <td>${escapeHtml(patient.gender_name || "N/A")}</td>
+      <td>${escapeHtml(patient.phone_number || "N/A")}</td>
+      <td>${escapeHtml(formatPatientAddress(patient) || "N/A")}</td>
+    </tr>
+  `).join("")
+
+  return `
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>${escapeHtml(lguName)} Patient Copy</title>
+        <style>
+          @page { size: A4 landscape; margin: 10mm; }
+          * { box-sizing: border-box; }
+          body { margin: 0; font-family: Arial, sans-serif; color: #111827; }
+          .sheet { padding: 18px; }
+          .top { display: flex; justify-content: space-between; gap: 16px; border-bottom: 2px solid #111827; padding-bottom: 10px; margin-bottom: 12px; }
+          h1 { margin: 0; font-size: 20px; letter-spacing: 0.04em; }
+          .meta { text-align: right; font-size: 12px; line-height: 1.6; }
+          table { width: 100%; border-collapse: collapse; font-size: 12px; }
+          th, td { border: 1px solid #111827; padding: 6px 8px; vertical-align: top; }
+          th { background: #f3f4f6; text-align: left; }
+          .center { text-align: center; }
+          @media print { .print-hidden { display: none; } }
+        </style>
+      </head>
+      <body>
+        <main class="sheet">
+          <button class="print-hidden" onclick="window.print()" style="float:right;margin-bottom:10px;">Print</button>
+          <div class="top">
+            <div>
+              <h1>COPY OF PATIENTS UNDER ${escapeHtml(lguName)}</h1>
+              <div>LGU Patient Masterlist</div>
+            </div>
+            <div class="meta">
+              <div><strong>Partner Institution:</strong> ${escapeHtml(lguName)}</div>
+              <div><strong>Generated Date:</strong> ${escapeHtml(new Date().toLocaleDateString("en-PH"))}</div>
+              <div><strong>Total Patients:</strong> ${patients.length}</div>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 60px;">ITEM No.</th>
+                <th style="width: 130px;">PATIENT ID</th>
+                <th style="width: 210px;">PATIENT NAME</th>
+                <th style="width: 70px;">AGE</th>
+                <th style="width: 100px;">GENDER</th>
+                <th style="width: 140px;">CONTACT NO.</th>
+                <th>ADDRESS</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows || `<tr><td colspan="7" class="center">No patients found for this LGU.</td></tr>`}
+            </tbody>
+          </table>
+        </main>
+      </body>
+    </html>
+  `
+}
+
+const exportLguPatientCopy = async (): Promise<void> => {
+  exportingLguPatients.value = true
+  try {
+    const { data } = await pamsAPI.get<Pageable<Patient>>("/patients", {
+      params: {
+        page: 1,
+        size: 10000,
+        status: "ALL",
+        sponsor_context: "LGU"
+      }
+    })
+    const popup = window.open("", "_blank", "noopener,noreferrer")
+    if (!popup || popup.closed) {
+      throw new Error("Please allow pop-ups so the patient copy can open.")
     }
-  }).href
-  window.open(url, "_blank", "noopener,noreferrer")
+    popup.document.open()
+    popup.document.write(renderLguPatientCopyHtml(data?.content ?? []))
+    popup.document.close()
+    exportsModalVisible.value = false
+  } catch (error: unknown) {
+    errorToast(toast, extractApiErrorMessage(error, "Failed to export LGU patient copy"))
+  } finally {
+    exportingLguPatients.value = false
+  }
 }
 
 const buildEncounterTicketCards = (detail: BillingListItem): EncounterTicketPdfCard[] => {
@@ -1402,7 +2268,23 @@ const loadDashboardBudget = async (): Promise<void> => {
     }
   }
 
-  const downloadClaimPdf = async (billingId: number): Promise<void> => {
+  const openInvoiceSessionPicker = (): void => {
+    invoiceSessionPickerVisible.value = true
+  }
+
+  const openPatientSoaPicker = (): void => {
+    patientSoaPickerVisible.value = true
+  }
+
+  const printSessionInvoice = async (option: LguInvoiceSessionOption): Promise<void> => {
+    if (!option.billingId) {
+      errorToast(toast, "This session does not have a generated LGU claim yet")
+      return
+    }
+    await downloadClaimPdf(option.billingId, option)
+  }
+
+  const downloadClaimPdf = async (billingId: number, sessionOption?: LguInvoiceSessionOption): Promise<void> => {
     if (!billingId || printingClaimBillingId.value) return
     printingClaimBillingId.value = billingId
     let popup: Window | null = null
@@ -1420,17 +2302,64 @@ const loadDashboardBudget = async (): Promise<void> => {
       const total = Number(detail.total_amount ?? detail.amount_due ?? 0)
       const isDropoutClaim = String(detail.pricing_source ?? "").toUpperCase().includes("DROPOUT")
         || lines.some(line => String(line.claimStatus ?? "").toUpperCase() === "DROPPED_OUT")
-      const lockedTickets = (detail.encounter_tickets ?? [])
+      const allLockedTickets = (detail.encounter_tickets ?? [])
         .filter(ticket => ticket.record_locked)
         .sort((left, right) => {
           const leftDate = String(left.billing_snapshot?.starts_at ?? left.attended_at ?? "")
           const rightDate = String(right.billing_snapshot?.starts_at ?? right.attended_at ?? "")
           return leftDate.localeCompare(rightDate)
         })
-      const shouldExpandSinglePackageLine = lines.length === 1
+      const scopedLockedTickets = sessionOption
+        ? allLockedTickets.filter(ticket =>
+            ticket.appointment_id === sessionOption.appointmentId
+            || ticket.billing_snapshot?.appointment_id === sessionOption.appointmentId
+          )
+        : allLockedTickets
+      const lockedTickets = scopedLockedTickets.length ? scopedLockedTickets : allLockedTickets
+      const matchesSessionLine = (line: (typeof lines)[number]): boolean => {
+        if (!sessionOption) return true
+        const sequenceText = String(line.sessionSequence ?? "").trim()
+        const sequenceNumber = Number(sequenceText.match(/\d+/)?.[0] ?? sequenceText)
+        if (Number.isFinite(sequenceNumber) && sequenceNumber === sessionOption.sessionSequence) return true
+        const lineDate = line.treatmentDate ? formatYmd(new Date(line.treatmentDate)) : ""
+        const sessionDate = sessionOption.appointmentDate ? formatYmd(new Date(sessionOption.appointmentDate)) : ""
+        return !!lineDate && lineDate === sessionDate
+      }
+      const scopedLines = sessionOption && lines.length > 1 ? lines.filter(matchesSessionLine) : lines
+      const shouldRenderSingleSelectedPackageSession = !!sessionOption
+        && lines.length === 1
+        && String(lines[0]?.type ?? "").toLowerCase() === "package"
+      const shouldExpandSinglePackageLine = !sessionOption
+        && lines.length === 1
         && lockedTickets.length > 1
         && String(lines[0]?.type ?? "").toLowerCase() === "package"
-      const invoiceLines = shouldExpandSinglePackageLine
+      const invoiceLines = shouldRenderSingleSelectedPackageSession
+        ? (() => {
+            const line = lines[0]
+            const totalSessions = line.totalSessions ?? sessionOption.totalSessions ?? inferLguPackageTotalSessions(line.name, lockedTickets.length)
+            const sourceTotal = Number(line.unitPrice || line.lineTotal || total || 0)
+            const unitPrice = totalSessions > 0 ? sourceTotal / totalSessions : sourceTotal
+            return [{
+              name: line.name,
+              quantity: 1,
+              unitPrice,
+              lineTotal: unitPrice,
+              treatmentDate: sessionOption.appointmentDate,
+              sessionSequence: sessionOption.label,
+              subItems: isDropoutClaim
+                ? (
+                    hasNestedSubItems(line.subItems)
+                      ? enrichSubItemPrices(line.subItems)
+                      : getPackageInvoiceSubItems(line.id, line.name, line.quantity, true).length
+                      ? getPackageInvoiceSubItems(line.id, line.name, line.quantity, true)
+                      : enrichSubItemPrices(line.subItems)
+                  )
+                : line.subItems?.length
+                  ? line.subItems
+                  : getPackageInvoiceSubItems(line.id, line.name, line.quantity)
+            }]
+          })()
+        : shouldExpandSinglePackageLine
         ? (() => {
             const line = lines[0]
             const sourceTotal = Number(line.unitPrice || line.lineTotal || total || 0)
@@ -1457,13 +2386,13 @@ const loadDashboardBudget = async (): Promise<void> => {
                   : getPackageInvoiceSubItems(line.id, line.name, line.quantity)
             }))
           })()
-        : lines.map((line, index) => ({
+        : scopedLines.map((line, index) => ({
             name: line.name,
             quantity: line.quantity,
             unitPrice: isDropoutClaim ? 0 : line.unitPrice,
             lineTotal: isDropoutClaim ? 0 : line.lineTotal,
-            treatmentDate: line.treatmentDate || lockedTickets[index]?.billing_snapshot?.starts_at || lockedTickets[index]?.attended_at || detail.created_at,
-            sessionSequence: line.sessionSequence || lockedTickets[index]?.billing_snapshot?.session_sequence_label || String(index + 1),
+            treatmentDate: sessionOption?.appointmentDate || line.treatmentDate || lockedTickets[index]?.billing_snapshot?.starts_at || lockedTickets[index]?.attended_at || detail.created_at,
+            sessionSequence: sessionOption?.label || line.sessionSequence || lockedTickets[index]?.billing_snapshot?.session_sequence_label || String(index + 1),
             subItems: isDropoutClaim
               ? (
                   hasNestedSubItems(line.subItems)
@@ -1478,12 +2407,15 @@ const loadDashboardBudget = async (): Promise<void> => {
                   ? getPackageInvoiceSubItems(line.id, line.name, line.quantity)
                   : undefined
           }))
+      const invoiceTotal = sessionOption
+        ? invoiceLines.reduce((sum, line) => sum + Number(line.lineTotal ?? 0), 0)
+        : total
       const lguStatus = selectedPatientDetail.value?.package_availments[0]?.status
         || lines.find(line => line.claimStatus)?.claimStatus
         || detail.billing_status
       renderLguInvoiceWindow(popup, {
         billingDate: detail.created_at,
-        referenceNumber,
+        referenceNumber: sessionOption ? `${referenceNumber} - ${sessionOption.label}` : referenceNumber,
         patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
         patientAddress: detail.patient_address,
         patientAge: detail.patient_age,
@@ -1494,11 +2426,11 @@ const loadDashboardBudget = async (): Promise<void> => {
         lguReferenceLabel: detail.lgu_patient_referral_form_no || detail.lgu_reference_label || detail.service_name || selectedBillingMonth.value,
         lguDateIssued: detail.lgu_date_issued || detail.created_at,
         lguStatus: formatLguStatus(lguStatus),
-        subtotal: Number(detail.subtotal_amount ?? total),
+        subtotal: sessionOption ? invoiceTotal : Number(detail.subtotal_amount ?? total),
         discount: Number(detail.discount_amount ?? 0),
-        grandTotal: total,
+        grandTotal: sessionOption ? invoiceTotal : total,
         lines: invoiceLines
-      }, { title: "LGU Claim PDF", fileName: referenceNumber })
+      }, { title: sessionOption ? "LGU Session Invoice" : "LGU Claim PDF", fileName: sessionOption ? `${referenceNumber}-${sessionOption.label.replace(/\s+/g, "-").toLowerCase()}` : referenceNumber })
     } catch (error: unknown) {
       if (popup && !popup.closed) popup.close()
       errorToast(toast, extractApiErrorMessage(error, "Failed to download LGU claim PDF"))

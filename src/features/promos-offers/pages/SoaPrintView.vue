@@ -20,7 +20,7 @@
           </div>
           <div>
             <div class="font-semibold">Billing Date</div>
-            <div>{{ todayLabel }}</div>
+            <div>{{ billingDateLabel }}</div>
           </div>
           <div>
             <div class="font-semibold">Transaction Period</div>
@@ -38,34 +38,34 @@
           <table class="w-full text-sm border-collapse">
             <thead>
               <tr class="border-b border-black">
-                <th class="p-2 text-left border-r border-black w-[60px]">No.</th>
-                <th class="p-2 text-left border-r border-black">Date</th>
-                <th class="p-2 text-left border-r border-black">Patient</th>
-                <th class="p-2 text-left border-r border-black">Service</th>
-                <th class="p-2 text-left border-r border-black">Status</th>
-                <th class="p-2 text-right border-r border-black w-[140px]">Total</th>
-                <th class="p-2 text-right border-r border-black w-[140px]">Paid</th>
-                <th class="p-2 text-left w-[160px]">Receipt</th>
+                <th class="p-2 text-left border-r border-black w-[70px]">ITEM No.</th>
+                <th class="p-2 text-left border-r border-black">PATIENT NAME</th>
+                <th class="p-2 text-left border-r border-black w-[140px]">REFERRAL FORM NO.</th>
+                <th class="p-2 text-left border-r border-black w-[140px]">REFERENCE NO.</th>
+                <th class="p-2 text-left border-r border-black w-[130px]">PROGRAM STATUS</th>
+                <th class="p-2 text-left border-r border-black w-[130px]">TREATMENT DATE</th>
+                <th class="p-2 text-left border-r border-black">PT SERVICE RENDERED</th>
+                <th class="p-2 text-left border-r border-black w-[130px]">SESSION SEQUENCE</th>
+                <th class="p-2 text-right w-[150px]">INVOICE BILLING TOTAL</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="(row, idx) in rows" :key="row.id" class="border-b border-black">
                 <td class="p-2 border-r border-black">{{ idx + 1 }}</td>
-                <td class="p-2 border-r border-black">{{ formatDate(row.created_at) }}</td>
                 <td class="p-2 border-r border-black">{{ row.patient_name ?? '—' }}</td>
-                <td class="p-2 border-r border-black">{{ row.service_name ?? '—' }}</td>
-                <td class="p-2 border-r border-black">{{ row.billing_status ?? '—' }}</td>
-                <td class="p-2 border-r border-black text-right">{{ asCurrency(row.total_amount) }}</td>
-                <td class="p-2 border-r border-black text-right">{{ asCurrency(row.amount_paid) }}</td>
-                <td class="p-2">{{ row.receipt_number ?? '—' }}</td>
+                <td class="p-2 border-r border-black">{{ row.referral_form_no ?? '—' }}</td>
+                <td class="p-2 border-r border-black">{{ row.reference_no ?? '—' }}</td>
+                <td class="p-2 border-r border-black">{{ row.program_status ?? '—' }}</td>
+                <td class="p-2 border-r border-black">{{ formatDate(row.treatment_date) }}</td>
+                <td class="p-2 border-r border-black">{{ row.pt_service_rendered ?? '—' }}</td>
+                <td class="p-2 border-r border-black">{{ row.session_sequence ?? '—' }}</td>
+                <td class="p-2 text-right">{{ asCurrency(row.invoice_billing_total) }}</td>
               </tr>
             </tbody>
             <tfoot>
               <tr>
-                <td class="p-2 border-t border-black font-semibold" colspan="5">Grand Total</td>
+                <td class="p-2 border-t border-black font-semibold" colspan="8">Grand Total</td>
                 <td class="p-2 border-t border-black text-right font-semibold">{{ asCurrency(grandTotal) }}</td>
-                <td class="p-2 border-t border-black text-right font-semibold">{{ asCurrency(grandPaid) }}</td>
-                <td class="p-2 border-t border-black" />
               </tr>
             </tfoot>
           </table>
@@ -87,13 +87,14 @@ type Payer = "hmo" | "lgu"
 
 type SoaRow = {
   id: number
-  created_at: string | null
   patient_name: string | null
-  billing_status: string | null
-  service_name: string | null
-  receipt_number: string | null
-  total_amount: number
-  amount_paid: number
+  referral_form_no: string | null
+  reference_no: string | null
+  program_status: string | null
+  treatment_date: string | null
+  pt_service_rendered: string | null
+  session_sequence: string | null
+  invoice_billing_total: number
 }
 
 const route = useRoute()
@@ -112,7 +113,11 @@ const programName = computed(() => String(route.query.program_name ?? "").trim()
 const rows = ref<SoaRow[]>([])
 const error = ref("")
 
-const todayLabel = new Date().toLocaleDateString("en-PH")
+const billingDateLabel = computed(() => {
+  const endDate = new Date(dateTo.value)
+  if (Number.isNaN(endDate.getTime())) return new Date().toLocaleDateString("en-PH")
+  return new Date(endDate.getFullYear(), endDate.getMonth() + 1, 0).toLocaleDateString("en-PH")
+})
 
 const partnerLabel = computed(() => {
   if (payer.value === "lgu") {
@@ -132,8 +137,7 @@ const formatDate = (value: string | null): string => {
   return dt.toLocaleDateString("en-PH")
 }
 
-const grandTotal = computed(() => rows.value.reduce((sum, r) => sum + Number(r.total_amount ?? 0), 0))
-const grandPaid = computed(() => rows.value.reduce((sum, r) => sum + Number(r.amount_paid ?? 0), 0))
+const grandTotal = computed(() => rows.value.reduce((sum, r) => sum + Number(r.invoice_billing_total ?? 0), 0))
 
 const toDateRange = (): { from: string; to: string } => {
   const from = dateFrom.value
@@ -155,13 +159,14 @@ const load = async (): Promise<void> => {
       const data = await billingPhase1Service.getHmoSoa({ from, to, limit: 5000 }) ?? []
       rows.value = (data as HmoRecentHistoryItem[]).map(item => ({
           id: item.id,
-          created_at: item.created_at,
           patient_name: item.patient_name,
-          billing_status: item.billing_status,
-          service_name: item.service_name,
-          receipt_number: item.receipt_number,
-          total_amount: Number(item.total_amount ?? 0),
-          amount_paid: Number(item.amount_paid ?? 0)
+          referral_form_no: item.receipt_number ?? null,
+          reference_no: item.receipt_number ?? null,
+          program_status: item.billing_status,
+          treatment_date: item.created_at,
+          pt_service_rendered: item.service_name,
+          session_sequence: null,
+          invoice_billing_total: Number(item.total_amount ?? 0)
         }))
       return
     }
@@ -170,13 +175,14 @@ const load = async (): Promise<void> => {
     const lgu = await lguBillingService.getSoa({ from, to, limit: 5000, program_id: programId.value }) ?? []
     rows.value = (lgu as LguDashboardHistoryItem[]).map(item => ({
       id: Number(item.id),
-      created_at: item.created_at ?? null,
       patient_name: item.patient_name ?? null,
-      billing_status: item.billing_status ?? null,
-      service_name: item.service_name ?? item.reference_label ?? null,
-      receipt_number: item.receipt_number ?? null,
-      total_amount: Number(item.amount_out ?? 0),
-      amount_paid: Number(item.amount_in ?? 0)
+      referral_form_no: item.reference_label ?? null,
+      reference_no: item.phase1_billing_public_id ?? item.receipt_number ?? null,
+      program_status: item.billing_status ?? item.usage_status ?? null,
+      treatment_date: item.created_at ?? null,
+      pt_service_rendered: item.service_name ?? null,
+      session_sequence: null,
+      invoice_billing_total: Number(item.amount_out ?? 0)
     }))
   } catch (err: unknown) {
     error.value = getApiErrorMessage(err, { baseMessage: "Failed to load SOA records" })
