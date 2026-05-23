@@ -1,20 +1,17 @@
 <template>
   <main class="app-page-shell space-y-5">
     <!-- Main header -->
-    <section class="app-section-card-comfy space-y-3">
+    <section v-if="props.showHero" class="app-section-card-comfy space-y-3">
       <div class="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
         <div class="space-y-2">
           <p class="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">
             Promos And Offers
           </p>
           <h1 class="text-2xl font-semibold text-[rgb(var(--app-fg))]">
-            Single Pay: Single Service Management
+            {{ props.pageTitle }}
           </h1>
           <p class="max-w-3xl text-sm leading-6 opacity-80">
-            Machines and techniques are synced from their backend master data. Manage evaluations and
-            add‑ons with prices here. These items are available for selection when creating Single Pay:
-            Single Service appointments and billings. Home Service add‑ons created here will
-            automatically switch an appointment to Home Care when selected.
+            {{ props.pageDescription }}
           </p>
         </div>
 
@@ -45,7 +42,7 @@
     <PromosCatalogManagerDialog v-model:visible="catalogManagerVisible" recycleOnly @refreshed="loadServices" />
 
     <!-- All available services -->
-    <section class="app-section-card-comfy space-y-3">
+    <section v-if="props.showServiceCatalog" class="app-section-card-comfy space-y-3">
       <div class="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
         <div class="space-y-1">
           <h3 class="text-sm font-semibold">All Available Services</h3>
@@ -240,6 +237,7 @@
 
     <!-- Bundled services -->
     <ServiceBundlesManager
+      v-if="props.showBundledServices"
       title="Bundled Services"
       description="Create service bundles combining multiple services at a discounted price."
       :can-edit="canCreateService"
@@ -606,6 +604,20 @@ import { pamsAPI } from "@/utils/axios-interceptor"
 import type { Pageable } from "@/models/paging"
 import PromosCatalogManagerDialog from "@/features/promos-offers/components/PromosCatalogManagerDialog.vue"
 import ServiceBundlesManager from "@/features/promos-offers/components/ServiceBundlesManager.vue"
+
+const props = withDefaults(defineProps<{
+  pageTitle?: string
+  pageDescription?: string
+  showHero?: boolean
+  showServiceCatalog?: boolean
+  showBundledServices?: boolean
+}>(), {
+  pageTitle: "Single Pay: Single Service Management",
+  pageDescription: "Machines and techniques are synced from their backend master data. Manage evaluations and add-ons with prices here. These items are available for selection when creating Single Pay: Single Service appointments and billings. Home Service add-ons created here will automatically switch an appointment to Home Care when selected.",
+  showHero: true,
+  showServiceCatalog: true,
+  showBundledServices: true,
+})
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

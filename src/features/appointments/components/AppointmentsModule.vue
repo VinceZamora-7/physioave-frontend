@@ -42,7 +42,8 @@
       <p class="app-appointment-muted text-xs font-medium uppercase tracking-wide">
         Visible Appointments
       </p>
-      <p class="app-appointment-value mt-1 text-2xl font-semibold">
+      <Skeleton v-if="isClinicSwitchLoading" width="4rem" height="2rem" class="mt-2" />
+      <p v-else class="app-appointment-value mt-1 text-2xl font-semibold">
         {{ dayBookings.length }}
       </p>
     </article>
@@ -53,7 +54,8 @@
       <p class="app-appointment-muted text-xs font-medium uppercase tracking-wide">
         Filtered Table
       </p>
-      <p class="app-appointment-value mt-1 text-2xl font-semibold">
+      <Skeleton v-if="isClinicSwitchLoading" width="4rem" height="2rem" class="mt-2" />
+      <p v-else class="app-appointment-value mt-1 text-2xl font-semibold">
         {{ totalElements }}
       </p>
     </article>
@@ -64,7 +66,8 @@
       <p class="app-appointment-muted text-xs font-medium uppercase tracking-wide">
         Rescheduled Today
       </p>
-      <p class="app-appointment-value mt-1 text-2xl font-semibold">
+      <Skeleton v-if="isClinicSwitchLoading" width="4rem" height="2rem" class="mt-2" />
+      <p v-else class="app-appointment-value mt-1 text-2xl font-semibold">
         {{ rescheduledAppointmentsCount }}
       </p>
     </article>
@@ -75,7 +78,8 @@
       <p class="app-appointment-muted text-xs font-medium uppercase tracking-wide">
         Needs Billing
       </p>
-      <p class="app-appointment-value mt-1 text-2xl font-semibold">
+      <Skeleton v-if="isClinicSwitchLoading" width="4rem" height="2rem" class="mt-2" />
+      <p v-else class="app-appointment-value mt-1 text-2xl font-semibold">
         {{ billingAttentionCount }}
       </p>
     </article>
@@ -92,7 +96,7 @@
       </h3>
 
       <p class="app-appointment-muted max-w-2xl text-sm leading-6">
-        View valid booking days, monthly appointment status, and branch schedule availability.
+        View valid booking days, monthly billing status, and branch schedule availability.
       </p>
 
       <div class="flex flex-wrap gap-2 pt-1 text-xs">
@@ -126,35 +130,21 @@
       class="app-appointment-legend app-appointment-legend-danger"
     >
       <span class="app-appointment-legend-dot app-appointment-legend-dot-danger" />
-      Unfinished and unbilled
+      Pending
     </span>
 
     <span
       class="app-appointment-legend app-appointment-legend-info"
     >
       <span class="app-appointment-legend-dot app-appointment-legend-dot-info" />
-      Scheduled, not fully paid
-    </span>
-
-    <span
-      class="app-appointment-legend app-appointment-legend-warning"
-    >
-      <span class="app-appointment-legend-dot app-appointment-legend-dot-warning" />
-      Unfinished but billed
-    </span>
-
-    <span
-      class="app-appointment-legend app-appointment-legend-amber"
-    >
-      <span class="app-appointment-legend-dot app-appointment-legend-dot-amber" />
-      Multi-session billed
+      Partial
     </span>
 
     <span
       class="app-appointment-legend app-appointment-legend-success"
     >
       <span class="app-appointment-legend-dot app-appointment-legend-dot-success" />
-      Finished and billed
+      Billed
     </span>
   </div>
 
@@ -388,11 +378,11 @@
         </template>
       </Column>
 
-      <Column field="billing_status" header="Billing">
+      <Column field="billing_status" header="Billing Status">
         <template #body="{ data }">
           <Tag
-            :value="displayBillingStatus(data.billing_status)"
-            :severity="billingSeverity(data.billing_status)"
+            :value="displayBillingStatus(data.billing_status, data.billing_type)"
+            :severity="billingSeverity(data.billing_status, data.billing_type)"
           />
         </template>
       </Column>
@@ -1474,6 +1464,7 @@ import Dialog from "primevue/dialog";
 import IftaLabel from "primevue/iftalabel";
 import InputText from "primevue/inputtext";
 import Message from "primevue/message";
+import Skeleton from "primevue/skeleton";
 import Select from "primevue/select";
 import SelectButton from "primevue/selectbutton";
 import Tag from "primevue/tag";
@@ -1548,6 +1539,7 @@ const lguMonthlyClaimMonth = ref("")
 const isLguMonthlyClaimSaving = ref(false)
 const lguMonthlyClaimSummary = ref<{ consumed_count: number; billing_month: string } | null>(null)
 const isLoading = ref(false)
+const isClinicSwitchLoading = ref(false)
 const slotMinuteStep = 15
 type SlotDurationMinutes = 30 | 60 | 75
 type DoctorConsultantFilterValue = number | "UNASSIGNED"
@@ -1730,11 +1722,9 @@ const createHmoAddOnMachineIds = ref<Set<number> | null>(null)
 const createHmoAddOnTechniqueIds = ref<Set<number> | null>(null)
 const createHmoAddOnHomeServiceIds = ref<Set<number> | null>(null)
 type CalendarDayStatus =
-  | "unfinished_unbilled"
-  | "scheduled_partially_paid"
-  | "unfinished_billed"
-  | "multi_session_billed"
-  | "finished_billed"
+  | "pending"
+  | "partial"
+  | "billed"
 const calendarDayStatusMap = ref<Map<string, CalendarDayStatus>>(new Map())
 const bookedMonthCache = ref<Map<string, Map<string, CalendarDayStatus>>>(new Map())
 const visibleMonth = ref<number>(new Date().getMonth())
@@ -2252,8 +2242,9 @@ const syncCreatePatientHmoRates = async (): Promise<void> => {
 
   syncingCreateHmoRates.value = true
   try {
-  const hmoInfo = await patientHMOInformationService.getByPatientId(patientId)
-  createPatientHmoInfo.value = hmoInfo ?? null
+  const sponsorEntries = await patientHMOInformationService.getByPatientId(patientId)
+  const hmoInfo = sponsorEntries.find(entry => entry.sponsor_context === 'HMO' && Number(entry.hmo_id) > 0) ?? null
+  createPatientHmoInfo.value = hmoInfo
   const hmoId = Number(hmoInfo?.hmo_id)
   if (!Number.isFinite(hmoId) || hmoId <= 0) return
 
@@ -2657,10 +2648,17 @@ const calendarDisabledDays = computed<number[]>(() => {
   return disabled
 })
 
-const billingSeverity = (status: string): "success" | "warn" | "danger" | "info" => {
-  const normalized = (status || "UNBILLED").toUpperCase()
+const billingSeverity = (status?: string, billingType?: string): "success" | "warn" | "danger" | "info" => {
+  const normalized = (status || "UNBILLED").trim().toUpperCase()
+  const normalizedBillingType = normalizeBillingTypeForCalendar(billingType)
+
   if (normalized === "PAID") return "success"
-  if (normalized === "PARTIAL" || normalized === "PENDING") return "warn"
+  if (normalized === "BILLED") {
+    return normalizedBillingType === "HMO_BILLING" || normalizedBillingType === "LGU_BILLING"
+      ? "success"
+      : "info"
+  }
+  if (normalized === "PARTIAL" || normalized === "PENDING" || normalized === "UNBILLED") return "warn"
   if (normalized === "VOID") return "danger"
   return "info"
 }
@@ -2691,7 +2689,6 @@ const displayLocationContext = (locationContext?: AppointmentLocationContext): s
   return "IN-CLINIC"
 }
 const displayAppointmentStatus = (status?: string): string => normalizeAppointmentStatus(status).split("_").join(" ")
-const displayBillingStatus = (status?: string): string => (status?.trim() || "UNBILLED").toUpperCase()
 const normalizeBillingTypeForCalendar = (value?: string): string =>
   String(value ?? "")
     .trim()
@@ -2699,6 +2696,22 @@ const normalizeBillingTypeForCalendar = (value?: string): string =>
     .replace(/:/g, "")
     .replace(/-/g, "_")
     .replace(/ /g, "_")
+const displayBillingStatus = (status?: string, billingType?: string): string => {
+  const normalized = (status?.trim() || "UNBILLED").toUpperCase()
+  const normalizedBillingType = normalizeBillingTypeForCalendar(billingType)
+  const isHmoOrLgu = normalizedBillingType === "HMO_BILLING" || normalizedBillingType === "LGU_BILLING"
+
+  if (normalized === "PAID") return "Paid"
+  if (normalized === "BILLED") return isHmoOrLgu ? "Paid" : "Paid"
+  if (normalized === "PARTIAL") {
+    return isHmoOrLgu ? "Pending" : "Partial (The patient payed some of current balance)"
+  }
+  if (normalized === "PENDING" || normalized === "UNBILLED") {
+    return isHmoOrLgu ? "Pending" : "Pending (Not yet Billed)"
+  }
+  if (normalized === "VOID") return "Void"
+  return normalized
+}
 const normalizeServiceTypeForCalendar = (value?: string): string =>
   String(value ?? "")
     .trim()
@@ -3114,23 +3127,15 @@ type CreateScheduleSlot = {
 }
 
 const calendarDayStatusStyles: Record<CalendarDayStatus, {cell: string; dot: string}> = {
-  unfinished_unbilled: {
+  pending: {
     cell: "bg-red-100 text-red-700 ring-1 ring-red-300 dark:bg-red-500/20 dark:text-red-100 dark:ring-red-400/40",
     dot: "absolute bottom-[3px] h-1.5 w-1.5 rounded-full bg-red-500 dark:bg-red-300"
   },
-  scheduled_partially_paid: {
+  partial: {
     cell: "bg-blue-100 text-blue-800 ring-1 ring-blue-300 dark:bg-blue-500/20 dark:text-blue-100 dark:ring-blue-400/40",
     dot: "absolute bottom-[3px] h-1.5 w-1.5 rounded-full bg-blue-500 dark:bg-blue-300"
   },
-  unfinished_billed: {
-    cell: "bg-orange-100 text-orange-800 ring-1 ring-orange-300 dark:bg-orange-500/20 dark:text-orange-100 dark:ring-orange-400/40",
-    dot: "absolute bottom-[3px] h-1.5 w-1.5 rounded-full bg-orange-500 dark:bg-orange-300"
-  },
-  multi_session_billed: {
-    cell: "bg-amber-100 text-amber-800 ring-1 ring-amber-300 dark:bg-amber-500/20 dark:text-amber-100 dark:ring-amber-400/40",
-    dot: "absolute bottom-[3px] h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-300"
-  },
-  finished_billed: {
+  billed: {
     cell: "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-100 dark:ring-emerald-400/40",
     dot: "absolute bottom-[3px] h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-300"
   }
@@ -3196,31 +3201,19 @@ const calendarDayDotClass = (date: CalendarSlotDate): string => {
 const classifyCalendarDayStatus = (rows: AppointmentListItem[]): CalendarDayStatus | null => {
   if (!rows.length) return null
 
-  if (rows.some(row => !isFinishedAppointmentStatus(row.appointment_status) && isUnbilledStatus(row.billing_status))) {
-    return "unfinished_unbilled"
-  }
-
   if (rows.some(row => isPartiallyPaidStatus(row.billing_status))) {
-    return "scheduled_partially_paid"
+    return "partial"
   }
 
-  if (rows.some(row => isMultiSessionAppointment(row) && isFullyBilledStatus(row.billing_status))) {
-    return "multi_session_billed"
+  if (rows.some(row => isUnbilledStatus(row.billing_status))) {
+    return "pending"
   }
 
-  if (rows.some(row => !isFinishedAppointmentStatus(row.appointment_status) && isFullyBilledStatus(row.billing_status))) {
-    return "unfinished_billed"
+  if (rows.some(row => isFullyBilledStatus(row.billing_status))) {
+    return "billed"
   }
 
-  if (rows.every(row => isFinishedAppointmentStatus(row.appointment_status) && isFullyBilledStatus(row.billing_status))) {
-    return "finished_billed"
-  }
-
-  if (rows.some(row => needsBillingAttention(row.billing_status))) {
-    return "unfinished_unbilled"
-  }
-
-  return "finished_billed"
+  return null
 }
 
 const toMinutesFromTime = (value: unknown): number | undefined => {
@@ -4137,34 +4130,39 @@ watch(recordFilter, () => {
 })
 
 watch(selectedClinicId, async () => {
-  createLookupsClinicId.value = undefined
-  if (createPatient.value && !patientOptions.value.some(option => option.id === createPatient.value && option.clinic_id === selectedClinicId.value)) {
-    createPatient.value = undefined
-  }
-  if (createDoctor.value && !doctorOptions.value.some(option => option.id === createDoctor.value && option.clinic_id === selectedClinicId.value)) {
-    createDoctor.value = undefined
-  }
-  if (createReferringDoctor.value && !referringDoctorOptions.value.some(option => option.id === createReferringDoctor.value && option.clinic_id === selectedClinicId.value)) {
-    createReferringDoctor.value = undefined
-  }
-  if (createSupportStaff.value && !supportStaffOptions.value.some(option => option.id === createSupportStaff.value && option.clinic_id === selectedClinicId.value)) {
-    createSupportStaff.value = undefined
-  }
-  if (createVisible.value) {
-    await loadCreateLookups()
-  }
+  isClinicSwitchLoading.value = true
+  try {
+    createLookupsClinicId.value = undefined
+    if (createPatient.value && !patientOptions.value.some(option => option.id === createPatient.value && option.clinic_id === selectedClinicId.value)) {
+      createPatient.value = undefined
+    }
+    if (createDoctor.value && !doctorOptions.value.some(option => option.id === createDoctor.value && option.clinic_id === selectedClinicId.value)) {
+      createDoctor.value = undefined
+    }
+    if (createReferringDoctor.value && !referringDoctorOptions.value.some(option => option.id === createReferringDoctor.value && option.clinic_id === selectedClinicId.value)) {
+      createReferringDoctor.value = undefined
+    }
+    if (createSupportStaff.value && !supportStaffOptions.value.some(option => option.id === createSupportStaff.value && option.clinic_id === selectedClinicId.value)) {
+      createSupportStaff.value = undefined
+    }
+    if (createVisible.value) {
+      await loadCreateLookups()
+    }
 
-  await loadTreatmentAreaOptions()
-  const normalizedDate = findNextAllowedDate(new Date(calendarDate.value))
-  if (normalizedDate.toDateString() !== calendarDate.value.toDateString()) {
-    calendarDate.value = normalizedDate
+    await loadTreatmentAreaOptions()
+    const normalizedDate = findNextAllowedDate(new Date(calendarDate.value))
+    if (normalizedDate.toDateString() !== calendarDate.value.toDateString()) {
+      calendarDate.value = normalizedDate
+      await refreshBookedDotsForVisibleMonth()
+      return
+    }
+
+    page.value = 1
     await refreshBookedDotsForVisibleMonth()
-    return
+    await refreshAll()
+  } finally {
+    isClinicSwitchLoading.value = false
   }
-
-  page.value = 1
-  await refreshBookedDotsForVisibleMonth()
-  await refreshAll()
 })
 
 watch(createPatient, (patientId) => {
@@ -4248,6 +4246,7 @@ watch([createPatient, createBillingType], async () => {
 
 onMounted(async () => {
   syncRoleFromStorage()
+  await globalClinicStore.loadClinics()
   await fetchBookedDatesForMonth(visibleYear.value, visibleMonth.value)
   await refreshAll()
 })

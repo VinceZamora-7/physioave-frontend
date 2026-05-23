@@ -11,7 +11,7 @@ import {computed} from "vue";
 
 export const patientHmoInformationTanstackService = {
   getByPatientId(patientId: Ref<number>, key: PatientTanstackKey = PatientTanstackKey.PATIENT_HMO_INFORMATION) {
-    return useQuery<PatientHMOInformation | undefined>({
+    return useQuery<PatientHMOInformation[]>({
       queryKey: computed(() => [key, patientId.value]),
       queryFn: () => patientHMOInformationService.getByPatientId(patientId.value),
       enabled: false,

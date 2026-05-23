@@ -108,7 +108,7 @@ const sidebarCollapsed = ref(true)
 // ── Clinic branch store ───────────────────────────────────────────────────
 const globalClinicStore = clinicStore()
 const { clinicOptions, isLoadingClinics, selectedClinicId } = storeToRefs(globalClinicStore)
-const { setSelectedClinicId } = globalClinicStore
+const { setSelectedClinicId, loadClinics } = globalClinicStore
 
 const clinicSelectOptions = computed(() => ([
   { id: 0, name: "All Branches" },
@@ -132,6 +132,7 @@ const touchPresence = async (): Promise<void> => {
 }
 
 onMounted(() => {
+  void loadClinics()
   void touchPresence()
   presenceTimer = window.setInterval(() => {
     void touchPresence()

@@ -108,34 +108,45 @@
       </DataTable>
     </section>
 
-    <section class="app-section-card-comfy space-y-3">
-      <div class="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+    <section class="app-section-card-comfy">
+      <div class="flex items-center justify-between">
         <div class="space-y-1">
           <h3 class="text-sm font-semibold">All Available HMO Services</h3>
-          <p class="text-xs opacity-70">
-            With no filter selected, the catalog stays in a four-column service table. Choose a filter to switch back to the detailed management list for just that service family.
-          </p>
+          <p class="text-xs opacity-70">View the full catalog of machines, techniques, evaluations, and add-ons.</p>
         </div>
-
-        <div class="flex flex-wrap gap-2">
-          <Button
-            v-for="option in serviceCatalogFilterOptions"
-            :key="option.value"
-            :label="option.label"
-            size="small"
-            :severity="selectedServiceCatalogFilters.includes(option.value) ? 'primary' : 'secondary'"
-            :outlined="!selectedServiceCatalogFilters.includes(option.value)"
-            @click="toggleServiceCatalogFilter(option.value)"
-          />
-          <Button
-            v-if="hasServiceCatalogFilters"
-            label="Show All"
-            size="small"
-            text
-            @click="clearServiceCatalogFilters"
-          />
-        </div>
+        <Button label="View Catalog" icon="pi pi-table" outlined @click="serviceCatalogVisible = true" />
       </div>
+    </section>
+
+    <Dialog
+      v-model:visible="serviceCatalogVisible"
+      header="All Available HMO Services"
+      modal
+      :style="{width: '92vw', maxWidth: '1200px'}"
+      :pt="{content: {class: 'space-y-4'}}"
+    >
+      <div class="flex flex-wrap gap-2 pb-1">
+        <Button
+          v-for="option in serviceCatalogFilterOptions"
+          :key="option.value"
+          :label="option.label"
+          size="small"
+          :severity="selectedServiceCatalogFilters.includes(option.value) ? 'primary' : 'secondary'"
+          :outlined="!selectedServiceCatalogFilters.includes(option.value)"
+          @click="toggleServiceCatalogFilter(option.value)"
+        />
+        <Button
+          v-if="hasServiceCatalogFilters"
+          label="Show All"
+          size="small"
+          text
+          @click="clearServiceCatalogFilters"
+        />
+      </div>
+
+      <p class="text-xs opacity-70 -mt-1">
+        With no filter selected, the catalog shows a four-column overview. Choose a filter to switch to the detailed management list for that service family.
+      </p>
 
       <DataTable
         v-if="hasServiceCatalogFilters"
@@ -257,7 +268,11 @@
           </template>
         </Column>
       </DataTable>
-    </section>
+
+      <template #footer>
+        <Button label="Close" icon="pi pi-times" text @click="serviceCatalogVisible = false" />
+      </template>
+    </Dialog>
 
     <Dialog v-model:visible="dialogVisible" :header="editingId ? 'Edit HMO Service' : 'Add New HMO Service'" modal :style="{width: '480px'}">
       <div class="space-y-3">
@@ -440,6 +455,7 @@ const toast = useToast()
 const confirm = useConfirm()
 
 const catalogManagerVisible = ref(false)
+const serviceCatalogVisible = ref(false)
 const authSnapshot = ref(readStoredAuthSnapshot())
 window.addEventListener("auth-user-updated", () => {
   authSnapshot.value = readStoredAuthSnapshot()
@@ -708,28 +724,28 @@ const loadServices = async (): Promise<void> => {
     const evalServices: HmoService[] = getContent<{ id: number; name: string; price: number; is_active: boolean }>(0).map(item => ({
       id: `evaluation-${item.id}`,
       type: "evaluation",
-      name: item.name,
+      name: String(item.name ?? ""),
       price: Number(item.price ?? 0),
       status: item.is_active ? "Active" : "Inactive"
     }))
     const addOnMachineServices: HmoService[] = getContent<{ id: number; name: string; price: number; is_active: boolean }>(1).map(item => ({
       id: `add-on-machine-${item.id}`,
       type: "add-on-machine",
-      name: item.name,
+      name: String(item.name ?? ""),
       price: Number(item.price ?? 0),
       status: item.is_active ? "Active" : "Inactive"
     }))
     const addOnTechniqueServices: HmoService[] = getContent<{ id: number; name: string; price: number; is_active: boolean }>(2).map(item => ({
       id: `add-on-technique-${item.id}`,
       type: "add-on-technique",
-      name: item.name,
+      name: String(item.name ?? ""),
       price: Number(item.price ?? 0),
       status: item.is_active ? "Active" : "Inactive"
     }))
     const addOnHomeServices: HmoService[] = getContent<{ id: number; name: string; price: number; is_active: boolean }>(3).map(item => ({
       id: `add-on-home-service-${item.id}`,
       type: "add-on-home-service",
-      name: item.name,
+      name: String(item.name ?? ""),
       price: Number(item.price ?? 0),
       status: item.is_active ? "Active" : "Inactive"
     }))
@@ -1071,7 +1087,9 @@ const getCustomRate = (service: HmoService): number | undefined => {
     if (byMachineId != null) return byMachineId
   }
 
-  return selectedProfileRateMap.value.get(`name:${service.name.trim().toLowerCase()}`)
+  const normalizedName = (service.name ?? "").trim().toLowerCase()
+  if (!normalizedName) return undefined
+  return selectedProfileRateMap.value.get(`name:${normalizedName}`)
 }
 
 const getCustomRateLabel = (service: HmoService): string => {

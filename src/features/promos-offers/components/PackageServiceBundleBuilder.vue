@@ -1,6 +1,6 @@
 <template>
   <main class="app-page-shell space-y-5">
-    <section class="app-section-card-comfy space-y-3">
+    <section v-if="props.showHero" class="app-section-card-comfy space-y-3">
       <div class="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
         <div class="space-y-2">
           <p class="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Promos And Offers</p>
@@ -26,6 +26,7 @@
     <PromosCatalogManagerDialog v-model:visible="catalogManagerVisible" recycleOnly @refreshed="refreshAll" />
 
     <PackageOffersManager
+      v-if="props.showPackageBuilder"
       title="Package Builder"
       description="Regular Total = (Bundled Price x Qty/Sessions) + (Evaluation original Price x Qty)."
       :can-edit="true"
@@ -136,7 +137,7 @@
       </DataTable>
     </section>
 
-    <section class="app-section-card-comfy space-y-3">
+    <section v-if="props.showServiceCatalog" class="app-section-card-comfy space-y-3">
       <div class="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
         <div class="space-y-1">
           <h3 class="text-sm font-semibold">All Available Services</h3>
@@ -252,6 +253,7 @@
     </section>
 
     <ServiceBundlesManager
+      v-if="props.showBundledServices"
       :title="props.bundledSectionTitle"
       :description="props.bundledSectionDescription"
       :can-edit="true"
@@ -629,12 +631,20 @@ const props = withDefaults(defineProps<{
   bundledSectionTitle?: string
   bundledSectionDescription?: string
   packageOfferScope?: "GLOBAL" | "LGU"
+  showHero?: boolean
+  showPackageBuilder?: boolean
+  showServiceCatalog?: boolean
+  showBundledServices?: boolean
 }>(), {
   pageTitle: "Self Pay: Package Service Management",
   pageDescription: "Manage the same service inventory used by single-service billing, reuse service bundles, and assemble package offers with session counts, evaluations, regular totals, and package prices.",
   bundledSectionTitle: "Bundled Services",
   bundledSectionDescription: "Same bundled-services table and logic used in Self Pay: Single Service.",
   packageOfferScope: "GLOBAL",
+  showHero: true,
+  showPackageBuilder: true,
+  showServiceCatalog: true,
+  showBundledServices: true,
 })
 const isLoading = ref(false)
 const dialogVisible = ref(false)

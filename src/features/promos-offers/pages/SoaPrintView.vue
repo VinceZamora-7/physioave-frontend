@@ -109,6 +109,12 @@ const programId = computed(() => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
 })
 const programName = computed(() => String(route.query.program_name ?? "").trim())
+const hmoId = computed(() => {
+  const raw = String(route.query.hmo_id ?? "").trim()
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+})
+const hmoName = computed(() => String(route.query.hmo_name ?? "").trim())
 
 const rows = ref<SoaRow[]>([])
 const error = ref("")
@@ -123,7 +129,7 @@ const partnerLabel = computed(() => {
   if (payer.value === "lgu") {
     return programName.value ? `LGU - ${programName.value}` : "LGU"
   }
-  return "HMO"
+  return hmoName.value ? `HMO - ${hmoName.value}` : "HMO"
 })
 const periodLabel = computed(() => `${dateFrom.value || "—"} to ${dateTo.value || "—"}`)
 
@@ -156,7 +162,7 @@ const load = async (): Promise<void> => {
 
   try {
     if (payer.value === "hmo") {
-      const data = await billingPhase1Service.getHmoSoa({ from, to, limit: 5000 }) ?? []
+      const data = await billingPhase1Service.getHmoSoa({ from, to, limit: 5000, hmo_id: hmoId.value }) ?? []
       rows.value = (data as HmoRecentHistoryItem[]).map(item => ({
           id: item.id,
           patient_name: item.patient_name,

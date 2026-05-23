@@ -99,6 +99,7 @@ export interface PatientHMOInformationFormProps {
   hmos: Lookup[]
   lguPrograms: Lookup[]
   sponsor_context?: "HMO" | "LGU"
+  forceInsert?: boolean
 }
 
 export interface PatientHMOInformationFormEmits {

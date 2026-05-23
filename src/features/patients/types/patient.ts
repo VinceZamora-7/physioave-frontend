@@ -34,6 +34,18 @@ export interface BasePatient {
   details?: string
   folder: UUID
   profile_image_file_id?: string
+  sponsor_context?: "HMO" | "LGU"
+  sponsor_company_name?: string
+  sponsor_approval_code?: string
+  sponsor_validity_start_date?: string
+  sponsor_validity_end_date?: string
+  hmo_id?: number
+  hmo_name?: string
+  lgu_program_id?: number
+  lgu_program_name?: string
+  referral_form_no?: string
+  referral_issued_date?: string
+  lgu_patient_status?: "ACTIVE" | "DROPPED_OUT" | "CROSS_MONTH_DROPPED_OUT"
 }
 
 export interface Patient extends BasePatient {
