@@ -380,7 +380,7 @@
           </button>
 
           <ul v-show="collapsed || promosOffersOpen" class="space-y-1.5">
-            <li v-if="canAccessRoute('promos-offers')">
+            <!-- <li v-if="canAccessRoute('promos-offers')">
               <button
                 type="button"
                 class="group relative w-full"
@@ -394,7 +394,7 @@
                 </span>
                 <span v-if="!collapsed" class="truncate">Offers Overview</span>
               </button>
-            </li>
+            </li> -->
 
             <li v-if="canAccessRoute('promos-offers-single-service')">
               <button

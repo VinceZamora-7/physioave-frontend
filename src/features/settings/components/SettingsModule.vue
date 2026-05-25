@@ -8,7 +8,7 @@
         <div class="space-y-2">
           <div class="text-lg font-semibold tracking-tight">PT Team Setup</div>
           <p class="max-w-3xl text-sm text-[rgb(var(--app-fg))]/70">
-            Manage your PT team members, specialties, and clinic rooms. Job titles and access are pre-configured for standard PT workflows.
+            Manage PT team members, referring doctors, specialties, and clinic rooms for appointment booking.
           </p>
           <div class="flex flex-wrap gap-2 text-xs text-[rgb(var(--app-fg))]/65">
             <span class="rounded-full border border-white/40 bg-white/60 px-3 py-1">
@@ -26,8 +26,8 @@
             <div class="mt-1 text-2xl font-semibold">{{ clinics.length }}</div>
           </article>
           <article class="rounded-2xl border border-white/40 bg-white/60 p-3">
-            <div class="text-xs uppercase tracking-wide text-slate-500">PTs</div>
-            <div class="mt-1 text-2xl font-semibold">{{ ptStaffs.length }}</div>
+            <div class="text-xs uppercase tracking-wide text-slate-500">Care Team</div>
+            <div class="mt-1 text-2xl font-semibold">{{ careTeamStaffs.length }}</div>
           </article>
           <article class="rounded-2xl border border-white/40 bg-white/60 p-3">
             <div class="text-xs uppercase tracking-wide text-slate-500">Specialties</div>
@@ -147,9 +147,9 @@
         <section v-if="canSeePtDirectorySection" class="app-section-card-comfy space-y-4" id="settings-pt-directory">
           <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <h3 class="app-section-title">PT Team Directory</h3>
+              <h3 class="app-section-title">Care Team Directory</h3>
               <p class="text-sm opacity-70">
-                Add and maintain physical therapists for the selected clinic. Specialty assignments here will appear in appointment booking.
+                Add and maintain physical therapists and referring doctors for the selected clinic. These staff appear in appointment booking.
               </p>
             </div>
             <div class="flex flex-wrap gap-2">
@@ -157,7 +157,7 @@
                 label="Add PT"
                 icon="pi pi-plus"
                 :pt="ptPrimaryBtn"
-                :disabled="!canManageStaff || !activePtRoles.length"
+                :disabled="!canManageStaff || !activeCareTeamRoles.length"
                 @click="openCreatePt"
               />
             </div>
@@ -168,10 +168,10 @@
               <InputText
                 v-model="ptSearch"
                 fluid
-                placeholder="Search PT by name, email, specialty, or job title"
+                placeholder="Search by name, email, specialty, or job title"
                 :pt="ptInputText"
               />
-              <label>Search PTs</label>
+              <label>Search Care Team</label>
             </IftaLabel>
             <IftaLabel>
               <Select
@@ -196,10 +196,10 @@
           >
             <template #empty>
               <div class="py-8 text-center text-sm opacity-70">
-                No physical therapist records match this branch and filter.
+                No care team records match this branch and filter.
               </div>
             </template>
-            <Column field="name" header="PT Name" />
+            <Column field="name" header="Name" />
             <Column field="email" header="Email" />
             <Column field="role_name" header="Job Title">
               <template #body="{ data }">
@@ -234,10 +234,10 @@
           </DataTable>
 
           <Message v-if="!canManageStaff" severity="info" :closable="false">
-            PT records are visible here, but your account does not currently have staff create or update permission.
+            Care team records are visible here, but your account does not currently have staff create or update permission.
           </Message>
-          <Message v-else-if="!activePtRoles.length" severity="warn" :closable="false">
-            No active PT job title found. Set up at least one in the PT Job Titles section below.
+          <Message v-else-if="!activeCareTeamRoles.length" severity="warn" :closable="false">
+            No active care team job title found. Set up at least one in the Care Team Job Titles section below.
           </Message>
         </section>
 
@@ -335,8 +335,8 @@
           <section v-if="canSeeRoleAccessSection" class="app-section-card-comfy space-y-3" id="settings-job-titles">
             <div class="flex items-center justify-between gap-2">
               <div>
-                <h3 class="app-section-title">PT Job Titles</h3>
-                <p class="text-sm opacity-70">Define PT roles. Access is pre-configured for standard PT work.</p>
+                <h3 class="app-section-title">Care Team Job Titles</h3>
+                <p class="text-sm opacity-70">Define PT and referring doctor roles used in appointment booking.</p>
               </div>
               <Button
                 label="Configure"
@@ -351,7 +351,7 @@
 
             <Button
               v-if="canManageRoleAccess && hasMissingStandardPtRoles"
-              :label="`Quick Setup: Add ${missingStandardPtProviderTypes.length} standard PT role${missingStandardPtProviderTypes.length > 1 ? 's' : ''}`"
+              :label="`Quick Setup: Add ${missingStandardPtProviderTypes.length} standard care team role${missingStandardPtProviderTypes.length > 1 ? 's' : ''}`"
               icon="pi pi-bolt"
               :pt="ptPrimaryBtn"
               :loading="isQuickSetupBusy"
@@ -389,8 +389,8 @@
     <StaffEditorDialog
       ref="staffEditor"
       formMode="PT"
-      :roles="activePtRoles"
-      :ptRoles="activePtRoles"
+      :roles="activeCareTeamRoles"
+      :ptRoles="activePtOnlyRoles"
       :clinics="clinicLookups"
       :specialties="activeSpecialties"
       :isLoading="isModalBusy"
@@ -401,7 +401,7 @@
     <RoleAccessManagerDialog
       ref="roleManager"
       providerScope="PT"
-      dialogTitle="PT Job Titles and Permissions"
+      dialogTitle="Care Team Job Titles and Permissions"
       @rolesUpdated="handleRolesUpdated"
     />
   </main>
@@ -480,6 +480,7 @@ const inlineSpecialtyName = ref("")
 const isAddingSpecialty = ref(false)
 
 const STANDARD_PT_ROLES = [
+  { name: "Doctor Consultant", appointment_provider_type: "DOCTOR_CONSULTANT" as const, requires_specialty_tag: false },
   { name: "Physical Therapist", appointment_provider_type: "PHYSICAL_THERAPIST" as const, requires_specialty_tag: true },
   { name: "PT Assistant", appointment_provider_type: "PT_ASSISTANT" as const, requires_specialty_tag: false },
   { name: "Intern", appointment_provider_type: "INTERN" as const, requires_specialty_tag: false },
@@ -588,18 +589,24 @@ const isModalBusy = computed(() =>
 const clinicLookups = computed<Lookup[]>(() =>
   clinics.value.map(clinic => ({ id: clinic.id, name: clinic.name }))
 )
-const ptRoles = computed(() =>
-  roles.value.filter(role =>
-    role.appointment_provider_type === "PHYSICAL_THERAPIST"
-    || role.appointment_provider_type === "PT_ASSISTANT"
-    || role.appointment_provider_type === "INTERN"
-  )
+const isCareTeamProviderType = (providerType?: string | null): boolean =>
+  providerType === "DOCTOR_CONSULTANT"
+  || providerType === "PHYSICAL_THERAPIST"
+  || providerType === "PT_ASSISTANT"
+  || providerType === "INTERN"
+const isPtProviderType = (providerType?: string | null): boolean =>
+  providerType === "PHYSICAL_THERAPIST" || providerType === "PT_ASSISTANT" || providerType === "INTERN"
+const careTeamRoles = computed(() =>
+  roles.value.filter(role => isCareTeamProviderType(role.appointment_provider_type))
 )
-const activePtRoles = computed(() =>
-  ptRoles.value.filter(role => role.is_active)
+const activeCareTeamRoles = computed(() =>
+  careTeamRoles.value.filter(role => role.is_active)
+)
+const activePtOnlyRoles = computed(() =>
+  careTeamRoles.value.filter(role => role.is_active && isPtProviderType(role.appointment_provider_type))
 )
 const orderedRoles = computed(() =>
-  [...ptRoles.value].sort((left, right) => left.name.localeCompare(right.name))
+  [...careTeamRoles.value].sort((left, right) => left.name.localeCompare(right.name))
 )
 const orderedSpecialties = computed(() =>
   [...specialties.value].sort((left, right) => left.name.localeCompare(right.name))
@@ -613,7 +620,7 @@ const visibleSpecialties = computed(() =>
     : orderedSpecialties.value
 )
 const missingStandardPtProviderTypes = computed(() => {
-  const existing = new Set(ptRoles.value.map(r => r.appointment_provider_type))
+  const existing = new Set(careTeamRoles.value.map(r => r.appointment_provider_type))
   return STANDARD_PT_ROLES.filter(t => !existing.has(t.appointment_provider_type))
 })
 const hasMissingStandardPtRoles = computed(() => missingStandardPtProviderTypes.value.length > 0)
@@ -622,24 +629,22 @@ const specialtySummary = computed(() => ({
   active: specialties.value.filter(specialty => specialty.is_active).length,
   inactive: specialties.value.filter(specialty => !specialty.is_active).length
 }))
-const isPtProviderType = (providerType?: string | null): boolean =>
-  providerType === "PHYSICAL_THERAPIST" || providerType === "PT_ASSISTANT" || providerType === "INTERN"
 const resolvePtRoleName = (staff: Staff): string =>
   isPtProviderType(staff.appointment_provider_type)
     ? staff.role_name
     : (staff.secondary_role_name || staff.role_name)
 const resolvePtSpecialtyName = (staff: Staff): string =>
   staff.specialty_tag_name || "Not assigned"
-const ptStaffs = computed(() =>
+const careTeamStaffs = computed(() =>
   staffs.value.filter(staff =>
-    isPtProviderType(staff.appointment_provider_type)
-    || isPtProviderType(staff.secondary_appointment_provider_type)
+    isCareTeamProviderType(staff.appointment_provider_type)
+    || isCareTeamProviderType(staff.secondary_appointment_provider_type)
   )
 )
 const filteredPtStaffs = computed(() => {
   const query = ptSearch.value.trim().toLowerCase()
 
-  return ptStaffs.value.filter(staff => {
+  return careTeamStaffs.value.filter(staff => {
     if (selectedClinicId.value && staff.clinic_id !== selectedClinicId.value) return false
     if (ptStatusFilter.value === "ACTIVE" && !staff.is_active) return false
     if (ptStatusFilter.value === "INACTIVE" && staff.is_active) return false
@@ -829,8 +834,8 @@ const refreshAll = async (): Promise<void> => {
 
 const openCreatePt = (): void => {
   if (!canManageStaff.value) return
-  if (!activePtRoles.value.length) {
-    errorToast(toast, "Add and activate at least one Physical Therapist job title first.")
+  if (!activeCareTeamRoles.value.length) {
+    errorToast(toast, "Add and activate at least one care team job title first.")
     return
   }
   staffEditor.value?.openCreate()
@@ -881,7 +886,7 @@ const quickSetupStandardRoles = async (): Promise<void> => {
   try {
     const toCreate = missingStandardPtProviderTypes.value
     if (!toCreate.length) {
-      toast.add({ severity: "info", summary: "Already set up", detail: "All standard PT job titles already exist.", life: 3000 })
+      toast.add({ severity: "info", summary: "Already set up", detail: "All standard care team job titles already exist.", life: 3000 })
       return
     }
 
@@ -897,7 +902,7 @@ const quickSetupStandardRoles = async (): Promise<void> => {
 
     await fetchReferences()
 
-    const newRoles = ptRoles.value.filter(role =>
+    const newRoles = careTeamRoles.value.filter(role =>
       toCreate.some(t => t.appointment_provider_type === role.appointment_provider_type)
     )
 
@@ -921,9 +926,9 @@ const quickSetupStandardRoles = async (): Promise<void> => {
     )
 
     await fetchReferences()
-    successToast(toast, `${toCreate.length} standard PT job title${toCreate.length > 1 ? "s" : ""} created with default access`)
+    successToast(toast, `${toCreate.length} standard care team job title${toCreate.length > 1 ? "s" : ""} created with default access`)
   } catch (error: unknown) {
-    errorToast(toast, extractApiErrorMessage(error, "Failed to create standard PT job titles"))
+    errorToast(toast, extractApiErrorMessage(error, "Failed to create standard care team job titles"))
   } finally {
     isQuickSetupBusy.value = false
   }

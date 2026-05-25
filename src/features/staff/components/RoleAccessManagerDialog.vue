@@ -443,10 +443,10 @@ const providerTypeOptions: Array<{ label: string; value: AppointmentProviderType
 
 const roleMatchesScope = (providerType: AppointmentProviderType): boolean => {
   if (props.providerScope === "PT") {
-    return providerType === "PHYSICAL_THERAPIST" || providerType === "PT_ASSISTANT" || providerType === "INTERN"
+    return providerType === "DOCTOR_CONSULTANT" || providerType === "PHYSICAL_THERAPIST" || providerType === "PT_ASSISTANT" || providerType === "INTERN"
   }
   if (props.providerScope === "ADMIN") {
-    return providerType === "NONE" || providerType === "DOCTOR_CONSULTANT"
+    return providerType === "NONE"
   }
   return true
 }

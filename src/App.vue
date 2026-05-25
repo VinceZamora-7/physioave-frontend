@@ -1,4 +1,4 @@
-<template>
+<template class="h-screen w-screen uppercase">
   <RouterView />
   <component :is="VueQueryDevtools" v-if="VueQueryDevtools" />
   <Toast />
