@@ -10,8 +10,9 @@
   >
     <ServiceBundlesManager
       title="LGU Bundled Services"
-      description="Create and manage bundled services used in LGU billing packages. Uses the same logic and saved data as Package Service."
+      description="Create and manage bundled services used in LGU billing packages. Bundles created here are scoped to LGU and are separate from self-pay bundles."
       :can-edit="true"
+      offer-scope="LGU"
       :machine-options="catalog.bundleMachineOptions.value"
       :technique-options="catalog.bundleTechniqueOptions.value"
       :evaluation-options="catalog.bundleEvaluationOptions.value"

@@ -309,13 +309,13 @@ const saveService = async () => {
     const endpoints: Record<ServiceType, string> = {
       machine: "/machines",
       technique: "/techniques",
-      evaluation: "/evaluations",
+      evaluation: "/lgu-evaluations",
       "add-on-machine": "/add-on-machines",
       "add-on-technique": "/add-on-techniques",
       "add-on-home-service": "/add-on-home-services",
     }
     const endpoint = endpoints[formData.type]
-    const payload = {name: formData.name, price: Number(formData.price ?? 0)}
+    const payload: Record<string, unknown> = {name: formData.name, price: Number(formData.price ?? 0)}
 
     if (editingId.value) {
       const prefixMap: Record<ServiceType, string> = {
@@ -353,7 +353,7 @@ const confirmDelete = (service: SingleService) => {
     accept: async () => {
       try {
         const endpointMap: Record<ServiceType, string> = {
-          machine: "/machines", technique: "/techniques", evaluation: "/evaluations",
+          machine: "/machines", technique: "/techniques", evaluation: "/lgu-evaluations",
           "add-on-machine": "/add-on-machines", "add-on-technique": "/add-on-techniques",
           "add-on-home-service": "/add-on-home-services",
         }

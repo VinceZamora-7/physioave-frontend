@@ -13,6 +13,7 @@ export interface AuthMe {
   is_active: boolean
   permissions: string[]
   clinic_id: number | null
+  can_view_all_branches: boolean
 }
 
 interface AuthMeService {

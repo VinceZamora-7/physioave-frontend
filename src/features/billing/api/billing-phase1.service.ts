@@ -88,6 +88,7 @@ export interface BillingListItem {
   hmo_name?: string
   hmo_type_name?: string
   hmo_company_name?: string
+  hmo_loa_number?: string
   hmo_approval_code?: string
   hmo_validity_start?: string
   hmo_validity_end?: string
@@ -96,6 +97,7 @@ export interface BillingListItem {
   lgu_reference_label?: string
   lgu_patient_referral_form_no?: string
   lgu_date_issued?: string
+  lgu_patient_program_status?: string
   dropout_adjustment_count?: number
   dropout_adjustment_total?: number
   // Patient demographics + care team (populated on detail fetch)
@@ -104,6 +106,7 @@ export interface BillingListItem {
   patient_gender?: string
   physical_therapist?: string
   doctor?: string
+  diagnosis?: string
   encounter_tickets?: BillingEncounterTicket[]
 }
 
@@ -197,6 +200,7 @@ export interface BillingRequest {
   vat_rate?: number
   vatable_amount?: number
   vat_amount?: number
+  loa_number?: string
 }
 
 export interface PackageLookup {
@@ -217,6 +221,9 @@ export interface HmoRecentHistoryItem {
   patient_id: number
   patient_name: string | null
   billing_status: string | null
+  physical_therapist?: string | null
+  doctor?: string | null
+  diagnosis?: string | null
   service_name: string | null
   receipt_number: string | null
   total_amount: number
@@ -342,6 +349,7 @@ export interface RecordPaymentRequest {
 
 export interface MarkAppointmentBilledRequest {
   appointment_id: number
+  loa_number?: string
 }
 
 export interface MarkAppointmentBilledResult {

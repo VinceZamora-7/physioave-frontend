@@ -43,6 +43,9 @@
                 <th class="p-2 text-left border-r border-black w-[140px]">REFERRAL FORM NO.</th>
                 <th class="p-2 text-left border-r border-black w-[140px]">REFERENCE NO.</th>
                 <th class="p-2 text-left border-r border-black w-[130px]">PROGRAM STATUS</th>
+                <th class="p-2 text-left border-r border-black w-[150px]">PHYSICAL THERAPIST</th>
+                <th class="p-2 text-left border-r border-black w-[150px]">DOCTOR</th>
+                <th class="p-2 text-left border-r border-black w-[180px]">DIAGNOSIS</th>
                 <th class="p-2 text-left border-r border-black w-[130px]">TREATMENT DATE</th>
                 <th class="p-2 text-left border-r border-black">PT SERVICE RENDERED</th>
                 <th class="p-2 text-left border-r border-black w-[130px]">SESSION SEQUENCE</th>
@@ -56,6 +59,9 @@
                 <td class="p-2 border-r border-black">{{ row.referral_form_no ?? '—' }}</td>
                 <td class="p-2 border-r border-black">{{ row.reference_no ?? '—' }}</td>
                 <td class="p-2 border-r border-black">{{ row.program_status ?? '—' }}</td>
+                <td class="p-2 border-r border-black">{{ row.physical_therapist ?? 'N/A' }}</td>
+                <td class="p-2 border-r border-black">{{ row.doctor ?? 'N/A' }}</td>
+                <td class="p-2 border-r border-black">{{ row.diagnosis ?? 'N/A' }}</td>
                 <td class="p-2 border-r border-black">{{ formatDate(row.treatment_date) }}</td>
                 <td class="p-2 border-r border-black">{{ row.pt_service_rendered ?? '—' }}</td>
                 <td class="p-2 border-r border-black">{{ row.session_sequence ?? '—' }}</td>
@@ -64,7 +70,7 @@
             </tbody>
             <tfoot>
               <tr>
-                <td class="p-2 border-t border-black font-semibold" colspan="8">Grand Total</td>
+                <td class="p-2 border-t border-black font-semibold" colspan="11">Grand Total</td>
                 <td class="p-2 border-t border-black text-right font-semibold">{{ asCurrency(grandTotal) }}</td>
               </tr>
             </tfoot>
@@ -91,6 +97,9 @@ type SoaRow = {
   referral_form_no: string | null
   reference_no: string | null
   program_status: string | null
+  physical_therapist: string | null
+  doctor: string | null
+  diagnosis: string | null
   treatment_date: string | null
   pt_service_rendered: string | null
   session_sequence: string | null
@@ -169,6 +178,9 @@ const load = async (): Promise<void> => {
           referral_form_no: item.receipt_number ?? null,
           reference_no: item.receipt_number ?? null,
           program_status: item.billing_status,
+          physical_therapist: item.physical_therapist ?? null,
+          doctor: item.doctor ?? null,
+          diagnosis: item.diagnosis ?? null,
           treatment_date: item.created_at,
           pt_service_rendered: item.service_name,
           session_sequence: null,
@@ -184,7 +196,10 @@ const load = async (): Promise<void> => {
       patient_name: item.patient_name ?? null,
       referral_form_no: item.reference_label ?? null,
       reference_no: item.phase1_billing_public_id ?? item.receipt_number ?? null,
-      program_status: item.billing_status ?? item.usage_status ?? null,
+      program_status: item.program_status ?? item.billing_status ?? item.usage_status ?? null,
+      physical_therapist: item.physical_therapist ?? null,
+      doctor: item.doctor ?? null,
+      diagnosis: item.diagnosis ?? null,
       treatment_date: item.created_at ?? null,
       pt_service_rendered: item.service_name ?? null,
       session_sequence: null,

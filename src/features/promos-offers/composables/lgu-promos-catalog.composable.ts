@@ -93,7 +93,7 @@ export function useLguPromosCatalog() {
       techniqueServices.value = backendTechniques as SingleService[]
 
       const [evaluationsRes, addOnMachinesRes, addOnTechniquesRes, addOnHomeRes] = await Promise.all([
-        withRefreshRetry(() => pamsAPI.get<Pageable<any>>("/evaluations", {params: {page: 1, size: 1000, name: "", status: "ALL"}})),
+        withRefreshRetry(() => pamsAPI.get<Pageable<any>>("/lgu-evaluations", {params: {page: 1, size: 1000, name: "", status: "ALL"}})),
         withRefreshRetry(() => pamsAPI.get<Pageable<any>>("/add-on-machines", {params: {page: 1, size: 1000, name: "", status: "ALL"}})),
         withRefreshRetry(() => pamsAPI.get<Pageable<any>>("/add-on-techniques", {params: {page: 1, size: 1000, name: "", status: "ALL"}})),
         withRefreshRetry(() => pamsAPI.get<Pageable<any>>("/add-on-home-services", {params: {page: 1, size: 1000, name: "", status: "ALL"}})),

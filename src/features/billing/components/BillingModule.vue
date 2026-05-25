@@ -1009,13 +1009,17 @@
                 outlined
                 :loading="markingBillingAsBilled"
                 :disabled="!canMarkSelectedBillingAsBilled"
-                @click="markSelectedBillingAsBilled"
+                @click="startMarkBillingAsBilled"
               />
             </div>
             <div class="grid grid-cols-1 gap-3 md:grid-cols-3 text-sm">
               <div :class="billingDetailCardClass">
                 <div class="text-xs uppercase tracking-wide opacity-70">Billing Route</div>
                 <div class="font-medium">{{ displayBillingType(selectedBillingDetail.billing_type) }}</div>
+              </div>
+              <div v-if="isSelectedBillingHmo" :class="billingDetailCardClass">
+                <div class="text-xs uppercase tracking-wide opacity-70">LOA Number</div>
+                <div class="font-medium">{{ selectedBillingDetail.hmo_loa_number || 'Not recorded' }}</div>
               </div>
               <div :class="billingDetailCardClass">
                 <div class="text-xs uppercase tracking-wide opacity-70">Current Paid</div>
@@ -1500,6 +1504,26 @@
       <template #footer>
         <Button label="Cancel" text @click="createBundleDialogVisible = false" />
         <Button label="Save As Bundle" icon="pi pi-check" @click="saveBundleFromSelection" />
+      </template>
+    </Dialog>
+
+    <Dialog v-model:visible="markBilledLoaDialogVisible" header="Letter of Authorization" modal :style="{width: '460px'}">
+      <div class="space-y-3">
+        <p class="text-sm opacity-70">Enter the LOA number before this HMO transaction is marked as billed.</p>
+        <IftaLabel>
+          <InputText v-model="markBilledLoaNumber" fluid autofocus placeholder="LOA number" @keyup.enter="confirmMarkBillingAsBilled" />
+          <label>LOA Number</label>
+        </IftaLabel>
+      </div>
+      <template #footer>
+        <Button label="Cancel" text :disabled="markingBillingAsBilled" @click="markBilledLoaDialogVisible = false" />
+        <Button
+          label="Confirm"
+          icon="pi pi-check"
+          :loading="markingBillingAsBilled"
+          :disabled="!canSubmitMarkBilledLoa"
+          @click="confirmMarkBillingAsBilled"
+        />
       </template>
     </Dialog>
   </component>
@@ -2161,6 +2185,8 @@ const billingTenderAmount      = ref<number>(0)
 const savingBillingTender      = ref(false)
 const markingBillingAsBilled   = ref(false)
 const billingContextAppointmentId = ref<number|undefined>(undefined)
+const markBilledLoaDialogVisible = ref(false)
+const markBilledLoaNumber = ref("")
 
 const selectedBillingAmountTendered = computed(() => Number(selectedBillingDetail.value?.amount_tendered ?? 0))
 
@@ -2172,6 +2198,10 @@ const isClaimBillingType = (billingType?: string): boolean => {
 const isSelectedBillingSelfPay   = computed(() => selectedBillingDetail.value ? !isClaimBillingType(selectedBillingDetail.value.billing_type) : false)
 const selectedBillingNormalizedStatus = computed(() => displayBillingStatus(selectedBillingDetail.value?.billing_status))
 const isSelectedBillingMarkedBilled   = computed(() => selectedBillingNormalizedStatus.value === "BILLED")
+const isSelectedBillingHmo = computed(() => {
+  const n = String(selectedBillingDetail.value?.billing_type ?? "").trim().toUpperCase()
+  return n === "HMO_BILLING" || n === "HMO"
+})
 
 const canShowMarkBillingAsBilledAction = computed(() =>
   !!selectedBillingDetail.value &&
@@ -2179,6 +2209,7 @@ const canShowMarkBillingAsBilledAction = computed(() =>
   !["PAID","VOID","CANCELLED"].includes(selectedBillingNormalizedStatus.value)
 )
 const canMarkSelectedBillingAsBilled = computed(() => canShowMarkBillingAsBilledAction.value && !isSelectedBillingMarkedBilled.value)
+const canSubmitMarkBilledLoa = computed(() => canMarkSelectedBillingAsBilled.value && !!markBilledLoaNumber.value.trim())
 const showBillingSettlementCard      = computed(() => !props.overlayOnly || overlayEntryMode.value === "tender")
 
 const billingTenderInputAmount = computed(() => Math.max(0, Number(billingTenderAmount.value ?? 0)))
@@ -3016,6 +3047,7 @@ const buildBillingUpdatePayload = (detail: BillingListItem, overrides?: Partial<
   amount_tendered: detail.amount_tendered, change_amount: detail.change_amount,
   pricing_tier: detail.pricing_tier, pricing_source: detail.pricing_source, receipt_number: detail.receipt_number,
   senior_pwd_id_presented: detail.senior_pwd_id_presented, senior_pwd_id_reference: detail.senior_pwd_id_reference,
+  loa_number: detail.hmo_loa_number,
   // Preserve existing VAT fields as-is when updating metadata fields
   vat_enabled: detail.vat_enabled, vat_rate: detail.vat_rate,
   vatable_amount: detail.vatable_amount, vat_amount: detail.vat_amount,
@@ -3052,6 +3084,7 @@ const printSelectedBillingReceipt = async (): Promise<void> => {
         patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
         patientAddress: detail.patient_address, patientAge: detail.patient_age, patientGender: detail.patient_gender,
         physicalTherapist: detail.physical_therapist, doctor: detail.doctor,
+        diagnosis: detail.diagnosis,
         paymentMethod: derivePaymentType(detail) || "Cash/Card/Online Transfer",
         paymentReferenceNo: detail.payment_reference || detail.receipt_number,
         subtotal: Number(detail.subtotal_amount ?? detail.amount_due ?? detail.total_amount ?? 0),
@@ -3079,6 +3112,7 @@ const printSelectedBillingReceipt = async (): Promise<void> => {
         patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
         patientAddress: detail.patient_address, patientAge: detail.patient_age, patientGender: detail.patient_gender,
         physicalTherapist: detail.physical_therapist, doctor: detail.doctor,
+        diagnosis: detail.diagnosis,
         paymentMethod: derivePaymentType(detail) || "Cash/Card/Online Transfer",
         paymentReferenceNo: detail.payment_reference || detail.receipt_number,
         subtotal: Number(detail.subtotal_amount ?? detail.amount_due ?? detail.total_amount ?? 0),
@@ -3119,8 +3153,9 @@ const printSelectedBillingReceipt = async (): Promise<void> => {
         patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
         patientAddress: detail.patient_address, patientAge: detail.patient_age, patientGender: detail.patient_gender,
         physicalTherapist: detail.physical_therapist, doctor: detail.doctor,
+        diagnosis: detail.diagnosis,
         hmoName: detail.hmo_name, hmoTypeName: detail.hmo_type_name, hmoCompanyName: detail.hmo_company_name,
-        hmoApprovalCode: detail.hmo_approval_code, hmoValidityStart: detail.hmo_validity_start, hmoValidityEnd: detail.hmo_validity_end,
+        hmoApprovalCode: detail.hmo_loa_number || detail.hmo_approval_code, hmoValidityStart: detail.hmo_validity_start, hmoValidityEnd: detail.hmo_validity_end,
         subtotal: Number(detail.subtotal_amount ?? detail.amount_due ?? detail.total_amount ?? 0),
         discount: Number(detail.discount_amount ?? 0), grandTotal: selectedBillingTotalDue.value,
         ...invoiceApprovalSignature.value,
@@ -3285,6 +3320,7 @@ const printSelectedBillingReceipt = async (): Promise<void> => {
           patientGender: detail.patient_gender,
           physicalTherapist: detail.physical_therapist,
           doctor: detail.doctor,
+          diagnosis: detail.diagnosis,
           paymentMethod: "LGU Dropout Billing",
           paymentReferenceNo: detail.lgu_patient_referral_form_no || detail.lgu_reference_label || detail.receipt_number,
           subtotal: Number(detail.subtotal_amount ?? detail.amount_due ?? detail.total_amount ?? 0),
@@ -3300,8 +3336,9 @@ const printSelectedBillingReceipt = async (): Promise<void> => {
         patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
         patientAddress: detail.patient_address, patientAge: detail.patient_age, patientGender: detail.patient_gender,
         physicalTherapist: detail.physical_therapist, doctor: detail.doctor,
+        diagnosis: detail.diagnosis,
         lguProgramName: detail.lgu_program_name, lguReferenceLabel: detail.lgu_patient_referral_form_no || detail.lgu_reference_label, lguDateIssued: detail.lgu_date_issued,
-        lguStatus: String(rawLines.find(line => line.claimStatus)?.claimStatus ?? detail.billing_status ?? "N/A").replace(/_/g, " "),
+        lguStatus: String(detail.lgu_patient_program_status ?? rawLines.find(line => line.claimStatus)?.claimStatus ?? detail.billing_status ?? "N/A").replace(/_/g, " "),
         subtotal: Number(detail.subtotal_amount ?? detail.amount_due ?? detail.total_amount ?? 0),
         discount: Number(detail.discount_amount ?? 0), grandTotal: selectedBillingTotalDue.value,
         ...invoiceApprovalSignature.value,
@@ -3352,7 +3389,7 @@ const printSelectedPatientInvoiceCopy = (): void => {
     const sessionSeqLabel = lockedTickets[0]?.billing_snapshot?.session_sequence_label ?? undefined
     const sponsorName = normalizedBillingType === "HMO_BILLING" ? detail.hmo_name : detail.lgu_program_name
     const sponsorReference = normalizedBillingType === "HMO_BILLING"
-      ? detail.hmo_approval_code
+      ? detail.hmo_loa_number || detail.hmo_approval_code
       : detail.lgu_patient_referral_form_no || detail.lgu_reference_label
     type PatientStatementSubItem = {name: string; quantity: number; subItems?: PatientStatementSubItem[]}
     const normalizePatientStatementSubItems = (items?: Array<{name?: unknown; quantity?: unknown; children?: any[]}>): PatientStatementSubItem[] =>
@@ -3391,7 +3428,7 @@ const printSelectedPatientInvoiceCopy = (): void => {
       patientGender: detail.patient_gender,
       physicalTherapist: detail.physical_therapist,
       doctor: detail.doctor,
-      diagnosis: detail.service_name || undefined,
+      diagnosis: detail.diagnosis,
       billingTypeLabel: normalizedBillingType === "HMO_BILLING" ? "HMO Billing" : "LGU Billing",
       sponsorName,
       sponsorReference,
@@ -3443,27 +3480,52 @@ const saveBillingTender = async (): Promise<void> => {
 }
 
 // ── Mark as billed ────────────────────────────────────────────────────────────
-const markSelectedBillingAsBilled = async (): Promise<void> => {
+const startMarkBillingAsBilled = (): void => {
+  if (!selectedBillingDetail.value || !canMarkSelectedBillingAsBilled.value) return
+  if (isSelectedBillingHmo.value) {
+    markBilledLoaNumber.value = selectedBillingDetail.value.hmo_loa_number?.trim() || ""
+    markBilledLoaDialogVisible.value = true
+    return
+  }
+  void markSelectedBillingAsBilled()
+}
+
+const confirmMarkBillingAsBilled = (): void => {
+  if (!canSubmitMarkBilledLoa.value) return
+  void markSelectedBillingAsBilled(markBilledLoaNumber.value.trim())
+}
+
+const markSelectedBillingAsBilled = async (loaNumber?: string): Promise<void> => {
   if (!selectedBillingDetail.value || !canMarkSelectedBillingAsBilled.value) return
   markingBillingAsBilled.value = true
   try {
     const targetAppointmentId = billingContextAppointmentId.value ?? selectedBillingDetail.value.appointment_id
     if (targetAppointmentId) {
-      const result = await billingPhase1Service.markAppointmentBilled(selectedBillingDetail.value.id, {appointment_id: targetAppointmentId})
+      const result = await billingPhase1Service.markAppointmentBilled(selectedBillingDetail.value.id, {
+        appointment_id: targetAppointmentId,
+        loa_number: loaNumber
+      })
       const refreshed = await billingPhase1Service.getById(selectedBillingDetail.value.id)
       const nextDetail = refreshed ?? selectedBillingDetail.value
       selectedBillingDetail.value = {...nextDetail, billing_status: result?.billing_status ?? "BILLED"}
       billingDetailPaymentType.value = getDefaultBillingPaymentType(selectedBillingDetail.value)
       billingTenderAmount.value = 0
+      markBilledLoaDialogVisible.value = false
+      markBilledLoaNumber.value = ""
       await fetchBillings()
       successToast(toast, result?.session_scoped ? "Current appointment marked as billed" : "Transaction marked as billed")
       return
     }
 
-    await billingPhase1Service.update(selectedBillingDetail.value.id, buildBillingUpdatePayload(selectedBillingDetail.value, {billing_status: "BILLED"}))
+    await billingPhase1Service.update(selectedBillingDetail.value.id, buildBillingUpdatePayload(selectedBillingDetail.value, {
+      billing_status: "BILLED",
+      loa_number: loaNumber
+    }))
     const refreshed = await billingPhase1Service.getById(selectedBillingDetail.value.id)
     if (!refreshed) { errorToast(toast, "Marked as billed but detail could not be reloaded"); return }
     selectedBillingDetail.value = refreshed; billingDetailPaymentType.value = getDefaultBillingPaymentType(refreshed); billingTenderAmount.value = 0
+    markBilledLoaDialogVisible.value = false
+    markBilledLoaNumber.value = ""
     await fetchBillings()
     successToast(toast, "Transaction marked as billed")
   } catch (e) { errorToast(toast, extractApiErrorMessage(e, "Failed to mark as billed")) }

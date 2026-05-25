@@ -127,6 +127,9 @@ export interface LguDashboardHistoryItem {
   billing_status?: string | null
   billing_amount_due?: number | null
   program_status?: string | null
+  physical_therapist?: string | null
+  doctor?: string | null
+  diagnosis?: string | null
   service_name?: string | null
   receipt_number?: string | null
   entry_type: string

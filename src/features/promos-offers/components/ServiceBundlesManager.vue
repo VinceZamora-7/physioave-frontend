@@ -201,6 +201,7 @@ const props = defineProps<{
   title: string
   description: string
   canEdit: boolean
+  apiPath?: string
   machineOptions: OptionRow[]
   techniqueOptions: OptionRow[]
   evaluationOptions: OptionRow[]
@@ -230,8 +231,10 @@ const calcOriginalPrice = (bundle: BundledService): number => {
 const loadBundles = async (): Promise<void> => {
   isLoading.value = true
   try {
-    const { data } = await pamsAPI.get<Pageable<BundleDTO>>("/service-bundles", {
-      params: { page: 1, size: 1000, name: "", status: "ALL" }
+    const { data } = await pamsAPI.get<Pageable<BundleDTO>>(`/${props.apiPath ?? 'service-bundles'}`, {
+      params: {
+        page: 1, size: 1000, name: "", status: "ALL",
+      }
     })
     const rows = (data?.content ?? []) as BundleDTO[]
     allBundles.value = rows.map(row => ({
@@ -324,10 +327,10 @@ const saveBundle = async (): Promise<void> => {
     }
 
     if (editingBundleId.value) {
-      await pamsAPI.put(`/service-bundles/${editingBundleId.value}`, apiPayload)
+      await pamsAPI.put(`/${props.apiPath ?? 'service-bundles'}/${editingBundleId.value}`, apiPayload)
       successToast(toast, "Bundle updated")
     } else {
-      await pamsAPI.post(`/service-bundles`, apiPayload)
+      await pamsAPI.post(`/${props.apiPath ?? 'service-bundles'}`, apiPayload)
       successToast(toast, "Bundle added")
     }
 

@@ -131,6 +131,8 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
           }
           * {
             box-sizing: border-box;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
           html, body {
             margin: 0;
@@ -231,7 +233,6 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
             font-family: "Canva Sans", sans-serif;
           }
           th, td {
-            border-bottom: 2px solid #d31d6e;
             padding: 3px 6px;
             vertical-align: top;
           }
@@ -240,6 +241,16 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
             font-weight: 700;
             font-family: "Montserrat", sans-serif;
             background: #f3f4f6;
+            border-bottom: 2px solid #d31d6e;
+          }
+          tbody tr.item-group-start td {
+            border-top: 2px solid #d31d6e;
+          }
+          tbody tr:first-child td {
+            border-top: none;
+          }
+          tbody tr.session-divider-row td {
+            border-bottom: 2px solid #d31d6e;
           }
           .text-center {
             text-align: center;
@@ -416,6 +427,7 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
           .footer {
             margin-top: 8px;
             background: #13b7de;
+            background-color: #13b7de;
             color: #0f172a;
             font-size: 11px;
             padding: 4px 6px;
@@ -446,6 +458,12 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
             .invoice-sheet {
               border: none;
             }
+            .footer {
+              background: #13b7de !important;
+              background-color: #13b7de !important;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
           }
         </style>
       </head>
@@ -471,8 +489,8 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
                   <div class="line"><span class="label">Gender:</span><span>${escapeHtml(invoice.patientGender || "N/A")}</span></div>
                 </div>
                 <div>
-                  <div class="line"><span class="label">Physical <br /> Therapist:</span><span>${escapeHtml(invoice.doctor || "N/A")}</span></div>
-                  <div class="line"><span class="label">Doctor:</span><span>${escapeHtml(invoice.physicalTherapist || "N/A")}</span></div>
+                  <div class="line"><span class="label">Physical <br /> Therapist:</span><span>${escapeHtml(invoice.physicalTherapist || "N/A")}</span></div>
+                  <div class="line"><span class="label">Doctor:</span><span>${escapeHtml(invoice.doctor || "N/A")}</span></div>
                   <div class="line"><span class="label">Diagnosis:</span><span>${escapeHtml(invoice.diagnosis || "N/A")}</span></div>
                 </div>
               </div>`}

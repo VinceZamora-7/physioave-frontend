@@ -986,7 +986,7 @@ const getPatientBillingSummaryAmount = (billing: LguPatientBilling): number => {
 const renderBillingSummaryInvoiceRows = (rows = getBillingSummaryInvoiceRows()): string => {
   if (!rows.length) return renderEmptyRow(5, "No availed LGU sessions recorded yet.")
   return rows.map(row => `
-    <tr>
+    <tr${row.itemNumber ? ' class="item-group-start"' : ''}>
       <td class="text-center">${escapeHtml(row.itemNumber)}</td>
       <td class="text-center">${escapeHtml(row.treatmentDate)}</td>
       <td>${escapeHtml(row.serviceRendered)}</td>
@@ -2125,7 +2125,8 @@ const loadDashboardBudget = async (): Promise<void> => {
           }))
       const calculatedInvoiceTotal = invoiceLines.reduce((sum, line) => sum + getLguInvoiceLineTotal(line), 0)
       const invoiceTotal = calculatedInvoiceTotal > 0 ? calculatedInvoiceTotal : total
-      const lguStatus = selectedPatientDetail.value?.package_availments[0]?.status
+      const lguStatus = detail.lgu_patient_program_status
+        || selectedPatientDetail.value?.package_availments[0]?.status
         || lines.find(line => line.claimStatus)?.claimStatus
         || detail.billing_status
       renderLguInvoiceWindow(popup, {
@@ -2137,6 +2138,7 @@ const loadDashboardBudget = async (): Promise<void> => {
         patientGender: detail.patient_gender,
         physicalTherapist: detail.physical_therapist,
         doctor: detail.doctor,
+        diagnosis: detail.diagnosis,
         lguProgramName: detail.lgu_program_name || selectedProgramName.value,
         lguReferenceLabel: detail.lgu_patient_referral_form_no || detail.lgu_reference_label || detail.service_name || selectedBillingMonth.value,
         lguDateIssued: detail.lgu_date_issued || detail.created_at,
@@ -2377,5 +2379,3 @@ onMounted(async () => {
   ])
 })
 </script>
-
-

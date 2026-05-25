@@ -16,7 +16,7 @@
 
           <div class="flex flex-wrap gap-2">
             <Button label="Invoices" icon="pi pi-file-pdf" size="small" outlined @click="$emit('open-invoice-session-picker')" />
-            <Button label="Billing Summary" icon="pi pi-chart-bar" size="small" outlined @click="$emit('export-patient-billing-summary')" />
+            <!-- <Button label="Billing Summary" icon="pi pi-file-pdf" size="small" outlined @click="$emit('export-patient-billing-summary')" /> -->
             <Button label="SOA" icon="pi pi-file" size="small" outlined @click="$emit('open-patient-soa-picker')" />
             <Button label="LGU Details" icon="pi pi-id-card" size="small" outlined @click="$emit('export-patient-lgu-details')" />
           </div>
@@ -123,7 +123,7 @@
                 </td>
                 <td class="px-3 py-2 text-xs text-[rgb(var(--app-fg))]/60">{{ formatDateTime(billing.created_at) }}</td>
                 <td class="px-3 py-2">
-                  <Button label="PDF" icon="pi pi-file-pdf" size="small" outlined :loading="printingClaimBillingId === billing.id" @click="$emit('download-claim-pdf', billing.id)" />
+                  <Button label="Billing Summary" icon="pi pi-file-pdf" size="small" outlined :loading="printingClaimBillingId === billing.id" @click="$emit('download-claim-pdf', billing.id)" />
                 </td>
               </tr>
             </tbody>

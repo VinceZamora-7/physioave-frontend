@@ -65,11 +65,17 @@ function buildLineRows(lines: LguInvoiceLine[]): string {
       ${sub.children?.length ? renderSubItems(sub.children, depth + 1) : ""}
     `).join("")
 
+  const sessionKey = (line: LguInvoiceLine): string =>
+    `${formatDate(line.treatmentDate)}|${line.sessionSequence || "-"}`
+
   return lines.map((line, index) => {
+    const currentSessionKey = sessionKey(line)
+    const nextSessionKey = lines[index + 1] ? sessionKey(lines[index + 1]) : ""
+    const isSessionEnd = currentSessionKey !== nextSessionKey
     const pricedSubItems = line.unitPrice <= 0 ? collectPricedSubItems(line.subItems ?? []) : []
     if (pricedSubItems.length) {
       return pricedSubItems.map((item, itemIndex) => `
-        <tr>
+        <tr class="${isSessionEnd && itemIndex === pricedSubItems.length - 1 ? "session-divider-row" : ""}">
           <td class="text-center">${itemIndex === 0 ? index + 1 : ""}</td>
           <td class="text-center">${escapeHtml(formatDate(line.treatmentDate))}</td>
           <td>${escapeHtml(`${item.quantity} ${item.name}`)}</td>
@@ -82,7 +88,7 @@ function buildLineRows(lines: LguInvoiceLine[]): string {
     const subItems = renderSubItems(line.subItems ?? [])
 
     return `
-      <tr>
+      <tr class="${isSessionEnd ? "session-divider-row" : ""}">
         <td class="text-center">${index + 1}</td>
         <td class="text-center">${escapeHtml(formatDate(line.treatmentDate))}</td>
         <td>
