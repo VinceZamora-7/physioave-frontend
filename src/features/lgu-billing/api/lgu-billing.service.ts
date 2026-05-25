@@ -125,6 +125,7 @@ export interface LguDashboardHistoryItem {
   phase1_billing_id?: number | null
   phase1_billing_public_id?: string | null
   billing_status?: string | null
+  billing_amount_due?: number | null
   program_status?: string | null
   service_name?: string | null
   receipt_number?: string | null

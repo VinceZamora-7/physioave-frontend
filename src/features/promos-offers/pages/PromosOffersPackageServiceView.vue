@@ -1,41 +1,47 @@
 <template>
   <main class="app-page-shell space-y-5">
-    <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-      <h2 class="text-xl font-semibold">Self Pay: Package Service</h2>
-      <RouterLink
-        :to="{ name: 'billing', query: { billing_type: 'SELF_PAY_PACKAGE' } }"
-        class="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-400"
-      >
-        <i class="pi pi-list" />
-        Manage All Self Pay Package Billings
-      </RouterLink>
-    </div>
+    <section class="app-hero-banner">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div class="space-y-2">
+          <div class="text-lg font-semibold tracking-tight">Self Pay: Package Service</div>
+          <p class="max-w-3xl text-sm text-[rgb(var(--app-fg))]/70">
+            Track self pay package billings, manage package offers, and maintain the service catalog for package-based care.
+          </p>
+        </div>
+        <Button
+          label="Manage All Self Pay Package Billings"
+          icon="pi pi-list"
+          :pt="ptPrimaryBtn"
+          @click="router.push({ name: 'billing', query: { billing_type: 'SELF_PAY_PACKAGE' } })"
+        />
+      </div>
+    </section>
 
     <SelfPayPackageRecentTransactionsCard />
 
     <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
       <div class="app-section-card-comfy flex flex-col gap-3">
         <div class="space-y-1">
-          <h3 class="text-sm font-semibold">Package Builder</h3>
-          <p class="text-xs opacity-70">Manage self pay package offers with bundled services, sessions, evaluations, and package prices.</p>
+          <h3 class="app-section-title text-base">Package Builder</h3>
+          <p class="text-sm opacity-70">Manage self pay package offers with bundled services, sessions, evaluations, and package prices.</p>
         </div>
-        <Button label="Open Package Builder" icon="pi pi-box" class="mt-auto" @click="showPackages = true" />
+        <Button label="Open Package Builder" icon="pi pi-box" class="mt-auto" :pt="ptPrimaryBtn" @click="showPackages = true" />
       </div>
 
       <div class="app-section-card-comfy flex flex-col gap-3">
         <div class="space-y-1">
-          <h3 class="text-sm font-semibold">All Available Services</h3>
-          <p class="text-xs opacity-70">Browse the package-service catalog for machines, techniques, evaluations, and add-ons.</p>
+          <h3 class="app-section-title text-base">All Available Services</h3>
+          <p class="text-sm opacity-70">Browse the package-service catalog for machines, techniques, evaluations, and add-ons.</p>
         </div>
-        <Button label="Open Services" icon="pi pi-list" class="mt-auto" @click="showServices = true" />
+        <Button label="Open Services" icon="pi pi-list" class="mt-auto" :pt="ptPrimaryBtn" @click="showServices = true" />
       </div>
 
       <div class="app-section-card-comfy flex flex-col gap-3">
         <div class="space-y-1">
-          <h3 class="text-sm font-semibold">Bundled Services</h3>
-          <p class="text-xs opacity-70">Create and manage bundled services used as building blocks for self pay packages.</p>
+          <h3 class="app-section-title text-base">Bundled Services</h3>
+          <p class="text-sm opacity-70">Create and manage bundled services used as building blocks for self pay packages.</p>
         </div>
-        <Button label="Open Bundles" icon="pi pi-objects-column" class="mt-auto" @click="showBundles = true" />
+        <Button label="Open Bundles" icon="pi pi-objects-column" class="mt-auto" :pt="ptPrimaryBtn" @click="showBundles = true" />
       </div>
     </div>
 
@@ -79,12 +85,14 @@
 
 <script setup lang="ts">
 import { ref } from "vue"
-import { RouterLink } from "vue-router"
+import { useRouter } from "vue-router"
 import Button from "primevue/button"
 import Dialog from "primevue/dialog"
 import PackageServiceBundleBuilder from "@/features/promos-offers/components/PackageServiceBundleBuilder.vue"
 import SelfPayPackageRecentTransactionsCard from "@/features/promos-offers/components/SelfPayPackageRecentTransactionsCard.vue"
+import { ptPrimaryBtn } from "@/features/shared/table-header.styles"
 
+const router = useRouter()
 const showPackages = ref(false)
 const showServices = ref(false)
 const showBundles = ref(false)

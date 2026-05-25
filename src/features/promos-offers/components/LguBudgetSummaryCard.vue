@@ -1737,16 +1737,42 @@ const usageStatusSeverity = (value?: string): "success" | "warn" | "danger" | "s
   return "secondary"
 }
 
+const normalizeLedgerStatus = (value?: string | null): string =>
+  String(value ?? "").trim().toUpperCase()
+
+const resolveLedgerAmount = (entry: LguDashboardHistoryItem): number => {
+  const billingAmountDue = Number(entry.billing_amount_due ?? 0)
+  if (billingAmountDue > 0) return billingAmountDue
+  return Math.max(0, Number(entry.amount_out ?? 0))
+}
+
+const shouldIgnoreLedgerEntry = (entry: LguDashboardHistoryItem): boolean => {
+  const usage = normalizeLedgerStatus(entry.usage_status)
+  if (usage === "REVERSED" || usage === "VOID") return true
+  return resolveLedgerAmount(entry) <= 0
+}
+
+const isUsedLedgerEntry = (entry: LguDashboardHistoryItem): boolean => {
+  if (shouldIgnoreLedgerEntry(entry)) return false
+  const billingStatus = normalizeLedgerStatus(entry.billing_status)
+  const programStatus = normalizeLedgerStatus(entry.program_status)
+  return billingStatus === "BILLED"
+    || billingStatus === "PAID"
+    || programStatus === "COMPLETED"
+    || programStatus === "DROPPED_OUT"
+}
+
 const usedLguFund = computed(() =>
   lguTransactionHistory.value
-    .filter(entry => entry.billing_status === "BILLED")
-    .reduce((sum, entry) => sum + Number(entry.amount_out ?? 0), 0)
+    .filter(isUsedLedgerEntry)
+    .reduce((sum, entry) => sum + resolveLedgerAmount(entry), 0)
 )
 
 const pendingUsedLguFund = computed(() =>
   lguTransactionHistory.value
-    .filter(entry => entry.billing_status && entry.billing_status !== "BILLED")
-    .reduce((sum, entry) => sum + Number(entry.amount_out ?? 0), 0)
+    .filter(entry => !shouldIgnoreLedgerEntry(entry))
+    .filter(entry => !isUsedLedgerEntry(entry))
+    .reduce((sum, entry) => sum + resolveLedgerAmount(entry), 0)
 )
 
 const totalAvailableFund = computed(() =>

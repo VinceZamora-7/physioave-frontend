@@ -266,7 +266,8 @@ const rolePermissionRequestCache = ref<Map<number, Promise<Set<number>>>>(new Ma
 
 const adminRoles = computed(() =>
   roles.value.filter((role) =>
-    role.appointment_provider_type !== "PHYSICAL_THERAPIST"
+    role.appointment_provider_type !== "DOCTOR_CONSULTANT"
+    && role.appointment_provider_type !== "PHYSICAL_THERAPIST"
     && role.appointment_provider_type !== "PT_ASSISTANT"
     && role.appointment_provider_type !== "INTERN"
   )
@@ -274,9 +275,9 @@ const adminRoles = computed(() =>
 
 	const selectedSearch = ref<string | undefined>()
 	const selectedStatus = ref<Status>(Status.ACTIVE)
-	
+
 	const { page, pageSize, onPageChangeDebounceFn } = usePaginationDebounce<Pageable<Staff> | undefined>()
-	
+
 	const requestParams = computed(
 	  () =>
 	    ({

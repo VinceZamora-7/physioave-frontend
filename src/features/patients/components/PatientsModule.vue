@@ -1,16 +1,6 @@
 <template>
   <main class="app-page-shell">
     <Message v-if="isError" severity="error" class="mb-3">Something went wrong!</Message>
-    <div class="mb-3 flex justify-end">
-      <Button
-        label="Export CSV"
-        icon="pi pi-download"
-        severity="secondary"
-        outlined
-        :loading="isPatientExportLoading"
-        @click="onExportCsv"
-      />
-    </div>
 
     <section
       v-if="!isError"
@@ -1249,18 +1239,6 @@ const onExportToExcelThrottleFn = useThrottleFn(async (): Promise<void> => {
   if (!response) return
   exportToExcel(response)
 }, defaultThrottle)
-
-const onExportCsv = async (): Promise<void> => {
-  const response: AxiosResponse<Blob> = await pamsAPI.get("/patients/export/csv", {
-    params: {
-      clinic_id: selectedClinicId.value,
-      name: selectedSearch.value?.trim() || undefined,
-      status: selectedStatus.value
-    },
-    responseType: "blob"
-  })
-  exportToExcel(response)
-}
 
 const statusLabel = (isActive: boolean): string => {
   return isActive ? 'Active' : 'Inactive'

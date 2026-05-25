@@ -590,7 +590,8 @@ const clinicLookups = computed<Lookup[]>(() =>
 )
 const ptRoles = computed(() =>
   roles.value.filter(role =>
-    role.appointment_provider_type === "PHYSICAL_THERAPIST"
+    role.appointment_provider_type === "DOCTOR_CONSULTANT"
+    || role.appointment_provider_type === "PHYSICAL_THERAPIST"
     || role.appointment_provider_type === "PT_ASSISTANT"
     || role.appointment_provider_type === "INTERN"
   )
@@ -623,7 +624,7 @@ const specialtySummary = computed(() => ({
   inactive: specialties.value.filter(specialty => !specialty.is_active).length
 }))
 const isPtProviderType = (providerType?: string | null): boolean =>
-  providerType === "PHYSICAL_THERAPIST" || providerType === "PT_ASSISTANT" || providerType === "INTERN"
+  providerType === "DOCTOR_CONSULTANT" || providerType === "PHYSICAL_THERAPIST" || providerType === "PT_ASSISTANT" || providerType === "INTERN"
 const resolvePtRoleName = (staff: Staff): string =>
   isPtProviderType(staff.appointment_provider_type)
     ? staff.role_name
@@ -830,7 +831,7 @@ const refreshAll = async (): Promise<void> => {
 const openCreatePt = (): void => {
   if (!canManageStaff.value) return
   if (!activePtRoles.value.length) {
-    errorToast(toast, "Add and activate at least one Physical Therapist job title first.")
+    errorToast(toast, "Add and activate at least one PT or Doctor Consultant job title first.")
     return
   }
   staffEditor.value?.openCreate()

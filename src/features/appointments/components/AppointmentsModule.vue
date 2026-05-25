@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <main class="app-page-shell space-y-5">
     <section class="app-appointment-card app-appointment-card-accent p-4 sm:p-5">
       <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -56,7 +56,7 @@
       </p>
       <Skeleton v-if="isClinicSwitchLoading" width="4rem" height="2rem" class="mt-2" />
       <p v-else class="app-appointment-value mt-1 text-2xl font-semibold">
-        {{ totalElements }}
+        {{ tableTotalElements }}
       </p>
     </article>
 
@@ -88,350 +88,21 @@
       </div>
     </section>
 
-<section :class="sectionCardClass">
-  <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-    <div class="space-y-1">
-      <h3 :class="sectionTitleClass">
-        Clinic Calendar
-      </h3>
-
-      <p class="app-appointment-muted max-w-2xl text-sm leading-6">
-        View valid booking days, monthly billing status, and branch schedule availability.
-      </p>
-
-      <div class="flex flex-wrap gap-2 pt-1 text-xs">
-        <span
-          class="app-appointment-chip"
-        >
-          Selected: {{ selectedDateLabel }}
-        </span>
-
-        <span
-          v-if="selectedClinicScheduleLabel"
-          class="app-appointment-chip"
-        >
-          {{ selectedClinicScheduleLabel }}
-        </span>
-      </div>
-    </div>
-
-    <div
-      class="app-appointment-branch-pill"
-    >
-      Branch:
-      <span class="app-appointment-value font-medium">
-        {{ selectedClinic?.name || "No branch selected" }}
-      </span>
-    </div>
-  </div>
-
-  <div class="app-appointment-muted flex flex-wrap gap-2 text-xs">
-    <span
-      class="app-appointment-legend app-appointment-legend-danger"
-    >
-      <span class="app-appointment-legend-dot app-appointment-legend-dot-danger" />
-      Pending
-    </span>
-
-    <span
-      class="app-appointment-legend app-appointment-legend-info"
-    >
-      <span class="app-appointment-legend-dot app-appointment-legend-dot-info" />
-      Partial
-    </span>
-
-    <span
-      class="app-appointment-legend app-appointment-legend-success"
-    >
-      <span class="app-appointment-legend-dot app-appointment-legend-dot-success" />
-      Billed
-    </span>
-  </div>
-
-  <DatePicker
-    v-model="calendarDate"
-    inline
-    fluid
-    :manualInput="false"
-    :disabledDays="calendarDisabledDays"
-    @month-change="onCalendarMonthChange"
-  >
-    <template #date="slotProps">
-      <div :class="calendarDayCellClass(slotProps.date)">
-        <span>{{ slotProps.date.day }}</span>
-
-        <span
-          v-if="getCalendarDayStatus(slotProps.date)"
-          :class="calendarDayDotClass(slotProps.date)"
-        />
-      </div>
-    </template>
-  </DatePicker>
-
-  <div class="flex justify-end pt-1">
-    <Button
-      label="Add Appointment"
-      icon="pi pi-plus"
-      size="small"
-      outlined
-      :pt="ptPrimaryBtn"
-      @click="openCreateDialog"
+<AppointmentCalendarSection
+      v-model:calendar-date="calendarDate"
+      ref="calendarSectionRef"
+      @appointment-click="selectAppointment"
+      @add-appointment="openCreateDialog"
     />
-  </div>
-</section>
 
-<section :class="sectionCardClass">
-  <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-    <div class="space-y-1">
-      <h3 :class="sectionTitleClass">
-        Appointments Table
-      </h3>
-
-        <p class="app-appointment-muted max-w-2xl text-sm leading-6">
-        Filter, review, page through, and export appointment records for the selected date.
-      </p>
-    </div>
-  </div>
-
-  <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
-    <IftaLabel>
-      <InputText
-        v-model="recordFilter"
-        fluid
-        placeholder="Search patient or record ID"
-        :pt="ptInputText"
-      />
-      <label>Record Search</label>
-    </IftaLabel>
-
-    <IftaLabel>
-      <Select
-        v-model="statusFilter"
-        :options="appointmentStatusOptions"
-        showClear
-        fluid
-        placeholder="All statuses"
-        :pt="ptSelect"
-      />
-      <label>Status</label>
-    </IftaLabel>
-
-    <IftaLabel>
-      <Select
-        v-model="phaseFilter"
-        :options="appointmentPhaseOptions"
-        optionLabel="label"
-        optionValue="value"
-        showClear
-        fluid
-        placeholder="All phases"
-        :pt="ptSelect"
-      />
-      <label>Phase</label>
-    </IftaLabel>
-
-    <IftaLabel>
-      <Select
-        v-model="ptFilter"
-        :options="ptFilterOptions"
-        optionLabel="label"
-        optionValue="value"
-        showClear
-        filter
-        fluid
-        placeholder="All assigned PTs"
-        :pt="ptSelect"
-      />
-      <label>Assigned PT</label>
-    </IftaLabel>
-
-    <div class="flex flex-col gap-2 md:col-span-2 sm:flex-row sm:items-end xl:col-span-2">
-      <Button
-        label="Refresh"
-        icon="pi pi-refresh"
-        severity="secondary"
-        outlined
-        class="w-full sm:w-auto"
-        :pt="ptOutlinedBtn"
-        @click="refreshAll"
-      />
-
-      <Button
-        label="Export CSV"
-        icon="pi pi-download"
-        severity="secondary"
-        outlined
-        class="w-full sm:w-auto"
-        :pt="ptOutlinedBtn"
-        @click="onExportCsv"
-      />
-    </div>
-
-    <p
-      v-if="recordFilter.trim()"
-      class="app-appointment-muted text-xs leading-5 md:col-span-2 xl:col-span-6"
-    >
-      Record search checks across clinics, assigned PTs, statuses, and dates. Clear the search to return to the selected table filters.
-    </p>
-  </div>
-
-  <div class="app-appointment-table-shell">
-    <DataTable
-      :value="appointments"
-      dataKey="id"
-      paginator
-      :rows="pageSize"
-      :first="(page - 1) * pageSize"
-      :totalRecords="totalElements"
-      :loading="isLoading"
-      selectionMode="single"
-      @page="onPage"
-      @rowSelect="onSelectRow"
-      :pt="{
-        column: {
-          headerCell: {
-            class: 'app-appointment-table-th'
-          },
-          bodyCell: {
-            class: 'app-appointment-table-td'
-          }
-        }
-      }"
-    >
-      <template #empty>
-        <div class="app-appointment-empty">
-          No appointments found for the selected date and filters.
-        </div>
-      </template>
-
-      <Column field="patient_name" header="Patient" />
-
-      <Column field="doctor_name" header="Assigned PT">
-        <template #body="{ data }">
-          {{ data.doctor_name || "Unassigned" }}
-        </template>
-      </Column>
-
-      <Column field="starts_at" header="Start">
-        <template #body="{ data }">
-          {{ formatDateTime(data.starts_at) }}
-        </template>
-      </Column>
-
-      <Column field="appointment_status" header="Status">
-        <template #body="{ data }">
-          <Tag
-            :value="displayAppointmentStatus(data.appointment_status)"
-            :severity="appointmentSeverity(data.appointment_status)"
-          />
-        </template>
-      </Column>
-
-      <Column field="appointment_phase" header="Phase">
-        <template #body="{ data }">
-          <Tag
-            :value="displayAppointmentPhase(data.appointment_phase)"
-            :severity="appointmentPhaseSeverity(data.appointment_phase)"
-          />
-        </template>
-      </Column>
-
-      <Column field="location_context" header="Location">
-        <template #body="{ data }">
-          <Tag
-            :value="displayLocationContext(data.location_context)"
-            :severity="appointmentLocationContextSeverity(data.location_context)"
-          />
-        </template>
-      </Column>
-
-      <Column field="specialty_tag_name" header="Specialty">
-        <template #body="{ data }">
-          <div class="space-y-1">
-            <p>{{ data.specialty_tag_name || "N/A" }}</p>
-
-            <Tag
-              v-if="data.specialty_tag_name && data.specialty_tag_is_active === false"
-              value="Inactive Specialty"
-              severity="secondary"
-              class="text-xs"
-            />
-          </div>
-        </template>
-      </Column>
-
-      <Column field="treatment_area_name" header="Clinic Room">
-        <template #body="{ data }">
-          <div class="space-y-1">
-            <TreatmentAreaChip
-              :name="data.treatment_area_name"
-              :color="data.treatment_area_color"
-            />
-
-            <Tag
-              v-if="data.treatment_area_name && data.treatment_area_is_active === false"
-              value="Inactive Room"
-              severity="secondary"
-              class="text-xs"
-            />
-          </div>
-        </template>
-      </Column>
-
-      <Column field="billing_status" header="Billing Status">
-        <template #body="{ data }">
-          <Tag
-            :value="displayBillingStatus(data.billing_status, data.billing_type)"
-            :severity="billingSeverity(data.billing_status, data.billing_type)"
-          />
-        </template>
-      </Column>
-
-      <Column field="reschedule_count" header="Reschedules">
-        <template #body="{ data }">
-          <span class="font-medium">
-            {{ data.reschedule_count }}
-          </span>
-        </template>
-      </Column>
-
-      <Column header="Actions">
-        <template #body="{ data }">
-          <div class="flex items-center gap-1">
-            <Button
-              size="small"
-              text
-              rounded
-              icon="pi pi-eye"
-              aria-label="View appointment"
-              @click.stop="selectAppointment(data)"
-            />
-
-            <Button
-              size="small"
-              text
-              rounded
-              icon="pi pi-calendar-plus"
-              aria-label="Reschedule appointment"
-              @click.stop="openReschedule(data)"
-            />
-
-            <Button
-              v-if="canDeleteAppointments"
-              size="small"
-              text
-              rounded
-              severity="danger"
-              icon="pi pi-trash"
-              aria-label="Delete appointment"
-              @click.stop="confirmDeleteAppointment(data)"
-            />
-          </div>
-        </template>
-      </Column>
-    </DataTable>
-  </div>
-</section>
+<AppointmentTableSection
+  :calendar-date="calendarDate"
+  ref="tableSectionRef"
+  @appointment-click="selectAppointment"
+  @reschedule="openReschedule"
+  @delete="confirmDeleteAppointment"
+  @data-updated="onTableDataUpdated"
+/>
 
 <AppointmentCheckoutPanel
   v-model:visible="detailPanelVisible"
@@ -1221,6 +892,17 @@
 
   <div class="mt-4 space-y-4">
 
+            <!-- Clinic Schedule info — integrated, not orphaned -->
+    <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] px-4 py-3 space-y-1">
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Clinic Schedule</span>
+        <span class="text-xs text-[rgb(var(--app-fg))]/40">30 · 60 · 75 min slots</span>
+      </div>
+      <div class="text-sm font-medium text-[rgb(var(--app-fg))]">
+        {{ selectedClinicScheduleLabel || "No clinic resolved yet" }}
+      </div>
+    </div>
+
     <!-- Slot Length -->
     <div class="flex flex-col gap-1.5">
       <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">
@@ -1243,99 +925,7 @@
       </div>
     </div>
 
-    <template v-if="selectedPackageHasSessionSchedules">
-      <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-4 py-3">
-        <div class="text-sm font-medium text-[rgb(var(--app-fg))]">
-          {{ selectedPackageOfferDetail?.name || "This package" }} includes {{ packageSessionSchedules.length }} schedulable session{{ packageSessionSchedules.length === 1 ? "" : "s" }}.
-        </div>
-        <p class="mt-1 text-xs text-[rgb(var(--app-fg))]/60">
-          Each schedule creates its own appointment while sharing the same billing record.
-        </p>
-      </div>
-
-      <div class="space-y-3">
-        <article
-          v-for="(schedule, index) in packageSessionSchedules"
-          :key="schedule.key"
-          class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3"
-        >
-          <div class="flex items-start justify-between gap-3">
-            <div>
-              <div class="font-medium text-[rgb(var(--app-fg))]">{{ schedule.sessionName }}</div>
-              <div class="mt-1 text-xs text-[rgb(var(--app-fg))]/60">
-                Session {{ schedule.occurrence }} of {{ schedule.totalOccurrences }}
-              </div>
-            </div>
-            <Tag :value="`#${index + 1}`" severity="contrast" />
-          </div>
-
-          <div class="mt-3 grid grid-cols-2 gap-3">
-            <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">
-                Start
-              </label>
-              <DatePicker
-                :modelValue="schedule.startsAt"
-                showTime
-                fluid
-                :manualInput="true"
-                :stepMinute="slotMinuteStep"
-                :disabledDays="calendarDisabledDays"
-                hourFormat="24"
-                @update:modelValue="value => updatePackageSessionStart(index, value)"
-              />
-            </div>
-
-            <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">
-                End
-              </label>
-              <div class="flex h-full items-center rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-3 py-2 text-sm text-[rgb(var(--app-fg))]/70">
-                {{ formatDateTime(getPackageSessionEnd(schedule.startsAt)) }}
-              </div>
-            </div>
-          </div>
-        </article>
-      </div>
-    </template>
-
-    <div v-else class="grid grid-cols-2 gap-3">
-      <div class="flex flex-col gap-1.5">
-        <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">
-          Start
-        </label>
-        <DatePicker
-          v-model="createStart"
-          showTime fluid
-          :manualInput="true"
-          :stepMinute="slotMinuteStep"
-          :disabledDays="calendarDisabledDays"
-          hourFormat="24"
-        />
-      </div>
-
-      <div class="flex flex-col gap-1.5">
-        <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">
-          End
-        </label>
-        <div class="flex h-full items-center rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] px-3 py-2 text-sm text-[rgb(var(--app-fg))]/70">
-          {{ formatDateTime(createEnd) }}
-        </div>
-      </div>
-    </div>
-
-    <!-- Clinic Schedule info — integrated, not orphaned -->
-    <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] px-4 py-3 space-y-1">
-      <div class="flex items-center justify-between gap-2">
-        <span class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Clinic Schedule</span>
-        <span class="text-xs text-[rgb(var(--app-fg))]/40">30 · 60 · 75 min slots</span>
-      </div>
-      <div class="text-sm font-medium text-[rgb(var(--app-fg))]">
-        {{ selectedClinicScheduleLabel || "No clinic resolved yet" }}
-      </div>
-    </div>
-
-    <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-4 py-3">
+        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-4 py-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Time Slots</div>
@@ -1419,6 +1009,93 @@
       </div>
     </div>
 
+
+
+
+    <template v-if="selectedPackageHasSessionSchedules">
+      <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-4 py-3">
+        <div class="text-sm font-medium text-[rgb(var(--app-fg))]">
+          {{ selectedPackageOfferDetail?.name || "This package" }} includes {{ packageSessionSchedules.length }} schedulable session{{ packageSessionSchedules.length === 1 ? "" : "s" }}.
+        </div>
+        <p class="mt-1 text-xs text-[rgb(var(--app-fg))]/60">
+          Each schedule creates its own appointment while sharing the same billing record.
+        </p>
+      </div>
+
+      <div class="space-y-3">
+        <article
+          v-for="(schedule, index) in packageSessionSchedules"
+          :key="schedule.key"
+          class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <div class="font-medium text-[rgb(var(--app-fg))]">{{ schedule.sessionName }}</div>
+              <div class="mt-1 text-xs text-[rgb(var(--app-fg))]/60">
+                Session {{ schedule.occurrence }} of {{ schedule.totalOccurrences }}
+              </div>
+            </div>
+            <Tag :value="`#${index + 1}`" severity="contrast" />
+          </div>
+
+          <div class="mt-3 grid grid-cols-2 gap-3">
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">
+                Start
+              </label>
+              <DatePicker
+                :modelValue="schedule.startsAt"
+                showTime
+                fluid
+                :manualInput="true"
+                :stepMinute="slotMinuteStep"
+                :disabledDays="calendarDisabledDays"
+                hourFormat="24"
+                @update:modelValue="value => updatePackageSessionStart(index, value)"
+              />
+            </div>
+
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">
+                End
+              </label>
+              <div class="flex h-full items-center rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-3 py-2 text-sm text-[rgb(var(--app-fg))]/70">
+                {{ formatDateTime(getPackageSessionEnd(schedule.startsAt)) }}
+              </div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </template>
+
+    <div v-else class="grid grid-cols-2 gap-3">
+      <div class="flex flex-col gap-1.5">
+        <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">
+          Start
+        </label>
+        <DatePicker
+          v-model="createStart"
+          showTime fluid
+          :manualInput="true"
+          :stepMinute="slotMinuteStep"
+          :disabledDays="calendarDisabledDays"
+          hourFormat="24"
+        />
+      </div>
+
+      <div class="flex flex-col gap-1.5">
+        <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">
+          End
+        </label>
+        <div class="flex h-full items-center rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] px-3 py-2 text-sm text-[rgb(var(--app-fg))]/70">
+          {{ formatDateTime(createEnd) }}
+        </div>
+      </div>
+    </div>
+
+
+
+
   </div>
 
 </section>
@@ -1454,11 +1131,10 @@ import AppointmentEncounterTicketDialog from "@/features/appointments/components
 import {computed, defineAsyncComponent, onMounted, ref, watch} from "vue";
 import {storeToRefs} from "pinia";
 import {useRouter} from "vue-router";
+import axios from "axios";
 import {useConfirm} from "primevue/useconfirm";
 import {useToast} from "primevue/usetoast";
 import Button from "primevue/button";
-import Column from "primevue/column";
-import DataTable, {type DataTablePageEvent} from "primevue/datatable";
 import DatePicker from "primevue/datepicker";
 import Dialog from "primevue/dialog";
 import IftaLabel from "primevue/iftalabel";
@@ -1479,12 +1155,11 @@ import {
   type AppointmentLocationContext,
   type AppointmentPhase
 } from "@/features/appointments/api/appointment-phase1.service";
-import {exportToExcel} from "@/utils/export-excel.util";
 import {
   openEncounterTicketPdfWindow,
   renderEncounterTicketPdfWindow
 } from "@/utils/encounter-ticket-pdf.util";
-import {getApiErrorMessage} from "@/utils/actionable-error.util";
+import {getApiErrorMessage, type ApiErrorMessageOptions} from "@/utils/actionable-error.util";
 import {errorToast, successToast} from "@/utils/toast.util";
 import {patientService} from "@/features/patients/api/patient.service";
 import {defaultPage} from "@/models/paging";
@@ -1504,9 +1179,11 @@ import {createReferenceService} from "@/services/reference.service";
 import {ReferenceTanstackKey} from "@/utils/keys/tanstack-key";
 import type {AppointmentProviderType, SpecialtyTag, TreatmentArea} from "@/models/reference";
 import { ptInputText, ptModalPrimaryBtn, ptOutlinedBtn, ptPrimaryBtn, ptSelect } from "@/features/shared/table-header.styles";
-import { hasAnyStoredPermission, readStoredAuthSnapshot } from "@/utils/auth-user.util"
+import { readStoredAuthSnapshot } from "@/utils/auth-user.util"
 import {clinicStore} from "@/stores/clinic.store"
 import AppointmentCheckoutPanel from "@/features/appointments/components/AppointmentCheckoutPanel.vue"
+import AppointmentCalendarSection from "@/features/appointments/components/AppointmentCalendarSection.vue"
+import AppointmentTableSection from "@/features/appointments/components/AppointmentTableSection.vue"
 
 
 const BillingModule = defineAsyncComponent(() => import("@/features/billing/components/BillingModule.vue"))
@@ -1525,7 +1202,9 @@ const {clinicOptions, selectedClinicId} = storeToRefs(globalClinicStore)
 const roleName = ref("")
 const permissionSet = ref<Set<string>>(new Set())
 
-const appointments = ref<AppointmentListItem[]>([])
+const tableAppointments = ref<AppointmentListItem[]>([])
+const tableTotalElements = ref(0)
+const tableSectionRef = ref<InstanceType<typeof AppointmentTableSection>>()
 const selectedDetail = ref<AppointmentDetail>()
 const detailPanelVisible = ref(false)
 const billingOverlayVisible = ref(false)
@@ -1538,26 +1217,16 @@ const lguMonthlyClaimVisible = ref(false)
 const lguMonthlyClaimMonth = ref("")
 const isLguMonthlyClaimSaving = ref(false)
 const lguMonthlyClaimSummary = ref<{ consumed_count: number; billing_month: string } | null>(null)
-const isLoading = ref(false)
 const isClinicSwitchLoading = ref(false)
 const slotMinuteStep = 15
 type SlotDurationMinutes = 30 | 60 | 75
-type DoctorConsultantFilterValue = number | "UNASSIGNED"
 const slotDurationOptions: Array<{label: string; value: SlotDurationMinutes}> = [
   {label: "30 min", value: 30},
   {label: "60 min", value: 60},
   {label: "75 min", value: 75},
 ]
 
-const page = ref(1)
-const pageSize = ref(10)
-const totalElements = ref(0)
-const recordFilter = ref("")
-const statusFilter = ref<string>()
-const phaseFilter = ref<AppointmentPhase>()
-const ptFilter = ref<DoctorConsultantFilterValue>()
 const calendarDate = ref<Date>(new Date())
-
 const rescheduleVisible = ref(false)
 const activeAppointment = ref<AppointmentListItem>()
 const rescheduleStart = ref<Date>(new Date())
@@ -1566,6 +1235,7 @@ const rescheduleSlotDuration = ref<SlotDurationMinutes>(60)
 const overrideReason = ref("")
 
 const createVisible = ref(false)
+const calendarSectionRef = ref<InstanceType<typeof AppointmentCalendarSection>>()
 type AppointmentPersonOption = {
   id: number
   name: string
@@ -1658,7 +1328,6 @@ const appointmentLocationContextOptions: Array<{label: string; value: Appointmen
   {label: "In-Clinic", value: "IN_CLINIC"},
   {label: "Home Care", value: "HOME_CARE"},
 ]
-const appointmentStatusOptions = ["Pending", "Rescheduled", "No show", "Cancelled", "Completed"]
 const createPatient = ref<number>()
 const createDoctor = ref<number>()
 const createReferringDoctor = ref<number>()
@@ -1721,21 +1390,12 @@ const createHmoEvaluationIds = ref<Set<number> | null>(null)
 const createHmoAddOnMachineIds = ref<Set<number> | null>(null)
 const createHmoAddOnTechniqueIds = ref<Set<number> | null>(null)
 const createHmoAddOnHomeServiceIds = ref<Set<number> | null>(null)
-type CalendarDayStatus =
-  | "pending"
-  | "partial"
-  | "billed"
-const calendarDayStatusMap = ref<Map<string, CalendarDayStatus>>(new Map())
-const bookedMonthCache = ref<Map<string, Map<string, CalendarDayStatus>>>(new Map())
-const visibleMonth = ref<number>(new Date().getMonth())
-const visibleYear = ref<number>(new Date().getFullYear())
 const createDayAppointments = ref<AppointmentListItem[]>([])
 const createDayAppointmentsKey = ref("")
 const isCreateSlotsLoading = ref(false)
 const createActiveScheduleIndex = ref(0)
 
 const needsOverrideReason = computed(() => (activeAppointment.value?.reschedule_count ?? 0) >= 3)
-const canDeleteAppointments = computed(() => hasAnyStoredPermission(permissionSet.value, "Appointment::DELETE"))
 const specialtyTagReferenceService = createReferenceService<SpecialtyTag>(ReferenceTanstackKey.SPECIALTY_TAGS)
 const treatmentAreaReferenceService = createReferenceService<TreatmentArea>(ReferenceTanstackKey.TREATMENT_AREAS)
 
@@ -1810,14 +1470,154 @@ const resolveCreateServiceType = (billingType: BillingType): NonNullable<Paramet
   return "SINGLE"
 }
 
-const extractApiErrorMessage = (error: unknown, fallback: string): string => {
-  return getApiErrorMessage(error, {
+const resolveAppointmentsErrorOptions = (fallback: string): ApiErrorMessageOptions => {
+  const normalized = fallback.trim().toLowerCase()
+
+  if (normalized.includes("create appointment")) {
+    return {
+      baseMessage: fallback,
+      permissionHint: "Appointment::CREATE and Patient::READ permissions for this clinic",
+      notFoundHint: "The selected patient, provider, room, or service is no longer available. Re-select those fields and submit again.",
+      invalidInputHint: "Check required fields in order: Patient -> Assigned PT -> Services -> Schedule (date/time within clinic hours).",
+      retryHint: "Review the form and submit again."
+    }
+  }
+
+  if (normalized.includes("reschedule")) {
+    return {
+      baseMessage: fallback,
+      permissionHint: "Appointment::UPDATE permission for this clinic",
+      notFoundHint: "This appointment may have been updated or removed. Refresh the table and retry.",
+      invalidInputHint: "Check new schedule: within clinic days/hours, 15-minute increments, no overlap, and provide owner reason after 3 reschedules.",
+      retryHint: "Pick a new valid slot and submit again."
+    }
+  }
+
+  if (normalized.includes("time slots")) {
+    return {
+      baseMessage: fallback,
+      permissionHint: "Appointment::READ permission for this clinic",
+      notFoundHint: "No schedule configuration was found for this clinic/date. Verify clinic setup and operating hours.",
+      invalidInputHint: "Check selected clinic and date, then reload available slots.",
+      retryHint: "Reopen the Create Appointment dialog or change date and back."
+    }
+  }
+
+  if (normalized.includes("dropout status")) {
+    return {
+      baseMessage: fallback,
+      permissionHint: "Appointment::UPDATE and LGU-related permissions in Role Access",
+      notFoundHint: "The LGU-linked appointment or billing record was not found. Refresh appointment details and retry.",
+      invalidInputHint: "Check LGU billing linkage and patient status before updating dropout state.",
+      retryHint: "Refresh the appointment detail panel and try again."
+    }
+  }
+
+  if (normalized.includes("month-end lgu claim")) {
+    return {
+      baseMessage: fallback,
+      permissionHint: "LGU claim permissions and Appointment::UPDATE",
+      notFoundHint: "LGU claim source records were not found. Reopen appointment details and verify LGU credit summary.",
+      invalidInputHint: "Check billing month format (YYYY-MM), consumed sessions, and LGU authorization status.",
+      retryHint: "Correct billing month/details and create claim again."
+    }
+  }
+
+  if (normalized.includes("encounter ticket")) {
+    return {
+      baseMessage: fallback,
+      permissionHint: "Encounter ticket and Appointment::UPDATE permissions",
+      notFoundHint: "The encounter ticket or billing snapshot is no longer available. Refresh appointment details.",
+      invalidInputHint: "Check that billing exists, patient signature is provided, and the ticket is not already locked.",
+      retryHint: "Refresh details and retry the encounter action."
+    }
+  }
+
+  if (normalized.includes("appointment detail")) {
+    return {
+      baseMessage: fallback,
+      permissionHint: "Appointment::READ permission for this clinic",
+      notFoundHint: "The selected appointment is no longer available. Refresh the table and select another record.",
+      invalidInputHint: "Check table filters and selected clinic/date before opening details.",
+      retryHint: "Click Refresh and try opening the detail again."
+    }
+  }
+
+  if (normalized.includes("delete appointment")) {
+    return {
+      baseMessage: fallback,
+      permissionHint: "Appointment::DELETE permission for this clinic",
+      notFoundHint: "This appointment may have already been deleted. Refresh the table.",
+      invalidInputHint: "Check whether the appointment is linked to a locked billing or encounter ticket.",
+      retryHint: "Refresh records and retry deletion."
+    }
+  }
+
+  return {
     baseMessage: fallback,
     permissionHint: "Appointment or Patient permissions in Role Access",
     notFoundHint: "The selected record was not found. Refresh the page and try again.",
     invalidInputHint: "Some inputs are invalid. Check required fields and schedule values, then retry.",
     retryHint: "Please try again."
-  })
+  }
+}
+
+const resolveSpecificAppointmentsErrorMessage = (error: unknown, fallback: string): string | undefined => {
+  if (!axios.isAxiosError(error)) return undefined
+
+  const status = Number(error.response?.status ?? 0)
+  const apiMessage = String(error.response?.data?.message ?? error.response?.data?.detail ?? "").trim()
+  const normalizedFallback = fallback.trim().toLowerCase()
+  const normalizedApi = apiMessage.toLowerCase()
+
+  const isCreateAppointment = normalizedFallback.includes("create appointment")
+  const isReschedule = normalizedFallback.includes("reschedule")
+
+  if (
+    isCreateAppointment
+    && /patient is marked as dropped out|cannot avail lgu billing|dropped out.*lgu/i.test(normalizedApi)
+  ) {
+    return "Cannot create LGU appointment: the patient is marked as Dropped Out. Ask an Owner-equivalent account to return the patient to Active first, then create the appointment again."
+  }
+
+  if (
+    (isCreateAppointment || isReschedule)
+    && (status === 409 || /conflict|overlap|already booked|double\s*book|time\s*slot.*taken|occupied/i.test(normalizedApi))
+    && /conflict|overlap|already booked|double\s*book|time\s*slot|occupied/i.test(normalizedApi)
+  ) {
+    return "Schedule conflict: the selected PT or room already has an appointment at that time. Check Calendar availability, then choose a different time slot, PT, or room."
+  }
+
+  if (
+    (isCreateAppointment || isReschedule)
+    && /outside clinic operating days|outside clinic operating hours|outside clinic operating/i.test(normalizedApi)
+  ) {
+    return "Schedule is outside clinic operating schedule. Pick a date within clinic operating days and a time within clinic operating hours."
+  }
+
+  if (isCreateAppointment && /lgu program.*required|select lgu program|missing lgu program/i.test(normalizedApi)) {
+    return "LGU Program is required for LGU Billing. Select an LGU Program in the appointment form, then submit again."
+  }
+
+  if (isCreateAppointment && /specialty.*required|requires specialty/i.test(normalizedApi)) {
+    return "Specialty is required for the selected provider role. Select a specialty in Care Team and Session Setup, then submit again."
+  }
+
+  if (isCreateAppointment && /assigned pt is required|doctor_id.*required|provider.*required/i.test(normalizedApi)) {
+    return "Assigned PT is required. Choose an Assigned PT in Care Team and Session Setup, then create the appointment again."
+  }
+
+  if (isCreateAppointment && /patient.*required|patient_id.*required/i.test(normalizedApi)) {
+    return "Patient is required. Select a patient first, then create the appointment again."
+  }
+
+  return undefined
+}
+
+const extractApiErrorMessage = (error: unknown, fallback: string): string => {
+  const specificMessage = resolveSpecificAppointmentsErrorMessage(error, fallback)
+  if (specificMessage) return specificMessage
+  return getApiErrorMessage(error, resolveAppointmentsErrorOptions(fallback))
 }
 
 const toOptionalStringId = (value: unknown): string | undefined => {
@@ -2339,9 +2139,6 @@ const formatLocalDateKey = (date: Date): string => {
   return `${yyyy}-${mm}-${dd}`
 }
 
-const selectedDateIso = computed(() => formatLocalDateKey(calendarDate.value))
-const sectionCardClass = "app-appointment-card space-y-4"
-const sectionTitleClass = "app-appointment-title text-lg"
 const detailCardClass = "app-appointment-card p-3"
 const selectedCheckoutSummary = computed(() => selectedDetail.value?.checkout_summary)
 const patientWalletAmountToCollect = computed(() =>
@@ -2588,7 +2385,7 @@ const submitLguMonthlyClaim = async (): Promise<void> => {
   }
 }
 
-const dayBookings = computed<AppointmentListItem[]>(() => appointments.value)
+const dayBookings = computed<AppointmentListItem[]>(() => tableAppointments.value)
 const rescheduledAppointmentsCount = computed(() => dayBookings.value.filter(item => Number(item.reschedule_count ?? 0) > 0).length)
 const billingAttentionCount = computed(() =>
   dayBookings.value.filter(item => {
@@ -2614,18 +2411,6 @@ const selectedCreateProviderSpecialtyLabel = computed(() =>
 const selectedTreatmentAreaOption = computed(() =>
   treatmentAreaOptions.value.find(option => option.id === createTreatmentArea.value)
 )
-const ptFilterOptions = computed(() =>
-  [
-    {label: "Unassigned", value: "UNASSIGNED" as const},
-    ...doctorOptions.value
-      .filter(option => isPhysicalTherapistProviderType(option.appointment_provider_type))
-      .map(option => ({label: option.label, value: option.id}))
-  ]
-)
-const selectedDoctorConsultantId = computed(() =>
-  typeof ptFilter.value === "number" ? ptFilter.value : undefined
-)
-const isUnassignedDoctorConsultantFilter = computed(() => ptFilter.value === "UNASSIGNED")
 const selectedDateLabel = computed(() =>
   calendarDate.value.toLocaleDateString("en-PH", {
     weekday: "long",
@@ -2712,22 +2497,6 @@ const displayBillingStatus = (status?: string, billingType?: string): string => 
   if (normalized === "VOID") return "Void"
   return normalized
 }
-const normalizeServiceTypeForCalendar = (value?: string): string =>
-  String(value ?? "")
-    .trim()
-    .toUpperCase()
-    .replace(/:/g, "")
-    .replace(/-/g, "_")
-    .replace(/ /g, "_")
-const isFullyBilledStatus = (status?: string): boolean => {
-  const normalized = displayBillingStatus(status)
-  return normalized === "PAID" || normalized === "BILLED"
-}
-const isPartiallyPaidStatus = (status?: string): boolean => displayBillingStatus(status) === "PARTIAL"
-const isUnbilledStatus = (status?: string): boolean => {
-  const normalized = displayBillingStatus(status)
-  return normalized === "UNBILLED" || normalized === "PENDING"
-}
 const needsBillingAttention = (status?: string): boolean => {
   const normalized = displayBillingStatus(status)
   return normalized !== "PAID" && normalized !== "BILLED"
@@ -2736,24 +2505,8 @@ const isFinishedAppointmentStatus = (status?: string): boolean => {
   const normalized = normalizeAppointmentStatus(status)
   return normalized === "COMPLETED" || normalized === "CANCELLED" || normalized === "NO_SHOW"
 }
-const isMultiSessionAppointment = (appointment: AppointmentListItem): boolean => {
-  const normalizedBillingType = normalizeBillingTypeForCalendar(appointment.billing_type)
-  const normalizedServiceType = normalizeServiceTypeForCalendar(appointment.service_type)
-
-  return normalizedServiceType === "PACKAGE"
-    || normalizedBillingType === "SELF_PAY_PACKAGE"
-}
 
 const formatDateTime = (value: string | Date): string => new Date(value).toLocaleString()
-const toDateKey = (year: number, month: number, day: number): string => {
-  const mm = String(month + 1).padStart(2, "0")
-  const dd = String(day).padStart(2, "0")
-  return `${year}-${mm}-${dd}`
-}
-const getBookedMonthCacheKey = (year: number, month: number, clinicId?: number): string => {
-  const monthKey = `${year}-${String(month + 1).padStart(2, "0")}`
-  return `${monthKey}::clinic:${clinicId ?? "all"}`
-}
 
 const fetchLookup = async (path: string): Promise<BillingPickerLookup[]> => {
   const {data} = await pamsAPI.get<Pageable<OfferLookupDTO>>(path, {params: {page: 1, size: 500, status: Status.ACTIVE}})
@@ -3106,14 +2859,6 @@ const removeServiceLine = (index: number): void => {
   }
 }
 
-type CalendarSlotDate = {
-  year: number
-  month: number
-  day: number
-  today?: boolean
-  selectable?: boolean
-}
-
 type CreateScheduleSlot = {
   key: string
   startsAt: Date
@@ -3124,96 +2869,6 @@ type CreateScheduleSlot = {
   isTaken: boolean
   isSelected: boolean
   conflicts: AppointmentListItem[]
-}
-
-const calendarDayStatusStyles: Record<CalendarDayStatus, {cell: string; dot: string}> = {
-  pending: {
-    cell: "bg-red-100 text-red-700 ring-1 ring-red-300 dark:bg-red-500/20 dark:text-red-100 dark:ring-red-400/40",
-    dot: "absolute bottom-[3px] h-1.5 w-1.5 rounded-full bg-red-500 dark:bg-red-300"
-  },
-  partial: {
-    cell: "bg-blue-100 text-blue-800 ring-1 ring-blue-300 dark:bg-blue-500/20 dark:text-blue-100 dark:ring-blue-400/40",
-    dot: "absolute bottom-[3px] h-1.5 w-1.5 rounded-full bg-blue-500 dark:bg-blue-300"
-  },
-  billed: {
-    cell: "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-100 dark:ring-emerald-400/40",
-    dot: "absolute bottom-[3px] h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-300"
-  }
-}
-
-const formatCalendarDateKey = (year: number, monthOneBased: number, day: number): string =>
-  `${year}-${String(monthOneBased).padStart(2, "0")}-${String(day).padStart(2, "0")}`
-
-const getBookedDateCandidateKeys = (date: CalendarSlotDate): string[] => {
-  const candidateKeys = new Set<string>()
-  const year = Number(date.year)
-  const month = Number(date.month)
-  const day = Number(date.day)
-
-  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
-    return []
-  }
-
-  // PrimeVue month in slot date can vary by version (0-based vs 1-based), so keep both interpretations.
-  if (month >= 0 && month <= 11) {
-    candidateKeys.add(toDateKey(year, month, day))
-    candidateKeys.add(formatCalendarDateKey(year, month + 1, day))
-  }
-
-  if (month >= 1 && month <= 12) {
-    candidateKeys.add(formatCalendarDateKey(year, month, day))
-  }
-
-  const isVisibleMonth =
-    (month >= 0 && month <= 11 && month === visibleMonth.value)
-    || (month >= 1 && month <= 12 && (month - 1) === visibleMonth.value)
-
-  // When the slot belongs to the visible month, fall back to the rendered month as a final match key.
-  if (isVisibleMonth) {
-    candidateKeys.add(toDateKey(visibleYear.value, visibleMonth.value, day))
-  }
-
-  return [...candidateKeys]
-}
-
-const getCalendarDayStatus = (date: CalendarSlotDate): CalendarDayStatus | null => {
-  const candidateKey = getBookedDateCandidateKeys(date)
-    .find(key => calendarDayStatusMap.value.has(key))
-
-  return candidateKey ? calendarDayStatusMap.value.get(candidateKey) ?? null : null
-}
-
-const calendarDayCellClass = (date: CalendarSlotDate): string[] => {
-  const dayStatus = getCalendarDayStatus(date)
-  return [
-    "relative flex h-full min-h-8 w-full items-center justify-center rounded-xl px-1 text-sm font-medium transition-colors",
-    dayStatus ? calendarDayStatusStyles[dayStatus].cell : "",
-    date.today ? "ring-2 ring-slate-400/70 dark:ring-slate-300/60" : "",
-    date.selectable === false ? "opacity-40" : ""
-  ]
-}
-
-const calendarDayDotClass = (date: CalendarSlotDate): string => {
-  const dayStatus = getCalendarDayStatus(date)
-  return dayStatus ? calendarDayStatusStyles[dayStatus].dot : ""
-}
-
-const classifyCalendarDayStatus = (rows: AppointmentListItem[]): CalendarDayStatus | null => {
-  if (!rows.length) return null
-
-  if (rows.some(row => isPartiallyPaidStatus(row.billing_status))) {
-    return "partial"
-  }
-
-  if (rows.some(row => isUnbilledStatus(row.billing_status))) {
-    return "pending"
-  }
-
-  if (rows.some(row => isFullyBilledStatus(row.billing_status))) {
-    return "billed"
-  }
-
-  return null
 }
 
 const toMinutesFromTime = (value: unknown): number | undefined => {
@@ -3472,96 +3127,13 @@ const setCreateActiveScheduleIndex = (index: number): void => {
   ensureCreateDayAppointmentsLoaded()
 }
 
-const fetchBookedDatesForMonth = async (year: number, month: number): Promise<void> => {
-  const clinicId = selectedClinicId.value
-  if (!clinicId) {
-    calendarDayStatusMap.value = new Map()
-    return
-  }
-
-  const monthKey = getBookedMonthCacheKey(year, month, clinicId)
-  const cached = bookedMonthCache.value.get(monthKey)
-  if (cached) {
-    calendarDayStatusMap.value = new Map(cached)
-    return
-  }
-
-  const daysInMonth = new Date(year, month + 1, 0).getDate()
-  const monthStatuses = new Map<string, CalendarDayStatus>()
-
-  // Use sequential requests to avoid overloading API and missing dots from transient failures.
-  for (let day = 1; day <= daysInMonth; day++) {
-    const dateKey = toDateKey(year, month, day)
-    let dayStatus: CalendarDayStatus | null = null
-    try {
-      const rows = await appointmentPhase1Service.getDay(dateKey, {clinic_id: clinicId})
-      dayStatus = classifyCalendarDayStatus(rows ?? [])
-    } catch {
-      try {
-        const retryRows = await appointmentPhase1Service.getDay(dateKey, {clinic_id: clinicId})
-        dayStatus = classifyCalendarDayStatus(retryRows ?? [])
-      } catch {
-        dayStatus = null
-      }
-    }
-    if (dayStatus) monthStatuses.set(dateKey, dayStatus)
-  }
-
-  bookedMonthCache.value.set(monthKey, monthStatuses)
-  calendarDayStatusMap.value = new Map(monthStatuses)
-}
-
-const refreshBookedDotsForVisibleMonth = async (): Promise<void> => {
-  const monthKey = getBookedMonthCacheKey(visibleYear.value, visibleMonth.value, selectedClinicId.value)
-  bookedMonthCache.value.delete(monthKey)
-  await fetchBookedDatesForMonth(visibleYear.value, visibleMonth.value)
-}
-
-const onCalendarMonthChange = async (event: {month: number; year: number}): Promise<void> => {
-  visibleMonth.value = Math.max(0, Math.min(11, Number(event.month) - 1))
-  visibleYear.value = event.year
-  await fetchBookedDatesForMonth(visibleYear.value, visibleMonth.value)
-}
-
-const fetchAppointments = async (): Promise<void> => {
-  try {
-    isLoading.value = true
-    const normalizedRecordFilter = recordFilter.value.trim()
-    const isRecordSearchActive = !!normalizedRecordFilter
-    const response = await appointmentPhase1Service.getAll({
-      page: page.value,
-      size: pageSize.value,
-      clinic_id: isRecordSearchActive ? undefined : selectedClinicId.value,
-      doctor_id: isRecordSearchActive ? undefined : selectedDoctorConsultantId.value,
-      unassigned: isRecordSearchActive ? undefined : (isUnassignedDoctorConsultantFilter.value || undefined),
-      search: normalizedRecordFilter || undefined,
-      status: isRecordSearchActive ? undefined : (statusFilter.value?.trim() || undefined),
-      phase: isRecordSearchActive ? undefined : phaseFilter.value,
-      date: isRecordSearchActive ? undefined : selectedDateIso.value
-    })
-    appointments.value = response?.content ?? []
-    totalElements.value = response?.total_elements ?? 0
-  } catch (error: unknown) {
-    errorToast(
-      toast,
-      extractApiErrorMessage(
-        error,
-        "Could not load appointments. Adjust filters (date, clinic, provider) and click Refresh."
-      )
-    )
-  } finally {
-    isLoading.value = false
-  }
-}
-
 const refreshAll = async (): Promise<void> => {
-  await fetchAppointments()
-  if (selectedDetail.value) {
-    const isStillVisible = appointments.value.some(appointment => appointment.id === selectedDetail.value?.id)
-    if (!isStillVisible) {
-      closeDetailPanel()
-    }
-  }
+  await tableSectionRef.value?.refresh()
+}
+
+const onTableDataUpdated = (data: { appointments: AppointmentListItem[]; totalElements: number }): void => {
+  tableAppointments.value = data.appointments
+  tableTotalElements.value = data.totalElements
 }
 
 const loadCreateLookups = async (): Promise<void> => {
@@ -3806,7 +3378,7 @@ const submitCreateAppointment = async (): Promise<void> => {
     )
     createVisible.value = false
     await refreshAll()
-    await refreshBookedDotsForVisibleMonth()
+    await calendarSectionRef.value?.refreshDots()
   } catch (error: unknown) {
     errorToast(
       toast,
@@ -3818,12 +3390,6 @@ const submitCreateAppointment = async (): Promise<void> => {
   } finally {
     isCreatingAppointment.value = false
   }
-}
-
-const onPage = async (event: DataTablePageEvent): Promise<void> => {
-  page.value = Math.floor((event.first ?? 0) / (event.rows ?? pageSize.value)) + 1
-  pageSize.value = event.rows ?? pageSize.value
-  await fetchAppointments()
 }
 
 const seedEncounterTicketForm = (ticket?: AppointmentEncounterTicket): void => {
@@ -3901,10 +3467,6 @@ const selectAppointment = async (appointment: AppointmentListItem): Promise<void
   }
 }
 
-const onSelectRow = async (event: {data: AppointmentListItem}): Promise<void> => {
-  await selectAppointment(event.data)
-}
-
 const submitEncounterTicket = async (): Promise<void> => {
   if (!selectedDetail.value) return
   if (isSelectedEncounterTicketLocked.value) {
@@ -3964,29 +3526,13 @@ const submitReschedule = async (): Promise<void> => {
     successToast(toast, "Reschedule successful")
     rescheduleVisible.value = false
     await refreshAll()
-    await refreshBookedDotsForVisibleMonth()
+    await calendarSectionRef.value?.refreshDots()
     if (selectedDetail.value?.id === activeAppointment.value.id) {
       selectedDetail.value = await appointmentPhase1Service.getById(activeAppointment.value.id)
     }
   } catch (error: unknown) {
     errorToast(toast, extractApiErrorMessage(error, "Reschedule failed"))
   }
-}
-
-const onExportCsv = async (): Promise<void> => {
-  const normalizedRecordFilter = recordFilter.value.trim()
-  const isRecordSearchActive = !!normalizedRecordFilter
-  const response = await appointmentPhase1Service.exportCsv({
-    clinic_id: isRecordSearchActive ? undefined : selectedClinicId.value,
-    doctor_id: isRecordSearchActive ? undefined : selectedDoctorConsultantId.value,
-    unassigned: isRecordSearchActive ? undefined : (isUnassignedDoctorConsultantFilter.value || undefined),
-    search: normalizedRecordFilter || undefined,
-    status: isRecordSearchActive ? undefined : (statusFilter.value?.trim() || undefined),
-    phase: isRecordSearchActive ? undefined : phaseFilter.value,
-    date: isRecordSearchActive ? undefined : selectedDateIso.value
-  })
-  if (!response) return
-  exportToExcel(response)
 }
 
 const syncRoleFromStorage = () => {
@@ -4018,7 +3564,7 @@ const confirmDeleteAppointment = (appointment: AppointmentListItem): void => {
           closeDetailPanel()
         }
         await refreshAll()
-        await refreshBookedDotsForVisibleMonth()
+        await calendarSectionRef.value?.refreshDots()
       } catch (error: unknown) {
         errorToast(toast, extractApiErrorMessage(error, "Delete appointment failed"))
       }
@@ -4108,27 +3654,6 @@ watch(rescheduleSlotDuration, (duration) => {
   rescheduleEnd.value = addMinutes(snapToSlotBoundary(new Date(rescheduleStart.value)), duration)
 })
 
-watch([calendarDate, statusFilter, phaseFilter], async () => {
-  page.value = 1
-  await refreshAll()
-})
-
-watch(ptFilter, async () => {
-  page.value = 1
-  await fetchAppointments()
-})
-
-let recordFilterDebounceHandle: ReturnType<typeof setTimeout> | undefined
-watch(recordFilter, () => {
-  page.value = 1
-  if (recordFilterDebounceHandle) {
-    clearTimeout(recordFilterDebounceHandle)
-  }
-  recordFilterDebounceHandle = setTimeout(() => {
-    void fetchAppointments()
-  }, 250)
-})
-
 watch(selectedClinicId, async () => {
   isClinicSwitchLoading.value = true
   try {
@@ -4153,12 +3678,11 @@ watch(selectedClinicId, async () => {
     const normalizedDate = findNextAllowedDate(new Date(calendarDate.value))
     if (normalizedDate.toDateString() !== calendarDate.value.toDateString()) {
       calendarDate.value = normalizedDate
-      await refreshBookedDotsForVisibleMonth()
+      await calendarSectionRef.value?.refreshDots()
       return
     }
 
-    page.value = 1
-    await refreshBookedDotsForVisibleMonth()
+    await calendarSectionRef.value?.refreshDots()
     await refreshAll()
   } finally {
     isClinicSwitchLoading.value = false
@@ -4247,7 +3771,6 @@ watch([createPatient, createBillingType], async () => {
 onMounted(async () => {
   syncRoleFromStorage()
   await globalClinicStore.loadClinics()
-  await fetchBookedDatesForMonth(visibleYear.value, visibleMonth.value)
-  await refreshAll()
+  await tableSectionRef.value?.refresh()
 })
 </script>

@@ -166,19 +166,7 @@
         </p>
       </div>
 
-      <!-- Reference note -->
-      <div class="rounded-xl border border-dashed border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-3 py-2">
-        <p class="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-          Reference Section
-        </p>
-
-        <p class="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
-          The tags and details below are read-only appointment context for audit and review.
-        </p>
-      </div>
-
-      <!-- Tags -->
-      <div class="flex flex-wrap gap-2 border-t border-[rgb(var(--app-border))] pt-4">
+            <div class="flex flex-wrap gap-2 border-t border-[rgb(var(--app-border))] pt-4">
         <Tag
           v-if="selectedDetail.specialty_tag_name"
           :value="selectedDetail.specialty_tag_name"
@@ -228,6 +216,27 @@
           :severity="selectedEncounterTicket ? 'success' : 'warn'"
         />
       </div>
+
+      <!-- Reference toggle -->
+      <button
+        class="flex w-full items-center justify-between rounded-xl border border-dashed border-[rgb(22,23,26)] bg-[rgb(var(--app-card))] px-3 py-2 text-left transition-colors hover:bg-[rgb(var(--app-bg))]"
+        @click="showDetails = !showDetails"
+      >
+        <div>
+          <p class="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Reference Details
+          </p>
+          <p class="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
+            Tags, audit fields, encounter ticket info, and LGU ledger
+          </p>
+        </div>
+        <i :class="showDetails ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" class="shrink-0 text-slate-400" />
+      </button>
+
+      <div v-show="showDetails" class="space-y-4">
+
+      <!-- Tags -->
+
 
       <!-- Additional Details -->
       <div class="mt-1 rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4">
@@ -515,12 +524,14 @@
           </table>
         </div>
       </div>
+
+      </div><!-- end collapsible -->
     </div>
   </Dialog>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue"
+import { computed, ref } from "vue"
 import Button from "primevue/button"
 import Dialog from "primevue/dialog"
 import Tag from "primevue/tag"
@@ -659,6 +670,8 @@ const emit = defineEmits<{
   "toggle-dropout-status": []
   "open-lgu-monthly-claim": []
 }>()
+
+const showDetails = ref(false)
 
 const visibleProxy = computed({
   get: () => props.visible,

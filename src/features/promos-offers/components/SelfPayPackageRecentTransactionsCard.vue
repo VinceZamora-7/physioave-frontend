@@ -1,6 +1,6 @@
 <template>
   <section class="space-y-4">
-    <article class="rounded-3xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 shadow-sm sm:p-5">
+    <article class="app-section-card-comfy">
       <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div class="space-y-1">
           <p class="m-0 text-xs font-semibold uppercase tracking-[0.22em] text-[rgb(var(--app-fg))]/50">Self Pay Dashboard</p>

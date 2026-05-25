@@ -13,12 +13,10 @@ import InputNumber from "primevue/inputnumber"
 import InputText from "primevue/inputtext"
 import Select from "primevue/select"
 import Tag from "primevue/tag"
-import Checkbox from "primevue/checkbox"
 import {
   appointmentPhase1Service,
   type EndOfDayHistoryItem,
   type PtEndOfDayReport,
-  type ReferringDoctorCompletedSessionsReport
 } from "@/features/appointments/api/appointment-phase1.service"
 import {
   billingPhase1Service,
@@ -49,9 +47,6 @@ const eodReport = ref<PtEndOfDayReport>()
 const eodHistoryItems = ref<EndOfDayHistoryItem[]>([])
 const eodHistoryDetailsVisible = ref(false)
 const selectedEodHistoryItem = ref<EndOfDayHistoryItem>()
-const isDoctorSessionsLoading = ref(false)
-const doctorSessionsDateRange = ref<Date[] | null>(null)
-const doctorSessionsReport = ref<ReferringDoctorCompletedSessionsReport>()
 const eodSectionRef = ref<HTMLElement | null>(null)
 const monthlySectionRef = ref<HTMLElement | null>(null)
 const expenseForm = ref({
@@ -64,14 +59,6 @@ type ExpenseItemRow = { id: number; name: string; is_active: boolean }
 const expenseItems = ref<ExpenseItemRow[]>([])
 const activeExpenseItems = computed(() => expenseItems.value.filter(item => item.is_active))
 
-type MonthlyExpenseTemplateRow = { id: number; name: string; amount: number; post_day: number; is_active: boolean }
-const monthlyTemplates = ref<MonthlyExpenseTemplateRow[]>([])
-const appliedMonthlyTemplateIds = ref<number[]>([])
-const selectedMonthlyTemplateIds = ref<number[]>([])
-const monthlyTemplateDialogVisible = ref(false)
-const loadingMonthlyTemplates = ref(false)
-const applyingMonthlyTemplates = ref(false)
-
 const user = ref<AuthMe | null>(null)
 const userPermissions = computed(() => user.value?.permissions ?? [])
 
@@ -82,7 +69,6 @@ const hasAnyPermission = (...permissions: string[]): boolean => {
 const canViewEodReports = computed(() => hasAnyPermission("Appointment::READ"))
 const canViewFinanceReports = computed(() => hasAnyPermission("Appointment::MANAGE_BILL", "Patient::MANAGE_BILLS"))
 const canManageExpenses = computed(() => hasAnyPermission("Appointment::MANAGE_BILL", "Patient::MANAGE_BILLS"))
-const canViewDoctorSessions = computed(() => hasAnyPermission("Appointment::READ"))
 
 const selectedDateLabel = computed(() =>
   selectedDate.value.toLocaleDateString("en-PH", {
@@ -236,28 +222,6 @@ const toDateParam = (value: Date): string => {
   return `${year}-${month}-${day}`
 }
 
-const formatDate = (value: Date): string =>
-  value.toLocaleDateString("en-PH", {
-    year: "numeric",
-    month: "short",
-    day: "numeric"
-  })
-
-const initializeDoctorSessionsDateRange = (): void => {
-  if (doctorSessionsDateRange.value && doctorSessionsDateRange.value.length === 2) return
-  const today = new Date()
-  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
-  doctorSessionsDateRange.value = [monthStart, today]
-}
-
-const selectedDoctorSessionsRangeLabel = computed(() => {
-  const range = doctorSessionsDateRange.value ?? []
-  if (range.length < 2 || !range[0] || !range[1]) {
-    return "Select a complete date range"
-  }
-  return `${formatDate(range[0])} to ${formatDate(range[1])}`
-})
-
 const asCurrency = (value: number): string =>
   new Intl.NumberFormat("en-PH", {
     style: "currency",
@@ -371,45 +335,6 @@ const refreshEodHistory = async (): Promise<void> => {
   }
 }
 
-const refreshDoctorSessionsReport = async (): Promise<void> => {
-  if (!canViewDoctorSessions.value) return
-  const range = doctorSessionsDateRange.value ?? []
-  if (range.length < 2 || !range[0] || !range[1]) {
-    errorToast(toast, "Select both Start Date and End Date, then click Load Completed Sessions.")
-    return
-  }
-
-  const fromDate = range[0]
-  const toDate = range[1]
-  if (fromDate.getTime() > toDate.getTime()) {
-    errorToast(toast, "Start Date cannot be later than End Date. Adjust the range, then try again.")
-    return
-  }
-
-  try {
-    isDoctorSessionsLoading.value = true
-    const clinicId = selectedClinicId.value
-    doctorSessionsReport.value = await appointmentPhase1Service.getCompletedSessionsByReferringDoctor(
-      toDateParam(fromDate),
-      toDateParam(toDate),
-      clinicId
-    )
-  } catch (error: unknown) {
-    errorToast(
-      toast,
-      getApiErrorMessage(error, {
-        baseMessage: "Completed sessions report could not be loaded",
-        permissionHint: "Reports access (Appointment Read)",
-        notFoundHint: "No completed sessions were found for the selected date range. Try a wider range.",
-        invalidInputHint: "The selected date range is invalid. Correct the dates and load again.",
-        retryHint: "Check date range and try again."
-      })
-    )
-  } finally {
-    isDoctorSessionsLoading.value = false
-  }
-}
-
 const resetExpenseForm = (): void => {
   expenseForm.value = {
     expense_item_id: null,
@@ -469,62 +394,6 @@ const loadExpenseItems = async (): Promise<void> => {
   }
 }
 
-const loadMonthlyExpenseTemplates = async (): Promise<void> => {
-  loadingMonthlyTemplates.value = true
-  try {
-    const { data } = await pamsAPI.get<MonthlyExpenseTemplateRow[]>("/billings/monthly-expense-templates", {
-      params: { clinic_id: selectedClinicId.value }
-    })
-    monthlyTemplates.value = data ?? []
-  } catch {
-    monthlyTemplates.value = []
-  } finally {
-    loadingMonthlyTemplates.value = false
-  }
-}
-
-const loadMonthlyExpenseStatus = async (): Promise<void> => {
-  try {
-    const month = selectedMonthParam.value
-    const [y, m] = month.split("-").map(v => Number(v))
-    const { data } = await pamsAPI.get<number[]>("/billings/monthly-expenses/status", {
-      params: { period_year: y, period_month: m, clinic_id: selectedClinicId.value }
-    })
-    appliedMonthlyTemplateIds.value = data ?? []
-  } catch {
-    appliedMonthlyTemplateIds.value = []
-  }
-}
-
-const openMonthlyExpenseDialog = async (): Promise<void> => {
-  monthlyTemplateDialogVisible.value = true
-  await Promise.all([loadMonthlyExpenseTemplates(), loadMonthlyExpenseStatus()])
-  // Default select all active not-yet-applied templates.
-  const selectable = (monthlyTemplates.value ?? []).filter(t => t.is_active).map(t => t.id)
-  selectedMonthlyTemplateIds.value = selectable.filter(id => !appliedMonthlyTemplateIds.value.includes(id))
-}
-
-const applyMonthlyExpenseTemplates = async (): Promise<void> => {
-  if (!selectedMonthlyTemplateIds.value.length) return
-  applyingMonthlyTemplates.value = true
-  try {
-    const [year, month] = selectedMonthParam.value.split("-").map(v => Number(v))
-    await pamsAPI.post("/billings/monthly-expenses/apply", {
-      period_year: year,
-      period_month: month,
-      clinic_id: selectedClinicId.value,
-      template_ids: selectedMonthlyTemplateIds.value
-    })
-    successToast(toast, "Monthly expenses applied")
-    monthlyTemplateDialogVisible.value = false
-    await Promise.all([refreshReport(), loadMonthlyExpenseStatus()])
-  } catch (error: unknown) {
-    errorToast(toast, getApiErrorMessage(error, { baseMessage: "Failed to apply monthly expenses" }))
-  } finally {
-    applyingMonthlyTemplates.value = false
-  }
-}
-
 const confirmDeleteExpense = (id: number, itemName: string): void => {
   if (!canManageExpenses.value) return
   confirm.require({
@@ -573,8 +442,7 @@ const refreshAllReports = async (): Promise<void> => {
   await Promise.all([
     refreshReport(),
     refreshEodReport(),
-    refreshEodHistory(),
-    refreshDoctorSessionsReport()
+    refreshEodHistory()
   ])
 }
 
@@ -634,7 +502,6 @@ watch(selectedClinicId, () => {
   void refreshReport()
   void refreshEodReport()
   void refreshEodHistory()
-  void refreshDoctorSessionsReport()
 })
 
 watch(() => route.query.section, () => {
@@ -647,7 +514,6 @@ onMounted(async () => {
   } catch {
     // Ignore
   }
-  initializeDoctorSessionsDateRange()
   try {
     await globalClinicStore.loadClinics()
   } catch (error: unknown) {
@@ -696,7 +562,7 @@ onMounted(async () => {
 
         <div class="flex flex-wrap gap-2">
           <Button label="Today" icon="pi pi-calendar" outlined :pt="ptOutlinedBtn" @click="resetToToday" />
-          <Button label="Refresh" icon="pi pi-refresh" severity="secondary" outlined :loading="isLoading || isEodLoading || isDoctorSessionsLoading" :pt="ptOutlinedBtn" @click="refreshAllReports" />
+          <Button label="Refresh" icon="pi pi-refresh" severity="secondary" outlined :loading="isLoading || isEodLoading" :pt="ptOutlinedBtn" @click="refreshAllReports" />
         </div>
       </div>
     </section>
@@ -1011,14 +877,6 @@ onMounted(async () => {
           <p class="text-sm opacity-70">Add daily operating expenses so the net cash view stays complete.</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <Button
-            v-if="canManageExpenses"
-            label="Apply Monthly Templates"
-            icon="pi pi-calendar-plus"
-            outlined
-            size="small"
-            @click="openMonthlyExpenseDialog"
-          />
           <div class="text-sm opacity-70">Total {{ asCurrency(report?.summary.expense_total ?? 0) }}</div>
         </div>
       </div>
@@ -1139,63 +997,11 @@ onMounted(async () => {
           <p class="text-sm opacity-70">Monthly operations rollup for finance review, cash monitoring, and expense tracking using the same billing and expense records as the daily report.</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <Button
-            v-if="canManageExpenses"
-            label="Apply Monthly Expenses"
-            icon="pi pi-calendar-plus"
-            outlined
-            size="small"
-            @click="openMonthlyExpenseDialog"
-          />
           <div class="text-sm opacity-70">
             {{ selectedMonthLabel }} · Active days {{ monthlyReport?.summary.active_day_count ?? 0 }}
           </div>
         </div>
       </div>
-
-      <Dialog v-model:visible="monthlyTemplateDialogVisible" header="Apply Monthly Expense Templates" modal :style="{ width: '720px' }">
-        <div class="space-y-3">
-          <Message severity="secondary" :closable="false" size="small">
-            Select templates to add as expense entries for {{ selectedMonthLabel }}. Already applied templates are disabled.
-          </Message>
-
-          <div class="rounded-lg border border-[rgb(var(--app-border))] p-3 space-y-2">
-            <div v-if="loadingMonthlyTemplates" class="text-sm opacity-70">Loading templates...</div>
-            <div v-else-if="!monthlyTemplates.length" class="text-sm opacity-70">No templates found. Add them in General Settings.</div>
-            <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-2">
-              <label
-                v-for="tpl in monthlyTemplates"
-                :key="tpl.id"
-                class="flex items-center gap-2 rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] px-3 py-2"
-              >
-                <Checkbox
-                  v-model="selectedMonthlyTemplateIds"
-                  :value="tpl.id"
-                  :binary="false"
-                  :disabled="!tpl.is_active || appliedMonthlyTemplateIds.includes(tpl.id)"
-                />
-                <div class="flex-1">
-                  <div class="text-sm font-medium">{{ tpl.name }}</div>
-                  <div class="text-xs opacity-70">{{ asCurrency(tpl.amount) }} · Posts day {{ tpl.post_day || 1 }}</div>
-                </div>
-                <Tag v-if="appliedMonthlyTemplateIds.includes(tpl.id)" value="Applied" severity="success" />
-                <Tag v-else-if="!tpl.is_active" value="Inactive" severity="danger" />
-              </label>
-            </div>
-          </div>
-
-          <div class="flex justify-end gap-2 pt-1">
-            <Button label="Cancel" text @click="monthlyTemplateDialogVisible = false" />
-            <Button
-              label="Apply"
-              icon="pi pi-check"
-              :loading="applyingMonthlyTemplates"
-              :disabled="!selectedMonthlyTemplateIds.length"
-              @click="applyMonthlyExpenseTemplates"
-            />
-          </div>
-        </div>
-      </Dialog>
 
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <article v-for="card in monthlySummaryCards" :key="card.label" class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
@@ -1259,71 +1065,5 @@ onMounted(async () => {
       </div>
     </section>
 
-    <section v-if="canViewDoctorSessions" class="app-section-card-comfy space-y-4">
-      <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <h2 class="app-section-title">Completed Sessions by Referring Doctor</h2>
-          <p class="text-sm opacity-70">Operations view for completed treatment sessions grouped by referring doctor over a selected date range.</p>
-        </div>
-        <div class="text-sm opacity-70">
-          Total Completed Sessions: {{ doctorSessionsReport?.total_completed_sessions ?? 0 }}
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 gap-3 md:grid-cols-[minmax(280px,360px)_auto_1fr] md:items-end">
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide opacity-60">Date Range</label>
-          <DatePicker
-            v-model="doctorSessionsDateRange"
-            selectionMode="range"
-            showIcon
-            fluid
-            :manualInput="false"
-            dateFormat="mm/dd/yy"
-          />
-        </div>
-        <div>
-          <Button
-            label="Generate"
-            icon="pi pi-chart-bar"
-            :loading="isDoctorSessionsLoading"
-            :pt="ptPrimaryBtn"
-            @click="refreshDoctorSessionsReport"
-          />
-        </div>
-        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 text-sm opacity-75">
-          {{ selectedDoctorSessionsRangeLabel }}
-        </div>
-      </div>
-
-      <div class="overflow-x-auto">
-        <DataTable :value="doctorSessionsReport?.doctors ?? []" size="small" :loading="isDoctorSessionsLoading" scrollable>
-          <template #empty>
-            <div class="py-10 text-center text-sm opacity-70">
-              No completed sessions found for the selected range.
-            </div>
-          </template>
-
-          <Column header="Rank" style="width: 80px">
-            <template #body="{ index }">{{ index + 1 }}</template>
-          </Column>
-
-          <Column header="Referring Doctor" style="min-width: 320px">
-            <template #body="{ data }">
-              <div class="space-y-1">
-                <div class="font-medium">{{ data.referring_doctor_name }}</div>
-                <div class="text-xs opacity-60">ID: {{ data.referring_doctor_id }}</div>
-              </div>
-            </template>
-          </Column>
-
-          <Column header="Completed Sessions" style="min-width: 180px">
-            <template #body="{ data }">
-              <span class="font-semibold">{{ data.completed_sessions_count }}</span>
-            </template>
-          </Column>
-        </DataTable>
-      </div>
-    </section>
   </main>
 </template>

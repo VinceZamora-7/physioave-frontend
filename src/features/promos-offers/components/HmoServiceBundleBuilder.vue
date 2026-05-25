@@ -1,17 +1,17 @@
 <template>
   <main class="app-page-shell space-y-5">
-    <section class="app-section-card-comfy space-y-3">
-      <div class="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+    <section class="app-hero-banner space-y-3">
+      <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div class="space-y-2">
-          <p class="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Promos And Offers</p>
-          <h1 class="text-2xl font-semibold text-[rgb(var(--app-fg))]">HMO Service Management</h1>
-          <p class="max-w-3xl text-sm leading-6 opacity-80">
+          <p class="text-xs font-semibold uppercase tracking-[0.28em] text-[rgb(var(--app-fg))]/50">Promos And Offers</p>
+          <h1 class="text-xl font-semibold tracking-tight text-[rgb(var(--app-fg))]">HMO Service Management</h1>
+          <p class="max-w-3xl text-sm leading-6 text-[rgb(var(--app-fg))]/70">
             Machines and techniques are synced from backend master data. Manage HMO-specific evaluation and add-on entries here. Changes here are reflected in Self Pay: Single Service as well.
           </p>
         </div>
 
         <div class="flex flex-wrap gap-2">
-          <Button v-if="canManageCatalog" label="Add New HMO Service" icon="pi pi-plus" @click="openAddDialog" />
+          <Button v-if="canManageCatalog" label="Add New HMO Service" icon="pi pi-plus" :pt="ptPrimaryBtn" @click="openAddDialog" />
           <Button
             label="Recycle Bin"
             icon="pi pi-trash"
@@ -39,8 +39,8 @@
     <section v-if="canViewConfidentialRates" class="app-section-card-comfy space-y-3">
       <div class="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
         <div class="space-y-1">
-          <h3 class="text-sm font-semibold">HMO Profiles & Custom Price Lists</h3>
-          <p class="text-xs opacity-70">Create an HMO profile and upload a CSV price list so staff can use in-app negotiated rates.</p>
+          <h3 class="app-section-title">HMO Profiles &amp; Custom Price Lists</h3>
+          <p class="text-sm opacity-70">Create an HMO profile and upload a CSV price list so staff can use in-app negotiated rates.</p>
         </div>
 
         <div class="flex flex-wrap gap-2">
@@ -77,8 +77,8 @@
 
     <section v-if="canViewConfidentialRates" class="app-section-card-comfy space-y-3">
       <div class="space-y-1">
-        <h3 class="text-sm font-semibold">Custom Rates For Selected Profile</h3>
-        <p class="text-xs opacity-70">Maintain custom negotiated rates manually without CSV upload.</p>
+        <h3 class="app-section-title">Custom Rates For Selected Profile</h3>
+        <p class="text-sm opacity-70">Maintain custom negotiated rates manually without CSV upload.</p>
       </div>
 
       <DataTable
@@ -111,8 +111,8 @@
     <section class="app-section-card-comfy">
       <div class="flex items-center justify-between">
         <div class="space-y-1">
-          <h3 class="text-sm font-semibold">All Available HMO Services</h3>
-          <p class="text-xs opacity-70">View the full catalog of machines, techniques, evaluations, and add-ons.</p>
+          <h3 class="app-section-title">All Available HMO Services</h3>
+          <p class="text-sm opacity-70">View the full catalog of machines, techniques, evaluations, and add-ons.</p>
         </div>
         <Button label="View Catalog" icon="pi pi-table" outlined @click="serviceCatalogVisible = true" />
       </div>
@@ -409,6 +409,7 @@ import { Status } from "@/utils/global.type"
 import { errorToast, successToast } from "@/utils/toast.util"
 import { hasAnyStoredPermission, readStoredAuthSnapshot } from "@/utils/auth-user.util"
 import PromosCatalogManagerDialog from "@/features/promos-offers/components/PromosCatalogManagerDialog.vue"
+import { ptPrimaryBtn } from "@/features/shared/table-header.styles"
 import {
   isLocalEditablePromosService,
   loadBackendPromosMasterCatalog,

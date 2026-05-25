@@ -776,6 +776,11 @@ html.dark .app-brand-icon-accent {
   background: rgba(16, 185, 129, 0.10);
 }
 
+.app-appointment-legend-muted {
+  border-color: rgba(148, 163, 184, 0.35);
+  background: rgba(148, 163, 184, 0.12);
+}
+
 .app-appointment-legend-dot {
   @apply h-2.5 w-2.5 rounded-full;
 }
@@ -798,6 +803,10 @@ html.dark .app-brand-icon-accent {
 
 .app-appointment-legend-dot-success {
   background: rgb(16 185 129);
+}
+
+.app-appointment-legend-dot-muted {
+  background: rgb(148 163 184);
 }
 
 .app-sidebar-backdrop {

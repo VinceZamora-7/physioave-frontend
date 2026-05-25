@@ -1,41 +1,47 @@
 <template>
   <main class="app-page-shell space-y-5">
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-      <h2 class="text-xl font-semibold">LGU Billing & Management</h2>
-      <RouterLink
-        :to="{ name: 'billing', query: { billing_type: 'LGU_BILLING' } }"
-        class="inline-flex items-center gap-2 rounded-lg bg-primary-600 text-white px-4 py-2 text-sm font-semibold shadow hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-400"
-      >
-        <i class="pi pi-list" />
-        Manage All LGU Billings
-      </RouterLink>
-    </div>
+    <section class="app-hero-banner">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div class="space-y-2">
+          <div class="text-lg font-semibold tracking-tight">LGU Billing &amp; Management</div>
+          <p class="max-w-3xl text-sm text-[rgb(var(--app-fg))]/70">
+            Monitor LGU fund usage, manage program budgets, and review patient credit details across all LGU programs.
+          </p>
+        </div>
+        <Button
+          label="Manage All LGU Billings"
+          icon="pi pi-list"
+          :pt="ptPrimaryBtn"
+          @click="router.push({ name: 'billing', query: { billing_type: 'LGU_BILLING' } })"
+        />
+      </div>
+    </section>
 
     <LguBudgetSummaryCard />
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
       <div class="app-section-card-comfy flex flex-col gap-3">
         <div class="space-y-1">
-          <h3 class="text-sm font-semibold">Package Builder</h3>
-          <p class="text-xs opacity-70">Manage LGU package offers with session counts, evaluations, and package prices.</p>
+          <h3 class="app-section-title text-base">Package Builder</h3>
+          <p class="text-sm opacity-70">Manage LGU package offers with session counts, evaluations, and package prices.</p>
         </div>
-        <Button label="Open Packages" icon="pi pi-box" class="mt-auto" @click="showPackages = true" />
+        <Button label="Open Packages" icon="pi pi-box" class="mt-auto" :pt="ptPrimaryBtn" @click="showPackages = true" />
       </div>
 
       <div class="app-section-card-comfy flex flex-col gap-3">
         <div class="space-y-1">
-          <h3 class="text-sm font-semibold">All Available Services</h3>
-          <p class="text-xs opacity-70">Browse and manage the full service catalog — machines, techniques, evaluations, and add-ons.</p>
+          <h3 class="app-section-title text-base">All Available Services</h3>
+          <p class="text-sm opacity-70">Browse and manage the full service catalog — machines, techniques, evaluations, and add-ons.</p>
         </div>
-        <Button label="Open Services" icon="pi pi-list" class="mt-auto" @click="showServices = true" />
+        <Button label="Open Services" icon="pi pi-list" class="mt-auto" :pt="ptPrimaryBtn" @click="showServices = true" />
       </div>
 
       <div class="app-section-card-comfy flex flex-col gap-3">
         <div class="space-y-1">
-          <h3 class="text-sm font-semibold">Bundled Services</h3>
-          <p class="text-xs opacity-70">Create and manage service bundles used as components in LGU package offers.</p>
+          <h3 class="app-section-title text-base">Bundled Services</h3>
+          <p class="text-sm opacity-70">Create and manage service bundles used as components in LGU package offers.</p>
         </div>
-        <Button label="Open Bundles" icon="pi pi-objects-column" class="mt-auto" @click="showBundles = true" />
+        <Button label="Open Bundles" icon="pi pi-objects-column" class="mt-auto" :pt="ptPrimaryBtn" @click="showBundles = true" />
       </div>
     </div>
 
@@ -47,13 +53,16 @@
 
 <script setup lang="ts">
 
-import {onMounted, ref} from "vue"
-import {RouterLink} from "vue-router"
+import { onMounted, ref } from "vue"
+import { useRouter } from "vue-router"
 import Button from "primevue/button"
 import LguBudgetSummaryCard from "@/features/lgu-billing/components/LguBudgetSummaryCard.vue"
 import LguPackagesModal from "@/features/promos-offers/components/LguPackagesModal.vue"
 import LguAvailableServicesModal from "@/features/promos-offers/components/LguAvailableServicesModal.vue"
 import LguBundledServicesModal from "@/features/promos-offers/components/LguBundledServicesModal.vue"
+import { ptPrimaryBtn } from "@/features/shared/table-header.styles"
+
+const router = useRouter()
 
 const showPackages = ref(false)
 const showServices = ref(false)

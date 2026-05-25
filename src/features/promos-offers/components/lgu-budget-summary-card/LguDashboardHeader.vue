@@ -1,9 +1,8 @@
 <template>
-  <section class="overflow-hidden rounded-3xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] shadow-sm">
-    <div class="relative p-4 sm:p-5">
-      <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-sky-500/10 via-transparent to-emerald-500/10" />
+  <section class="app-section-card-comfy relative overflow-hidden">
+    <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-sky-500/10 via-transparent to-emerald-500/10" />
 
-      <div class="relative flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+    <div class="relative flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div class="min-w-0 space-y-2">
           <div class="flex flex-wrap items-center gap-2">
             <span class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-700 dark:text-sky-300">
@@ -53,9 +52,8 @@
 
           <Button label="Exports" icon="pi pi-arrow-up-right" size="small" @click="$emit('open-exports')" />
         </div>
-      </div>
     </div>
-  </section>
+</section>
 </template>
 
 <script setup lang="ts">

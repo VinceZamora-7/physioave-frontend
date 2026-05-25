@@ -23,7 +23,7 @@
             size="small"
             @click="transactionsVisible = true"
           />
-          <Button label="Refresh" icon="pi pi-refresh" outlined size="small" :loading="loadingLguPatients" @click="$emit('load-lgu-patients')" />
+          <Button label="Refresh" icon="pi pi-refresh" outlined size="small" :loading="loadingLguPatients" @click="emit('load-lgu-patients')" />
         </div>
       </div>
 
@@ -78,7 +78,13 @@
 
           <Column header="Action" style="width: 130px">
             <template #body="{ data }">
-              <Button label="View" icon="pi pi-external-link" size="small" outlined @click="$emit('open-patient-detail', data.id)" />
+              <Button
+                label="View"
+                icon="pi pi-external-link"
+                size="small"
+                outlined
+                @click="emit('open-patient-detail', data.id)"
+              />
             </template>
           </Column>
         </DataTable>
@@ -108,7 +114,7 @@
 
         <div class="flex flex-wrap items-center gap-2">
           <Tag :value="`${lguTransactionHistory.length} record${lguTransactionHistory.length === 1 ? '' : 's'}`" severity="contrast" />
-          <Button label="Refresh" icon="pi pi-refresh" outlined size="small" :loading="loadingTransactionHistory" @click="$emit('load-transaction-history')" />
+          <Button label="Refresh" icon="pi pi-refresh" outlined size="small" :loading="loadingTransactionHistory" @click="emit('load-transaction-history')" />
         </div>
       </div>
 
@@ -175,7 +181,7 @@
                 icon="pi pi-external-link"
                 size="small"
                 outlined
-                @click="$emit('open-patient-detail', data.patient_id, data.period_year, data.period_month)"
+                @click="emit('open-patient-detail', data.patient_id, data.period_year, data.period_month)"
               />
               <span v-else class="text-xs text-[rgb(var(--app-fg))]/50">N/A</span>
             </template>
@@ -189,15 +195,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue"
+import { ref, computed } from "vue"
 import Button from "primevue/button"
 import Column from "primevue/column"
 import DataTable from "primevue/datatable"
 import Dialog from "primevue/dialog"
 import Message from "primevue/message"
 import Tag from "primevue/tag"
+import DropdownButton from "primevue/splitbutton"
 import type { Patient } from "@/features/patients/types/patient"
 import type { LguDashboardHistoryItem } from "@/features/lgu-billing/api/lgu-billing.service"
+import { readStoredAuthSnapshot } from '@/utils/auth-user.util'
 
 defineProps<{
   lguTransactionHistory: LguDashboardHistoryItem[]
@@ -217,13 +225,9 @@ defineProps<{
   formatPatientAddress: (patient?: Patient | null) => string
 }>()
 
-defineEmits<{
-  "load-transaction-history": []
-  "load-lgu-patients": []
-  "open-patient-detail": [patientId: number, periodYear?: number, periodMonth?: number]
-}>()
-
 const transactionsVisible = ref(false)
+
+const isOwner = computed(() => readStoredAuthSnapshot().roleName?.toLowerCase() === 'owner')
 
 const formatLguPatientStatus = (value?: Patient["lgu_patient_status"]): string => {
   if (value === "CROSS_MONTH_DROPPED_OUT") return "Cross Month Dropped Out"
@@ -272,6 +276,16 @@ const transactionStatusSeverity = (row: LguDashboardHistoryItem): "success" | "i
   if (status === "ACTIVE" || status === "PENDING") return "info"
   return "secondary"
 }
+
+
+// Place the Reactivate button inside the patient detail modal/dialog instead, not in the table.
+
+const emit = defineEmits<{
+  (e: 'load-transaction-history'): void
+  (e: 'load-lgu-patients'): void
+  (e: 'open-patient-detail', patientId: number, periodYear?: number, periodMonth?: number): void
+  (e: 'reactivate-lgu-patient', patientId: number): void
+}>()
 </script>
 
 <script lang="ts">
