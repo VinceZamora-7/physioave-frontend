@@ -586,6 +586,8 @@ const onCalendarMonthChange = async (event: { month: number; year: number }): Pr
 
 watch([weekStartDate, selectedClinicId], () => { void fetchWeeklyAppointments() }, { immediate: true })
 
+watch(selectedClinicId, () => { void refreshBookedDotsForVisibleMonth() })
+
 onMounted(async () => {
   await fetchBookedDatesForMonth(visibleYear.value, visibleMonth.value)
 })

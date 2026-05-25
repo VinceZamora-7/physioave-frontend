@@ -310,6 +310,7 @@ const page = ref(1)
 const pageSize = ref(10)
 const totalElements = ref(0)
 const isLoading = ref(false)
+let fetchRequestId = 0
 
 // Filter state
 const recordFilter = ref("")
@@ -457,6 +458,13 @@ const resolveTableErrorOptions = (action: "load" | "export"): ApiErrorMessageOpt
 const extractApiErrorMessage = (error: unknown, action: "load" | "export"): string =>
   getApiErrorMessage(error, resolveTableErrorOptions(action))
 
+const publishTableData = (): void => {
+  emit("data-updated", {
+    appointments: appointments.value,
+    totalElements: totalElements.value,
+  })
+}
+
 // Load PT filter staff from API
 const loadPtFilterOptions = async (): Promise<void> => {
   if (!selectedClinicId.value) {
@@ -480,13 +488,23 @@ const loadPtFilterOptions = async (): Promise<void> => {
           isPhysicalTherapistProviderType(s.secondary_appointment_provider_type)
       )
       .map((s: Staff) => ({ id: s.id, label: s.name }))
+    if (
+      typeof ptFilter.value === "number" &&
+      !ptDoctorOptions.value.some((option) => option.id === ptFilter.value)
+    ) {
+      ptFilter.value = undefined
+    }
   } catch {
     ptDoctorOptions.value = []
+    if (typeof ptFilter.value === "number") {
+      ptFilter.value = undefined
+    }
   }
 }
 
 // Fetch appointments
 const fetchAppointments = async (): Promise<void> => {
+  const requestId = ++fetchRequestId
   try {
     isLoading.value = true
     const normalizedRecordFilter = recordFilter.value.trim()
@@ -504,19 +522,20 @@ const fetchAppointments = async (): Promise<void> => {
       phase: isRecordSearchActive ? undefined : phaseFilter.value,
       date: isRecordSearchActive ? undefined : selectedDateIso.value,
     })
+    if (requestId !== fetchRequestId) return
     appointments.value = response?.content ?? []
     totalElements.value = response?.total_elements ?? 0
-    emit("data-updated", {
-      appointments: appointments.value,
-      totalElements: totalElements.value,
-    })
+    publishTableData()
   } catch (error: unknown) {
+    if (requestId !== fetchRequestId) return
     errorToast(
       toast,
       extractApiErrorMessage(error, "load")
     )
   } finally {
-    isLoading.value = false
+    if (requestId === fetchRequestId) {
+      isLoading.value = false
+    }
   }
 }
 
@@ -581,6 +600,10 @@ watch(recordFilter, () => {
 })
 
 watch(selectedClinicId, async () => {
+  fetchRequestId += 1
+  appointments.value = []
+  totalElements.value = 0
+  publishTableData()
   await loadPtFilterOptions()
   page.value = 1
   void fetchAppointments()

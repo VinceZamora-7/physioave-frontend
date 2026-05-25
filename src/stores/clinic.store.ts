@@ -35,11 +35,12 @@ export const clinicStore = defineStore('clinicStore', () => {
     localStorage.removeItem(SELECTED_CLINIC_STORAGE_KEY)
   }
 
-  const setSelectedClinicId = (id: number | undefined) => {
-    const normalized = typeof id === "number" && Number.isFinite(id) && id > 0 ? id : undefined
+  const setSelectedClinicId = (id: number | string | undefined) => {
+    const parsed = typeof id === "number" ? id : Number(id)
+    const normalized = Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
     selectedClinicId.value = normalized
     clinic.value = clinicOptions.value.find((item) => item.id === normalized)
-    persistSelectedClinicId(id)
+    persistSelectedClinicId(normalized)
   }
 
   const ensureSelectedClinic = () => {
