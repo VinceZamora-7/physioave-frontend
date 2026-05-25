@@ -15,16 +15,19 @@ export interface InvoiceLayoutInput {
   fileName: string
   billingDate?: string
   referenceNumber: string
+  topMetaRows?: InvoiceDetailRow[]
   patientName: string
   patientAddress?: string
   patientAge?: string
   patientGender?: string
+  hidePatientDoctorHeader?: boolean
   physicalTherapist?: string
   doctor?: string
   diagnosis?: string
   columns: InvoiceColumn[]
   tableRowsHtml: string
   emptyStateColspan: number
+  customBodyHtml?: string
   discount: number
   surchargeAmount?: number
   surchargeLabel?: string
@@ -104,6 +107,15 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
   const detailRows = invoice.detailRows.map(row =>
     `<div><strong>${escapeHtml(row.label)}:</strong> ${escapeHtml(row.value)}</div>`
   ).join("")
+  const topMetaRows = (invoice.topMetaRows?.length
+    ? invoice.topMetaRows
+    : [
+        { label: "BILLING DATE", value: formatDate(invoice.billingDate) },
+        { label: "BILLING RECORD ID", value: invoice.referenceNumber }
+      ]
+  ).map(row => `
+    <strong>${escapeHtml(row.label)}:</strong><span>${escapeHtml(row.value)}</span>
+  `).join("")
 
   const html = `
     <!doctype html>
@@ -250,6 +262,97 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
           .sub-item-depth-2 {
             padding-left: 48px;
           }
+          .profile-summary {
+            display: grid;
+            grid-template-columns: 92px 1fr;
+            gap: 12px;
+            align-items: center;
+            margin-top: 8px;
+            padding: 10px;
+            border: 2px solid #d31d6e;
+            background: #fef5f9;
+            font-size: 12px;
+          }
+          .profile-photo {
+            width: 82px;
+            height: 82px;
+            border-radius: 999px;
+            object-fit: cover;
+            border: 2px solid #ffffff;
+            background: #ffffff;
+          }
+          .profile-photo-fallback {
+            width: 82px;
+            height: 82px;
+            border-radius: 999px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #ffffff;
+            background: #f3f4f6;
+            color: #111827;
+            font-size: 24px;
+            font-weight: 800;
+            font-family: "Montserrat", sans-serif;
+          }
+          .profile-name {
+            margin: 0 0 4px;
+            font-size: 18px;
+            font-weight: 800;
+            font-family: "Montserrat", sans-serif;
+            color: #111827;
+          }
+          .profile-subtitle {
+            margin: 0;
+            color: #4b5563;
+            font-size: 12px;
+          }
+          .profile-section {
+            margin-top: 8px;
+            border-top: 3px solid #d31d6e;
+            padding-top: 6px;
+          }
+          .profile-section h2 {
+            margin: 0 0 6px;
+            font-size: 14px;
+            font-weight: 800;
+            font-family: "Montserrat", sans-serif;
+            color: #111827;
+            text-transform: uppercase;
+          }
+          .profile-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 6px 10px;
+            font-size: 11px;
+          }
+          .profile-field {
+            border-bottom: 1px solid #f3a8c8;
+            padding-bottom: 3px;
+            min-height: 30px;
+          }
+          .profile-field strong {
+            display: block;
+            font-size: 9px;
+            text-transform: uppercase;
+            color: #6b7280;
+            font-family: "Montserrat", sans-serif;
+            margin-bottom: 1px;
+          }
+          .profile-field-wide {
+            grid-column: span 2;
+          }
+          .profile-field-full {
+            grid-column: 1 / -1;
+          }
+          .compact-table {
+            margin-top: 4px;
+            font-size: 11px;
+          }
+          .compact-table th,
+          .compact-table td {
+            padding: 3px 5px;
+          }
           .totals {
             margin-top: 6px;
             margin-left: auto;
@@ -328,6 +431,14 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
             text-overflow: ellipsis;
           }
           @media print {
+            .profile-summary {
+              break-inside: avoid;
+            }
+            .profile-section {
+              break-inside: avoid;
+            }
+          }
+          @media print {
             body {
               background: #ffffff;
               padding: 0;
@@ -346,37 +457,40 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
               <h1 class="invoice-title"><span>${escapeHtml(invoice.headerTitle || "INVOICE BILLING")}</span></h1>
             </div>
             <div class="meta-grid">
-              <strong>BILLING DATE:</strong><span>${escapeHtml(formatDate(invoice.billingDate))}</span>
-              <strong>BILLING RECORD ID:</strong><span>${escapeHtml(invoice.referenceNumber)}</span>
+              ${topMetaRows}
             </div>
           </div>
 
-          <div class="patient-doctor-grid">
-            <div>
-              <div class="line"><span class="label">Patient's Name:</span><span>${escapeHtml(invoice.patientName)}</span></div>
-              <div class="line"><span class="label">Address:</span><span>${escapeHtml(invoice.patientAddress || "N/A")}</span></div>
-              <div class="line"><span class="label">Age:</span><span>${escapeHtml(invoice.patientAge || "N/A")}</span></div>
-              <div class="line"><span class="label">Gender:</span><span>${escapeHtml(invoice.patientGender || "N/A")}</span></div>
-            </div>
-            <div>
-              <div class="line"><span class="label">Physical <br /> Therapist:</span><span>${escapeHtml(invoice.doctor || "N/A")}</span></div>
-              <div class="line"><span class="label">Doctor:</span><span>${escapeHtml(invoice.physicalTherapist || "N/A")}</span></div>
-              <div class="line"><span class="label">Diagnosis:</span><span>${escapeHtml(invoice.diagnosis || "N/A")}</span></div>
-            </div>
-          </div>
+          ${invoice.hidePatientDoctorHeader
+            ? ""
+            : `<div class="patient-doctor-grid">
+                <div>
+                  <div class="line"><span class="label">Patient's Name:</span><span>${escapeHtml(invoice.patientName)}</span></div>
+                  <div class="line"><span class="label">Address:</span><span>${escapeHtml(invoice.patientAddress || "N/A")}</span></div>
+                  <div class="line"><span class="label">Age:</span><span>${escapeHtml(invoice.patientAge || "N/A")}</span></div>
+                  <div class="line"><span class="label">Gender:</span><span>${escapeHtml(invoice.patientGender || "N/A")}</span></div>
+                </div>
+                <div>
+                  <div class="line"><span class="label">Physical <br /> Therapist:</span><span>${escapeHtml(invoice.doctor || "N/A")}</span></div>
+                  <div class="line"><span class="label">Doctor:</span><span>${escapeHtml(invoice.physicalTherapist || "N/A")}</span></div>
+                  <div class="line"><span class="label">Diagnosis:</span><span>${escapeHtml(invoice.diagnosis || "N/A")}</span></div>
+                </div>
+              </div>`}
 
           <div class="divider"></div>
 
-          <table>
-            <thead>
-              <tr>
-                ${tableHeaders}
-              </tr>
-            </thead>
-            <tbody>
-              ${invoice.tableRowsHtml || `<tr><td class="text-center">1</td><td colspan="${invoice.emptyStateColspan}">No services found.</td></tr>`}
-            </tbody>
-          </table>
+          ${invoice.customBodyHtml
+            ? invoice.customBodyHtml
+            : `<table>
+                <thead>
+                  <tr>
+                    ${tableHeaders}
+                  </tr>
+                </thead>
+                <tbody>
+                  ${invoice.tableRowsHtml || `<tr><td class="text-center">1</td><td colspan="${invoice.emptyStateColspan}">No services found.</td></tr>`}
+                </tbody>
+              </table>`}
 
           ${invoice.hideFinancialSummary
             ? ""

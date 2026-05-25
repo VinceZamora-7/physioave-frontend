@@ -1,16 +1,6 @@
 <template>
   <main class="app-page-shell">
     <Message v-if="isError" severity="error" class="mb-3">Something went wrong!</Message>
-    <div class="mb-3 flex justify-end">
-      <Button
-        label="Export CSV"
-        icon="pi pi-download"
-        severity="secondary"
-        outlined
-        :loading="isPatientExportLoading"
-        @click="onExportCsv"
-      />
-    </div>
 
     <section
       v-if="!isError"
@@ -328,6 +318,146 @@
       </div>
     </Dialog>
 
+    <!-- View Sponsor Information (read-only) -->
+    <Dialog
+      v-model:visible="viewSponsorInfoVisible"
+      modal
+      :header="`Sponsor Information — ${selectedPatient?.full_name}`"
+      :style="{ width: '38rem', maxWidth: '95vw' }"
+      :draggable="false"
+    >
+      <div v-if="viewSponsorInfoLoading" class="flex flex-col items-center gap-3 py-10">
+        <i class="pi pi-spinner pi-spin text-3xl opacity-40"></i>
+        <p class="m-0 text-sm opacity-60">Loading sponsor information…</p>
+      </div>
+
+      <div v-else-if="!viewSponsorInfoData.length" class="flex flex-col items-center gap-4 py-8 text-center">
+        <i class="pi pi-address-book text-4xl opacity-30"></i>
+        <p class="m-0 text-sm opacity-60">No sponsor information registered for this patient.</p>
+      </div>
+
+      <div v-else class="space-y-3">
+        <div
+          v-for="(entry, index) in viewSponsorInfoData"
+          :key="index"
+          class="overflow-hidden rounded-lg border border-surface-200"
+        >
+          <!-- Entry header -->
+          <div class="flex items-center gap-3 border-b border-surface-200 bg-surface-50 px-4 py-3">
+            <span class="flex h-5 w-5 items-center justify-center rounded-full bg-surface-200 text-xs font-bold">{{ index + 1 }}</span>
+            <Tag
+              :value="entry.sponsor_context === 'LGU' ? 'LGU Sponsored' : 'HMO Sponsored'"
+              :severity="entry.sponsor_context === 'LGU' ? 'info' : 'success'"
+            />
+          </div>
+
+          <!-- HMO details -->
+          <template v-if="entry.sponsor_context !== 'LGU'">
+            <div class="grid grid-cols-2 gap-x-6 gap-y-4 p-4 text-sm">
+              <div>
+                <div class="mb-1 text-xs font-semibold uppercase tracking-wide opacity-50">HMO Name</div>
+                <div class="font-medium">{{ entry.hmo_name ?? 'N/A' }}</div>
+              </div>
+              <div>
+                <div class="mb-1 text-xs font-semibold uppercase tracking-wide opacity-50">HMO Type</div>
+                <div class="font-medium">{{ entry.hmo_type_name ?? 'N/A' }}</div>
+              </div>
+              <div>
+                <div class="mb-1 text-xs font-semibold uppercase tracking-wide opacity-50">HMO Company</div>
+                <div class="font-medium">{{ entry.company_name ?? 'N/A' }}</div>
+              </div>
+              <div>
+                <div class="mb-1 text-xs font-semibold uppercase tracking-wide opacity-50">HMO Card Number</div>
+                <div class="font-medium">{{ entry.card_number ?? 'N/A' }}</div>
+              </div>
+              <div>
+                <div class="mb-1 text-xs font-semibold uppercase tracking-wide opacity-50">Expiration Date</div>
+                <div class="font-medium">
+                  <template v-if="entry.validity_end_date">
+                    {{ formatSponsorDate(entry.validity_end_date) }}
+                  </template>
+                  <template v-else>N/A</template>
+                </div>
+              </div>
+            </div>
+
+            <div
+              v-if="entry.plan_name || entry.principal_name || entry.relationship_to_principal || entry.approval_code"
+              class="border-t border-surface-200 bg-surface-50 px-4 py-3"
+            >
+              <div class="mb-3 text-xs font-semibold uppercase tracking-wide opacity-50">Additional HMO Details</div>
+              <div class="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
+                <div v-if="entry.plan_name">
+                  <div class="mb-1 text-xs font-semibold uppercase tracking-wide opacity-50">Plan / Benefit</div>
+                  <div class="font-medium">{{ entry.plan_name }}</div>
+                </div>
+                <div v-if="entry.principal_name">
+                  <div class="mb-1 text-xs font-semibold uppercase tracking-wide opacity-50">Principal Name</div>
+                  <div class="font-medium">{{ entry.principal_name }}</div>
+                </div>
+                <div v-if="entry.relationship_to_principal">
+                  <div class="mb-1 text-xs font-semibold uppercase tracking-wide opacity-50">Relationship</div>
+                  <div class="font-medium">{{ entry.relationship_to_principal }}</div>
+                </div>
+                <div v-if="entry.approval_code">
+                  <div class="mb-1 text-xs font-semibold uppercase tracking-wide opacity-50">Approval Code</div>
+                  <div class="font-medium">{{ entry.approval_code }}</div>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <!-- LGU details -->
+          <template v-else>
+            <div class="grid grid-cols-2 gap-x-6 gap-y-4 p-4 text-sm">
+              <div class="col-span-2">
+                <div class="mb-1 text-xs font-semibold uppercase tracking-wide opacity-50">LGU Program</div>
+                <div class="font-medium">{{ entry.lgu_program_name ?? 'N/A' }}</div>
+              </div>
+              <div>
+                <div class="mb-1 text-xs font-semibold uppercase tracking-wide opacity-50">Referral Form No.</div>
+                <div class="font-medium">{{ entry.referral_form_no ?? 'N/A' }}</div>
+              </div>
+              <div>
+                <div class="mb-1 text-xs font-semibold uppercase tracking-wide opacity-50">Date Issued</div>
+                <div class="font-medium">{{ formatSponsorDate(entry.referral_issued_date ?? entry.validity_start_date) }}</div>
+              </div>
+              <div>
+                <div class="mb-1 text-xs font-semibold uppercase tracking-wide opacity-50">Approval Code</div>
+                <div class="font-medium">{{ entry.approval_code ?? 'N/A' }}</div>
+              </div>
+              <div>
+                <div class="mb-1 text-xs font-semibold uppercase tracking-wide opacity-50">Validity Start</div>
+                <div class="font-medium">{{ formatSponsorDate(entry.validity_start_date) }}</div>
+              </div>
+            </div>
+          </template>
+
+          <div v-if="entry.notes" class="border-t border-surface-200 bg-surface-50 px-4 py-3 text-sm">
+            <div class="mb-1 text-xs font-semibold uppercase tracking-wide opacity-50">Notes</div>
+            <p class="m-0 leading-relaxed">{{ entry.notes }}</p>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <Button label="Close" text severity="secondary" @click="viewSponsorInfoVisible = false" />
+        <Button
+          v-if="!viewSponsorInfoData.length && !viewSponsorInfoLoading"
+          label="Register Sponsor Information"
+          icon="pi pi-plus"
+          @click="viewSponsorInfoVisible = false; registerSponsorInfoVisible = true"
+        />
+        <Button
+          v-if="viewSponsorInfoData.length"
+          label="Edit"
+          icon="pi pi-pencil"
+          outlined
+          @click="openEditFromView"
+        />
+      </template>
+    </Dialog>
+
     <PatientAppointmentsDialog
       ref="patientAppointmentsDialog"
       :patient="selectedPatient"
@@ -438,6 +568,8 @@ import {hmoService} from "@/features/hmos/api/hmo.service";
 import {staffService} from "@/features/staff/api/staff.service";
 import {pamsAPI} from "@/utils/axios-interceptor.ts";
 import {lguBillingService} from "@/features/lgu-billing/api/lgu-billing.service";
+import {patientHMOInformationService} from "@/services/patient-hmo-information.service.ts";
+import type {PatientHMOInformation} from "@/models/hmo-information.ts";
 
 type ToggleDialogExpose = {
   toggleDialog: () => void
@@ -475,36 +607,79 @@ const patientHMOInformationForm = useTemplateRef<ToggleDialogExpose>('patientHMO
 
 const registerSponsorInfoVisible = ref(false)
 const sponsorContext = ref<"HMO" | "LGU">("HMO")
+const forceInsert = ref(false)
 const loadSponsorDropdowns = async (): Promise<void> => {
-  const [fetchedHMOs, fetchedLguPrograms] = await Promise.allSettled([
+  const needHmoTypes = hmoTypes.value.length === 0
+  const hmoTypeParams: PageRequestWithStatus = { page: defaultPage, size: defaultPageSize, status: defaultStatus }
+
+  const [fetchedHMOs, fetchedLguPrograms, fetchedHMOTypes] = await Promise.allSettled([
     hmoService.getAllLookup({
       page: 1,
       size: 1000,
       name: "",
       status: Status.ACTIVE
     }),
-    lguBillingService.getPrograms()
+    lguBillingService.getPrograms(),
+    needHmoTypes
+      ? createReferenceQueryService<HMOType>(queryClient, ReferenceTanstackKey.HMO_TYPES, hmoTypeParams)
+      : Promise.resolve(undefined)
   ])
 
   hmos.value = fetchedHMOs.status === "fulfilled" ? (fetchedHMOs.value?.content ?? []) : []
   lguPrograms.value = fetchedLguPrograms.status === "fulfilled" ? (fetchedLguPrograms.value ?? []) : []
+  if (needHmoTypes && fetchedHMOTypes.status === "fulfilled" && fetchedHMOTypes.value) {
+    hmoTypes.value = fetchedHMOTypes.value.content ?? []
+  }
 }
 
 const openHmoRegistration = (): void => {
   registerSponsorInfoVisible.value = false
   sponsorContext.value = "HMO"
+  forceInsert.value = true
   void loadSponsorDropdowns().finally(() => patientHMOInformationForm.value?.toggleDialog())
 }
 
 const openLguRegistration = (): void => {
   registerSponsorInfoVisible.value = false
   sponsorContext.value = "LGU"
+  forceInsert.value = true
   void loadSponsorDropdowns().finally(() => patientHMOInformationForm.value?.toggleDialog())
 }
 
 const skipSponsorRegistration = (): void => {
   registerSponsorInfoVisible.value = false
   selectedPatient.value = undefined
+}
+
+const viewSponsorInfoVisible = ref(false)
+const viewSponsorInfoData = ref<PatientHMOInformation[]>([])
+const viewSponsorInfoLoading = ref(false)
+
+const formatSponsorDate = (value?: string | null): string => {
+  if (!value) return 'N/A'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })
+}
+
+const openViewSponsorInfo = async (patient: Patient): Promise<void> => {
+  selectedPatient.value = patient
+  viewSponsorInfoData.value = []
+  viewSponsorInfoLoading.value = true
+  viewSponsorInfoVisible.value = true
+  try {
+    viewSponsorInfoData.value = await patientHMOInformationService.getByPatientId(patient.id)
+  } finally {
+    viewSponsorInfoLoading.value = false
+  }
+}
+
+const openEditFromView = (): void => {
+  if (!viewSponsorInfoData.value.length) return
+  viewSponsorInfoVisible.value = false
+  sponsorContext.value = viewSponsorInfoData.value[0]?.sponsor_context === 'LGU' ? 'LGU' : 'HMO'
+  forceInsert.value = false
+  void loadSponsorDropdowns().finally(() => patientHMOInformationForm.value?.toggleDialog())
 }
 
 const useClinicStore = clinicStore()
@@ -770,7 +945,8 @@ const patientHMOInformationFormProps = computed(() => ({
   hmoTypes: hmoTypes.value,
   hmos: hmos.value,
   lguPrograms: lguPrograms.value,
-  sponsor_context: sponsorContext.value
+  sponsor_context: sponsorContext.value,
+  forceInsert: forceInsert.value
 }) satisfies PatientHMOInformationFormProps)
 
 const patientMedicalCategoryDialogProps = computed(() => ({
@@ -1033,6 +1209,13 @@ const menuButtons = (patient: Patient): MenuItem[] => {
       label: 'View Sponsor Information',
       icon: 'pi pi-address-book',
       command: () => {
+        void openViewSponsorInfo(patient)
+      },
+    },
+    {
+      label: 'Add Sponsor Information',
+      icon: 'pi pi-plus-circle',
+      command: () => {
         selectedPatient.value = patient
         registerSponsorInfoVisible.value = true
       },
@@ -1056,18 +1239,6 @@ const onExportToExcelThrottleFn = useThrottleFn(async (): Promise<void> => {
   if (!response) return
   exportToExcel(response)
 }, defaultThrottle)
-
-const onExportCsv = async (): Promise<void> => {
-  const response: AxiosResponse<Blob> = await pamsAPI.get("/patients/export/csv", {
-    params: {
-      clinic_id: selectedClinicId.value,
-      name: selectedSearch.value?.trim() || undefined,
-      status: selectedStatus.value
-    },
-    responseType: "blob"
-  })
-  exportToExcel(response)
-}
 
 const statusLabel = (isActive: boolean): string => {
   return isActive ? 'Active' : 'Inactive'

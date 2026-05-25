@@ -48,6 +48,7 @@ export interface AppointmentListItem {
   billing_public_id?: string
   reschedule_flag: boolean
   reschedule_count: number
+  dropout_status?: string
 }
 
 export interface AppointmentCheckoutSummary {

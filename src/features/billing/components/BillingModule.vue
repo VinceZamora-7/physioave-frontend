@@ -2667,8 +2667,9 @@ const syncBillingPatientHmoRates = async (): Promise<void> => {
 
   syncingBillingHmoRates.value = true
   try {
-    const hmoInfo = await patientHMOInformationService.getByPatientId(patientId)
-    billingPatientHmoInfo.value = hmoInfo ?? null
+    const sponsorEntries = await patientHMOInformationService.getByPatientId(patientId)
+    const hmoInfo = sponsorEntries.find(entry => entry.sponsor_context === 'HMO' && Number(entry.hmo_id) > 0) ?? null
+    billingPatientHmoInfo.value = hmoInfo
     const hmoId = Number(hmoInfo?.hmo_id)
     if (!Number.isFinite(hmoId) || hmoId <= 0) return
     billingPatientHmoId.value = hmoId

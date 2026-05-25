@@ -48,15 +48,37 @@ export interface LguInvoiceData {
 }
 
 function buildLineRows(lines: LguInvoiceLine[]): string {
+  const collectPricedSubItems = (items: LguInvoiceSubItem[]): Array<{name: string; quantity: number; unitPrice: number}> =>
+    items.flatMap(item => {
+      if (item.children?.length) return collectPricedSubItems(item.children)
+      const unitPrice = Number(item.unitPrice ?? 0)
+      return unitPrice > 0
+        ? [{ name: item.name, quantity: Math.max(1, Number(item.quantity ?? 1)), unitPrice }]
+        : []
+    })
+
   const renderSubItems = (items: LguInvoiceSubItem[], depth = 0): string =>
     items.map(sub => `
       <div class="sub-item sub-item-depth-${depth}">
-        - ${sub.quantity} ${escapeHtml(sub.name)}${sub.unitPrice != null ? ` - ${escapeHtml(asCurrency(sub.unitPrice))}` : ""}
+        - ${sub.quantity} ${escapeHtml(sub.name)}
       </div>
       ${sub.children?.length ? renderSubItems(sub.children, depth + 1) : ""}
     `).join("")
 
   return lines.map((line, index) => {
+    const pricedSubItems = line.unitPrice <= 0 ? collectPricedSubItems(line.subItems ?? []) : []
+    if (pricedSubItems.length) {
+      return pricedSubItems.map((item, itemIndex) => `
+        <tr>
+          <td class="text-center">${itemIndex === 0 ? index + 1 : ""}</td>
+          <td class="text-center">${escapeHtml(formatDate(line.treatmentDate))}</td>
+          <td>${escapeHtml(`${item.quantity} ${item.name}`)}</td>
+          <td class="text-center">${escapeHtml(line.sessionSequence || "-")}</td>
+          <td class="text-right">${escapeHtml(asCurrency(item.unitPrice))}</td>
+        </tr>
+      `).join("")
+    }
+
     const subItems = renderSubItems(line.subItems ?? [])
 
     return `

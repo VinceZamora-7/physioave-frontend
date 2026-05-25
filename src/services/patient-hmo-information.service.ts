@@ -14,20 +14,20 @@ interface PatientHMOInformationService {
 
   updateByPatientId(payload: PatientHMOInformationPayload): Promise<void | undefined>
 
-  getByPatientId(patientId: number): Promise<PatientHMOInformation | undefined>
+  getByPatientId(patientId: number): Promise<PatientHMOInformation[]>
 
   getHistoryByPatientId(patientId: number): Promise<PatientHMOInformationHistoryEntry[]>
 }
 
 export const patientHMOInformationService: PatientHMOInformationService = {
-  async getByPatientId(patientId: number): Promise<PatientHMOInformation | undefined> {
+  async getByPatientId(patientId: number): Promise<PatientHMOInformation[]> {
     try {
-      const {data: response} = await pamsAPI.get<PatientHMOInformation>(`/${ResourceKey.PATIENTS}/${patientId}/${ResourceKey.HMO_INFORMATION}`)
+      const {data: response} = await pamsAPI.get<PatientHMOInformation[]>(`/${ResourceKey.PATIENTS}/${patientId}/${ResourceKey.HMO_INFORMATION}`)
 
-      return response
+      return response ?? []
     } catch (error: unknown) {
       errorHandler(error)
-      return undefined
+      return []
     }
   },
 

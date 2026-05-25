@@ -31,7 +31,7 @@ export const mapBackendOfferToPromosService = (
 ): PromosCatalogServiceItem => ({
   id: `${type}-${id}`,
   type,
-  name,
+  name: String(name ?? ""),
   price,
   status: isActive ? "Active" : "Inactive"
 })

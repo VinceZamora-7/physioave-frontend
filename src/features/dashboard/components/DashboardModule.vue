@@ -27,15 +27,30 @@
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-        <article v-for="item in kpiCards" :key="item.label" class="app-dashboard-kpi-card">
-          <p class="app-muted-text text-xs uppercase tracking-wide">{{ item.label }}</p>
-          <p class="mt-1 text-2xl font-semibold">{{ item.value }}</p>
+        <article
+          v-for="item in kpiCards"
+          :key="item.label"
+          class="app-dashboard-kpi-card"
+          :style="{
+            borderLeftWidth: '4px',
+            borderLeftColor: item.accent,
+            background: `linear-gradient(135deg, ${item.accent}18, rgb(var(--app-surface)), ${item.accent}0a)`
+          }"
+        >
+          <p class="text-xs uppercase tracking-wide opacity-60">{{ item.label }}</p>
+          <p class="mt-1 text-2xl font-semibold" :style="{color: item.accent}">{{ item.value }}</p>
         </article>
       </div>
 
       <div class="app-dashboard-panel">
-        <h4 class="text-sm font-semibold mb-3">Marketing Channels</h4>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <button
+          class="flex w-full items-center justify-between text-left"
+          @click="marketingChannelsOpen = !marketingChannelsOpen"
+        >
+          <h4 class="text-sm font-semibold">Marketing Channels</h4>
+          <i :class="marketingChannelsOpen ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" class="text-xs opacity-50" />
+        </button>
+        <div v-if="marketingChannelsOpen" class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
           <div>
             <p class="font-medium mb-2">Online Marketing</p>
             <ul class="app-muted-text space-y-1">
@@ -136,15 +151,71 @@
       </DataTable>
     </section>
 
-    <section class="app-section-card-comfy space-y-3">
-      <div class="flex items-center gap-2 text-sm">
-        <i class="app-section-icon pi pi-user-md" />
-        <span class="font-medium">Completed Sessions by Referring Doctor</span>
+    <section class="app-section-card-comfy space-y-4">
+      <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <h2 class="app-section-title">Completed Sessions by Referring Doctor</h2>
+          <p class="text-sm opacity-70">Operations view for completed treatment sessions grouped by referring doctor over a selected date range.</p>
+        </div>
+        <div class="text-sm opacity-70">
+          Total Completed Sessions: {{ doctorSessionsReport?.total_completed_sessions ?? 0 }}
+        </div>
       </div>
-      <DataTable class="app-data-table" :value="referringDoctorSummary" size="small" :loading="isLoading">
-        <Column field="referring_doctor_name" header="Referring Doctor" />
-        <Column field="completed_sessions_count" header="Completed Sessions" />
-      </DataTable>
+
+      <div class="grid grid-cols-1 gap-3 md:grid-cols-[minmax(280px,360px)_auto_1fr] md:items-end">
+        <div class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wide opacity-60">Date Range</label>
+          <DatePicker
+            v-model="doctorSessionsDateRange"
+            selectionMode="range"
+            showIcon
+            fluid
+            :manualInput="false"
+            dateFormat="mm/dd/yy"
+          />
+        </div>
+        <div>
+          <Button
+            label="Generate"
+            icon="pi pi-chart-bar"
+            :loading="isDoctorSessionsLoading"
+            :pt="ptPrimaryBtn"
+            @click="refreshDoctorSessionsReport"
+          />
+        </div>
+        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 text-sm opacity-75">
+          {{ selectedDoctorSessionsRangeLabel }}
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <DataTable :value="doctorSessionsReport?.doctors ?? []" size="small" :loading="isDoctorSessionsLoading" scrollable>
+          <template #empty>
+            <div class="py-10 text-center text-sm opacity-70">
+              No completed sessions found for the selected range.
+            </div>
+          </template>
+
+          <Column header="Rank" style="width: 80px">
+            <template #body="{ index }">{{ index + 1 }}</template>
+          </Column>
+
+          <Column header="Referring Doctor" style="min-width: 320px">
+            <template #body="{ data }">
+              <div class="space-y-1">
+                <div class="font-medium">{{ data.referring_doctor_name }}</div>
+                <div class="text-xs opacity-60">ID: {{ data.referring_doctor_id }}</div>
+              </div>
+            </template>
+          </Column>
+
+          <Column header="Completed Sessions" style="min-width: 180px">
+            <template #body="{ data }">
+              <span class="font-semibold">{{ data.completed_sessions_count }}</span>
+            </template>
+          </Column>
+        </DataTable>
+      </div>
     </section>
   </main>
 </template>
@@ -155,9 +226,12 @@ import {storeToRefs} from "pinia"
 import Button from "primevue/button"
 import Column from "primevue/column"
 import DataTable from "primevue/datatable"
+import DatePicker from "primevue/datepicker"
 import Tag from "primevue/tag"
 import {errorToast} from "@/utils/toast.util"
 import {useToast} from "primevue/usetoast"
+import {getApiErrorMessage} from "@/utils/actionable-error.util"
+import {ptPrimaryBtn} from "@/features/shared/table-header.styles"
 import {
   dashboardService,
   type DashboardConfidentialRevenue,
@@ -169,7 +243,7 @@ import {billingPhase1Service} from "@/features/billing/api/billing-phase1.servic
 import {
   appointmentPhase1Service,
   type PtCompletedSessionsItem,
-  type ReferringDoctorCompletedSessionsItem,
+  type ReferringDoctorCompletedSessionsReport,
 } from "@/features/appointments/api/appointment-phase1.service"
 import { clinicStore } from "@/stores/clinic.store"
 
@@ -215,11 +289,29 @@ const billingDistribution = ref<Array<{
 
 const recentAppointments = ref<DashboardRecentAppointment[]>([])
 const ptPerformance = ref<Array<{pt_name: string; bookings: number; documentationReminderCount: number; redAlertCount: number}>>([])
-const referringDoctorSummary = ref<ReferringDoctorCompletedSessionsItem[]>([])
+const isDoctorSessionsLoading = ref(false)
+const doctorSessionsDateRange = ref<Date[] | null>(null)
+const doctorSessionsReport = ref<ReferringDoctorCompletedSessionsReport>()
 const canViewConfidentialRevenueCards = ref(false)
 const hideSensitiveDashboardData = ref(localStorage.getItem("dashboard.hideSensitiveData") === "true")
 
 const formatDateTime = (value: string): string => new Date(value).toLocaleString()
+
+const formatDate = (value: Date): string =>
+  value.toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" })
+
+const toDateParam = (value: Date): string => {
+  const year = value.getFullYear()
+  const month = String(value.getMonth() + 1).padStart(2, "0")
+  const day = String(value.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+const selectedDoctorSessionsRangeLabel = computed(() => {
+  const range = doctorSessionsDateRange.value ?? []
+  if (range.length < 2 || !range[0] || !range[1]) return "Select a complete date range"
+  return `${formatDate(range[0])} to ${formatDate(range[1])}`
+})
 const formatCurrency = (value: number): string =>
   new Intl.NumberFormat("en-PH", {style: "currency", currency: "PHP", maximumFractionDigits: 0}).format(value || 0)
 const sensitivePlaceholder = "••••••"
@@ -231,24 +323,27 @@ const toggleSensitiveDashboardData = (): void => {
   localStorage.setItem("dashboard.hideSensitiveData", String(hideSensitiveDashboardData.value))
 }
 
+const marketingChannelsOpen = ref(localStorage.getItem("dashboard.marketingChannelsOpen") !== "false")
+watch(marketingChannelsOpen, (val) => localStorage.setItem("dashboard.marketingChannelsOpen", String(val)))
+
 const kpiCards = computed(() => {
   const cards = [
-    {label: "Monthly Total Appointments", value: metrics.value.monthlyTotalAppointments},
-    {label: "Active Patients", value: metrics.value.activePatients},
-    {label: "Appointments Today", value: metrics.value.appointmentsToday},
-    {label: "Rescheduling/Cancellation Index", value: `${metrics.value.rescheduleCancellationIndex}%`},
-    {label: "HMO (Bookings) Monthly Total", value: metrics.value.hmoBookingsMonthlyTotal},
-    {label: "LGU (Bookings) Monthly Total", value: metrics.value.lguBookingsMonthlyTotal},
-    {label: "Pending Billings", value: metrics.value.pendingBillings},
-    {label: "Paid Billings", value: metrics.value.paidBillings},
-    {label: "HMO Revenue", value: formatSensitiveCurrency(metrics.value.hmoRevenue)},
+    {label: "Monthly Total Appointments", value: metrics.value.monthlyTotalAppointments, accent: '#3b82f6'},
+    {label: "Active Patients", value: metrics.value.activePatients, accent: '#8b5cf6'},
+    {label: "Appointments Today", value: metrics.value.appointmentsToday, accent: '#06b6d4'},
+    {label: "Rescheduling/Cancellation Index", value: `${metrics.value.rescheduleCancellationIndex}%`, accent: '#f59e0b'},
+    {label: "HMO (Bookings) Monthly Total", value: metrics.value.hmoBookingsMonthlyTotal, accent: '#14b8a6'},
+    {label: "LGU (Bookings) Monthly Total", value: metrics.value.lguBookingsMonthlyTotal, accent: '#10b981'},
+    {label: "Pending Billings", value: metrics.value.pendingBillings, accent: '#f97316'},
+    {label: "Paid Billings", value: metrics.value.paidBillings, accent: '#22c55e'},
+    {label: "HMO Revenue", value: formatSensitiveCurrency(metrics.value.hmoRevenue), accent: '#14b8a6'},
   ]
 
   if (canViewConfidentialRevenueCards.value) {
     cards.push(
-      {label: "LGU Revenue", value: formatSensitiveCurrency(metrics.value.lguRevenue)},
-      {label: "Online Marketing Revenue", value: formatSensitiveCurrency(metrics.value.onlineMarketingRevenue)},
-      {label: "Direct Marketing Revenue", value: formatSensitiveCurrency(metrics.value.directMarketingRevenue)},
+      {label: "LGU Revenue", value: formatSensitiveCurrency(metrics.value.lguRevenue), accent: '#10b981'},
+      {label: "Online Marketing Revenue", value: formatSensitiveCurrency(metrics.value.onlineMarketingRevenue), accent: '#a855f7'},
+      {label: "Direct Marketing Revenue", value: formatSensitiveCurrency(metrics.value.directMarketingRevenue), accent: '#ec4899'},
     )
   }
 
@@ -343,17 +438,37 @@ const loadPtPerformance = async (): Promise<void> => {
     .sort((a, b) => b.bookings - a.bookings)
 }
 
-const loadReferringDoctorSummary = async (): Promise<void> => {
-  const monthRange = getMonthRange()
-  const clinicId = selectedClinicId.value
-  const report = await appointmentPhase1Service.getCompletedSessionsByReferringDoctor(monthRange.from, monthRange.to, clinicId)
-  referringDoctorSummary.value = (report?.doctors ?? [])
-    .map(item => ({
-      ...item,
-      referring_doctor_name: item.referring_doctor_name?.trim() || "Unassigned",
-      completed_sessions_count: Number(item.completed_sessions_count ?? 0),
-    }))
-    .sort((a, b) => b.completed_sessions_count - a.completed_sessions_count)
+const initializeDoctorSessionsDateRange = (): void => {
+  if (doctorSessionsDateRange.value && doctorSessionsDateRange.value.length === 2) return
+  const today = new Date()
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
+  doctorSessionsDateRange.value = [monthStart, today]
+}
+
+const refreshDoctorSessionsReport = async (): Promise<void> => {
+  const range = doctorSessionsDateRange.value ?? []
+  if (range.length < 2 || !range[0] || !range[1]) {
+    errorToast(toast, "Select both Start Date and End Date, then click Generate.")
+    return
+  }
+  const fromDate = range[0]
+  const toDate = range[1]
+  if (fromDate.getTime() > toDate.getTime()) {
+    errorToast(toast, "Start Date cannot be later than End Date.")
+    return
+  }
+  try {
+    isDoctorSessionsLoading.value = true
+    doctorSessionsReport.value = await appointmentPhase1Service.getCompletedSessionsByReferringDoctor(
+      toDateParam(fromDate),
+      toDateParam(toDate),
+      selectedClinicId.value
+    )
+  } catch (error: unknown) {
+    errorToast(toast, getApiErrorMessage(error, { baseMessage: "Completed sessions report could not be loaded" }))
+  } finally {
+    isDoctorSessionsLoading.value = false
+  }
 }
 
 const loadTrend = async (): Promise<void> => {
@@ -410,7 +525,6 @@ const refreshDashboard = async (): Promise<void> => {
       loadBillingDistribution(),
       loadRecentAppointments(),
       loadPtPerformance(),
-      loadReferringDoctorSummary(),
     ])
 
     const confidentialRevenueResult = results[1]
@@ -444,11 +558,14 @@ onMounted(async () => {
   } catch {
     errorToast(toast, "Failed to load clinic list")
   }
+  initializeDoctorSessionsDateRange()
   void refreshDashboard()
+  void refreshDoctorSessionsReport()
 })
 
 // Refresh dashboard when clinic selection changes
 watch(selectedClinicId, () => {
   void refreshDashboard()
+  void refreshDoctorSessionsReport()
 })
 </script>

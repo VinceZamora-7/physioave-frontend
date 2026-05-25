@@ -227,6 +227,7 @@ export interface HmoSoaParams {
   from: string
   to: string
   limit?: number
+  hmo_id?: number
 }
 
 export interface DailyIncomeExpenseRow {
@@ -408,9 +409,9 @@ export const billingPhase1Service = {
   async getLguDashboardHistory(limit = 100, periodYear?: number, periodMonth?: number, programId?: number): Promise<LguDashboardHistoryItem[] | undefined> {
     return lguBillingService.getDashboardHistory(limit, periodYear, periodMonth, programId)
   },
-  async getHmoRecentHistory(limit = 25): Promise<HmoRecentHistoryItem[] | undefined> {
+  async getHmoRecentHistory(limit = 25, hmoId?: number): Promise<HmoRecentHistoryItem[] | undefined> {
     const { data } = await pamsAPI.get<HmoRecentHistoryItem[]>("/billings/hmo-recent-history", {
-      params: { limit }
+      params: { limit, hmo_id: hmoId }
     })
     return data
   },
