@@ -67,8 +67,8 @@ export const pamsBaseURL =
   explicitPamsBaseURL ??
   buildBaseURL(
     import.meta.env.VITE_PAMS_HOST || "127.0.0.1",
-    import.meta.env.VITE_PAMS_PORT,
-    import.meta.env.VITE_PAMS_CONTEXT_PATH
+    import.meta.env.VITE_PAMS_PORT || 8079,
+    import.meta.env.VITE_PAMS_CONTEXT_PATH || "/api/v2/pams"
   )
 
 export const pamsAPI = axios.create({

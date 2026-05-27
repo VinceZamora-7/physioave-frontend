@@ -1761,13 +1761,21 @@ const extractApiErrorMessage = (error: unknown, fallback: string): string =>
 // ── Local catalog types ───────────────────────────────────────────────────────
 type LocalService  = {id: string; type: string; name: string; price: number; status: string}
 type LocalBundle   = {id: string; name: string; machineIds: string[]; techniqueIds: string[]; evaluationIds: string[]; addOnIds: string[]; bundledPrice: number; status: string}
+type LocalPackageItem = {
+  id: string
+  qty: number
+  standardUnitPrice?: number
+  packageUnitPrice?: number
+  dropoutUnitPrice?: number
+}
 type LocalPackageOffer = {
   id: string; name: string; bundleId?: string; bundleQty: number
-  machineIds?: string[]; machineQty?: number; machineItems?: Array<{id:string;qty:number}>
-  techniqueIds?: string[]; techniqueQty?: number; techniqueItems?: Array<{id:string;qty:number}>
-  evaluationIds: string[]; evaluationQty: number; evaluationItems?: Array<{id:string;qty:number}>
-  addOnIds?: string[]; addOnQty?: number; addOnItems?: Array<{id:string;qty:number}>
-  sessionIds?: string[]; sessionQty?: number; sessionItems?: Array<{id:string;qty:number}>
+  bundleItems?: LocalPackageItem[]
+  machineIds?: string[]; machineQty?: number; machineItems?: LocalPackageItem[]
+  techniqueIds?: string[]; techniqueQty?: number; techniqueItems?: LocalPackageItem[]
+  evaluationIds: string[]; evaluationQty: number; evaluationItems?: LocalPackageItem[]
+  addOnIds?: string[]; addOnQty?: number; addOnItems?: LocalPackageItem[]
+  sessionIds?: string[]; sessionQty?: number; sessionItems?: LocalPackageItem[]
   invoiceSubItems?: PackageInvoicePrintSubItem[]
   packagePrice: number; status: string
 }
@@ -1796,6 +1804,14 @@ const normalizePositiveInt = (value: unknown, fallback = 1): number => {
 const normalizeNonNegativeNumber = (value: unknown): number => {
   const n = Number(value); return Number.isFinite(n) && n >= 0 ? n : 0
 }
+const normalizeOptionalAmount = (...values: unknown[]): number | undefined => {
+  for (const value of values) {
+    if (value === undefined || value === null || String(value).trim() === "") continue
+    const parsed = Number(value)
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed
+  }
+  return undefined
+}
 const parseMaybeJsonArray = (value: unknown): unknown[] => {
   if (Array.isArray(value)) return value
   if (typeof value !== "string") return []
@@ -1804,13 +1820,23 @@ const parseMaybeJsonArray = (value: unknown): unknown[] => {
 }
 const normalizeStringIdArray = (value: unknown): string[] =>
   parseMaybeJsonArray(value).map(e => toOptionalStringId(e)).filter((e): e is string => !!e)
-const normalizeQtyItems = (value: unknown): Array<{id:string;qty:number}> =>
+const normalizeQtyItems = (value: unknown): LocalPackageItem[] =>
   parseMaybeJsonArray(value).flatMap(entry => {
     if (!entry || typeof entry !== "object") return []
     const raw = entry as Record<string, unknown>
     const id = toOptionalStringId(raw.id ?? raw.item_id ?? raw.service_id ?? raw.session_id)
     if (!id) return []
-    return [{id, qty: normalizePositiveInt(raw.qty ?? raw.quantity, 1)}]
+    const standardUnitPrice = normalizeOptionalAmount(raw.standardUnitPrice, raw.standard_unit_price, raw.referencePrice, raw.reference_price)
+    const packageUnitPrice = normalizeOptionalAmount(raw.packageUnitPrice, raw.package_unit_price, raw.contractPrice, raw.contract_price, raw.allocatedPrice, raw.allocated_price)
+    const dropoutUnitPrice = normalizeOptionalAmount(raw.dropoutUnitPrice, raw.dropout_unit_price, raw.dropoutPrice, raw.dropout_price)
+    const isComplimentary = Boolean(raw.isComplimentary ?? raw.is_complimentary)
+    return [{
+      id,
+      qty: normalizePositiveInt(raw.qty ?? raw.quantity, 1),
+      ...(standardUnitPrice === undefined ? {} : { standardUnitPrice }),
+      ...(packageUnitPrice === undefined && !isComplimentary ? {} : { packageUnitPrice: isComplimentary ? 0 : Number(packageUnitPrice ?? 0) }),
+      ...(dropoutUnitPrice === undefined ? {} : { dropoutUnitPrice })
+    }]
   })
 const normalizeInvoiceSubItems = (value: unknown): PackageInvoicePrintSubItem[] =>
   parseMaybeJsonArray(value).flatMap(entry => {
@@ -1818,9 +1844,23 @@ const normalizeInvoiceSubItems = (value: unknown): PackageInvoicePrintSubItem[] 
     const raw = entry as Record<string, unknown>
     const name = String(raw.name ?? "").trim()
     if (!name) return []
+    const rawUnitPrice = raw.unitPrice ?? raw.unit_price ?? raw.price
+    const parsedUnitPrice = rawUnitPrice === undefined || rawUnitPrice === null || String(rawUnitPrice).trim() === ""
+      ? undefined
+      : Number(rawUnitPrice)
+    const rawDropoutUnitPrice = raw.dropoutUnitPrice ?? raw.dropout_unit_price ?? raw.dropoutPrice ?? raw.dropout_price
+    const parsedDropoutUnitPrice = rawDropoutUnitPrice === undefined || rawDropoutUnitPrice === null || String(rawDropoutUnitPrice).trim() === ""
+      ? undefined
+      : Number(rawDropoutUnitPrice)
     return [{
       name,
       quantity: normalizePositiveInt(raw.quantity, 1),
+      unitPrice: parsedUnitPrice !== undefined && Number.isFinite(parsedUnitPrice) && parsedUnitPrice >= 0
+        ? parsedUnitPrice
+        : undefined,
+      dropoutUnitPrice: parsedDropoutUnitPrice !== undefined && Number.isFinite(parsedDropoutUnitPrice) && parsedDropoutUnitPrice >= 0
+        ? parsedDropoutUnitPrice
+        : undefined,
       children: normalizeInvoiceSubItems(raw.children)
     }]
   })
@@ -1839,6 +1879,7 @@ const normalizePackageServiceOffer = (value: unknown): LocalPackageOffer | null 
     id, name,
     bundleId: toOptionalStringId(raw.bundleId ?? raw.bundle_template_id),
     bundleQty: normalizePositiveInt(raw.bundleQty ?? raw.bundle_qty, 1),
+    bundleItems: normalizeQtyItems(raw.bundleItems ?? raw.bundle_items ?? raw.bundle_items_json),
     machineIds: normalizeStringIdArray(raw.machineIds ?? raw.machine_ids ?? raw.machine_ids_json),
     machineQty: normalizePositiveInt(raw.machineQty ?? raw.machine_qty, 1),
     machineItems: normalizeQtyItems(raw.machineItems ?? raw.machine_items ?? raw.machine_items_json),
@@ -1972,14 +2013,14 @@ const getBundleCategoryGroups = (bundleId?: string|number, bundleName?: string):
 }
 
 const expandQtyItems = (
-  items: Array<{id:string;qty:number}> | undefined,
+  items: LocalPackageItem[] | undefined,
   ids: string[] | undefined,
   fallbackQty: number | undefined
-): Array<{id?:string;qty:number}> =>
-  items?.length ? items.map(e => ({id: e.id, qty: Number(e.qty ?? 1)})) : (ids ?? []).map(id => ({id, qty: Number(fallbackQty ?? 1)}))
+): Array<LocalPackageItem | {id?:string;qty:number}> =>
+  items?.length ? items.map(e => ({...e, qty: Number(e.qty ?? 1)})) : (ids ?? []).map(id => ({id, qty: Number(fallbackQty ?? 1)}))
 
 const buildBreakdownItems = (
-  entries: Array<{id?:string;qty:number}>,
+  entries: Array<LocalPackageItem | {id?:string;qty:number}>,
   resolveItem: (id:string) => {name:string;price:number}|undefined,
   multiplier = 1
 ): BillingReceiptPrintSubItem[] =>
@@ -2019,7 +2060,13 @@ const getPackageReceiptGroups = (pkgId?: string|number, pkgName?: string, multip
 }
 
 // ── Line parsing ──────────────────────────────────────────────────────────────
-type PackageInvoicePrintSubItem = {name: string; quantity: number; unitPrice?: number; children?: PackageInvoicePrintSubItem[]}
+type PackageInvoicePrintSubItem = {
+  name: string
+  quantity: number
+  unitPrice?: number
+  dropoutUnitPrice?: number
+  children?: PackageInvoicePrintSubItem[]
+}
 const findLocalServiceByName = (name?: string): LocalService | undefined => {
   const normalized = String(name ?? "").trim().toLowerCase()
   return normalized ? localServices.value.find(service => service.name.trim().toLowerCase() === normalized) : undefined
@@ -2041,19 +2088,123 @@ const findSessionServiceByName = (name?: string): BillingPickerLookup | undefine
   const normalized = String(name ?? "").trim().toLowerCase()
   return normalized ? sessionServices.value.find(service => service.name.trim().toLowerCase() === normalized) : undefined
 }
-const enrichPackageInvoiceSubItemPrices = (items?: PackageInvoicePrintSubItem[]): PackageInvoicePrintSubItem[] | undefined => {
+type PackageInvoicePrintPriceMode = "package" | "dropout"
+
+const findPackageBundleItem = (pkg: LocalPackageOffer): LocalPackageItem | undefined => {
+  const bundle = findBundle(pkg.bundleId)
+  return pkg.bundleItems?.find(item =>
+    String(item.id) === String(pkg.bundleId) ||
+    String(item.id) === String(bundle?.id) ||
+    String(item.id) === String(pkg.bundleId).replace(/^bundle-/, "")
+  )
+}
+
+const getConfiguredPackageItemPrice = (
+  item: LocalPackageItem | undefined,
+  priceMode: PackageInvoicePrintPriceMode
+): number | undefined => {
+  if (!item) return undefined
+  return priceMode === "dropout"
+    ? item.dropoutUnitPrice ?? item.standardUnitPrice ?? item.packageUnitPrice
+    : item.packageUnitPrice
+}
+
+const findConfiguredPackageItemByName = (
+  pkg: LocalPackageOffer,
+  name?: string
+): LocalPackageItem | undefined => {
+  const normalizedName = String(name ?? "").trim().toLowerCase()
+  if (!normalizedName) return undefined
+  const items = [
+    ...(pkg.machineItems ?? []),
+    ...(pkg.techniqueItems ?? []),
+    ...(pkg.evaluationItems ?? []),
+    ...(pkg.addOnItems ?? []),
+    ...(pkg.sessionItems ?? [])
+  ]
+  return items.find(item => {
+    const resolved = resolveLocalServiceSummary(item.id) ?? resolveSessionServiceSummary(item.id)
+    return resolved?.name.trim().toLowerCase() === normalizedName
+  })
+}
+
+const applyConfiguredPackageRates = (
+  pkg: LocalPackageOffer | undefined,
+  items: PackageInvoicePrintSubItem[] | undefined,
+  priceMode: PackageInvoicePrintPriceMode
+): PackageInvoicePrintSubItem[] | undefined => {
+  if (!items?.length || !pkg) return items
+  const bundle = findBundle(pkg.bundleId)
+  const bundleItem = findPackageBundleItem(pkg)
+  return items.map(item => {
+    const isBundleContainer = Boolean(
+      item.children?.length &&
+      bundleItem &&
+      bundle?.name &&
+      item.name.trim().toLowerCase() === bundle.name.trim().toLowerCase()
+    )
+    const configuredItem = isBundleContainer ? bundleItem : findConfiguredPackageItemByName(pkg, item.name)
+    const configuredUnitPrice = getConfiguredPackageItemPrice(configuredItem, priceMode)
+    return {
+      ...item,
+      unitPrice: configuredUnitPrice ?? item.unitPrice,
+      dropoutUnitPrice: priceMode === "dropout"
+        ? item.dropoutUnitPrice ?? configuredUnitPrice
+        : item.dropoutUnitPrice,
+      children: applyConfiguredPackageRates(pkg, item.children, priceMode)
+    }
+  })
+}
+
+const buildPackageInvoiceSubItems = (
+  entries: Array<LocalPackageItem | {id?:string;qty:number}>,
+  resolveItem: (id:string) => {name:string;price:number}|undefined,
+  multiplier: number,
+  includePrices: boolean,
+  priceMode: PackageInvoicePrintPriceMode
+): PackageInvoicePrintSubItem[] =>
+  entries.flatMap(entry => {
+    if (!entry.id) return []
+    const resolved = resolveItem(entry.id)
+    if (!resolved) return []
+    const configuredPrice = getConfiguredPackageItemPrice(entry as LocalPackageItem, priceMode)
+    return [{
+      name: resolved.name,
+      quantity: Math.max(1, Number(entry.qty ?? 1) * multiplier),
+      unitPrice: includePrices ? configuredPrice ?? Number(resolved.price ?? 0) : undefined,
+      dropoutUnitPrice: includePrices ? (entry as LocalPackageItem).dropoutUnitPrice : undefined
+    }]
+  })
+
+const enrichPackageInvoiceSubItemPrices = (
+  items?: PackageInvoicePrintSubItem[],
+  priceMode: PackageInvoicePrintPriceMode = "package"
+): PackageInvoicePrintSubItem[] | undefined => {
   if (!items?.length) return items
-  return items.map(item => ({
-    ...item,
-    unitPrice: item.children?.length
-      ? undefined
-      : item.unitPrice ?? findLiveBillingLookupByName(item.name)?.price ?? findLocalServiceByName(item.name)?.price ?? findSessionServiceByName(item.name)?.price,
-    children: enrichPackageInvoiceSubItemPrices(item.children)
-  }))
+  return items.map(item => {
+    const bundle = item.children?.length ? findBundle(undefined, item.name) : undefined
+    const bundledPrice = bundle ? Number(bundle.bundledPrice ?? 0) : undefined
+    const explicitPrice = priceMode === "dropout"
+      ? item.dropoutUnitPrice ?? item.unitPrice
+      : item.unitPrice
+    return {
+      ...item,
+      unitPrice: explicitPrice ?? (item.children?.length
+        ? (bundledPrice !== undefined && Number.isFinite(bundledPrice) && bundledPrice >= 0 ? bundledPrice : undefined)
+        : findLiveBillingLookupByName(item.name)?.price ?? findLocalServiceByName(item.name)?.price ?? findSessionServiceByName(item.name)?.price),
+      children: enrichPackageInvoiceSubItemPrices(item.children, priceMode)
+    }
+  })
 }
 const hasNestedInvoiceSubItems = (items?: PackageInvoicePrintSubItem[]): boolean =>
   Boolean(items?.some(item => (item.children?.length ?? 0) > 0 || hasNestedInvoiceSubItems(item.children)))
-const getPackageInvoiceSubItems = (pkgId?: string|number, pkgName?: string, multiplier = 1, includePrices = false): PackageInvoicePrintSubItem[] => {
+const getPackageInvoiceSubItems = (
+  pkgId?: string|number,
+  pkgName?: string,
+  multiplier = 1,
+  includePrices = false,
+  priceMode: PackageInvoicePrintPriceMode = "package"
+): PackageInvoicePrintSubItem[] => {
   const pkg = findPackageOffer(pkgId, pkgName)
   if (!pkg) return []
   if (pkg.invoiceSubItems?.length) {
@@ -2062,19 +2213,30 @@ const getPackageInvoiceSubItems = (pkgId?: string|number, pkgName?: string, mult
         name: item.name,
         quantity: Math.max(1, Number(item.quantity ?? 1) * multiplier),
         unitPrice: includePrices ? item.unitPrice : undefined,
+        dropoutUnitPrice: includePrices ? item.dropoutUnitPrice : undefined,
         children: item.children?.length ? multiply(item.children) : undefined
       }))
-    const multiplied = multiply(pkg.invoiceSubItems)
-    return includePrices ? enrichPackageInvoiceSubItemPrices(multiplied) ?? multiplied : multiplied
+    const configuredSubItems = applyConfiguredPackageRates(pkg, pkg.invoiceSubItems, priceMode) ?? pkg.invoiceSubItems
+    const multiplied = multiply(configuredSubItems)
+    return includePrices ? enrichPackageInvoiceSubItemPrices(multiplied, priceMode) ?? multiplied : multiplied
   }
 
   const subItems: PackageInvoicePrintSubItem[] = []
   if (pkg.bundleId) {
     const bundle = findBundle(pkg.bundleId)
+    const bundleItem = pkg.bundleItems?.find(item =>
+      String(item.id) === String(pkg.bundleId) ||
+      String(item.id) === String(bundle?.id) ||
+      String(item.id) === String(pkg.bundleId).replace(/^bundle-/, "")
+    )
+    const bundleQuantity = Math.max(1, Number(bundleItem?.qty ?? pkg.bundleQty ?? 1))
+    const bundlePrice = priceMode === "dropout"
+      ? bundleItem?.dropoutUnitPrice ?? bundleItem?.standardUnitPrice ?? bundleItem?.packageUnitPrice ?? Number(bundle?.bundledPrice ?? 0)
+      : bundleItem?.packageUnitPrice ?? Number(bundle?.bundledPrice ?? 0)
     const bundleChildren = getBundleReceiptGroups(
       pkg.bundleId,
       bundle?.name,
-      Math.max(1, Number(pkg.bundleQty ?? 1) * multiplier)
+      Math.max(1, bundleQuantity * multiplier)
     ).flatMap(group => group.items.map(item => ({
       name: item.name,
       quantity: item.quantity,
@@ -2083,24 +2245,22 @@ const getPackageInvoiceSubItems = (pkgId?: string|number, pkgName?: string, mult
 
     subItems.push({
       name: bundle?.name ?? "Bundle",
-      quantity: Math.max(1, Number(pkg.bundleQty ?? 1) * multiplier),
+      quantity: Math.max(1, bundleQuantity * multiplier),
+      unitPrice: includePrices ? bundlePrice : undefined,
+      dropoutUnitPrice: includePrices ? bundleItem?.dropoutUnitPrice : undefined,
       children: bundleChildren
     })
   }
 
   const directItems = [
-    ...buildBreakdownItems(expandQtyItems(pkg.machineItems, pkg.machineIds, pkg.machineQty), resolveLocalServiceSummary, multiplier),
-    ...buildBreakdownItems(expandQtyItems(pkg.techniqueItems, pkg.techniqueIds, pkg.techniqueQty), resolveLocalServiceSummary, multiplier),
-    ...buildBreakdownItems(expandQtyItems(pkg.evaluationItems, pkg.evaluationIds, pkg.evaluationQty), resolveLocalServiceSummary, multiplier),
-    ...buildBreakdownItems(expandQtyItems(pkg.addOnItems, pkg.addOnIds, pkg.addOnQty), resolveLocalServiceSummary, multiplier),
-    ...buildBreakdownItems(expandQtyItems(pkg.sessionItems, pkg.sessionIds, pkg.sessionQty), resolveSessionServiceSummary, multiplier)
+    ...buildPackageInvoiceSubItems(expandQtyItems(pkg.machineItems, pkg.machineIds, pkg.machineQty), resolveLocalServiceSummary, multiplier, includePrices, priceMode),
+    ...buildPackageInvoiceSubItems(expandQtyItems(pkg.techniqueItems, pkg.techniqueIds, pkg.techniqueQty), resolveLocalServiceSummary, multiplier, includePrices, priceMode),
+    ...buildPackageInvoiceSubItems(expandQtyItems(pkg.evaluationItems, pkg.evaluationIds, pkg.evaluationQty), resolveLocalServiceSummary, multiplier, includePrices, priceMode),
+    ...buildPackageInvoiceSubItems(expandQtyItems(pkg.addOnItems, pkg.addOnIds, pkg.addOnQty), resolveLocalServiceSummary, multiplier, includePrices, priceMode),
+    ...buildPackageInvoiceSubItems(expandQtyItems(pkg.sessionItems, pkg.sessionIds, pkg.sessionQty), resolveSessionServiceSummary, multiplier, includePrices, priceMode)
   ]
 
-  directItems.forEach(item => subItems.push({
-    name: item.name,
-    quantity: item.quantity,
-    unitPrice: includePrices ? item.unitPrice : undefined
-  }))
+  directItems.forEach(item => subItems.push(item))
   return subItems
 }
 
@@ -3190,19 +3350,46 @@ const printSelectedBillingReceipt = async (): Promise<void> => {
           return []
         }
       })()
-      type PrintableLguSubItem = {name: string; quantity: number; unitPrice?: number; children?: PrintableLguSubItem[]}
-      const normalizeLguSubItems = (items?: Array<{name?: string; quantity?: number; children?: any[]}>): PrintableLguSubItem[] =>
-        (items ?? []).map(item => ({
-          name: String(item.name ?? "Service"),
-          quantity: Math.max(1, Number(item.quantity ?? 1)),
-          unitPrice: isDropoutClaim
-            ? Number((item as {unitPrice?: number; unit_price?: number; price?: number}).unitPrice
-              ?? (item as {unit_price?: number}).unit_price
-              ?? (item as {price?: number}).price
-              ?? 0) || findLocalServiceByName(String(item.name ?? "Service"))?.price
-            : undefined,
-          children: normalizeLguSubItems(item.children)
-        }))
+      type PrintableLguSubItem = {name: string; quantity: number; unitPrice?: number; dropoutUnitPrice?: number; children?: PrintableLguSubItem[]}
+      const normalizeLguSubItems = (items?: Array<{
+        name?: string
+        quantity?: number
+        unitPrice?: number
+        unit_price?: number
+        price?: number
+        dropoutUnitPrice?: number
+        dropout_unit_price?: number
+        dropoutPrice?: number
+        dropout_price?: number
+        children?: any[]
+      }>): PrintableLguSubItem[] =>
+        (items ?? []).map(item => {
+          const rawUnitPrice = item.unitPrice ?? item.unit_price ?? item.price
+          const explicitUnitPrice = rawUnitPrice === undefined || rawUnitPrice === null || String(rawUnitPrice).trim() === ""
+            ? undefined
+            : Number(rawUnitPrice)
+          const rawDropoutUnitPrice = item.dropoutUnitPrice ?? item.dropout_unit_price ?? item.dropoutPrice ?? item.dropout_price
+          const explicitDropoutUnitPrice = rawDropoutUnitPrice === undefined || rawDropoutUnitPrice === null || String(rawDropoutUnitPrice).trim() === ""
+            ? undefined
+            : Number(rawDropoutUnitPrice)
+          const serviceFallbackPrice = isDropoutClaim
+            ? findLocalServiceByName(String(item.name ?? "Service"))?.price
+            : undefined
+          const effectiveUnitPrice = isDropoutClaim
+            ? explicitDropoutUnitPrice ?? explicitUnitPrice
+            : explicitUnitPrice
+          return {
+            name: String(item.name ?? "Service"),
+            quantity: Math.max(1, Number(item.quantity ?? 1)),
+            unitPrice: effectiveUnitPrice !== undefined && Number.isFinite(effectiveUnitPrice) && effectiveUnitPrice >= 0
+              ? effectiveUnitPrice
+              : serviceFallbackPrice,
+            dropoutUnitPrice: explicitDropoutUnitPrice !== undefined && Number.isFinite(explicitDropoutUnitPrice) && explicitDropoutUnitPrice >= 0
+              ? explicitDropoutUnitPrice
+              : undefined,
+            children: normalizeLguSubItems(item.children)
+          }
+        })
       const completedSessionTickets = [...lockedTickets].sort((left, right) => {
         const leftDate = String(left.billing_snapshot?.starts_at ?? left.attended_at ?? "")
         const rightDate = String(right.billing_snapshot?.starts_at ?? right.attended_at ?? "")
@@ -3212,10 +3399,29 @@ const printSelectedBillingReceipt = async (): Promise<void> => {
         const match = String(name ?? "").match(/\((\d+)\)\s*Sessions?/i)
         return match ? Math.max(1, Number(match[1])) : Math.max(1, completedSessionTickets.length)
       }
-      const shouldExpandSinglePackageLine = rawLines.length === 1
+      const dropoutPackageName = detail.package_name || detail.service_name || selectedBillingReceiptLines.value.find(line => line.type === "package")?.name
+      const dropoutPackageSubItems = isDropoutClaim && dropoutPackageName
+        ? getPackageInvoiceSubItems(undefined, dropoutPackageName, 1, true, "dropout")
+        : []
+      const shouldRenderDropoutPackageTree = isDropoutClaim
+        && dropoutPackageSubItems.length > 0
+        && rawLines.length > 1
+        && rawLines.every(line => String(line.type ?? "").toLowerCase() !== "package")
+      const shouldExpandSinglePackageLine = isDropoutClaim
+        && rawLines.length === 1
         && completedSessionTickets.length > 1
         && String(rawLines[0]?.type ?? selectedBillingReceiptLines.value[0]?.type ?? "").toLowerCase() === "package"
-      const lguInvoiceLines = shouldExpandSinglePackageLine
+      const lguInvoiceLines = shouldRenderDropoutPackageTree
+        ? [{
+            name: dropoutPackageName ?? "LGU Package",
+            quantity: 1,
+            unitPrice: 0,
+            lineTotal: 0,
+            treatmentDate: completedSessionTickets[0]?.billing_snapshot?.starts_at || completedSessionTickets[0]?.attended_at || detail.created_at,
+            sessionSequence: sessionSeqLabel,
+            subItems: dropoutPackageSubItems
+          }]
+        : shouldExpandSinglePackageLine
         ? (() => {
             const rawLine = rawLines[0]
             const sourceLine = selectedBillingReceiptLines.value[0]
@@ -3223,11 +3429,15 @@ const printSelectedBillingReceipt = async (): Promise<void> => {
             const unitPrice = completedSessionTickets.length > 0 ? sourceTotal / completedSessionTickets.length : sourceTotal
             const subItems = rawLine.subItems?.length
               ? (
-                  isDropoutClaim && !hasNestedInvoiceSubItems(normalizeLguSubItems(rawLine.subItems)) && getPackageInvoiceSubItems(sourceLine?.id, String(rawLine.name ?? sourceLine?.name ?? ""), Number(sourceLine?.quantity ?? 1), true).length
-                    ? getPackageInvoiceSubItems(sourceLine?.id, String(rawLine.name ?? sourceLine?.name ?? ""), Number(sourceLine?.quantity ?? 1), true)
-                    : normalizeLguSubItems(rawLine.subItems)
+                  isDropoutClaim && !hasNestedInvoiceSubItems(normalizeLguSubItems(rawLine.subItems)) && getPackageInvoiceSubItems(sourceLine?.id, String(rawLine.name ?? sourceLine?.name ?? ""), Number(sourceLine?.quantity ?? 1), true, "dropout").length
+                    ? getPackageInvoiceSubItems(sourceLine?.id, String(rawLine.name ?? sourceLine?.name ?? ""), Number(sourceLine?.quantity ?? 1), true, "dropout")
+                    : applyConfiguredPackageRates(
+                        findPackageOffer(sourceLine?.id, String(rawLine.name ?? sourceLine?.name ?? dropoutPackageName ?? "")),
+                        normalizeLguSubItems(rawLine.subItems),
+                        isDropoutClaim ? "dropout" : "package"
+                      ) ?? normalizeLguSubItems(rawLine.subItems)
                 )
-              : getPackageInvoiceSubItems(sourceLine?.id, String(rawLine.name ?? sourceLine?.name ?? ""), Number(sourceLine?.quantity ?? 1), isDropoutClaim)
+              : getPackageInvoiceSubItems(sourceLine?.id, String(rawLine.name ?? sourceLine?.name ?? ""), Number(sourceLine?.quantity ?? 1), isDropoutClaim, isDropoutClaim ? "dropout" : "package")
             const totalSessions = Number(rawLine.totalSessions ?? 0) > 0
               ? Number(rawLine.totalSessions)
               : inferPackageTotalSessions(String(rawLine.name ?? sourceLine?.name ?? ""))
@@ -3239,19 +3449,30 @@ const printSelectedBillingReceipt = async (): Promise<void> => {
               lineTotal: unitPrice,
               treatmentDate: ticket.billing_snapshot?.starts_at || ticket.attended_at || detail.created_at,
               sessionSequence: `Session ${index + 1} of ${totalSessions}`,
-              subItems: isDropoutClaim ? enrichPackageInvoiceSubItemPrices(subItems) : subItems
+              subItems: isDropoutClaim ? enrichPackageInvoiceSubItemPrices(subItems, "dropout") : subItems
             }))
           })()
         : rawLines.length
         ? rawLines.map((rawLine, index) => {
             const quantity = Math.max(1, Number(rawLine.quantity ?? 1))
             const unitPrice = Number(rawLine.price ?? 0)
-            const sequence = rawLine.sessionSequenceLabel
-              || (
-                rawLine.sessionSequence && rawLine.totalSessions
-                  ? `Session ${rawLine.sessionSequence} of ${rawLine.totalSessions}`
-                  : sessionSeqLabel
-              )
+            const sequence = isDropoutClaim
+              ? (rawLine.sessionSequenceLabel
+                || (
+                  rawLine.sessionSequence && rawLine.totalSessions
+                    ? `Session ${rawLine.sessionSequence} of ${rawLine.totalSessions}`
+                    : sessionSeqLabel
+                ))
+              : undefined
+            const normalizedSubItems = normalizeLguSubItems(rawLine.subItems)
+            const configuredSubItems = applyConfiguredPackageRates(
+              findPackageOffer(
+                rawLine.type === "package" ? selectedBillingReceiptLines.value[index]?.id : undefined,
+                String(rawLine.name ?? selectedBillingReceiptLines.value[index]?.name ?? dropoutPackageName ?? detail.package_name ?? detail.service_name ?? "")
+              ),
+              normalizedSubItems,
+              isDropoutClaim ? "dropout" : "package"
+            ) ?? normalizedSubItems
             return {
               name: String(rawLine.name ?? selectedBillingReceiptLines.value[index]?.name ?? "LGU Session"),
               quantity,
@@ -3261,14 +3482,14 @@ const printSelectedBillingReceipt = async (): Promise<void> => {
               sessionSequence: sequence,
               subItems: isDropoutClaim
                 ? (
-                    hasNestedInvoiceSubItems(normalizeLguSubItems(rawLine.subItems))
-                      ? enrichPackageInvoiceSubItemPrices(normalizeLguSubItems(rawLine.subItems))
-                      : getPackageInvoiceSubItems(rawLine.type === "package" ? selectedBillingReceiptLines.value[index]?.id : undefined, String(rawLine.name ?? selectedBillingReceiptLines.value[index]?.name ?? ""), quantity, true).length
-                      ? getPackageInvoiceSubItems(rawLine.type === "package" ? selectedBillingReceiptLines.value[index]?.id : undefined, String(rawLine.name ?? selectedBillingReceiptLines.value[index]?.name ?? ""), quantity, true)
-                      : enrichPackageInvoiceSubItemPrices(normalizeLguSubItems(rawLine.subItems))
+                    hasNestedInvoiceSubItems(configuredSubItems)
+                      ? enrichPackageInvoiceSubItemPrices(configuredSubItems, "dropout")
+                      : getPackageInvoiceSubItems(rawLine.type === "package" ? selectedBillingReceiptLines.value[index]?.id : undefined, String(rawLine.name ?? selectedBillingReceiptLines.value[index]?.name ?? ""), quantity, true, "dropout").length
+                      ? getPackageInvoiceSubItems(rawLine.type === "package" ? selectedBillingReceiptLines.value[index]?.id : undefined, String(rawLine.name ?? selectedBillingReceiptLines.value[index]?.name ?? ""), quantity, true, "dropout")
+                      : enrichPackageInvoiceSubItemPrices(configuredSubItems, "dropout")
                   )
                 : rawLine.subItems?.length
-                  ? normalizeLguSubItems(rawLine.subItems)
+                  ? configuredSubItems
                   : selectedBillingReceiptLines.value[index]?.type === "package"
                     ? getPackageInvoiceSubItems(
                         selectedBillingReceiptLines.value[index]?.id,
@@ -3284,53 +3505,11 @@ const printSelectedBillingReceipt = async (): Promise<void> => {
             unitPrice: isDropoutClaim ? 0 : l.unitPrice,
             lineTotal: isDropoutClaim ? 0 : l.lineTotal,
             treatmentDate: detail.created_at,
-            sessionSequence: sessionSeqLabel,
+            sessionSequence: isDropoutClaim ? sessionSeqLabel : undefined,
             subItems: l.type === "package"
-              ? getPackageInvoiceSubItems(l.id, l.name, l.quantity, isDropoutClaim)
+              ? getPackageInvoiceSubItems(l.id, l.name, l.quantity, isDropoutClaim, isDropoutClaim ? "dropout" : "package")
               : (l.breakdownGroups ?? []).flatMap(g => g.items.map(i => ({name: i.name, quantity: i.quantity})))
           }))
-      if (isDropoutClaim) {
-        const toSingleServiceLines = (items?: PrintableLguSubItem[]): Array<{name: string; quantity: number; unitPrice: number; lineTotal: number}> =>
-          (items ?? []).flatMap(item => {
-            if (item.children?.length) return toSingleServiceLines(item.children)
-            const unitPrice = Number(item.unitPrice ?? 0)
-            return [{
-              name: item.name,
-              quantity: Math.max(1, Number(item.quantity ?? 1)),
-              unitPrice,
-              lineTotal: unitPrice * Math.max(1, Number(item.quantity ?? 1))
-            }]
-          }).filter(item => item.name.trim().length > 0)
-
-        const productLines = lguInvoiceLines.flatMap(line => toSingleServiceLines(line.subItems))
-        const fallbackLines = lguInvoiceLines.map(line => ({
-          name: line.name,
-          quantity: line.quantity,
-          unitPrice: Number(line.unitPrice ?? 0),
-          lineTotal: Number(line.lineTotal ?? 0)
-        }))
-        const invoiceLines = productLines.length ? productLines : fallbackLines
-
-        renderSingleServiceInvoiceWindow(popup, {
-          billingDate: detail.created_at,
-          referenceNumber: getReceiptDisplayNumber(detail),
-          patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
-          patientAddress: detail.patient_address,
-          patientAge: detail.patient_age,
-          patientGender: detail.patient_gender,
-          physicalTherapist: detail.physical_therapist,
-          doctor: detail.doctor,
-          diagnosis: detail.diagnosis,
-          paymentMethod: "LGU Dropout Billing",
-          paymentReferenceNo: detail.lgu_patient_referral_form_no || detail.lgu_reference_label || detail.receipt_number,
-          subtotal: Number(detail.subtotal_amount ?? detail.amount_due ?? detail.total_amount ?? 0),
-          discount: Number(detail.discount_amount ?? 0),
-          grandTotal: selectedBillingTotalDue.value,
-          ...invoiceApprovalSignature.value,
-          lines: invoiceLines
-        }, {title: "LGU Dropout Invoice", fileName: getReceiptDisplayNumber(detail)}); return
-      }
-
       renderLguInvoiceWindow(popup, {
         billingDate: detail.created_at, referenceNumber: getReceiptDisplayNumber(detail),
         patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
@@ -3343,7 +3522,7 @@ const printSelectedBillingReceipt = async (): Promise<void> => {
         discount: Number(detail.discount_amount ?? 0), grandTotal: selectedBillingTotalDue.value,
         ...invoiceApprovalSignature.value,
         lines: lguInvoiceLines
-      }, {title: "LGU Invoice", fileName: getReceiptDisplayNumber(detail)}); return
+      }, {title: isDropoutClaim ? "LGU Dropout Invoice" : "LGU Invoice", fileName: getReceiptDisplayNumber(detail)}); return
     }
 
     // Fallback generic receipt

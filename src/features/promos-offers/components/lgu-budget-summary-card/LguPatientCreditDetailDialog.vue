@@ -102,6 +102,8 @@
                 <th class="px-3 py-2 font-bold">Reference</th>
                 <th class="px-3 py-2 font-bold">Availed Package</th>
                 <th class="px-3 py-2 font-bold">Type</th>
+                <th class="px-3 py-2 font-bold">Program Status</th>
+                <th class="px-3 py-2 font-bold">Sessions Rendered</th>
                 <th class="px-3 py-2 text-right font-bold">Amount</th>
                 <th class="px-3 py-2 font-bold">Status</th>
                 <th class="px-3 py-2 font-bold">Date</th>
@@ -116,6 +118,17 @@
                   <span v-if="billing.pricing_source === 'LGU_DROPOUT_INDIVIDUAL_CLAIM'" class="inline-flex rounded-full bg-orange-100 px-2 py-0.5 text-xs font-bold text-orange-700 dark:bg-orange-900/30 dark:text-orange-300">Dropout Claim</span>
                   <span v-else-if="billing.pricing_source === 'LGU_PACKAGE_MONTHLY_CLAIM'" class="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">Monthly Claim</span>
                   <span v-else class="text-xs text-[rgb(var(--app-fg))]/60">{{ billing.pricing_source || '-' }}</span>
+                </td>
+                <td class="px-3 py-2">
+                  <Tag :value="getProgramStatusLabel(billing)" :severity="getProgramStatusSeverity(billing)" class="text-xs" />
+                </td>
+                <td class="px-3 py-2 text-xs">
+                  <div class="space-y-1">
+                    <div class="font-semibold">{{ sessionsRenderedLabel }}</div>
+                    <div class="h-1.5 w-28 overflow-hidden rounded-full bg-[rgb(var(--app-border))]">
+                      <div class="h-full bg-emerald-500" :style="{ width: sessionsRenderedPercent + '%' }" />
+                    </div>
+                  </div>
                 </td>
                 <td class="px-3 py-2 text-right font-bold">{{ asCurrency(getBillingSummaryAmount(billing)) }}</td>
                 <td class="px-3 py-2">
@@ -173,6 +186,44 @@ const selectedPatientStatus = computed(() =>
   ?? props.selectedPatientDetail?.dropout_status
   ?? props.selectedPatientDetail?.authorizations[0]?.authorization_status
 )
+
+const completedAppointmentCount = computed(() =>
+  props.selectedPatientDetail?.appointments.filter(appointment => appointment.status === "COMPLETED").length ?? 0
+)
+
+const totalAuthorizedSessions = computed(() => {
+  const authorizations = props.selectedPatientDetail?.authorizations ?? []
+  const totalFromAuthorizations = authorizations.reduce((sum, auth) => sum + Number(auth.total_sessions ?? 0), 0)
+  if (totalFromAuthorizations > 0) return totalFromAuthorizations
+  const packageAvailments = props.selectedPatientDetail?.package_availments ?? []
+  return packageAvailments.reduce((sum, pkg) => sum + Number(pkg.availed_count ?? 0), 0)
+})
+
+const sessionsRenderedLabel = computed(() => {
+  const total = totalAuthorizedSessions.value
+  return `${completedAppointmentCount.value} / ${total || 0} Sessions`
+})
+
+const sessionsRenderedPercent = computed(() => {
+  const total = totalAuthorizedSessions.value
+  if (!total) return 0
+  return Math.min(100, Math.max(0, (completedAppointmentCount.value / total) * 100))
+})
+
+const getProgramStatusLabel = (billing: LguPatientBilling): string => {
+  const pricingSource = String(billing.pricing_source ?? "").toUpperCase()
+  if (pricingSource.includes("DROPOUT")) return "DROPPED_OUT"
+  const fallback = selectedPatientStatus.value
+  if (!fallback) return "ACTIVE"
+  return String(fallback).trim().toUpperCase()
+}
+
+const getProgramStatusSeverity = (billing: LguPatientBilling): "success" | "warn" | "danger" | "info" | "secondary" => {
+  const status = getProgramStatusLabel(billing)
+  if (status === "DROPPED_OUT" || status === "CROSS_MONTH_DROPPED_OUT") return "danger"
+  if (status === "ACTIVE") return "success"
+  return "info"
+}
 </script>
 
 <script lang="ts">

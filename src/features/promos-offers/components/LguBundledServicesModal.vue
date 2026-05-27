@@ -1,7 +1,7 @@
 <template>
   <Dialog
     v-model:visible="visible"
-    header="LGU Bundled Services"
+    :header="LGU_TABLE_NAMES.bundles"
     modal
     maximizable
     :style="{width: '95vw', maxWidth: '1400px'}"
@@ -9,9 +9,11 @@
     @show="onShow"
   >
     <ServiceBundlesManager
-      title="LGU Bundled Services"
+      :title="LGU_TABLE_NAMES.bundles"
       description="Create and manage bundled services used in LGU billing packages. Bundles created here are scoped to LGU and are separate from self-pay bundles."
       :can-edit="true"
+      allow-item-pricing
+      :api-path="LGU_BUNDLES_API_PATH"
       offer-scope="LGU"
       :machine-options="catalog.bundleMachineOptions.value"
       :technique-options="catalog.bundleTechniqueOptions.value"
@@ -28,6 +30,8 @@ import {ref} from "vue"
 import Dialog from "primevue/dialog"
 import ServiceBundlesManager from "@/features/promos-offers/components/ServiceBundlesManager.vue"
 import {useLguPromosCatalog} from "@/features/promos-offers/composables/lgu-promos-catalog.composable"
+import {LGU_BUNDLES_API_PATH} from "@/features/promos-offers/lgu/lgu-module.config"
+import {LGU_TABLE_NAMES} from "@/features/promos-offers/lgu/lgu-module.config"
 
 const visible = defineModel<boolean>("visible", {default: false})
 

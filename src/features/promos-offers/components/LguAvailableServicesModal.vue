@@ -1,7 +1,7 @@
 <template>
   <Dialog
     v-model:visible="visible"
-    header="All Available Services"
+    :header="LGU_TABLE_NAMES.services"
     modal
     maximizable
     :style="{width: '95vw', maxWidth: '1400px'}"
@@ -33,6 +33,13 @@
           text
           :loading="catalog.isLoading.value"
           @click="catalog.load()"
+        />
+        <Button
+          label="Import Global"
+          size="small"
+          icon="pi pi-download"
+          outlined
+          @click="openImportDialog"
         />
       </div>
 
@@ -126,6 +133,58 @@
       </DataTable>
     </div>
 
+    <Dialog v-model:visible="importDialogVisible" header="Import from Global" modal :style="{width: '720px'}" :breakpoints="{'760px': '95vw'}">
+      <div class="space-y-3">
+        <div class="flex flex-wrap items-end gap-2">
+          <IftaLabel class="min-w-[220px]">
+            <Select v-model="importType" :options="importTypeOptions" optionLabel="label" optionValue="value" fluid />
+            <label>Global Catalog</label>
+          </IftaLabel>
+          <Button
+            label="Refresh"
+            icon="pi pi-refresh"
+            text
+            :loading="importLoading"
+            @click="loadGlobalImportRows"
+          />
+        </div>
+
+        <DataTable
+          :value="globalImportRows"
+          dataKey="id"
+          paginator
+          :rows="8"
+          :loading="importLoading"
+          class="rounded-lg border border-[rgb(var(--app-border))]"
+        >
+          <template #empty>
+            <span class="text-sm opacity-70">No global services available.</span>
+          </template>
+          <Column field="name" header="Service Name" />
+          <Column field="price" header="Price" style="width: 130px">
+            <template #body="{data}">{{ asCurrency(data.price) }}</template>
+          </Column>
+          <Column header="Status" style="width: 160px">
+            <template #body="{data}">
+              <Tag :value="getImportStatusLabel(data)" :severity="getImportStatusSeverity(data)" />
+            </template>
+          </Column>
+          <Column header="Actions" style="width: 120px">
+            <template #body="{data}">
+              <Button
+                label="Import"
+                icon="pi pi-download"
+                size="small"
+                :disabled="!canImportGlobalService(data)"
+                :loading="importingGlobalId === data.id"
+                @click="importGlobalService(data)"
+              />
+            </template>
+          </Column>
+        </DataTable>
+      </div>
+    </Dialog>
+
     <!-- Edit Service Dialog -->
     <Dialog v-model:visible="editDialogVisible" :header="editingId ? 'Edit Service' : 'Add New Service'" modal :style="{width: '480px'}">
       <div class="space-y-3">
@@ -163,7 +222,7 @@
 </template>
 
 <script setup lang="ts">
-import {computed, reactive, ref} from "vue"
+import {computed, reactive, ref, watch} from "vue"
 import Button from "primevue/button"
 import Column from "primevue/column"
 import ConfirmDialog from "primevue/confirmdialog"
@@ -176,11 +235,20 @@ import Select from "primevue/select"
 import Tag from "primevue/tag"
 import {useConfirm} from "primevue/useconfirm"
 import {useToast} from "primevue/usetoast"
+import type {Pageable} from "@/models/paging"
 import {pamsAPI} from "@/utils/axios-interceptor"
 import {errorToast, successToast} from "@/utils/toast.util"
-import {isLocalEditablePromosService} from "@/features/promos-offers/composables/promos-master-catalog.composable"
 import {useLguPromosCatalog} from "@/features/promos-offers/composables/lgu-promos-catalog.composable"
 import type {ServiceType, SingleService} from "@/features/promos-offers/composables/lgu-promos-catalog.composable"
+import {
+  LGU_LOCAL_SERVICE_PREFIXES
+} from "@/features/promos-offers/lgu/lgu-module.config"
+import {LGU_TABLE_NAMES} from "@/features/promos-offers/lgu/lgu-module.config"
+import {
+  createLguLocalService,
+  toggleLguLocalServiceStatus,
+  updateLguLocalService
+} from "@/features/promos-offers/lgu/lgu-module.api"
 
 const visible = defineModel<boolean>("visible", {default: false})
 
@@ -197,6 +265,21 @@ const onShow = async () => {
 }
 
 type ServiceCatalogFilter = "machine" | "technique" | "evaluation" | "add-ons"
+type ImportableServiceType = ServiceType
+
+type GlobalImportRow = {
+  id: number
+  name: string
+  price: number
+  is_active?: boolean
+  add_on_price?: number | null
+  machine_id?: number | null
+  machine_name?: string | null
+  technique_id?: number | null
+  technique_name?: string | null
+  start?: number | null
+  label?: string | null
+}
 
 const selectedFilters = ref<ServiceCatalogFilter[]>([])
 const hasFilters = computed(() => selectedFilters.value.length > 0)
@@ -207,6 +290,24 @@ const serviceCatalogFilterOptions: Array<{label: string; value: ServiceCatalogFi
   {label: "Evaluation", value: "evaluation"},
   {label: "Add-Ons", value: "add-ons"},
 ]
+
+const importTypeOptions: Array<{label: string; value: ImportableServiceType}> = [
+  {label: "Machine", value: "machine"},
+  {label: "Technique", value: "technique"},
+  {label: "Evaluation", value: "evaluation"},
+  {label: "Add-Ons (Machine)", value: "add-on-machine"},
+  {label: "Add-Ons (Technique)", value: "add-on-technique"},
+  {label: "Add-Ons (Home Service)", value: "add-on-home-service"},
+]
+
+const GLOBAL_IMPORT_ENDPOINTS: Record<ImportableServiceType, string> = {
+  machine: "/machines",
+  technique: "/techniques",
+  evaluation: "/evaluations",
+  "add-on-machine": "/add-on-machines",
+  "add-on-technique": "/add-on-techniques",
+  "add-on-home-service": "/add-on-home-services",
+}
 
 const normalizeFilter = (type: ServiceType): ServiceCatalogFilter => {
   if (type === "machine") return "machine"
@@ -241,7 +342,7 @@ const matrixRows = computed(() => {
   }))
 })
 
-const isLocalEditable = (service: SingleService) => isLocalEditablePromosService(service)
+const isLocalEditable = (_service: SingleService) => true
 
 const asCurrency = (value: number) => Number(value ?? 0).toLocaleString("en-PH", {style: "currency", currency: "PHP"})
 
@@ -264,11 +365,158 @@ const getTypeSeverity = (type: ServiceType): string => ({
 }[type] ?? "info")
 
 const typeOptions = [
+  {label: "Machine", value: "machine"},
+  {label: "Technique", value: "technique"},
   {label: "Evaluation", value: "evaluation"},
   {label: "Add-Ons (Machine)", value: "add-on-machine"},
   {label: "Add-Ons (Technique)", value: "add-on-technique"},
   {label: "Add-Ons (Home Service)", value: "add-on-home-service"},
 ]
+
+const importDialogVisible = ref(false)
+const importType = ref<ImportableServiceType>("machine")
+const importLoading = ref(false)
+const importingGlobalId = ref<number | null>(null)
+const globalImportRows = ref<GlobalImportRow[]>([])
+
+const normalizeServiceName = (value: string) => value.trim().toLowerCase()
+
+const getGlobalImportName = (row: Partial<GlobalImportRow>) =>
+  String(row.name ?? row.machine_name ?? row.technique_name ?? row.label ?? (row.start ? `Add-on: Home Service - ${row.start} km` : "")).trim()
+
+const getGlobalImportPrice = (row: Partial<GlobalImportRow>) => Number(row.price ?? row.add_on_price ?? 0)
+
+const findImportedParent = (type: Extract<ServiceType, "machine" | "technique">, name?: string | null) => {
+  const normalizedName = normalizeServiceName(String(name ?? ""))
+  if (!normalizedName) return null
+  return catalog.allServices.value.find(service =>
+    service.type === type && normalizeServiceName(service.name) === normalizedName
+  ) ?? null
+}
+
+const getLocalServiceNumericId = (service: SingleService | null, type: ServiceType) => {
+  if (!service) return 0
+  const raw = service.id.startsWith(LGU_LOCAL_SERVICE_PREFIXES[type])
+    ? service.id.slice(LGU_LOCAL_SERVICE_PREFIXES[type].length)
+    : service.id
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+const isAlreadyImported = (row: GlobalImportRow) =>
+  catalog.allServices.value.some(service =>
+    service.type === importType.value && normalizeServiceName(service.name) === normalizeServiceName(row.name)
+  )
+
+const getMissingParentLabel = (row: GlobalImportRow) => {
+  if (importType.value === "add-on-machine" && row.machine_name && !findImportedParent("machine", row.machine_name)) {
+    return "Import machine first"
+  }
+  if (importType.value === "add-on-technique" && !findImportedParent("technique", row.technique_name)) {
+    return "Import technique first"
+  }
+  return ""
+}
+
+const getImportStatusLabel = (row: GlobalImportRow) => {
+  if (isAlreadyImported(row)) return "In LGU"
+  return getMissingParentLabel(row) || "Available"
+}
+
+const getImportStatusSeverity = (row: GlobalImportRow) => {
+  if (isAlreadyImported(row)) return "success"
+  if (getMissingParentLabel(row)) return "warning"
+  return "secondary"
+}
+
+const canImportGlobalService = (row: GlobalImportRow) => !isAlreadyImported(row) && !getMissingParentLabel(row)
+
+const buildGlobalImportPayload = (row: GlobalImportRow): Record<string, unknown> => {
+  const price = getGlobalImportPrice(row)
+
+  if (importType.value === "add-on-machine") {
+    const parent = findImportedParent("machine", row.machine_name)
+    const machineId = getLocalServiceNumericId(parent, "machine")
+    return machineId
+      ? {machine_id: machineId, add_on_price: price}
+      : {name: row.name, add_on_price: price}
+  }
+
+  if (importType.value === "add-on-technique") {
+    const techniqueId = getLocalServiceNumericId(findImportedParent("technique", row.technique_name), "technique")
+    if (!techniqueId) throw new Error("Technique must be imported before its add-on")
+    return {technique_id: techniqueId, add_on_price: price}
+  }
+
+  if (importType.value === "add-on-home-service") {
+    return {start: Number(row.start ?? 0), add_on_price: price}
+  }
+
+  return {name: row.name, price}
+}
+
+const loadGlobalImportRows = async () => {
+  importLoading.value = true
+  try {
+    const {data} = await catalog.withRefreshRetry(() =>
+      pamsAPI.get<Pageable<GlobalImportRow>>(GLOBAL_IMPORT_ENDPOINTS[importType.value], {
+        params: {page: 1, size: 1000, name: "", status: "ACTIVE"}
+      })
+    )
+
+    globalImportRows.value = (data.content ?? []).map(row => ({
+      id: Number(row.id),
+      name: getGlobalImportName(row),
+      price: getGlobalImportPrice(row),
+      is_active: Boolean(row.is_active ?? true),
+      add_on_price: Number(row.add_on_price ?? row.price ?? 0),
+      machine_id: row.machine_id == null ? null : Number(row.machine_id),
+      machine_name: row.machine_name ?? null,
+      technique_id: row.technique_id == null ? null : Number(row.technique_id),
+      technique_name: row.technique_name ?? null,
+      start: row.start == null ? null : Number(row.start),
+      label: row.label ?? null,
+    }))
+  } catch {
+    globalImportRows.value = []
+    errorToast(toast, "Failed to load global services")
+  } finally {
+    importLoading.value = false
+  }
+}
+
+const openImportDialog = async () => {
+  importDialogVisible.value = true
+  if (!loaded.value) {
+    await catalog.load()
+    loaded.value = true
+  }
+  await loadGlobalImportRows()
+}
+
+const importGlobalService = async (row: GlobalImportRow) => {
+  if (!canImportGlobalService(row)) return
+
+  importingGlobalId.value = row.id
+  try {
+    await catalog.withRefreshRetry(() =>
+      createLguLocalService(importType.value, buildGlobalImportPayload(row))
+    )
+    successToast(toast, `${row.name} imported to LGU`)
+    await catalog.load()
+    await loadGlobalImportRows()
+  } catch {
+    errorToast(toast, "Failed to import global service")
+  } finally {
+    importingGlobalId.value = null
+  }
+}
+
+watch(importType, () => {
+  if (importDialogVisible.value) {
+    void loadGlobalImportRows()
+  }
+})
 
 const editDialogVisible = ref(false)
 const editingId = ref<string | null>(null)
@@ -306,29 +554,15 @@ const saveService = async () => {
 
   saving.value = true
   try {
-    const endpoints: Record<ServiceType, string> = {
-      machine: "/machines",
-      technique: "/techniques",
-      evaluation: "/lgu-evaluations",
-      "add-on-machine": "/add-on-machines",
-      "add-on-technique": "/add-on-techniques",
-      "add-on-home-service": "/add-on-home-services",
-    }
-    const endpoint = endpoints[formData.type]
     const payload: Record<string, unknown> = {name: formData.name, price: Number(formData.price ?? 0)}
 
     if (editingId.value) {
-      const prefixMap: Record<ServiceType, string> = {
-        machine: "machine-", technique: "technique-", evaluation: "evaluation-",
-        "add-on-machine": "add-on-machine-", "add-on-technique": "add-on-technique-",
-        "add-on-home-service": "add-on-home-service-",
-      }
-      const id = parseNumericId(editingId.value, prefixMap[formData.type])
+      const id = parseNumericId(editingId.value, LGU_LOCAL_SERVICE_PREFIXES[formData.type])
       if (!id) throw new Error("Invalid id")
-      await catalog.withRefreshRetry(() => pamsAPI.put(`${endpoint}/${id}`, payload))
+      await catalog.withRefreshRetry(() => updateLguLocalService(formData.type, id, payload))
       successToast(toast, "Service updated")
     } else {
-      await catalog.withRefreshRetry(() => pamsAPI.post(endpoint, payload))
+      await catalog.withRefreshRetry(() => createLguLocalService(formData.type, payload))
       successToast(toast, "Service added")
     }
 
@@ -352,20 +586,9 @@ const confirmDelete = (service: SingleService) => {
     icon: "pi pi-exclamation-triangle",
     accept: async () => {
       try {
-        const endpointMap: Record<ServiceType, string> = {
-          machine: "/machines", technique: "/techniques", evaluation: "/lgu-evaluations",
-          "add-on-machine": "/add-on-machines", "add-on-technique": "/add-on-techniques",
-          "add-on-home-service": "/add-on-home-services",
-        }
-        const prefixMap: Record<ServiceType, string> = {
-          machine: "machine-", technique: "technique-", evaluation: "evaluation-",
-          "add-on-machine": "add-on-machine-", "add-on-technique": "add-on-technique-",
-          "add-on-home-service": "add-on-home-service-",
-        }
-        const endpoint = endpointMap[service.type]
-        const id = parseNumericId(service.id, prefixMap[service.type])
+        const id = parseNumericId(service.id, LGU_LOCAL_SERVICE_PREFIXES[service.type])
         if (!id) throw new Error("Invalid id")
-        await catalog.withRefreshRetry(() => pamsAPI.patch(`${endpoint}/${id}/status`))
+        await catalog.withRefreshRetry(() => toggleLguLocalServiceStatus(service.type, id))
         successToast(toast, "Service deactivated")
         await catalog.load()
       } catch {

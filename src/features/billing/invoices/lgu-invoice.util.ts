@@ -48,22 +48,50 @@ export interface LguInvoiceData {
 }
 
 function buildLineRows(lines: LguInvoiceLine[]): string {
-  const collectPricedSubItems = (items: LguInvoiceSubItem[]): Array<{name: string; quantity: number; unitPrice: number}> =>
-    items.flatMap(item => {
-      if (item.children?.length) return collectPricedSubItems(item.children)
-      const unitPrice = Number(item.unitPrice ?? 0)
-      return unitPrice > 0
-        ? [{ name: item.name, quantity: Math.max(1, Number(item.quantity ?? 1)), unitPrice }]
-        : []
-    })
+  const hasContractRate = (item: LguInvoiceSubItem): boolean => {
+    const unitPrice = Number(item.unitPrice)
+    return item.unitPrice !== undefined && Number.isFinite(unitPrice) && unitPrice >= 0
+  }
+
+  const hasExplicitSubItemPricing = (items?: LguInvoiceSubItem[]): boolean =>
+    Boolean((items ?? []).some(item => {
+      return hasContractRate(item) || hasExplicitSubItemPricing(item.children)
+    }))
+
+  const formatContractRate = (amount: number): string =>
+    amount > 0 ? escapeHtml(asCurrency(amount)) : "FREE"
 
   const renderSubItems = (items: LguInvoiceSubItem[], depth = 0): string =>
     items.map(sub => `
-      <div class="sub-item sub-item-depth-${depth}">
-        - ${sub.quantity} ${escapeHtml(sub.name)}
+      <div class="sub-item sub-item-depth-${Math.min(depth, 2)}">
+        - ${Math.max(1, Number(sub.quantity ?? 1))} ${escapeHtml(sub.name)}
       </div>
       ${sub.children?.length ? renderSubItems(sub.children, depth + 1) : ""}
     `).join("")
+
+  const renderBlankSubItemPrices = (items: LguInvoiceSubItem[], depth = 0): string =>
+    items.map(sub => `
+      <div class="sub-item sub-item-depth-${Math.min(depth, 2)}">&nbsp;</div>
+      ${sub.children?.length ? renderBlankSubItemPrices(sub.children, depth + 1) : ""}
+    `).join("")
+
+  const renderSubItemPrices = (items: LguInvoiceSubItem[], depth = 0): string =>
+    items.map(sub => {
+      const hasUnitPrice = hasContractRate(sub)
+      const quantity = Math.max(1, Number(sub.quantity ?? 1))
+      const unitPrice = Number(sub.unitPrice ?? 0)
+      const childPriceHtml = sub.children?.length
+        ? hasUnitPrice
+          ? renderBlankSubItemPrices(sub.children, depth + 1)
+          : renderSubItemPrices(sub.children, depth + 1)
+        : ""
+      return `
+        <div class="sub-item sub-item-depth-${Math.min(depth, 2)}">
+          ${hasUnitPrice ? formatContractRate(Number((quantity * unitPrice).toFixed(2))) : "&nbsp;"}
+        </div>
+        ${childPriceHtml}
+      `
+    }).join("")
 
   const sessionKey = (line: LguInvoiceLine): string =>
     `${formatDate(line.treatmentDate)}|${line.sessionSequence || "-"}`
@@ -72,20 +100,13 @@ function buildLineRows(lines: LguInvoiceLine[]): string {
     const currentSessionKey = sessionKey(line)
     const nextSessionKey = lines[index + 1] ? sessionKey(lines[index + 1]) : ""
     const isSessionEnd = currentSessionKey !== nextSessionKey
-    const pricedSubItems = line.unitPrice <= 0 ? collectPricedSubItems(line.subItems ?? []) : []
-    if (pricedSubItems.length) {
-      return pricedSubItems.map((item, itemIndex) => `
-        <tr class="${isSessionEnd && itemIndex === pricedSubItems.length - 1 ? "session-divider-row" : ""}">
-          <td class="text-center">${itemIndex === 0 ? index + 1 : ""}</td>
-          <td class="text-center">${escapeHtml(formatDate(line.treatmentDate))}</td>
-          <td>${escapeHtml(`${item.quantity} ${item.name}`)}</td>
-          <td class="text-center">${escapeHtml(line.sessionSequence || "-")}</td>
-          <td class="text-right">${escapeHtml(asCurrency(item.unitPrice))}</td>
-        </tr>
-      `).join("")
-    }
-
+    const hasSubItemPricing = hasExplicitSubItemPricing(line.subItems)
     const subItems = renderSubItems(line.subItems ?? [])
+    const unitPriceHtml = hasSubItemPricing
+      ? `<div class="package-line">&nbsp;</div>${renderSubItemPrices(line.subItems ?? [])}`
+      : line.unitPrice > 0
+        ? escapeHtml(asCurrency(line.unitPrice))
+        : "-"
 
     return `
       <tr class="${isSessionEnd ? "session-divider-row" : ""}">
@@ -95,8 +116,8 @@ function buildLineRows(lines: LguInvoiceLine[]): string {
           <div class="package-line">${escapeHtml(line.name)}</div>
           ${subItems}
         </td>
-        <td class="text-center">${escapeHtml(line.sessionSequence || "-")}</td>
-        <td class="text-right">${line.unitPrice > 0 ? escapeHtml(asCurrency(line.unitPrice)) : "-"}</td>
+        <td class="text-center">${escapeHtml(line.sessionSequence || "")}</td>
+        <td class="text-right">${unitPriceHtml}</td>
       </tr>
     `
   }).join("")
@@ -134,7 +155,7 @@ export function renderLguInvoiceWindow(
       { label: "UNIT PRICE", width: "126px", align: "right" }
     ],
     tableRowsHtml: buildLineRows(invoice.lines),
-    emptyStateColspan: 4,
+    emptyStateColspan: 5,
     discount: invoice.discount,
     surchargeAmount: invoice.surchargeAmount,
     surchargeLabel: "Retroactive Adjustment Surcharge",

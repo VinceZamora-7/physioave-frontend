@@ -100,7 +100,7 @@ export function renderPackageServiceInvoiceWindow(
       { label: "UNIT PRICE", width: "126px", align: "right" }
     ],
     tableRowsHtml: buildLineRows(invoice.lines),
-    emptyStateColspan: 4,
+    emptyStateColspan: 5,
     discount: invoice.discount,
     grandTotal: invoice.grandTotal,
     detailBoxTitle: "PAYMENT DETAILS",

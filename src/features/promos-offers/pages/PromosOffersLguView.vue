@@ -12,7 +12,7 @@
           label="Manage All LGU Billings"
           icon="pi pi-list"
           :pt="ptPrimaryBtn"
-          @click="router.push({ name: 'billing', query: { billing_type: 'LGU_BILLING' } })"
+          @click="router.push({ name: 'billing', query: buildLguBillingQuery() })"
         />
       </div>
     </section>
@@ -22,26 +22,26 @@
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
       <div class="app-section-card-comfy flex flex-col gap-3">
         <div class="space-y-1">
-          <h3 class="app-section-title text-base">Package Builder</h3>
+          <h3 class="app-section-title text-base">{{ LGU_TABLE_NAMES.packages }}</h3>
           <p class="text-sm opacity-70">Manage LGU package offers with session counts, evaluations, and package prices.</p>
         </div>
-        <Button label="Open Packages" icon="pi pi-box" class="mt-auto" :pt="ptPrimaryBtn" @click="showPackages = true" />
+        <Button :label="`Open ${LGU_TABLE_NAMES.packages}`" icon="pi pi-box" class="mt-auto" :pt="ptPrimaryBtn" @click="showPackages = true" />
       </div>
 
       <div class="app-section-card-comfy flex flex-col gap-3">
         <div class="space-y-1">
-          <h3 class="app-section-title text-base">All Available Services</h3>
+          <h3 class="app-section-title text-base">{{ LGU_TABLE_NAMES.services }}</h3>
           <p class="text-sm opacity-70">Browse and manage the full service catalog — machines, techniques, evaluations, and add-ons.</p>
         </div>
-        <Button label="Open Services" icon="pi pi-list" class="mt-auto" :pt="ptPrimaryBtn" @click="showServices = true" />
+        <Button :label="`Open ${LGU_TABLE_NAMES.services}`" icon="pi pi-list" class="mt-auto" :pt="ptPrimaryBtn" @click="showServices = true" />
       </div>
 
       <div class="app-section-card-comfy flex flex-col gap-3">
         <div class="space-y-1">
-          <h3 class="app-section-title text-base">Bundled Services</h3>
+          <h3 class="app-section-title text-base">{{ LGU_TABLE_NAMES.bundles }}</h3>
           <p class="text-sm opacity-70">Create and manage service bundles used as components in LGU package offers.</p>
         </div>
-        <Button label="Open Bundles" icon="pi pi-objects-column" class="mt-auto" :pt="ptPrimaryBtn" @click="showBundles = true" />
+        <Button :label="`Open ${LGU_TABLE_NAMES.bundles}`" icon="pi pi-objects-column" class="mt-auto" :pt="ptPrimaryBtn" @click="showBundles = true" />
       </div>
     </div>
 
@@ -54,12 +54,14 @@
 <script setup lang="ts">
 
 import { onMounted, ref } from "vue"
-import { useRouter } from "vue-router"
+  import { useRouter } from "vue-router"
 import Button from "primevue/button"
 import LguBudgetSummaryCard from "@/features/lgu-billing/components/LguBudgetSummaryCard.vue"
 import LguPackagesModal from "@/features/promos-offers/components/LguPackagesModal.vue"
 import LguAvailableServicesModal from "@/features/promos-offers/components/LguAvailableServicesModal.vue"
 import LguBundledServicesModal from "@/features/promos-offers/components/LguBundledServicesModal.vue"
+import { buildLguBillingQuery } from "@/features/promos-offers/lgu/lgu-billing-type.module"
+import { LGU_TABLE_NAMES } from "@/features/promos-offers/lgu/lgu-module.config"
 import { ptPrimaryBtn } from "@/features/shared/table-header.styles"
 
 const router = useRouter()

@@ -55,16 +55,16 @@
             <tbody>
               <tr v-for="(row, idx) in rows" :key="row.id" class="border-b border-black">
                 <td class="p-2 border-r border-black">{{ idx + 1 }}</td>
-                <td class="p-2 border-r border-black">{{ row.patient_name ?? '—' }}</td>
-                <td class="p-2 border-r border-black">{{ row.referral_form_no ?? '—' }}</td>
-                <td class="p-2 border-r border-black">{{ row.reference_no ?? '—' }}</td>
-                <td class="p-2 border-r border-black">{{ row.program_status ?? '—' }}</td>
+                <td class="p-2 border-r border-black">{{ row.patient_name ?? '-' }}</td>
+                <td class="p-2 border-r border-black">{{ row.referral_form_no ?? '-' }}</td>
+                <td class="p-2 border-r border-black">{{ row.reference_no ?? '-' }}</td>
+                <td class="p-2 border-r border-black">{{ row.program_status ?? '-' }}</td>
                 <td class="p-2 border-r border-black">{{ row.physical_therapist ?? 'N/A' }}</td>
                 <td class="p-2 border-r border-black">{{ row.doctor ?? 'N/A' }}</td>
                 <td class="p-2 border-r border-black">{{ row.diagnosis ?? 'N/A' }}</td>
                 <td class="p-2 border-r border-black">{{ formatDate(row.treatment_date) }}</td>
-                <td class="p-2 border-r border-black">{{ row.pt_service_rendered ?? '—' }}</td>
-                <td class="p-2 border-r border-black">{{ row.session_sequence ?? '—' }}</td>
+                <td class="p-2 border-r border-black">{{ row.pt_service_rendered ?? '-' }}</td>
+                <td class="p-2 border-r border-black">{{ shouldShowSessionSequence(row) ? (row.session_sequence ?? '-') : '-' }}</td>
                 <td class="p-2 text-right">{{ asCurrency(row.invoice_billing_total) }}</td>
               </tr>
             </tbody>
@@ -140,17 +140,20 @@ const partnerLabel = computed(() => {
   }
   return hmoName.value ? `HMO - ${hmoName.value}` : "HMO"
 })
-const periodLabel = computed(() => `${dateFrom.value || "—"} to ${dateTo.value || "—"}`)
+const periodLabel = computed(() => `${dateFrom.value || "-"} to ${dateTo.value || "-"}`)
 
 const asCurrency = (value: number): string =>
   Number(value ?? 0).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
 
 const formatDate = (value: string | null): string => {
-  if (!value) return "—"
+  if (!value) return "-"
   const dt = new Date(value)
-  if (Number.isNaN(dt.getTime())) return "—"
+  if (Number.isNaN(dt.getTime())) return "-"
   return dt.toLocaleDateString("en-PH")
 }
+
+const shouldShowSessionSequence = (row: SoaRow): boolean =>
+  String(row.program_status ?? "").trim().toUpperCase() === "DROPPED_OUT"
 
 const grandTotal = computed(() => rows.value.reduce((sum, r) => sum + Number(r.invoice_billing_total ?? 0), 0))
 

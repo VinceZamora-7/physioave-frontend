@@ -246,6 +246,14 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
           tbody tr.item-group-start td {
             border-top: 2px solid #d31d6e;
           }
+          tbody tr.line-item-child td {
+            border-top: 1px dashed #f3a8c8;
+            color: #374151;
+          }
+          tbody tr.line-item-child td.text-right {
+            color: #1f2937;
+            font-weight: 600;
+          }
           tbody tr:first-child td {
             border-top: none;
           }
@@ -272,6 +280,16 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
           }
           .sub-item-depth-2 {
             padding-left: 48px;
+          }
+          tr.line-item-child td:nth-child(3) {
+            padding-left: 18px;
+            font-size: 11px;
+          }
+          tr.line-item-child.hierarchy-depth-2 td:nth-child(3) {
+            padding-left: 30px;
+          }
+          tr.line-item-child.hierarchy-depth-3 td:nth-child(3) {
+            padding-left: 42px;
           }
           .profile-summary {
             display: grid;

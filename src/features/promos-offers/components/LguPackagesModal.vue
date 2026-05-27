@@ -1,7 +1,7 @@
 <template>
   <Dialog
     v-model:visible="visible"
-    header="LGU Package Builder"
+    :header="LGU_TABLE_NAMES.packages"
     modal
     maximizable
     :style="{width: '95vw', maxWidth: '1400px'}"
@@ -9,7 +9,7 @@
     @show="onShow"
   >
     <PackageOffersManager
-      title="LGU Package Builder"
+      :title="LGU_TABLE_NAMES.packages"
       description="Manage package offers for LGU billing. Packages are scoped to LGU and will appear in LGU billing selections."
       :can-edit="true"
       offer-scope="LGU"
@@ -27,6 +27,7 @@ import {ref, watch} from "vue"
 import Dialog from "primevue/dialog"
 import PackageOffersManager from "@/features/promos-offers/components/PackageOffersManager.vue"
 import {useLguPromosCatalog} from "@/features/promos-offers/composables/lgu-promos-catalog.composable"
+import {LGU_TABLE_NAMES} from "@/features/promos-offers/lgu/lgu-module.config"
 
 const visible = defineModel<boolean>("visible", {default: false})
 
