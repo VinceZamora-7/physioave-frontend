@@ -41,19 +41,55 @@ export interface HmoInvoiceData {
   lines: HmoInvoiceLine[]
 }
 
+const hasMeaningfulValue = (value?: string): boolean => {
+  const normalized = String(value ?? "").trim()
+  return !!normalized && !["N/A", "-", "NONE"].includes(normalized.toUpperCase())
+}
+
+const parseDiagnosisParts = (diagnosis?: string): { laterality?: string; bodyArea?: string } => {
+  const value = String(diagnosis ?? "").trim()
+  if (!hasMeaningfulValue(value)) return {}
+
+  const markerMatch = value.match(/^\((L|R|B|LEFT|RIGHT|BOTH|BILATERAL)\)\s*(.*)$/i)
+  if (markerMatch) {
+    const marker = markerMatch[1].toUpperCase()
+    const laterality = marker === "L" || marker === "LEFT"
+      ? "Left"
+      : marker === "R" || marker === "RIGHT"
+        ? "Right"
+        : "Both"
+    return {
+      laterality,
+      bodyArea: markerMatch[2]?.trim() || undefined
+    }
+  }
+
+  const wordMatch = value.match(/^(LEFT|RIGHT|BOTH|BILATERAL)\b[\s,;:-]*(.*)$/i)
+  if (wordMatch) {
+    const marker = wordMatch[1].toUpperCase()
+    return {
+      laterality: marker === "LEFT" ? "Left" : marker === "RIGHT" ? "Right" : "Both",
+      bodyArea: wordMatch[2]?.trim() || undefined
+    }
+  }
+
+  return { bodyArea: value }
+}
+
 export function renderHmoInvoiceWindow(
   printWindow: Window,
   invoice: HmoInvoiceData,
   options?: {title?: string; fileName?: string}
 ): void {
+  const diagnosisParts = parseDiagnosisParts(invoice.diagnosis)
   const lineRows = invoice.lines.map((line, index) => `
     <tr>
       <td class="text-center">${index + 1}</td>
       <td class="text-center">${escapeHtml(formatDate(line.treatmentDate))}</td>
       <td>${escapeHtml(line.name)}</td>
       <td class="text-center">${line.quantity}</td>
-      <td class="text-center">${escapeHtml(line.laterality || "N/A")}</td>
-      <td class="text-center">${escapeHtml(line.bodyArea || "N/A")}</td>
+      <td class="text-center">${escapeHtml(hasMeaningfulValue(line.laterality) ? line.laterality : diagnosisParts.laterality || "N/A")}</td>
+      <td class="text-center">${escapeHtml(hasMeaningfulValue(line.bodyArea) ? line.bodyArea : diagnosisParts.bodyArea || "N/A")}</td>
       <td class="text-right">${escapeHtml(asCurrency(line.unitPrice))}</td>
       <td class="text-right">${escapeHtml(asCurrency(line.lineTotal))}</td>
     </tr>
@@ -90,7 +126,7 @@ export function renderHmoInvoiceWindow(
       { label: "UNIT TOTAL", width: "110px", align: "right" }
     ],
     tableRowsHtml: lineRows,
-    emptyStateColspan: 7,
+    emptyStateColspan: 8,
     discount: invoice.discount,
     grandTotal: invoice.grandTotal,
     detailBoxTitle: "HMO DETAILS",

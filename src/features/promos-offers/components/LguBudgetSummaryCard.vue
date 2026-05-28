@@ -646,11 +646,28 @@ const getConfiguredPackageItemPrice = (
     : item.packageUnitPrice
 }
 
+const normalizeCatalogItemName = (value?: string): string =>
+  String(value ?? "")
+    .trim()
+    .replace(/^[-\s]*(?:\d+(?:\.\d+)?|x\d+)\s+/i, "")
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+
+const catalogNamesMatch = (left?: string, right?: string): boolean => {
+  const normalizedLeft = normalizeCatalogItemName(left)
+  const normalizedRight = normalizeCatalogItemName(right)
+  return !!normalizedLeft && !!normalizedRight && (
+    normalizedLeft === normalizedRight ||
+    normalizedLeft.includes(normalizedRight) ||
+    normalizedRight.includes(normalizedLeft)
+  )
+}
+
 const findConfiguredPackageItemByName = (
   pkg: LocalPackageOffer,
   name?: string
 ): LocalPackageItem | undefined => {
-  const normalizedName = String(name ?? "").trim().toLowerCase()
+  const normalizedName = normalizeCatalogItemName(name)
   if (!normalizedName) return undefined
   const items = [
     ...(pkg.machineItems ?? []),
@@ -659,7 +676,7 @@ const findConfiguredPackageItemByName = (
     ...(pkg.addOnItems ?? []),
     ...(pkg.sessionItems ?? [])
   ]
-  return items.find(item => getServiceName(item.id)?.trim().toLowerCase() === normalizedName)
+  return items.find(item => catalogNamesMatch(getServiceName(item.id), normalizedName))
 }
 
 const applyConfiguredPackageRates = (
@@ -675,7 +692,7 @@ const applyConfiguredPackageRates = (
       item.children?.length &&
       bundleItem &&
       bundle?.name &&
-      item.name.trim().toLowerCase() === bundle.name.trim().toLowerCase()
+      catalogNamesMatch(item.name, bundle.name)
     )
     const configuredItem = isBundleContainer ? bundleItem : findConfiguredPackageItemByName(pkg, item.name)
     const configuredUnitPrice = getConfiguredPackageItemPrice(configuredItem, priceMode)
@@ -741,17 +758,24 @@ const isDropoutClaimBilling = (billing?: Pick<LguPatientBilling, "pricing_source
 const normalizeLguStatus = (value?: string | null): string =>
   String(value ?? "").trim().toUpperCase()
 
+const isDroppedOutStatus = (value?: string | null): boolean => {
+  const normalized = normalizeLguStatus(value)
+  return normalized === "DROPPED_OUT" || normalized === "CROSS_MONTH_DROPPED_OUT"
+}
+
 const isCrossMonthDroppedOutSession = (option: LguInvoiceSessionOption): boolean => {
+  if (isDroppedOutStatus(selectedPatientDetail.value?.dropout_status)) return true
+
   const packageName = String(option.packageName ?? "").trim().toLowerCase()
   const packageStatus = selectedPatientDetail.value?.package_availments.find((pkg) =>
     String(pkg.package_name ?? "").trim().toLowerCase() === packageName
   )?.status
-  if (normalizeLguStatus(packageStatus) === "CROSS_MONTH_DROPPED_OUT") return true
+  if (isDroppedOutStatus(packageStatus)) return true
 
   const appointmentStatus = selectedPatientDetail.value?.appointments.find((appointment) =>
     appointment.appointment_id === option.appointmentId
   )?.status
-  return normalizeLguStatus(appointmentStatus) === "CROSS_MONTH_DROPPED_OUT"
+  return isDroppedOutStatus(appointmentStatus)
 }
 
 const getPrintableBillingTotal = (billing?: LguPatientBilling): number => {
@@ -1269,6 +1293,29 @@ const buildDropoutIndividualRows = (
   const sourceLines = matchedLines.length ? matchedLines : lines.length === 1 ? lines : []
 
   if (!sourceLines.length) {
+    const fallbackPackageName = option.packageName || billing?.package_name || billing?.service_name || undefined
+    const fallbackSubItemTree = fallbackPackageName
+      ? filterSubItemsForSession(
+          getPackageInvoiceSubItems(undefined, fallbackPackageName, 1, true, "dropout"),
+          Math.max(1, Number(option.sessionSequence ?? 1))
+        )
+      : []
+    if (fallbackSubItemTree.length && fallbackPackageName) {
+      const lineTotal = sumSubItemTreeAmounts(fallbackSubItemTree)
+      return [{
+        itemNumber: String(index + 1),
+        treatmentDate,
+        serviceRendered: fallbackPackageName,
+        serviceRenderedHtml: renderPackageServiceRenderedHtml(fallbackPackageName, fallbackSubItemTree),
+        sessionSequence: option.label,
+        unitTotal: Number(lineTotal.toFixed(2)),
+        unitTotalLabel: formatContractRateLabel(Number(lineTotal.toFixed(2))),
+        unitTotalHtml: renderPackageUnitPriceHtml(fallbackSubItemTree),
+        billingId: billing?.id,
+        appointmentId: option.appointmentId
+      }]
+    }
+
     const fallbackTotal = getSessionUnitTotal(option)
     return [{
       itemNumber: String(index + 1),
@@ -1355,13 +1402,16 @@ const getPackageLineSubItems = (
   fallbackPackageName?: string
 ): LguInvoiceSubItem[] | undefined => {
   const priceMode: LguInvoicePriceMode = isDropoutClaim ? "dropout" : "package"
-  const packageFallback = getPackageInvoiceSubItems(line.id, line.name, line.quantity, true, priceMode)
+  const packageMultiplier = isDropoutClaim ? 1 : line.quantity
+  const packageFallback = getPackageInvoiceSubItems(line.id, line.name, packageMultiplier, true, priceMode)
   const namedPackageFallback = packageFallback.length || !fallbackPackageName
     ? packageFallback
     : getPackageInvoiceSubItems(undefined, fallbackPackageName, 1, true, priceMode)
   const source = isDropoutClaim
     ? (
-        hasNestedSubItems(line.subItems)
+        namedPackageFallback.length
+          ? namedPackageFallback
+          : hasNestedSubItems(line.subItems)
           ? enrichSubItemPrices(
               applyConfiguredPackageRates(
                 findPackageOffer(line.id, line.name) ?? findPackageOffer(undefined, fallbackPackageName),
@@ -1370,9 +1420,7 @@ const getPackageLineSubItems = (
               ),
               priceMode
             )
-          : namedPackageFallback.length
-            ? namedPackageFallback
-            : enrichSubItemPrices(line.subItems, priceMode)
+          : enrichSubItemPrices(line.subItems, priceMode)
       )
     : line.subItems?.length
       ? enrichSubItemPrices(line.subItems, priceMode)
