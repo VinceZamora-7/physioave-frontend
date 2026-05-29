@@ -42,6 +42,8 @@ export interface AppointmentListItem {
   appointment_phase: AppointmentPhase
   appointment_status: string
   billing_type?: string
+  hmo_loa_number?: string
+  hmo_loa_date?: string
   service_type?: string
   billing_status: string
   billing_id?: number
@@ -158,6 +160,8 @@ export interface AppointmentDetail extends AppointmentListItem {
   patient_link: string
   billing_link?: string
   billing_type?: string
+  hmo_loa_number?: string
+  hmo_loa_date?: string
   service_name?: string
   override_reason?: string
   dropout_status?: string
@@ -274,6 +278,8 @@ export interface AppointmentUpdatePayload {
 export interface AppointmentEncounterTicketPayload {
   attended_at?: string
   patient_signature_data_url: string
+  loa_number?: string
+  loa_date?: string
 }
 
 export interface AppointmentPtCompletionPayload {

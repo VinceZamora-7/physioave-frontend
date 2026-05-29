@@ -236,6 +236,8 @@
   <AppointmentEncounterTicketDialog
   v-model:visible="encounterTicketVisible"
   v-model:signature-data-url="encounterTicketSignatureDataUrl"
+  v-model:loa-number="encounterTicketLoaNumber"
+  v-model:loa-date="encounterTicketLoaDate"
   :selected-detail="selectedDetail"
   :selected-encounter-ticket="selectedEncounterTicket"
   :selected-encounter-ticket-has-pt-signature="selectedEncounterTicketHasPtSignature"
@@ -1213,6 +1215,8 @@ const encounterTicketVisible = ref(false)
 const isEncounterTicketSaving = ref(false)
 const encounterTicketAttendedAt = ref<Date>(new Date())
 const encounterTicketSignatureDataUrl = ref("")
+const encounterTicketLoaNumber = ref("")
+const encounterTicketLoaDate = ref("")
 const lguMonthlyClaimVisible = ref(false)
 const lguMonthlyClaimMonth = ref("")
 const isLguMonthlyClaimSaving = ref(false)
@@ -3395,6 +3399,8 @@ const submitCreateAppointment = async (): Promise<void> => {
 const seedEncounterTicketForm = (ticket?: AppointmentEncounterTicket): void => {
   encounterTicketAttendedAt.value = ticket?.attended_at ? new Date(ticket.attended_at) : new Date()
   encounterTicketSignatureDataUrl.value = ticket?.patient_signature_data_url ?? ""
+  encounterTicketLoaNumber.value = selectedDetail.value?.hmo_loa_number ?? ""
+  encounterTicketLoaDate.value = selectedDetail.value?.hmo_loa_date?.slice(0, 10) ?? ""
 }
 
 const openEncounterTicketDialog = (): void => {
@@ -3469,25 +3475,45 @@ const selectAppointment = async (appointment: AppointmentListItem): Promise<void
 
 const submitEncounterTicket = async (): Promise<void> => {
   if (!selectedDetail.value) return
+  const isHmoBilling = String(selectedDetail.value.billing_type ?? "")
+    .trim()
+    .toUpperCase()
+    .includes("HMO")
   if (isSelectedEncounterTicketLocked.value) {
-    errorToast(toast, "This signed encounter ticket is already locked")
-    return
+    if (!isHmoBilling) {
+      errorToast(toast, "This signed encounter ticket is already locked")
+      return
+    }
+    if (!encounterTicketLoaNumber.value.trim() || !encounterTicketLoaDate.value) {
+      errorToast(toast, "LOA number and LOA date are required to update HMO invoice details")
+      return
+    }
   }
   const appointmentId = selectedDetail.value.id
   if (!encounterTicketSignatureDataUrl.value.trim()) {
     errorToast(toast, "Patient signature is required before saving the encounter ticket")
     return
   }
+  if (
+    isHmoBilling
+    && (Boolean(encounterTicketLoaNumber.value.trim()) || Boolean(encounterTicketLoaDate.value))
+    && (!encounterTicketLoaNumber.value.trim() || !encounterTicketLoaDate.value)
+  ) {
+    errorToast(toast, "LOA number and LOA date must be entered together")
+    return
+  }
 
   const payload: AppointmentEncounterTicketPayload = {
     attended_at: encounterTicketAttendedAt.value.toISOString(),
-    patient_signature_data_url: encounterTicketSignatureDataUrl.value
+    patient_signature_data_url: encounterTicketSignatureDataUrl.value,
+    loa_number: encounterTicketLoaNumber.value.trim() || undefined,
+    loa_date: encounterTicketLoaDate.value || undefined
   }
 
   try {
     isEncounterTicketSaving.value = true
     await appointmentPhase1Service.processEncounterTicket(appointmentId, payload)
-    successToast(toast, "Digital sign-off slip saved and attendance marked complete")
+    successToast(toast, isSelectedEncounterTicketLocked.value ? "HMO LOA details updated" : "Digital sign-off slip saved and attendance marked complete")
     encounterTicketVisible.value = false
     await refreshAll()
     selectedDetail.value = await appointmentPhase1Service.getById(appointmentId)

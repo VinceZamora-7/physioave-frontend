@@ -30,6 +30,7 @@ export interface HmoInvoiceData {
   hmoTypeName?: string
   hmoCompanyName?: string
   hmoApprovalCode?: string
+  hmoApprovalDate?: string
   hmoValidityStart?: string
   hmoValidityEnd?: string
   subtotal: number
@@ -100,7 +101,7 @@ export function renderHmoInvoiceWindow(
     { label: "HMO Type", value: invoice.hmoTypeName || "N/A" },
     { label: "Company Name", value: invoice.hmoCompanyName || "N/A" },
     { label: "LOA Approval No.", value: invoice.hmoApprovalCode || "N/A" },
-    { label: "LOA Validity", value: `${formatDate(invoice.hmoValidityStart)} - ${formatDate(invoice.hmoValidityEnd)}` }
+    { label: "LOA Approval date", value: formatDate(invoice.hmoApprovalDate) }
   ]
 
   renderStandardInvoiceWindow(printWindow, {

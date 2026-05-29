@@ -12,7 +12,37 @@
       @open-exports="exportsModalVisible = true"
     />
 
+    <section class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <article
+        v-for="card in lguOperationalCards"
+        :key="card.label"
+        class="rounded-3xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-4 shadow-sm"
+      >
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <p class="m-0 text-xs font-bold uppercase tracking-widest text-[rgb(var(--app-fg))]/50">{{ card.label }}</p>
+            <p :class="['m-0 mt-2 text-2xl font-bold', card.valueClass]">{{ card.value }}</p>
+          </div>
+          <span :class="['rounded-2xl bg-white/70 p-2 shadow-sm dark:bg-white/10', card.iconClass]">
+            <i :class="card.icon" />
+          </span>
+        </div>
+      </article>
+    </section>
+
+    <div class="flex justify-end">
+      <Button
+        label="Claimed"
+        icon="pi pi-check-circle"
+        severity="success"
+        :loading="claimingLguPayments"
+        :disabled="claimingLguPayments || lguOutstandingAmount <= 0"
+        @click="claimOutstandingLguBillings"
+      />
+    </div>
+
     <LguBudgetSnapshot
+      v-if="budgetLedgerVisible"
       :total-available-fund="totalAvailableFund"
       :used-lgu-fund="usedLguFund"
       :pending-used-lgu-fund="pendingUsedLguFund"
@@ -98,6 +128,7 @@
       :get-billing-summary-amount="getPatientBillingSummaryAmount"
       @open-invoice-session-picker="openInvoiceSessionPicker"
       @export-patient-billing-summary="exportPatientBillingSummary"
+      @print-attendance-record="exportPatientAttendanceRecord"
       @open-patient-soa-picker="openPatientSoaPicker"
       @export-patient-lgu-details="exportPatientLguDetails"
       @create-claims="createClaimsForEligibleAppointments"
@@ -123,6 +154,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue"
+import Button from "primevue/button"
 import { useToast } from "primevue/usetoast"
 import LguBudgetSetup from "./lgu-budget-summary-card/LguBudgetSetup.vue"
 import LguBudgetSnapshot from "./lgu-budget-summary-card/LguBudgetSnapshot.vue"
@@ -152,6 +184,8 @@ import { getApiErrorMessage } from "@/utils/actionable-error.util"
 import { errorToast, successToast } from "@/utils/toast.util"
 import {
   openEncounterTicketPdfWindow,
+  renderEncounterTicketPdfWindow,
+  renderAttendanceRecordPdfWindow,
   renderEncounterTicketBulkPdfWindow,
   type EncounterTicketPdfCard
 } from "@/utils/encounter-ticket-pdf.util"
@@ -209,6 +243,7 @@ const patientSoaRange = ref<Date[] | null>(null)
 const bulkTicketRange = ref<Date[] | null>(null)
 const exportingBulkTickets = ref(false)
 const exportingLguPatients = ref(false)
+const claimingLguPayments = ref(false)
 
 type LocalService = { id: string; type?: string; name: string; price?: number; status?: string }
 type LocalBundle = {
@@ -1011,6 +1046,7 @@ type PatientLguDetailsExportContext = {
   lguInformation: PatientHMOInformation | null
   profileImageDataUrl: string | null
   transactions: LguDashboardHistoryItem[]
+  billingDetails: BillingListItem[]
 }
 
 const patientExportFileName = (suffix: string): string => {
@@ -1066,7 +1102,11 @@ const formatPatientAddress = (patient?: Patient | null): string => {
 }
 
 const loadPatientLguDetailsExportContext = async (patientId: number): Promise<PatientLguDetailsExportContext> => {
-  const [patientResult, imageResult, transactionsResult, lguInformationResult] = await Promise.allSettled([
+  const billingIds = (selectedPatientDetail.value?.billings ?? [])
+    .map(billing => Number(billing.id))
+    .filter(id => Number.isFinite(id) && id > 0)
+
+  const [patientResult, imageResult, transactionsResult, lguInformationResult, billingDetailsResult] = await Promise.allSettled([
     pamsAPI.get<Patient>(`/patients/${patientId}`).then(response => response.data),
     pamsAPI.get<Blob>(`/patients/${patientId}/profile-image/file?t=${Date.now()}`, {
       responseType: "blob"
@@ -1077,7 +1117,8 @@ const loadPatientLguDetailsExportContext = async (patientId: number): Promise<Pa
       selectedBudgetPeriodMonth.value,
       selectedProgramId.value ?? undefined
     ),
-    patientHMOInformationService.getByPatientId(patientId)
+    patientHMOInformationService.getByPatientId(patientId),
+    Promise.all(billingIds.map(id => billingPhase1Service.getById(id)))
   ])
 
   const transactions = transactionsResult.status === "fulfilled"
@@ -1090,7 +1131,10 @@ const loadPatientLguDetailsExportContext = async (patientId: number): Promise<Pa
       ? (lguInformationResult.value ?? []).find(entry => entry.sponsor_context === "LGU") ?? null
       : null,
     profileImageDataUrl: imageResult.status === "fulfilled" ? imageResult.value : null,
-    transactions
+    transactions,
+    billingDetails: billingDetailsResult.status === "fulfilled"
+      ? billingDetailsResult.value.filter((detail): detail is BillingListItem => Boolean(detail))
+      : []
   }
 }
 
@@ -1619,6 +1663,46 @@ const renderPackageRows = (): string => {
 const renderProfileField = (label: string, value: unknown, className = ""): string =>
   `<div class="profile-field ${className}"><strong>${escapeHtml(label)}</strong>${escapeHtml(value === null || value === undefined || value === "" ? "N/A" : value)}</div>`
 
+const firstNonBlank = (...values: Array<unknown>): string => {
+  for (const value of values) {
+    const text = String(value ?? "").trim()
+    if (text) return text
+  }
+  return "N/A"
+}
+
+const latestPatientTransaction = (context: PatientLguDetailsExportContext): LguDashboardHistoryItem | undefined =>
+  [...context.transactions].sort((left, right) =>
+    String(right.created_at ?? "").localeCompare(String(left.created_at ?? ""))
+  )[0]
+
+const latestAppointmentBillingDetail = (context: PatientLguDetailsExportContext): BillingListItem | undefined =>
+  [...context.billingDetails].sort((left, right) =>
+    String(right.created_at ?? "").localeCompare(String(left.created_at ?? ""))
+  )[0]
+
+const loadBillingDetailsForSessions = async (sessions: LguInvoiceSessionOption[]): Promise<BillingListItem[]> => {
+  const billingIds = Array.from(new Set(
+    sessions
+      .map(session => Number(session.billingId ?? 0))
+      .filter(id => Number.isFinite(id) && id > 0)
+  ))
+
+  const results = await Promise.allSettled(billingIds.map(id => billingPhase1Service.getById(id)))
+  const details: BillingListItem[] = []
+  for (const result of results) {
+    if (result.status === "fulfilled" && result.value) {
+      details.push(result.value)
+    }
+  }
+  return details
+}
+
+const latestBillingDetail = (details: BillingListItem[]): BillingListItem | undefined =>
+  [...details].sort((left, right) =>
+    String(right.created_at ?? "").localeCompare(String(left.created_at ?? ""))
+  )[0]
+
 const formatProfileDate = (value?: string | null): string => {
   if (!value) return "N/A"
   const date = new Date(value)
@@ -1663,20 +1747,58 @@ const renderProfileSummaryHtml = (context: PatientLguDetailsExportContext): stri
 
 const renderProfileIdentityHtml = (context: PatientLguDetailsExportContext): string => {
   const details = context.patientDetails
+  const patient = selectedPatientDetail.value
+  const transaction = latestPatientTransaction(context)
+  const appointmentBilling = latestAppointmentBillingDetail(context)
   return `
     <section class="profile-section">
       <h2>Patient Profile</h2>
-      <div class="profile-grid">
-        ${renderProfileField("Civil Status", details?.civil_status_name)}
-        ${renderProfileField("Occupation", details?.occupation)}
-        ${renderProfileField("Religion", details?.religion_name)}
-        ${renderProfileField("Phone", details?.phone_number)}
-        ${renderProfileField("Email", details?.email)}
-        ${renderProfileField("Facebook", details?.fb_link)}
-        ${renderProfileField("Referral Source", details?.mode_of_referral_name, "profile-field-wide")}
-        ${renderProfileField("Referring Doctor", details?.referred_by_staff_name || details?.referred_by)}
-        ${renderProfileField("Address", formatPatientAddress(details), "profile-field-full")}
-      </div>
+<div style="width: 100%; margin-top: 12px;">
+  <table style="width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; font-family: Arial, sans-serif;">
+    <tbody>
+      <tr>
+        <th style="width: 18%; background: #f3f4f6; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: 700; white-space: nowrap;">
+          Patient's Name:
+        </th>
+        <td style="width: 32%; padding: 8px 10px; vertical-align: top; font-weight: 500; word-break: break-word;">
+          ${details?.full_name || patient?.patient_name || "—"}
+        </td>
+
+        <th style="width: 18%; background: #f3f4f6; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: 700; white-space: nowrap;">
+          Physical Therapist:
+        </th>
+        <td style="width: 32%; padding: 8px 10px; vertical-align: top; font-weight: 500; word-break: break-word;">
+          ${firstNonBlank(appointmentBilling?.physical_therapist, transaction?.physical_therapist) || "—"}
+        </td>
+      </tr>
+
+      <tr>
+        <th style="background: #f3f4f6; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: 700; white-space: nowrap;">
+          Address:
+        </th>
+        <td style="padding: 8px 10px; vertical-align: top; font-weight: 500; word-break: break-word;">
+          ${formatPatientAddress(details) || "—"}
+        </td>
+
+        <th style="background: #f3f4f6; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: 700; white-space: nowrap;">
+          Doctor:
+        </th>
+        <td style="padding: 8px 10px; vertical-align: top; font-weight: 500; word-break: break-word;">
+          ${firstNonBlank(appointmentBilling?.doctor, transaction?.doctor, details?.referred_by_staff_name, details?.referred_by) || "—"}
+        </td>
+      </tr>
+
+      <tr>
+        <th style="background: #f3f4f6; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: 700; white-space: nowrap;">
+          Diagnosis:
+        </th>
+        <td colspan="3" style="padding: 8px 10px; vertical-align: top; font-weight: 500; word-break: break-word; min-height: 36px;">
+          ${firstNonBlank(appointmentBilling?.diagnosis, transaction?.diagnosis) || "—"}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
     </section>
   `
 }
@@ -1685,36 +1807,48 @@ const renderProfileLguProgramHtml = (context: PatientLguDetailsExportContext): s
   const patient = selectedPatientDetail.value
   if (!patient) return ""
   const lguInfo = context.lguInformation
-  const activePackage = patient.package_availments[0]
-  const totalBillings = patient.billings.reduce((sum, billing) => sum + getPatientBillingSummaryAmount(billing), 0)
-  const usedSessionKeys = new Set<string>()
-  patient.authorizations.forEach(authorization => {
-    authorization.sessions.forEach(session => {
-      usedSessionKeys.add(String(session.id || `${session.appointment_id}-${session.session_sequence}`))
-    })
-  })
-  const usedSessions = usedSessionKeys.size || patient.authorizations.reduce((sum, authorization) => sum + Number(authorization.consumed_sessions ?? 0), 0)
-  const totalSessions = patient.authorizations.reduce((sum, authorization) => sum + Number(authorization.total_sessions ?? 0), 0)
-    || patient.package_availments.reduce((sum, pkg) => sum + Number(pkg.availed_count ?? 0), 0)
-  const remainingSessions = Math.max(0, totalSessions - usedSessions)
-  const recentAppointment = patient.appointments[patient.appointments.length - 1]
   const lguName = lguInfo?.lgu_program_name || lguInfo?.company_name || selectedProgramName.value || "LGU"
 
   return `
     <section class="profile-section">
       <h2>LGU Information</h2>
-      <div class="profile-grid">
-        ${renderProfileField("LGU Name", lguName)}
-        ${renderProfileField("Referral Form No.", lguInfo?.referral_form_no || lguInfo?.approval_code)}
-        ${renderProfileField("Date of Referral Issued", formatProfileDate(lguInfo?.referral_issued_date || lguInfo?.validity_start_date))}
-        ${renderProfileField("Billing Month", selectedBillingMonth.value)}
-        ${renderProfileField("Program Status", selectedPatientStatusLabel())}
-        ${renderProfileField("Current Package", activePackage?.package_name || "N/A")}
-        ${renderProfileField("Sessions Used / Remaining", `${usedSessions} used / ${remainingSessions} remaining${totalSessions ? ` (${totalSessions} authorized)` : ""}`)}
-        ${renderProfileField("Total Claim Billings", asCurrency(totalBillings))}
-        ${renderProfileField("Recent Appointment", recentAppointment ? formatDateTime(recentAppointment.appointment_date) : "N/A")}
-        ${renderProfileField("LGU Notes", lguInfo?.notes, "profile-field-full")}
-      </div>
+<div style="width: 100%; margin-top: 12px;">
+  <table style="width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; font-family: Arial, sans-serif;">
+    <tbody>
+      <tr>
+        <th style="width: 18%; background: #f3f4f6; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: 700; white-space: nowrap;">
+          Billing To:
+        </th>
+        <td style="width: 32%; padding: 8px 10px; vertical-align: top; font-weight: 500; word-break: break-word;">
+          ${lguName || "—"}
+        </td>
+
+        <th style="width: 18%; background: #f3f4f6; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: 700; white-space: nowrap;">
+          Patient Program <br /> Status:
+        </th>
+        <td style="width: 32%; padding: 8px 10px; vertical-align: top; font-weight: 500; word-break: break-word;">
+          ${selectedPatientStatusLabel() || "—"}
+        </td>
+      </tr>
+
+      <tr>
+        <th style="background: #f3f4f6; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: 700; white-space: nowrap;">
+          Referral Form No.:
+        </th>
+        <td style="padding: 8px 10px; vertical-align: top; font-weight: 500; word-break: break-word;">
+          ${lguInfo?.referral_form_no || lguInfo?.approval_code || "—"}
+        </td>
+
+        <th style="background: #f3f4f6; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: 700; white-space: nowrap;">
+          Date Issued:
+        </th>
+        <td style="padding: 8px 10px; vertical-align: top; font-weight: 500; word-break: break-word;">
+          ${formatProfileDate(lguInfo?.referral_issued_date || lguInfo?.validity_start_date) || "—"}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
     </section>
   `
 }
@@ -1786,11 +1920,34 @@ const renderProfileAvailedPackagesHtml = (): string => {
   `
 }
 
+const renderProfileIncludedServicesHtml = (): string => {
+  const rows = getStatementOfAccountRows()
+
+  return `
+    <section class="profile-section">
+      <h2>Included Services</h2>
+      <table class="compact-table">
+        <thead>
+          <tr>
+            <th>ITEM No.</th>
+            <th>TREATMENT DATE</th>
+            <th>PT SERVICE RENDERED</th>
+            <th>SESSION SEQUENCE</th>
+            <th>UNIT PRICE</th>
+          </tr>
+        </thead>
+        <tbody>${renderStatementOfAccountRows(rows)}</tbody>
+      </table>
+    </section>
+  `
+}
+
 const renderLguProfileBodyHtml = (context: PatientLguDetailsExportContext): string => `
   ${renderProfileSummaryHtml(context)}
   ${renderProfileIdentityHtml(context)}
   ${renderProfileLguProgramHtml(context)}
   ${renderProfileAvailedPackagesHtml()}
+  ${renderProfileIncludedServicesHtml()}
 `
 
 const exportPatientBillingSummary = async (): Promise<void> => {
@@ -1856,10 +2013,15 @@ const exportPatientSoa = async (): Promise<void> => {
     const appointmentDate = new Date(option.appointmentDate)
     return !Number.isNaN(appointmentDate.getTime()) && appointmentDate >= from && appointmentDate <= to
   })
+  const billingDetails = await loadBillingDetailsForSessions(sessions)
+  const headerBilling = latestBillingDetail(billingDetails)
   const rows = getStatementOfAccountRows(sessions)
   const transactionPeriod = `${formatDateOnly(fromDate)} - ${formatDateOnly(toDate)}`
-  const billingDate = formatDateOnly(getMonthEndDate(toDate))
-  const lguName = selectedProgramName.value || "LGU"
+  const billingDate = formatDateOnly(headerBilling?.lgu_date_issued ? new Date(headerBilling.lgu_date_issued) : getMonthEndDate(toDate))
+  const lguName = headerBilling?.lgu_program_name || selectedProgramName.value || "LGU"
+  const lguReference = headerBilling?.lgu_patient_referral_form_no || headerBilling?.lgu_reference_label || selectedBillingMonth.value
+  const patientName = headerBilling?.patient_name || patient.patient_name
+  const lguStatus = formatLguStatus(headerBilling?.lgu_patient_program_status || selectedPatientStatusLabel())
   const referenceNumber = `LGU-SOA-${patient.patient_id}-${formatYmd(fromDate)}-${formatYmd(toDate)}`
   const grandTotal = Number(rows.reduce((sum, row) => sum + (row.isChildRow ? 0 : Number(row.unitTotal ?? 0)), 0).toFixed(2))
   let popup: Window
@@ -1871,10 +2033,10 @@ const exportPatientSoa = async (): Promise<void> => {
   }
 
   const detailRows: InvoiceDetailRow[] = [
-    { label: "Billing To", value: selectedProgramName.value || "LGU" },
-    { label: "Referral Form No.", value: selectedBillingMonth.value },
-    { label: "Date Issued", value: new Date().toLocaleDateString("en-PH") },
-    { label: "Patient Program Status", value: selectedPatientStatusLabel() }
+    { label: "Billing To", value: lguName },
+    { label: "Referral Form No.", value: lguReference },
+    { label: "Date Issued", value: billingDate },
+    { label: "Patient Program Status", value: lguStatus }
   ]
 
   renderStandardInvoiceWindow(popup, {
@@ -1888,7 +2050,13 @@ const exportPatientSoa = async (): Promise<void> => {
       { label: "Billing Date", value: billingDate },
       { label: "Transaction Period", value: transactionPeriod }
     ],
-    patientName: patient.patient_name,
+    patientName,
+    patientAddress: headerBilling?.patient_address,
+    patientAge: headerBilling?.patient_age,
+    patientGender: headerBilling?.patient_gender,
+    physicalTherapist: headerBilling?.physical_therapist,
+    doctor: headerBilling?.doctor,
+    diagnosis: headerBilling?.diagnosis,
     columns: [
       { label: "ITEM No.", width: "68px", align: "center" },
       { label: "TREATMENT DATE", width: "110px", align: "center" },
@@ -1985,13 +2153,18 @@ const inferLguPackageTotalSessions = (name?: string, fallback = 1): number => {
 }
 
 const renderDashboardStatementOfAccountRows = (rows: LguDashboardHistoryItem[]): string => {
-  if (!rows.length) return renderEmptyRow(5, "No SOA records found for the selected period.")
+  if (!rows.length) return renderEmptyRow(10, "No SOA records found for the selected period.")
   return rows.map((row, index) => `
     <tr>
       <td class="text-center">${index + 1}</td>
+      <td>${escapeHtml(row.patient_name || "N/A")}</td>
+      <td>${escapeHtml(row.reference_label || row.phase1_billing_public_id || row.receipt_number || "N/A")}</td>
+      <td>${escapeHtml(row.program_status || row.billing_status || row.usage_status || "N/A")}</td>
+      <td>${escapeHtml(row.physical_therapist || "N/A")}</td>
+      <td>${escapeHtml(row.doctor || "N/A")}</td>
+      <td>${escapeHtml(row.diagnosis || "N/A")}</td>
       <td class="text-center">${escapeHtml(new Date(row.created_at).toLocaleDateString("en-PH"))}</td>
       <td>${escapeHtml(row.service_name || "LGU Session")}</td>
-      <td class="text-center"></td>
       <td class="text-right">${Number(row.amount_out ?? 0) > 0 ? escapeHtml(asCurrency(Number(row.amount_out ?? 0))) : "FREE"}</td>
     </tr>
   `).join("")
@@ -2013,12 +2186,12 @@ const generateSoa = async (): Promise<void> => {
   }
 
   try {
-    const rows = await lguBillingService.getSoa({
+    const rows = (await lguBillingService.getSoa({
       from: formatYmd(from),
       to: formatYmd(to),
       limit: 5000,
       program_id: selectedProgramId.value ?? undefined
-    }) ?? []
+    }) ?? []).filter(row => Number(row.amount_out ?? 0) > 0 || !!row.patient_id || !!row.phase1_billing_id)
     const grandTotal = rows.reduce((sum, row) => sum + Number(row.amount_out ?? 0), 0)
     const detailRows: InvoiceDetailRow[] = [
       { label: "Billing To", value: lguName },
@@ -2040,19 +2213,25 @@ const generateSoa = async (): Promise<void> => {
       patientName: lguName,
       hidePatientDoctorHeader: true,
       columns: [
-        { label: "ITEM No.", width: "68px", align: "center" },
-        { label: "TREATMENT DATE", width: "110px", align: "center" },
+        { label: "ITEM No.", width: "58px", align: "center" },
+        { label: "PATIENT NAME", width: "150px" },
+        { label: "REFERENCE NO.", width: "120px" },
+        { label: "PROGRAM STATUS", width: "110px" },
+        { label: "PHYSICAL THERAPIST", width: "130px" },
+        { label: "DOCTOR", width: "120px" },
+        { label: "DIAGNOSIS", width: "150px" },
+        { label: "TREATMENT DATE", width: "100px", align: "center" },
         { label: "PT SERVICE RENDERED" },
-        { label: "SESSION SEQUENCE", width: "120px", align: "center" },
-        { label: "UNIT PRICE", width: "126px", align: "right" }
+        { label: "INVOICE BILLING TOTAL", width: "130px", align: "right" }
       ],
       tableRowsHtml: renderDashboardStatementOfAccountRows(rows),
-      emptyStateColspan: 5,
+      emptyStateColspan: 10,
       discount: 0,
       grandTotal,
       detailBoxTitle: "LGU DETAILS",
       detailRows,
       renderErrorMessage: "The statement of the account could not be rendered. Please try again.",
+      autoPrint: true,
       pageSize: "A4 landscape",
       maxWidthPx: 1320
     })
@@ -2284,6 +2463,57 @@ const exportBulkLguEncounterTickets = async (): Promise<void> => {
   }
 }
 
+const exportPatientAttendanceRecord = async (): Promise<void> => {
+  const patient = selectedPatientDetail.value
+  if (!patient) return
+
+  const billingIds = patient.billings
+    .map(billing => Number(billing.id))
+    .filter(id => Number.isFinite(id) && id > 0)
+
+  if (!billingIds.length) {
+    errorToast(toast, "No LGU billing statements are available for this patient's attendance record")
+    return
+  }
+
+  let popup: Window
+  try {
+    popup = openEncounterTicketPdfWindow("Attendance & Treatment Record")
+  } catch {
+    errorToast(toast, "Unable to open attendance record. Allow pop-ups for this site, then try again.")
+    return
+  }
+
+  try {
+    const details = (await Promise.all(billingIds.map(id => billingPhase1Service.getById(id))))
+      .filter((detail): detail is BillingListItem => !!detail)
+
+    const cards = details
+      .flatMap(detail => buildEncounterTicketCards(detail))
+      .filter(card => card.attendanceStatus === "Attended")
+      .sort((left, right) => {
+        const leftDate = String(left.attendedAt ?? left.signedOffAt ?? "")
+        const rightDate = String(right.attendedAt ?? right.signedOffAt ?? "")
+        return leftDate.localeCompare(rightDate)
+      })
+
+    if (!cards.length) {
+      popup.close()
+      errorToast(toast, "No locked attended encounter tickets found for this patient")
+      return
+    }
+
+    renderAttendanceRecordPdfWindow(popup, cards, {
+      title: "Attendance & Treatment Record",
+      subtitle: `${patient.patient_name} - ${cards.length} locked encounter ticket${cards.length === 1 ? "" : "s"}`,
+      fileName: `lgu-attendance-treatment-record-${patient.patient_id}`
+    })
+  } catch (error: unknown) {
+    popup.close()
+    errorToast(toast, extractApiErrorMessage(error, "Failed to export attendance and treatment record"))
+  }
+}
+
 const firstDroppedOutAppointmentId = computed<number | null>(() => {
   const appointments = selectedPatientDetail.value?.appointments ?? []
   return appointments.find(appointment =>
@@ -2419,6 +2649,69 @@ const isFutureBudgetMonth = computed(() =>
 const remainingAvailableFund = computed(() =>
   Number((totalAvailableFund.value - usedLguFund.value).toFixed(2))
 )
+
+type LguBillingPaymentSummary = {
+  billingId: number
+  amountDue: number
+  amountPaid: number
+}
+
+const lguBillingPaymentSummaries = computed<LguBillingPaymentSummary[]>(() => {
+  const byBillingId = new Map<number, LguBillingPaymentSummary>()
+  for (const entry of lguTransactionHistory.value) {
+    const billingId = Number(entry.phase1_billing_id ?? 0)
+    if (!Number.isFinite(billingId) || billingId <= 0) continue
+    const amountDue = resolveLedgerAmount(entry)
+    if (amountDue <= 0) continue
+    byBillingId.set(billingId, {
+      billingId,
+      amountDue,
+      amountPaid: Math.max(0, Number(entry.amount_paid ?? 0))
+    })
+  }
+  return Array.from(byBillingId.values())
+})
+
+const lguTotalTransactions = computed(() => lguBillingPaymentSummaries.value.length)
+
+const lguPaidBySponsorAmount = computed(() =>
+  Number(lguBillingPaymentSummaries.value.reduce((sum, row) => sum + Math.min(row.amountPaid, row.amountDue), 0).toFixed(2))
+)
+
+const lguOutstandingAmount = computed(() =>
+  Number(lguBillingPaymentSummaries.value.reduce((sum, row) => sum + Math.max(0, row.amountDue - row.amountPaid), 0).toFixed(2))
+)
+
+const lguOperationalCards = computed(() => [
+  {
+    label: "LGU Patients",
+    value: String(lguPatients.value.length),
+    icon: "pi pi-users",
+    valueClass: "text-sky-700 dark:text-sky-300",
+    iconClass: "text-sky-700 dark:text-sky-300"
+  },
+  {
+    label: "Total Transactions",
+    value: String(lguTotalTransactions.value),
+    icon: "pi pi-receipt",
+    valueClass: "text-[rgb(var(--app-fg))]",
+    iconClass: "text-[rgb(var(--app-fg))]/70"
+  },
+  {
+    label: "Paid By LGU",
+    value: asCurrency(lguPaidBySponsorAmount.value),
+    icon: "pi pi-check-circle",
+    valueClass: "text-emerald-700 dark:text-emerald-300",
+    iconClass: "text-emerald-700 dark:text-emerald-300"
+  },
+  {
+    label: "Outstanding",
+    value: asCurrency(lguOutstandingAmount.value),
+    icon: "pi pi-clock",
+    valueClass: "text-amber-700 dark:text-amber-300",
+    iconClass: "text-amber-700 dark:text-amber-300"
+  }
+])
 
 const canManageLguDashboard = computed(() => {
   const normalized = currentRoleName.value.trim().toLowerCase()
@@ -2813,7 +3106,7 @@ const loadTransactionHistory = async (): Promise<void> => {
   }
   try {
     lguTransactionHistory.value = await lguBillingService.getDashboardHistory(
-      100,
+      5000,
       selectedBudgetPeriodYear.value,
       selectedBudgetPeriodMonth.value,
       selectedProgramId.value ?? undefined
@@ -2823,6 +3116,41 @@ const loadTransactionHistory = async (): Promise<void> => {
     transactionHistoryError.value = extractApiErrorMessage(error, "Failed to load LGU transaction history")
   } finally {
     loadingTransactionHistory.value = false
+  }
+}
+
+const claimOutstandingLguBillings = async (): Promise<void> => {
+  const outstanding = lguBillingPaymentSummaries.value
+    .map(row => ({
+      billingId: row.billingId,
+      outstanding: Number(Math.max(0, row.amountDue - row.amountPaid).toFixed(2))
+    }))
+    .filter(row => row.outstanding > 0)
+
+  if (!outstanding.length) {
+    successToast(toast, "No outstanding LGU billings to claim")
+    return
+  }
+
+  claimingLguPayments.value = true
+  try {
+    await Promise.all(outstanding.map(row =>
+      billingPhase1Service.recordPayment(row.billingId, {
+        amountTendered: row.outstanding,
+        paymentType: "LGU Claim",
+        referenceNo: `LGU-${budgetMonthLabel.value}`,
+        note: "Marked claimed from LGU dashboard"
+      })
+    ))
+    successToast(toast, `${outstanding.length} LGU billing${outstanding.length === 1 ? "" : "s"} marked as claimed`)
+    await Promise.all([
+      loadTransactionHistory(),
+      loadDashboardBudget()
+    ])
+  } catch (error: unknown) {
+    errorToast(toast, extractApiErrorMessage(error, "Failed to mark LGU billings as claimed"))
+  } finally {
+    claimingLguPayments.value = false
   }
 }
 

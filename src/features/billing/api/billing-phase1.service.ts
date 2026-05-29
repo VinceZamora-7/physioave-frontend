@@ -89,6 +89,7 @@ export interface BillingListItem {
   hmo_type_name?: string
   hmo_company_name?: string
   hmo_loa_number?: string
+  hmo_loa_date?: string
   hmo_approval_code?: string
   hmo_validity_start?: string
   hmo_validity_end?: string
@@ -201,6 +202,7 @@ export interface BillingRequest {
   vatable_amount?: number
   vat_amount?: number
   loa_number?: string
+  loa_date?: string
 }
 
 export interface PackageLookup {
@@ -226,6 +228,7 @@ export interface HmoRecentHistoryItem {
   diagnosis?: string | null
   service_name: string | null
   receipt_number: string | null
+  hmo_loa_date?: string | null
   total_amount: number
   amount_paid: number
 }
@@ -350,6 +353,7 @@ export interface RecordPaymentRequest {
 export interface MarkAppointmentBilledRequest {
   appointment_id: number
   loa_number?: string
+  loa_date?: string
 }
 
 export interface MarkAppointmentBilledResult {
@@ -424,7 +428,7 @@ export const billingPhase1Service = {
     return data
   },
   async getHmoSoa(params: HmoSoaParams): Promise<HmoRecentHistoryItem[] | undefined> {
-    const { data } = await pamsAPI.get<HmoRecentHistoryItem[]>("/billings/hmo-soa", { params })
+    const { data } = await pamsAPI.get<HmoRecentHistoryItem[]>("/hmos/invoices/soa", { params })
     return data
   },
   async getLguSoa(params: { from: string; to: string; limit?: number; program_id?: number }): Promise<LguDashboardHistoryItem[] | undefined> {

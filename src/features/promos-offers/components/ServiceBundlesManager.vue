@@ -143,12 +143,13 @@
 
           <IftaLabel>
             <InputNumber
-              v-model="bundleForm.bundledPrice"
+              :model-value="bundleForm.bundledPrice"
               :min="0"
               mode="currency"
               currency="PHP"
               locale="en-PH"
               fluid
+              @update:model-value="handleBundlePriceChange"
             />
             <label>Bundled Price</label>
           </IftaLabel>
@@ -291,6 +292,11 @@ const hasItemPricing = computed(() => Boolean(props.allowItemPricing))
 const asCurrency = (value: number): string =>
   Number(value ?? 0).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
 
+const getApiErrorMessage = (error: unknown): string => {
+  const response = (error as { response?: { data?: { message?: unknown } } })?.response
+  return typeof response?.data?.message === "string" ? response.data.message : ""
+}
+
 const calcOriginalPrice = (bundle: BundledService): number => {
   const ids = [...bundle.machineIds, ...bundle.techniqueIds, ...bundle.evaluationIds]
   return ids.reduce((sum, id) => sum + Number(props.getServicePrice(id) ?? 0), 0)
@@ -367,6 +373,8 @@ const bundleForm = reactive<{
   bundledPrice: 0
 })
 
+const bundlePriceManuallyEdited = ref(false)
+
 const selectedBundleItems = computed<BundleItemEditorRow[]>(() => [
   ...bundleForm.machineIds.map(id => ({
     id,
@@ -391,6 +399,18 @@ const selectedBundleItems = computed<BundleItemEditorRow[]>(() => [
   })),
 ])
 
+const getSelectedBundleItemPrice = (item: BundleItemEditorRow): number => {
+  if (!hasItemPricing.value) {
+    return item.standardPrice
+  }
+
+  const configuredPrice = Number(bundleForm.itemPrices[item.id])
+  return Number.isFinite(configuredPrice) ? configuredPrice : item.standardPrice
+}
+
+const getSelectedBundleTotal = (): number =>
+  selectedBundleItems.value.reduce((sum, item) => sum + getSelectedBundleItemPrice(item), 0)
+
 const replaceItemPrices = (prices: Record<string, number>): void => {
   for (const key of Object.keys(bundleForm.itemPrices)) {
     delete bundleForm.itemPrices[key]
@@ -414,6 +434,14 @@ const syncSelectedItemPrices = (): void => {
   }
 }
 
+const syncBundlePriceFromSelection = (): void => {
+  if (editingBundleId.value !== null || bundlePriceManuallyEdited.value) {
+    return
+  }
+
+  bundleForm.bundledPrice = getSelectedBundleTotal()
+}
+
 const getBundleItemFormPrice = (id: string): number => Number(bundleForm.itemPrices[id] ?? 0)
 
 const setBundleItemFormPrice = (id: string, value: number | null): void => {
@@ -429,12 +457,13 @@ const buildBundleItemPricePayload = () =>
     ? selectedBundleItems.value.map(item => ({
       item_type: item.itemType,
       id: item.numericId,
-      price: Number(bundleForm.itemPrices[item.id] ?? 0),
+      price: getSelectedBundleItemPrice(item),
     }))
     : []
 
 const openAddBundleDialog = (): void => {
   editingBundleId.value = null
+  bundlePriceManuallyEdited.value = false
   bundleForm.name = ""
   bundleForm.machineIds = []
   bundleForm.techniqueIds = []
@@ -446,6 +475,7 @@ const openAddBundleDialog = (): void => {
 
 const openEditBundleDialog = (bundle: BundledService): void => {
   editingBundleId.value = bundle.id
+  bundlePriceManuallyEdited.value = true
   bundleForm.name = bundle.name
   bundleForm.machineIds = [...bundle.machineIds]
   bundleForm.techniqueIds = [...bundle.techniqueIds]
@@ -460,6 +490,11 @@ const parseNumericId = (value: string, prefix: string): number => {
   const raw = value.startsWith(prefix) ? value.slice(prefix.length) : value
   const parsed = Number(raw)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+const handleBundlePriceChange = (value: number | null): void => {
+  bundlePriceManuallyEdited.value = true
+  bundleForm.bundledPrice = Number(value ?? 0)
 }
 
 const saveBundle = async (): Promise<void> => {
@@ -484,9 +519,13 @@ const saveBundle = async (): Promise<void> => {
 
   isLoading.value = true
   try {
+    const bundledPrice = editingBundleId.value === null && !bundlePriceManuallyEdited.value
+      ? getSelectedBundleTotal()
+      : Number(bundleForm.bundledPrice ?? 0)
+
     const apiPayload = {
       name: bundleForm.name,
-      bundled_price: Number(bundleForm.bundledPrice ?? 0),
+      bundled_price: bundledPrice,
       machine_ids: [...bundleForm.machineIds].map(id => parseNumericId(id, "machine-")).filter(Boolean),
       technique_ids: [...bundleForm.techniqueIds].map(id => parseNumericId(id, "technique-")).filter(Boolean),
       evaluation_ids: [...bundleForm.evaluationIds].map(id => parseNumericId(id, "evaluation-")).filter(Boolean),
@@ -506,8 +545,8 @@ const saveBundle = async (): Promise<void> => {
 
     bundleDialogVisible.value = false
     await loadBundles()
-  } catch {
-    errorToast(toast, "Failed to save bundle")
+  } catch (error) {
+    errorToast(toast, getApiErrorMessage(error) || "Failed to save bundle")
   } finally {
     isLoading.value = false
   }
@@ -539,9 +578,13 @@ watch(
     bundleForm.machineIds.join("|"),
     bundleForm.techniqueIds.join("|"),
     bundleForm.evaluationIds.join("|"),
+    hasItemPricing.value ? JSON.stringify(bundleForm.itemPrices) : "",
     hasItemPricing.value ? "priced" : "plain",
   ],
-  () => syncSelectedItemPrices()
+  () => {
+    syncSelectedItemPrices()
+    syncBundlePriceFromSelection()
+  }
 )
 
 onMounted(() => {

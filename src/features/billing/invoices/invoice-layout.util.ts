@@ -100,6 +100,7 @@ const columnAlignClass = (align?: "left" | "center" | "right"): string => {
 }
 
 export function renderStandardInvoiceWindow(printWindow: Window, invoice: InvoiceLayoutInput): void {
+  const printedDate = new Date().toISOString()
   const tableHeaders = invoice.columns.map(column => `
     <th class="${columnAlignClass(column.align)}"${column.width ? ` style="width: ${escapeHtml(column.width)};"` : ""}>${escapeHtml(column.label)}</th>
   `).join("")
@@ -550,7 +551,7 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
               <div><strong>Approved By:</strong></div>
               <div class="name">${escapeHtml(invoice.approvedBy || "RENALOU B. CORDOVA, PTRP, UK-PT")}</div>
               <div class="title">${escapeHtml(invoice.approverTitle || "Chief Operations Officer")}</div>
-              <div class="signed"><strong>Date Signed:</strong> ${escapeHtml(formatDate(invoice.dateSigned || invoice.billingDate))}</div>
+              <div class="signed"><strong>Date Signed:</strong> ${escapeHtml(formatDate(invoice.dateSigned || printedDate))}</div>
             </section>
           </div>
 

@@ -38,6 +38,10 @@ const escapeHtml = (value: unknown): string =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;")
 
+const WEBSITE_LABEL = "www.physioave.com"
+const PHONE_LABEL = "+63-965-571-2455"
+const EMAIL_LABEL = "admin@physioave.com"
+
 const formatDateTime = (value?: string): string => {
   if (!value) return "N/A"
   const date = new Date(value)
@@ -585,6 +589,354 @@ export function renderEncounterTicketPdfWindow(
       <body>
         ${cards.length > 1 ? coverPage : ""}
         ${pages}
+      </body>
+    </html>
+  `
+
+  writePrintWindowDocument(printWindow, html)
+  printWindow.focus()
+
+  window.setTimeout(() => {
+    if (printWindow.closed) return
+    printWindow.focus()
+    printWindow.print()
+  }, 350)
+}
+
+export function renderAttendanceRecordPdfWindow(
+  printWindow: Window,
+  cards: EncounterTicketPdfCard[],
+  options: EncounterTicketPdfOptions = {}
+): void {
+  if (!cards.length) {
+    throw new Error("No attendance records were found to export.")
+  }
+
+  const title = options.title?.trim() || "Attendance & Treatment Record"
+  const subtitle = options.subtitle?.trim() || "Completed patient sessions"
+  const fileName = options.fileName?.trim() || title
+  const generatedAt = new Date().toLocaleString("en-PH", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  })
+
+  const signatureCell = (dataUrl?: string, label = "Signature"): string => {
+    const src = safeSignatureImage(dataUrl)
+    if (!src) return `<div class="signature-missing">No signature</div>`
+    return `<img src="${src}" alt="${escapeHtml(label)}" class="signature-image" />`
+  }
+
+  const sessionDate = (card: EncounterTicketPdfCard): string => {
+    const primary = card.attendedAt || card.signedOffAt
+    const secondary = card.signedOffAt && card.signedOffAt !== card.attendedAt
+      ? `<div class="date-sub">Out: ${escapeHtml(formatDateTime(card.signedOffAt))}</div>`
+      : ""
+    return `
+      <div class="date-main">${escapeHtml(formatDateTime(primary))}</div>
+      ${secondary}
+    `
+  }
+
+  const statusLabel = (card: EncounterTicketPdfCard): string =>
+    card.attendanceStatus === "Attended" ? "Completed" : escapeHtml(card.attendanceStatus || "Pending")
+
+  const rows = cards.map(card => `
+    <tr>
+      <td>
+        <div class="cell-strong">${escapeHtml(card.patientName)}</div>
+        <div class="cell-sub">${escapeHtml(String(card.appointmentId ?? card.slipNumber ?? ""))}</div>
+      </td>
+      <td>${sessionDate(card)}</td>
+      <td>
+        <div class="cell-strong">${escapeHtml(card.providerName || "Unassigned")}</div>
+      </td>
+      <td>${signatureCell(card.ptSignatureDataUrl, "PT Signature")}</td>
+      <td>${signatureCell(card.signatureDataUrl, "Patient Signature")}</td>
+      <td><span class="status-pill">${statusLabel(card)}</span></td>
+    </tr>
+  `).join("")
+
+  const html = `
+    <!doctype html>
+    <html>
+      <head>
+        <title>${escapeHtml(fileName)}</title>
+        <meta charset="utf-8" />
+        <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Canva+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+        <style>
+          @page { size: A4 landscape; margin: 10mm; }
+          * {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          html, body {
+            margin: 0;
+            padding: 0;
+            font-family: "Canva Sans", "Segoe UI", Tahoma, Arial, sans-serif;
+            color: #1f2937;
+            background: #f5f5f5;
+          }
+          body { padding: 10px; }
+          .invoice-sheet {
+            background: #ffffff;
+            width: 100%;
+            max-width: 297mm;
+            min-height: 210mm;
+            margin: 0 auto;
+            border: 1px solid #d1d5db;
+            padding: 12px 16px 10px;
+          }
+          .top {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 8px;
+          }
+          .logo {
+            max-height: 60px;
+            width: auto;
+          }
+          .invoice-title {
+            text-align: center;
+            margin: 4px 0 4px;
+            font-size: 24px;
+            letter-spacing: 0.05em;
+            font-weight: 800;
+            color: #111827;
+            font-family: "Montserrat", sans-serif;
+          }
+          .invoice-title span {
+            text-decoration: underline;
+            text-decoration-thickness: 1.5px;
+          }
+          .meta-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 2px 8px;
+            font-size: 12px;
+            padding-top: 6px;
+            font-family: "Montserrat", sans-serif;
+            font-weight: 600;
+          }
+          .meta-grid strong {
+            white-space: nowrap;
+            font-weight: 700;
+          }
+          .summary-box {
+            margin-top: 8px;
+            border: 2px solid #d31d6e;
+            padding: 10px;
+            background: #fef5f9;
+            font-size: 12px;
+            line-height: 1.5;
+          }
+          .summary-box strong {
+            font-family: "Montserrat", sans-serif;
+          }
+          .divider {
+            border-top: 3px solid #d31d6e;
+            margin-top: 8px;
+            margin-bottom: 6px;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 6px;
+            table-layout: fixed;
+            font-size: 11px;
+            font-family: "Canva Sans", sans-serif;
+          }
+          th, td {
+            padding: 5px 6px;
+            vertical-align: middle;
+            border-bottom: 1px solid #e5e7eb;
+          }
+          th {
+            text-align: left;
+            font-weight: 700;
+            font-family: "Montserrat", sans-serif;
+            background: #f3f4f6;
+            border-bottom: 2px solid #d31d6e;
+          }
+          th:nth-child(1) { width: 20%; }
+          th:nth-child(2) { width: 19%; }
+          th:nth-child(3) { width: 17%; }
+          th:nth-child(4) { width: 15%; }
+          th:nth-child(5) { width: 15%; }
+          th:nth-child(6) { width: 14%; }
+          tr { break-inside: avoid; page-break-inside: avoid; }
+          .cell-strong { font-weight: 700; line-height: 1.25; }
+          .cell-sub, .date-sub {
+            margin-top: 3px;
+            color: #475569;
+            font-size: 10px;
+          }
+          .date-main {
+            font-weight: 700;
+            line-height: 1.3;
+          }
+          .signature-image {
+            display: block;
+            width: 100%;
+            height: 46px;
+            object-fit: contain;
+            background: #ffffff;
+          }
+          .signature-missing {
+            display: grid;
+            place-items: center;
+            height: 46px;
+            border: 1px dashed #cbd5e1;
+            color: #94a3b8;
+            font-size: 10px;
+          }
+          .status-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 92px;
+            border-radius: 999px;
+            background: #dcfce7;
+            color: #166534;
+            padding: 5px 9px;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+          }
+          .bottom {
+            margin-top: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          }
+          .payment-box {
+            width: 540px;
+            padding: 8px;
+            min-height: 80px;
+            font-size: 12px;
+            font-family: "Canva Sans", sans-serif;
+          }
+          .payment-box h3 {
+            margin: 0 0 6px;
+            font-size: 18px;
+            font-weight: 800;
+            font-family: "Montserrat", sans-serif;
+          }
+          .approval {
+            width: 240px;
+            text-align: center;
+            padding-top: 8px;
+            font-size: 11px;
+            font-family: "Canva Sans", sans-serif;
+          }
+          .approval .name {
+            margin-top: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 11px;
+            font-family: "Montserrat", sans-serif;
+          }
+          .approval .title { font-size: 10px; }
+          .approval .signed {
+            margin-top: 6px;
+            font-size: 10px;
+          }
+          .footer {
+            margin-top: 8px;
+            background: #13b7de;
+            background-color: #13b7de;
+            color: #0f172a;
+            font-size: 11px;
+            padding: 4px 6px;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 6px;
+            font-family: "Montserrat", sans-serif;
+            font-weight: 600;
+          }
+          .footer span {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          @media print {
+            body {
+              background: #ffffff;
+              padding: 0;
+            }
+            .invoice-sheet { border: none; }
+            .footer {
+              background: #13b7de !important;
+              background-color: #13b7de !important;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <section class="invoice-sheet">
+          <div class="top">
+            <div>
+              <img class="logo" src="/app-logo.png" alt="PhysioAve" />
+              <h1 class="invoice-title"><span>${escapeHtml(title)}</span></h1>
+            </div>
+            <div class="meta-grid">
+              <strong>GENERATED:</strong><span>${escapeHtml(generatedAt)}</span>
+              <strong>RECORD COUNT:</strong><span>${cards.length}</span>
+            </div>
+          </div>
+
+          <div class="summary-box">
+            <strong>Document:</strong> ${escapeHtml(subtitle)}
+          </div>
+
+          <div class="divider"></div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Patient Name</th>
+                <th>Date of Session</th>
+                <th>PT Name</th>
+                <th>PT Signature</th>
+                <th>Patient Signature</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+
+          <div class="divider"></div>
+
+          <div class="bottom">
+            <section class="payment-box">
+              <h3>ATTENDANCE DETAILS</h3>
+              <div><strong>Total Completed Sessions:</strong> ${cards.length}</div>
+              <div><strong>Document Type:</strong> Attendance & Treatment Record</div>
+            </section>
+
+            <section class="approval">
+              <div><strong>Approved By:</strong></div>
+              <div class="name">RENALOU B. CORDOVA, PTRP, UK-PT</div>
+              <div class="title">Chief Operations Officer</div>
+              <div class="signed"><strong>Date Signed:</strong> ${escapeHtml(new Date().toLocaleDateString("en-PH"))}</div>
+            </section>
+          </div>
+
+          <footer class="footer">
+            <span>${WEBSITE_LABEL}</span>
+            <span>${PHONE_LABEL}</span>
+            <span>${EMAIL_LABEL}</span>
+          </footer>
+        </section>
       </body>
     </html>
   `

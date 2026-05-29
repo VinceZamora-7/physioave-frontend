@@ -13,14 +13,41 @@
             </div>
             <p class="m-0 text-sm text-[rgb(var(--app-fg))]/60">Export patient documents or review LGU appointment, package, and claim records.</p>
           </div>
-
-          <div class="flex flex-wrap gap-2">
-            <Button label="Invoices" icon="pi pi-file-pdf" size="small" outlined @click="$emit('open-invoice-session-picker')" />
-            <!-- <Button label="Billing Summary" icon="pi pi-file-pdf" size="small" outlined @click="$emit('export-patient-billing-summary')" /> -->
-            <Button label="SOA" icon="pi pi-file" size="small" outlined @click="$emit('open-patient-soa-picker')" />
-            <Button label="LGU Details" icon="pi pi-id-card" size="small" outlined @click="$emit('export-patient-lgu-details')" />
-          </div>
         </div>
+
+<div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+  <div
+    v-for="printable in lguPrintables"
+    :key="printable.title"
+    class="group flex h-full flex-col rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 transition hover:-translate-y-0.5 hover:shadow-sm"
+  >
+    <div class="flex flex-1 items-start gap-3">
+      <span
+        class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-700 dark:text-sky-300"
+      >
+        <i :class="printable.icon" class="text-base" />
+      </span>
+
+      <div class="min-w-0 flex-1">
+        <h4 class="m-0 text-sm font-bold text-[rgb(var(--app-fg))]">
+          {{ printable.title }}
+        </h4>
+
+      </div>
+    </div>
+
+    <div class="mt-4 border-t border-[rgb(var(--app-border))] pt-3">
+      <Button
+        :label="printable.buttonLabel"
+        icon="pi pi-print"
+        size="small"
+        outlined
+        class="w-full justify-center"
+        @click="printPrintable(printable.event)"
+      />
+    </div>
+  </div>
+</div>
       </section>
 
       <section class="space-y-3">
@@ -172,14 +199,50 @@ const props = defineProps<{
 
 const visibleModel = defineModel<boolean>("visible", { required: true })
 
-defineEmits<{
+const emit = defineEmits<{
   "open-invoice-session-picker": []
   "export-patient-billing-summary": []
+  "print-attendance-record": []
   "open-patient-soa-picker": []
   "export-patient-lgu-details": []
   "create-claims": []
   "download-claim-pdf": [billingId: number]
 }>()
+
+type LguPrintableEvent = "print-attendance-record" | "open-patient-soa-picker" | "export-patient-lgu-details"
+
+const lguPrintables = [
+  {
+    title: "Patient LGU Profile",
+    buttonLabel: "Print Patient Profile",
+    icon: "pi pi-id-card",
+    event: "export-patient-lgu-details" as LguPrintableEvent
+  },
+  {
+    title: "Attendance & Treatment Record",
+    buttonLabel: "Print Attendance Record",
+    icon: "pi pi-calendar-clock",
+    event: "print-attendance-record" as LguPrintableEvent
+  },
+  {
+    title: "LGU Billing Statement",
+    buttonLabel: "Print Billing Statement",
+    icon: "pi pi-file-pdf",
+    event: "open-patient-soa-picker" as LguPrintableEvent
+  }
+]
+
+const printPrintable = (event: LguPrintableEvent): void => {
+  if (event === "print-attendance-record") {
+    emit("print-attendance-record")
+    return
+  }
+  if (event === "open-patient-soa-picker") {
+    emit("open-patient-soa-picker")
+    return
+  }
+  emit("export-patient-lgu-details")
+}
 
 const selectedPatientStatus = computed(() =>
   props.selectedPatientDetail?.package_availments[0]?.status

@@ -162,6 +162,20 @@
             </p>
           </div>
 
+          <div v-if="isHmoBilling" class="rounded-2xl border border-white/50 bg-white/60 px-3 py-3 dark:border-white/10 dark:bg-white/10">
+            <p class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              LOA Number
+            </p>
+            <InputText v-model="loaNumberModel" fluid placeholder="Can be added later" :disabled="isEncounterTicketSaving" />
+          </div>
+
+          <div v-if="isHmoBilling" class="rounded-2xl border border-white/50 bg-white/60 px-3 py-3 dark:border-white/10 dark:bg-white/10">
+            <p class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              LOA / Invoice Date
+            </p>
+            <InputText v-model="loaDateModel" type="date" fluid :disabled="isEncounterTicketSaving" />
+          </div>
+
           <div class="rounded-2xl border border-white/50 bg-white/60 px-3 py-3 dark:border-white/10 dark:bg-white/10 md:col-span-2">
             <p class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
               Billing Package Link
@@ -205,10 +219,17 @@
         </div>
 
         <div
-          v-if="isSelectedEncounterTicketLocked"
+          v-if="isSelectedEncounterTicketLocked && !isHmoBilling"
           class="mt-3 rounded-2xl border border-slate-300 bg-slate-50 px-3 py-3 text-sm text-slate-800 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
         >
           This signed ticket is locked as a permanent billing record and can no longer be changed.
+        </div>
+
+        <div
+          v-else-if="isSelectedEncounterTicketLocked && isHmoBilling"
+          class="mt-3 rounded-2xl border border-slate-300 bg-slate-50 px-3 py-3 text-sm text-slate-800 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
+        >
+          This signed ticket is locked. HMO LOA details can still be updated for invoice dating.
         </div>
       </section>
 
@@ -332,6 +353,17 @@
           class="w-full sm:w-auto"
           @click="emit('submit')"
         />
+
+        <Button
+          v-else-if="isHmoBilling"
+          label="Save LOA Details"
+          icon="pi pi-save"
+          :loading="isEncounterTicketSaving"
+          :disabled="!loaNumberModel || !loaDateModel || isEncounterTicketSaving"
+          :pt="ptPrimaryBtn"
+          class="w-full sm:w-auto"
+          @click="emit('submit')"
+        />
       </div>
     </template>
   </Dialog>
@@ -341,15 +373,20 @@
 import { computed } from "vue"
 import Button from "primevue/button"
 import Dialog from "primevue/dialog"
+import InputText from "primevue/inputtext"
 import PatientSignaturePad from "@/features/appointments/components/PatientSignaturePad.vue"
 
 interface AppointmentDetail {
   starts_at: string
   doctor_name?: string
+  billing_type?: string
+  hmo_loa_number?: string
+  hmo_loa_date?: string
 }
 
 interface EncounterTicketBillingSnapshot {
   session_sequence_label?: string
+  billing_type?: string
 }
 
 interface EncounterTicket {
@@ -383,6 +420,8 @@ const props = defineProps<{
 
   isSelectedEncounterTicketLocked: boolean
   isEncounterTicketSaving: boolean
+  loaNumber: string
+  loaDate: string
 
   ptPrimaryBtn?: PassThroughValue
 
@@ -392,6 +431,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   "update:visible": [value: boolean]
   "update:signatureDataUrl": [value: string]
+  "update:loaNumber": [value: string]
+  "update:loaDate": [value: string]
   submit: []
 }>()
 
@@ -399,4 +440,21 @@ const signatureProxy = computed({
   get: () => props.signatureDataUrl,
   set: (value: string) => emit("update:signatureDataUrl", value)
 })
+
+const loaNumberModel = computed({
+  get: () => props.loaNumber,
+  set: (value: string) => emit("update:loaNumber", value)
+})
+
+const loaDateModel = computed({
+  get: () => props.loaDate,
+  set: (value: string) => emit("update:loaDate", value)
+})
+
+const isHmoBilling = computed(() =>
+  String(props.selectedDetail?.billing_type ?? props.selectedEncounterTicket?.billing_snapshot?.billing_type ?? "")
+    .trim()
+    .toUpperCase()
+    .includes("HMO")
+)
 </script>
