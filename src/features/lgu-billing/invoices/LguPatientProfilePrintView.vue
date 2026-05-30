@@ -293,7 +293,7 @@ const profileStatusHeading = computed(() => {
 })
 
 const referralFormNo = computed(() =>
-  billingDetail.value?.lgu_reference_label ||
+  billingDetail.value?.lgu_patient_referral_form_no ||
   lguSponsor.value?.referral_form_no ||
   "N/A"
 )
