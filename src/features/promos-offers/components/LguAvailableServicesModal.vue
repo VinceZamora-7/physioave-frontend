@@ -147,10 +147,20 @@
             :loading="importLoading"
             @click="loadGlobalImportRows"
           />
+          <Button
+            label="Import Selected"
+            icon="pi pi-check"
+            severity="success"
+            outlined
+            :disabled="!selectedGlobalImportRows.length || bulkImportingGlobal"
+            :loading="bulkImportingGlobal"
+            @click="importSelectedGlobalServices"
+          />
         </div>
 
         <DataTable
           :value="globalImportRows"
+            v-model:selection="selectedGlobalImportRows"
           dataKey="id"
           paginator
           :rows="8"
@@ -160,6 +170,7 @@
           <template #empty>
             <span class="text-sm opacity-70">No global services available.</span>
           </template>
+            <Column selectionMode="multiple" headerStyle="width: 3rem" style="width: 3rem" />
           <Column field="name" header="Service Name" />
           <Column field="price" header="Price" style="width: 130px">
             <template #body="{data}">{{ asCurrency(data.price) }}</template>
@@ -376,8 +387,10 @@ const typeOptions = [
 const importDialogVisible = ref(false)
 const importType = ref<ImportableServiceType>("machine")
 const importLoading = ref(false)
+const bulkImportingGlobal = ref(false)
 const importingGlobalId = ref<number | null>(null)
 const globalImportRows = ref<GlobalImportRow[]>([])
+const selectedGlobalImportRows = ref<GlobalImportRow[]>([])
 
 const normalizeServiceName = (value: string) => value.trim().toLowerCase()
 
@@ -477,8 +490,10 @@ const loadGlobalImportRows = async () => {
       start: row.start == null ? null : Number(row.start),
       label: row.label ?? null,
     }))
+    selectedGlobalImportRows.value = []
   } catch {
     globalImportRows.value = []
+    selectedGlobalImportRows.value = []
     errorToast(toast, "Failed to load global services")
   } finally {
     importLoading.value = false
@@ -512,8 +527,39 @@ const importGlobalService = async (row: GlobalImportRow) => {
   }
 }
 
+const importSelectedGlobalServices = async () => {
+  const rowsToImport = selectedGlobalImportRows.value.filter(canImportGlobalService)
+
+  if (!rowsToImport.length) {
+    errorToast(toast, "Select at least one importable service")
+    return
+  }
+
+  bulkImportingGlobal.value = true
+  try {
+    let importedCount = 0
+
+    for (const row of rowsToImport) {
+      await catalog.withRefreshRetry(() =>
+        createLguLocalService(importType.value, buildGlobalImportPayload(row))
+      )
+      importedCount += 1
+    }
+
+    successToast(toast, `${importedCount} global service${importedCount === 1 ? "" : "s"} imported to LGU`)
+    selectedGlobalImportRows.value = []
+    await catalog.load()
+    await loadGlobalImportRows()
+  } catch {
+    errorToast(toast, "Failed to import selected global services")
+  } finally {
+    bulkImportingGlobal.value = false
+  }
+}
+
 watch(importType, () => {
   if (importDialogVisible.value) {
+    selectedGlobalImportRows.value = []
     void loadGlobalImportRows()
   }
 })

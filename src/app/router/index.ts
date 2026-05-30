@@ -26,7 +26,43 @@ const router = createRouter({
     {
       path: "/soa/:payer",
       name: "soa-print",
-      component: () => import("@/features/promos-offers/pages/SoaPrintView.vue"),
+      component: () => import("@/features/lgu-billing/invoices/LguGeneralSoaPrintView.vue"),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: "/hmo/invoices/soa",
+      name: "hmo-soa-print",
+      component: () => import("@/features/hmo-billing/invoices/HmoGeneralSoaPrintView.vue"),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: "/hmo/invoices/patient-profile",
+      name: "hmo-patient-profile-print",
+      component: () => import("@/features/hmo-billing/invoices/HmoPatientProfilePrintView.vue"),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: "/hmo/invoices/patient-billing-summary",
+      name: "hmo-patient-billing-summary-print",
+      component: () => import("@/features/hmo-billing/invoices/HmoPatientBillingSummaryPrintView.vue"),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: "/lgu/invoices/patient-profile",
+      name: "lgu-patient-profile-print",
+      component: () => import("@/features/lgu-billing/invoices/LguPatientProfilePrintView.vue"),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: "/lgu/invoices/patient-billing-summary",
+      name: "lgu-patient-billing-summary-print",
+      component: () => import("@/features/lgu-billing/invoices/LguPatientBillingSummaryPrintView.vue"),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: "/lgu/invoices/attendance-treatment",
+      name: "lgu-attendance-treatment-print",
+      component: () => import("@/features/lgu-billing/invoices/LguAttendanceTreatmentRecordPrintView.vue"),
       meta: { requiresAuth: true }
     },
     {

@@ -428,7 +428,7 @@ export const billingPhase1Service = {
     return data
   },
   async getHmoSoa(params: HmoSoaParams): Promise<HmoRecentHistoryItem[] | undefined> {
-    const { data } = await pamsAPI.get<HmoRecentHistoryItem[]>("/hmos/invoices/soa", { params })
+    const { data } = await pamsAPI.get<HmoRecentHistoryItem[]>("/billings/hmo-recent-history", { params })
     return data
   },
   async getLguSoa(params: { from: string; to: string; limit?: number; program_id?: number }): Promise<LguDashboardHistoryItem[] | undefined> {

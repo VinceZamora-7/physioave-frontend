@@ -378,6 +378,7 @@ import {authMeService, type AuthMe} from "@/services/auth-me.service"
 import {getApiErrorMessage} from "@/utils/actionable-error.util"
 import {errorToast, successToast} from "@/utils/toast.util"
 import {ptOutlinedBtn, ptPrimaryBtn} from "@/features/shared/table-header.styles"
+import { isPtAppointmentProvider } from "@/utils/appointment-provider.util"
 
 const toast = useToast()
 
@@ -415,7 +416,7 @@ type CalendarDayStatus =
   | "multi_session_billed"
   | "finished_billed"
 
-const canUseDashboard = computed(() => currentUser.value?.appointment_provider_type === "PHYSICAL_THERAPIST")
+const canUseDashboard = computed(() => isPtAppointmentProvider(currentUser.value))
 const nextAppointment = computed(() => appointments.value[0])
 const selectedPtEncounterTicket = computed(() => selectedPtAppointmentDetail.value?.encounter_ticket)
 const isSelectedPtEncounterTicketLocked = computed(() =>
@@ -540,7 +541,7 @@ const refreshSchedule = async (): Promise<void> => {
       return
     }
 
-    if (currentUser.value.appointment_provider_type !== "PHYSICAL_THERAPIST") {
+    if (!isPtAppointmentProvider(currentUser.value)) {
       appointments.value = []
       return
     }

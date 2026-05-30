@@ -417,7 +417,7 @@ type HmoPrintableLine = {
   referenceNumber?: string
 }
 
-type HmoPrintableEvent = "print-individual-billing" | "print-hmo-invoice" | "print-attendance-record" | "print-billing-statement"
+type HmoPrintableEvent = "print-individual-billing" | "print-hmo-invoice" | "print-billing-statement"
 
 const hmoPrintables = [
   {
@@ -431,12 +431,6 @@ const hmoPrintables = [
     buttonLabel: "Print Invoice",
     icon: "pi pi-receipt",
     event: "print-hmo-invoice" as HmoPrintableEvent
-  },
-  {
-    title: "Attendance & Treatment Record",
-    buttonLabel: "Print Attendance Record",
-    icon: "pi pi-calendar-clock",
-    event: "print-attendance-record" as HmoPrintableEvent
   },
   {
     title: "HMO Billing Statement",

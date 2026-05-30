@@ -14,6 +14,9 @@ export interface AuthMe {
   permissions: string[]
   clinic_id: number | null
   can_view_all_branches: boolean
+  secondary_role_id?: number | null
+  secondary_role_name?: string | null
+  secondary_appointment_provider_type?: "NONE" | "DOCTOR_CONSULTANT" | "PHYSICAL_THERAPIST" | "PT_ASSISTANT" | "INTERN" | null
 }
 
 interface AuthMeService {

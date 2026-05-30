@@ -444,6 +444,7 @@ import type { Staff } from "@/features/staff/types/staff"
 import { errorToast, successToast } from "@/utils/toast.util"
 import { ptInputText, ptOutlinedBtn, ptPrimaryBtn, ptSelect } from "@/features/shared/table-header.styles"
 import { clinicStore } from "@/stores/clinic.store"
+import { isPtAppointmentProvider } from "@/utils/appointment-provider.util"
 
 type StatusFilterValue = "ACTIVE" | "INACTIVE"
 type SpecialtyDisplayFilter = "ACTIVE" | "ALL"
@@ -542,10 +543,7 @@ const canSeeOperationsSetup = computed(() =>
 const canSeeBranchScopeSection = computed(() =>
   canSeePtDirectorySection.value || canSeeTreatmentAreasSection.value
 )
-const isMobileCalendarEligibleRole = computed(() => {
-  const providerType = String(currentUser.value?.appointment_provider_type ?? "").trim().toUpperCase()
-  return providerType === "PHYSICAL_THERAPIST" || providerType === "PT_ASSISTANT" || providerType === "INTERN"
-})
+const isMobileCalendarEligibleRole = computed(() => isPtAppointmentProvider(currentUser.value))
 const canSeeMobileCalendarSection = computed(() =>
   isMobileCalendarEligibleRole.value
 )
