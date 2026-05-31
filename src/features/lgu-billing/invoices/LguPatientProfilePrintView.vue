@@ -299,7 +299,7 @@ const referralFormNo = computed(() =>
 )
 
 const dateIssued = computed(() =>
-  formatDateTime(
+  formatDate(
     billingDetail.value?.lgu_date_issued ||
     lguSponsor.value?.referral_issued_date
   )

@@ -1,7 +1,7 @@
 <template>
   <LguInvoiceLayout
     title="PATIENT BILLING SUMMARY"
-    :subtitle="`Static printable record for ${patientName}`"
+    :subtitle="`BILLING SUMMARY record for ${patientName}`"
     :has-error="!!error"
   >
     <template #meta>

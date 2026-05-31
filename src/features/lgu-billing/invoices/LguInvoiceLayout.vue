@@ -128,6 +128,7 @@ const goBack = (): void => router.back()
   font-size: 12px;
   line-height: 1.45;
   color: #374151;
+  text-transform: uppercase;
 }
 
 .lgu-invoice-meta-grid {

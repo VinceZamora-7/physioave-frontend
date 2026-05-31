@@ -68,7 +68,7 @@
           <thead>
             <tr>
               <th class="w-[80px] text-center">ITEM No.</th>
-              <th class="w-[120px] text-center">TREATMENT DATE</th>
+              <th class="w-[120px] text-center">LOA Date Issued</th>
               <th class="text-left">SERVICE NAME</th>
               <th class="w-[140px] text-center">REFERENCE NO.</th>
               <th class="w-[140px] text-center">BILLING STATUS</th>

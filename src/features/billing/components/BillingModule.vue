@@ -2521,7 +2521,8 @@ const parseRouteQueryId = (value: unknown): number|undefined => {
 
 const routeBillingContextKey = computed(() =>
   [getRouteQueryValue(route.query.patientId) ?? "", getRouteQueryValue(route.query.appointmentId) ?? "",
-   getRouteQueryValue(route.query.billingId) ?? "", getRouteQueryValue(route.query.openMode) ?? ""].join("|")
+  getRouteQueryValue(route.query.billingId) ?? "", getRouteQueryValue(route.query.openMode) ?? "",
+  getRouteQueryValue(route.query.billing_type) ?? ""].join("|")
 )
 
 const derivePaymentType  = (billing: BillingListItem): string => {
@@ -3747,6 +3748,12 @@ const applyRouteBillingContext = async (): Promise<void> => {
   const appointmentId= parseRouteQueryId(route.query.appointmentId)
   const billingId    = parseRouteQueryId(route.query.billingId)
   const openMode     = getRouteQueryValue(route.query.openMode)
+  const billingType  = normalizeBillingTypeValue(getRouteQueryValue(route.query.billing_type))
+
+  if (billingType) {
+    form.value.billing_type = billingType
+  }
+
   billingContextAppointmentId.value = appointmentId ?? undefined
   overlayEntryMode.value = openMode === "tender" ? "tender" : openMode === "edit" ? "edit" : "detail"
   if (!patientId && !appointmentId && !billingId) {
