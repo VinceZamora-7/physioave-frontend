@@ -48,6 +48,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: "/hmo/invoices/attendance-treatment",
+      name: "hmo-attendance-treatment-print",
+      component: () => import("@/features/hmo-billing/invoices/HmoAttendanceTreatmentRecordPrintView.vue"),
+      meta: { requiresAuth: true }
+    },
+    {
       path: "/lgu/invoices/patient-profile",
       name: "lgu-patient-profile-print",
       component: () => import("@/features/lgu-billing/invoices/LguPatientProfilePrintView.vue"),
