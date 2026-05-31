@@ -5,10 +5,12 @@
     :has-error="!!error"
   >
     <template #meta>
-      <strong>Patient:</strong><span>{{ patientName }}</span>
-      <strong>Patient ID:</strong><span>{{ patientIdLabel }}</span>
-      <strong>HMO:</strong><span>{{ hmoLabel }}</span>
+      <strong>Patient's Name:</strong><span>{{ patientName }}</span>
+      <strong>Address:</strong><span>{{ patientAddress }}</span>
+      <strong>Age: 	</strong><span>{{ patientAge }}</span>
       <strong>Period:</strong><span>{{ periodLabel }}</span>
+
+
     </template>
 
     <template #toolbar>
@@ -31,30 +33,30 @@
               </div>
 
               <div class="profile-row">
-                <span class="profile-label">Patient ID:</span>
-                <span class="profile-value">{{ patientIdLabel }}</span>
+                <span class="profile-label">Address:</span>
+                <span class="profile-value">{{ patientAddress }}</span>
               </div>
 
               <div class="profile-row">
-                <span class="profile-label">HMO:</span>
-                <span class="profile-value">{{ hmoLabel }}</span>
+                <span class="profile-label">Age: 	</span>
+                <span class="profile-value">{{ patientAge }}</span>
               </div>
             </div>
 
             <div class="profile-group">
               <div class="profile-row profile-row--wide-label">
-                <span class="profile-label">Billing Status:</span>
-                <span class="profile-value">{{ billingStatus }}</span>
+                <span class="profile-label">Physical Therapist:</span>
+                <span class="profile-value">{{ physicalTherapist }}</span>
               </div>
 
               <div class="profile-row profile-row--wide-label">
-                <span class="profile-label">Billing Rows:</span>
-                <span class="profile-value">{{ rows.length }}</span>
+                <span class="profile-label">Doctor:</span>
+                <span class="profile-value">{{ doctor }}</span>
               </div>
 
               <div class="profile-row profile-row--wide-label">
-                <span class="profile-label">Grand Total:</span>
-                <span class="profile-value">{{ formatCurrency(grandTotal) }}</span>
+                <span class="profile-label">Diagnosis:</span>
+                <span class="profile-value">{{ diagnosis }}</span>
               </div>
             </div>
           </div>
@@ -167,6 +169,7 @@ import { computed, onMounted, ref } from "vue"
 import { useRoute } from "vue-router"
 import Button from "primevue/button"
 import { billingPhase1Service, type BillingListItem } from "@/features/billing/api/billing-phase1.service"
+import { patientEvaluationVisitLogService, type PatientEvaluationVisitLogItem } from "@/features/patients/api/patient-evaluation-visit-log.service"
 import { patientHMOInformationService } from "@/services/patient-hmo-information.service"
 import type { PatientHMOInformation } from "@/models/hmo-information"
 import HmoInvoiceLayout from "./HmoInvoiceLayout.vue"
@@ -197,6 +200,8 @@ const { printPage, goBack } = useHmoInvoicePrintActions()
 const rows = ref<BillingSummaryRow[]>([])
 const error = ref("")
 const sponsorInfo = ref<PatientHMOInformation | null>(null)
+const billingDetail = ref<BillingListItem | null>(null)
+const evaluationVisitLogs = ref<PatientEvaluationVisitLogItem[]>([])
 
 const patientId = computed(() => {
   const parsed = Number(String(route.query.patient_id ?? "").trim())
@@ -204,7 +209,8 @@ const patientId = computed(() => {
 })
 
 const patientName = computed(() => String(route.query.patient_name ?? "Patient").trim() || "Patient")
-const patientIdLabel = computed(() => patientId.value > 0 ? String(patientId.value) : "N/A")
+const patientAddress = computed(() => billingDetail.value?.patient_address?.trim() || "N/A")
+const patientAge = computed(() => billingDetail.value?.patient_age?.trim() || "N/A")
 const sponsorRecord = computed(() => sponsorInfo.value)
 const hmoLabel = computed(() =>
   sponsorRecord.value?.company_name?.trim() ||
@@ -212,10 +218,15 @@ const hmoLabel = computed(() =>
   String(route.query.hmo_name ?? "HMO").trim() ||
   "HMO"
 )
-const sponsorBillingTo = computed(() => sponsorRecord.value?.company_name?.trim() || hmoLabel.value)
 const sponsorHmoType = computed(() => sponsorRecord.value?.hmo_type_name?.trim() || "N/A")
 const sponsorCompanyName = computed(() => sponsorRecord.value?.company_name?.trim() || hmoLabel.value)
 const sponsorApprovalNo = computed(() => sponsorRecord.value?.approval_code?.trim() || "N/A")
+const dateSigned = computed(() => {
+  const dateValue = billingDetail.value?.hmo_loa_date?.trim() || sponsorInfo.value?.validity_start_date?.trim() || ""
+  if (!dateValue) return "N/A"
+  const parsed = new Date(dateValue)
+  return Number.isNaN(parsed.getTime()) ? dateValue : parsed.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })
+})
 const dateFrom = computed(() => String(route.query.from ?? "").trim())
 const dateTo = computed(() => String(route.query.to ?? "").trim())
 const periodLabel = computed(() => {
@@ -224,8 +235,115 @@ const periodLabel = computed(() => {
   return dateFrom.value || dateTo.value || "-"
 })
 
-const billingStatus = computed(() => rows.value[0]?.billingStatus || "N/A")
 const grandTotal = computed(() => rows.value.reduce((sum, row) => sum + Number(row.unitTotal ?? 0), 0))
+
+const physicalTherapist = computed(() => billingDetail.value?.physical_therapist?.trim() || "N/A")
+const doctor = computed(() => billingDetail.value?.doctor?.trim() || "N/A")
+
+const formatDiagnosis = (value?: string | null): string => {
+  const diagnosis = String(value ?? "").trim()
+  if (!diagnosis) return "N/A"
+
+  const markerMatch = diagnosis.match(/^\(?\s*(L|R|B|LEFT|RIGHT|BOTH|BILATERAL)\s*\)?[\s,:-]*(.*)$/i)
+  if (!markerMatch) return diagnosis
+
+  const marker = markerMatch[1].toUpperCase()
+  const laterality = marker === "L" || marker === "LEFT"
+    ? "L"
+    : marker === "R" || marker === "RIGHT"
+      ? "R"
+      : marker === "B" || marker === "BOTH" || marker === "BILATERAL"
+        ? "B"
+        : ""
+  const name = markerMatch[2]?.trim() || diagnosis
+  return laterality ? `${name} (${laterality})` : name
+}
+
+const latestEvaluationVisitLog = computed(() => {
+  return [...evaluationVisitLogs.value].sort((left, right) => {
+    const leftTime = new Date(`${left.visit_date}T00:00:00`).getTime()
+    const rightTime = new Date(`${right.visit_date}T00:00:00`).getTime()
+    if (leftTime !== rightTime) return rightTime - leftTime
+    return Number(right.id) - Number(left.id)
+  })[0] ?? null
+})
+
+const diagnosisSource = computed(() => {
+  const billingDiagnosis = String(billingDetail.value?.diagnosis ?? "").trim()
+  if (billingDiagnosis) return billingDiagnosis
+
+  const visitDiagnosis = String(latestEvaluationVisitLog.value?.doctor_diagnosis ?? "").trim()
+  const visitLaterality = String(latestEvaluationVisitLog.value?.doctor_diagnosis_laterality ?? "").trim()
+  if (!visitDiagnosis) return ""
+
+  return visitLaterality ? `(${visitLaterality}) ${visitDiagnosis}` : visitDiagnosis
+})
+
+const diagnosisParts = computed(() => {
+  const value = String(diagnosisSource.value ?? "").trim()
+  if (!value) return { laterality: "N/A", bodyArea: "N/A" }
+
+  const markerMatch = value.match(/^\(?\s*(L|R|B|LEFT|RIGHT|BOTH|BILATERAL)\s*\)?[\s,:-]*(.*)$/i)
+  if (markerMatch) {
+    const marker = markerMatch[1].toUpperCase()
+    const laterality = marker === "L" || marker === "LEFT"
+      ? "Left"
+      : marker === "R" || marker === "RIGHT"
+        ? "Right"
+        : "Both"
+    return {
+      laterality,
+      bodyArea: markerMatch[2]?.trim() || "N/A"
+    }
+  }
+
+  const wordMatch = value.match(/^(LEFT|RIGHT|BOTH|BILATERAL)\b[\s,;:-]*(.*)$/i)
+  if (wordMatch) {
+    const marker = wordMatch[1].toUpperCase()
+    return {
+      laterality: marker === "LEFT" ? "Left" : marker === "RIGHT" ? "Right" : "Both",
+      bodyArea: wordMatch[2]?.trim() || "N/A"
+    }
+  }
+
+  return { laterality: "N/A", bodyArea: value }
+})
+
+const normalizeBodyArea = (value?: string | null): string => {
+  const text = String(value ?? "").trim()
+  if (!text) return "N/A"
+
+  const withoutParentheses = text.replace(/\s*\([^)]*\)/g, "").trim()
+  if (withoutParentheses) return withoutParentheses
+
+  const suffixMatch = text.match(/^(.*?)[\s,:-]*\(?\s*(L|R|B|LEFT|RIGHT|BOTH|BILATERAL)\s*\)?$/i)
+  if (suffixMatch) {
+    const bodyArea = suffixMatch[1]?.trim()
+    if (bodyArea) return bodyArea
+  }
+
+  const prefixMatch = text.match(/^\(?\s*(L|R|B|LEFT|RIGHT|BOTH|BILATERAL)\s*\)?[\s,:-]*(.*)$/i)
+  if (prefixMatch) {
+    const bodyArea = prefixMatch[2]?.trim()
+    if (bodyArea) return bodyArea
+  }
+
+  return text
+}
+
+const diagnosis = computed(() => {
+  const value = String(diagnosisSource.value ?? "").trim()
+  if (!value) return "N/A"
+
+  if (billingDetail.value?.diagnosis) {
+    return formatDiagnosis(billingDetail.value.diagnosis)
+  }
+
+  const visitDiagnosis = String(latestEvaluationVisitLog.value?.doctor_diagnosis ?? "").trim()
+  if (!visitDiagnosis) return "N/A"
+  const laterality = String(latestEvaluationVisitLog.value?.doctor_diagnosis_laterality ?? "").trim()
+  return laterality ? `${visitDiagnosis} (${laterality})` : visitDiagnosis
+})
 
 const formatCurrency = (value?: number | null): string =>
   Number(value ?? 0).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
@@ -276,8 +394,8 @@ const buildRows = (items: BillingSummarySource[]): BillingSummaryRow[] => {
 
     lineItems.forEach((lineItem, lineIndex) => {
       const quantity = Math.max(1, Number(lineItem.quantity ?? 1))
-      const laterality = String(lineItem.laterality ?? lineItem.laterality_name ?? "N/A")
-      const bodyArea = String(lineItem.body_area ?? lineItem.bodyArea ?? "N/A")
+      const laterality = String(lineItem.laterality ?? lineItem.laterality_name ?? diagnosisParts.value.laterality ?? "N/A")
+      const bodyArea = normalizeBodyArea(String(lineItem.body_area ?? lineItem.bodyArea ?? diagnosisParts.value.bodyArea ?? ""))
       const serviceName = String(lineItem.name ?? item.service_name ?? "HMO Service")
       const baseUnitPrice = Number(lineItem.price ?? lineItem.unitPrice ?? lineItem.unit_price ?? 0)
       const unitPrice = baseUnitPrice
@@ -308,6 +426,7 @@ const load = async (): Promise<void> => {
   error.value = ""
   rows.value = []
   sponsorInfo.value = null
+  billingDetail.value = null
 
   if (!patientId.value) {
     error.value = "Patient ID is required."
@@ -315,7 +434,7 @@ const load = async (): Promise<void> => {
   }
 
   try {
-    const [result, sponsorRecords] = await Promise.all([
+    const [result, sponsorRecords, visitLogs] = await Promise.all([
       billingPhase1Service.getAll({
         patient_id: patientId.value,
         billing_type: "HMO_BILLING",
@@ -324,10 +443,13 @@ const load = async (): Promise<void> => {
         page: 1,
         size: 5000
       }),
-      patientHMOInformationService.getByPatientId(patientId.value)
+      patientHMOInformationService.getByPatientId(patientId.value),
+      patientEvaluationVisitLogService.getAll(patientId.value)
     ])
 
+    billingDetail.value = (result?.content?.[0] ?? null) as BillingListItem | null
     sponsorInfo.value = sponsorRecords.find(record => record.sponsor_context === "HMO") ?? sponsorRecords[0] ?? null
+    evaluationVisitLogs.value = visitLogs ?? []
     rows.value = buildRows((result?.content ?? []) as BillingSummarySource[])
   } catch (err: unknown) {
     error.value = err instanceof Error ? err.message : "Failed to load HMO billing summary"

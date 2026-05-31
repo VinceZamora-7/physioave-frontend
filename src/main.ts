@@ -10,6 +10,7 @@ import router from "./app/router"
 
 import PrimeVue from 'primevue/config'
 import ConfirmationService from 'primevue/confirmationservice'
+import KeyFilter from 'primevue/keyfilter'
 import Ripple from 'primevue/ripple'
 import ToastService from 'primevue/toastservice'
 import Tooltip from 'primevue/tooltip'
@@ -40,5 +41,6 @@ app.use(VueQueryPlugin)
 
 app.directive('tooltip', Tooltip)
 app.directive('ripple', Ripple)
+app.directive('keyfilter', KeyFilter)
 
 app.mount('#app')

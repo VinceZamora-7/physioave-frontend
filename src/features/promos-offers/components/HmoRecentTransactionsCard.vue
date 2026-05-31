@@ -693,10 +693,23 @@ const refreshPatientBillings = async (): Promise<void> => {
   await loadPatientBillings()
 }
 
-const openHmoSoaDialog = (): void => {
+const openHmoSoaDialog = async (): Promise<void> => {
   const { from, to } = getSelectedMonthRange()
-  soaRange.value = [from, to]
-  soaVisible.value = true
+  const href = router.resolve({
+    name: "hmo-soa-print",
+    query: {
+      hmo_id: selectedHmoId.value ? String(selectedHmoId.value) : undefined,
+      hmo_name: selectedHmoName.value || undefined,
+      from: formatYmd(from),
+      to: formatYmd(to),
+      autoprint: "1"
+    }
+  }).href
+
+  const popup = window.open(href, "_blank")
+  if (!popup || popup.closed) {
+    patientBillingError.value = "Unable to open the HMO SOA print view. Allow pop-ups for this site, then try again."
+  }
 }
 
 const openPatientBillings = async (patient: Patient): Promise<void> => {

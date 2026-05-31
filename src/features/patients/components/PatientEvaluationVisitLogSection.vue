@@ -180,7 +180,7 @@
                   <label class="text-sm font-medium">PT Case Impression</label>
                   <Select
                     v-model="form.pt_case_impression"
-                    :options="normalizedMedicalDiagnosisOptions"
+                    :options="normalizedPTCaseImpressionOptions"
                     editable
                     showClear
                     fluid
@@ -315,6 +315,7 @@ const props = defineProps<{
   patient?: Patient
   medicalCategoryOptions?: string[]
   medicalDiagnosisOptions?: string[]
+  ptCaseImpressionOptions?: string[]
 }>()
 
 const toast = useToast()
@@ -402,6 +403,10 @@ const normalizedMedicalCategoryOptions = computed<string[]>(() => {
 
 const normalizedMedicalDiagnosisOptions = computed<string[]>(() => {
   return Array.from(new Set((props.medicalDiagnosisOptions ?? []).map((item) => String(item).trim()).filter(Boolean)))
+})
+
+const normalizedPTCaseImpressionOptions = computed<string[]>(() => {
+  return Array.from(new Set((props.ptCaseImpressionOptions ?? []).map((item) => String(item).trim()).filter(Boolean)))
 })
 
 const dialogHeader = computed(() => form.value.id ? "Edit Evaluation Visit Log" : "Add Evaluation Visit Log")

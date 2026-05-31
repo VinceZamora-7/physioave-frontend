@@ -232,6 +232,7 @@
             :patient="selectedPatientDetails"
             :medical-category-options="medicalCategoryOptions"
             :medical-diagnosis-options="medicalDiagnosisOptions"
+            :pt-case-impression-options="ptCaseImpressionOptions"
           />
 
           <div class="app-detail-card app-detail-card-primary">
@@ -474,7 +475,7 @@
 
 <script setup lang="ts">
 
-import {computed, defineAsyncComponent, onMounted, ref, useTemplateRef, watch} from "vue";
+import {computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, useTemplateRef, watch} from "vue";
 import {storeToRefs} from "pinia";
 import {useConfirm} from "primevue/useconfirm";
 import {useToast} from "primevue/usetoast";
@@ -537,6 +538,7 @@ import type {
   MedicalHistory,
   MedicalImaging,
   ModeOfReferral,
+  PTCaseImpression,
   ReferralChannel,
   Religion
 } from "@/models/reference.ts";
@@ -701,6 +703,7 @@ const isReligionsLoading = useIsLoading(ReferenceTanstackKey.RELIGIONS)
 const isModeOfReferralsLoading = useIsLoading(ReferenceTanstackKey.MODE_OF_REFERRALS)
 const isMedicalCategoriesLoading = useIsLoading(ReferenceTanstackKey.MEDICAL_CATEGORIES)
 const isMedicalDiagnosesLoading = useIsLoading(ReferenceTanstackKey.MEDICAL_DIAGNOSES)
+const isPTCaseImpressionsLoading = useIsLoading(ReferenceTanstackKey.PT_CASE_IMPRESSIONS)
 const isMedicalHistoriesLoading = useIsLoading(ReferenceTanstackKey.MEDICAL_HISTORIES)
 const isMedicalImagingsLoading = useIsLoading(ReferenceTanstackKey.MEDICAL_IMAGINGS)
 const isHMOTypesLoading = useIsLoading(ReferenceTanstackKey.HMO_TYPES)
@@ -730,6 +733,7 @@ const isLoading = computed<boolean>(() =>
   isModeOfReferralsLoading.value ||
   isMedicalCategoriesLoading.value ||
   isMedicalDiagnosesLoading.value ||
+  isPTCaseImpressionsLoading.value ||
   isMedicalHistoriesLoading.value ||
   isMedicalImagingsLoading.value ||
   isHMOTypesLoading.value ||
@@ -771,8 +775,9 @@ const loadSelectedPatientProfileImage = async (patientId?: number): Promise<void
   }
 }
 
-const onPatientRowClick = (patient: Patient): void => {
+const onPatientRowClick = async (patient: Patient): Promise<void> => {
   selectedPatientDetails.value = patient
+  await ensureDropdownsLoaded()
   patientDetailsVisible.value = true
   void loadSelectedPatientProfileImage(patient.id)
 }
@@ -849,7 +854,7 @@ const tryOpenDrillDownPatient = (): void => {
     : undefined
 
   const target = byId ?? byName ?? content[0]
-  onPatientRowClick(target)
+  void onPatientRowClick(target)
 
   pendingPatientDrillDownId.value = undefined
   pendingPatientDrillDownName.value = undefined
@@ -905,6 +910,7 @@ const regions = ref<Region[]>([])
 
 const medicalCategories = ref<MedicalCategory[]>([])
 const medicalDiagnoses = ref<MedicalDiagnose[]>([])
+const ptCaseImpressions = ref<PTCaseImpression[]>([])
 const medicalHistories = ref<MedicalHistory[]>([])
 const medicalImagings = ref<MedicalImaging[]>([])
 
@@ -914,6 +920,10 @@ const medicalCategoryOptions = computed<string[]>(() => {
 
 const medicalDiagnosisOptions = computed<string[]>(() => {
   return Array.from(new Set((medicalDiagnoses.value ?? []).map((item) => item.name).filter(Boolean))).sort((a, b) => a.localeCompare(b))
+})
+
+const ptCaseImpressionOptions = computed<string[]>(() => {
+  return Array.from(new Set((ptCaseImpressions.value ?? []).map((item) => item.name).filter(Boolean))).sort((a, b) => a.localeCompare(b))
 })
 
 const hmos = ref<Lookup[]>([])
@@ -1269,6 +1279,7 @@ const initializeDropdowns = async (): Promise<void> => {
     fetchedRegions,
     fetchedMedicalCategories,
     fetchedMedicalDiagnoses,
+    fetchedPTCaseImpressions,
     fetchedMedicalHistories,
     fetchedMedicalImagings,
     fetchedHMOTypes
@@ -1290,6 +1301,7 @@ const initializeDropdowns = async (): Promise<void> => {
     philippineLocationTanstackService.getAllRegions(queryClient, regionRequestParams),
     createReferenceQueryService<MedicalCategory>(queryClient, ReferenceTanstackKey.MEDICAL_CATEGORIES, requestParams),
     createReferenceQueryService<MedicalDiagnose>(queryClient, ReferenceTanstackKey.MEDICAL_DIAGNOSES, requestParams),
+    createReferenceQueryService<PTCaseImpression>(queryClient, ReferenceTanstackKey.PT_CASE_IMPRESSIONS, requestParams),
     createReferenceQueryService<MedicalHistory>(queryClient, ReferenceTanstackKey.MEDICAL_HISTORIES, requestParams),
     createReferenceQueryService<MedicalImaging>(queryClient, ReferenceTanstackKey.MEDICAL_IMAGINGS, requestParams),
     createReferenceQueryService<HMOType>(queryClient, ReferenceTanstackKey.HMO_TYPES, requestParams)
@@ -1315,6 +1327,7 @@ const initializeDropdowns = async (): Promise<void> => {
 
   medicalCategories.value = contentOrEmpty(fetchedMedicalCategories)
   medicalDiagnoses.value = contentOrEmpty(fetchedMedicalDiagnoses)
+  ptCaseImpressions.value = contentOrEmpty(fetchedPTCaseImpressions)
   medicalHistories.value = contentOrEmpty(fetchedMedicalHistories)
   medicalImagings.value = contentOrEmpty(fetchedMedicalImagings)
 
@@ -1329,13 +1342,26 @@ const resetQueries = async (): Promise<void> => {
 const dropdownsReady = ref(false)
 const dropdownsLoading = ref(false)
 const ensureDropdownsLoaded = async (): Promise<void> => {
-  if (dropdownsReady.value || dropdownsLoading.value) return
+  if (dropdownsLoading.value) return
   dropdownsLoading.value = true
   try {
     await initializeDropdowns()
     dropdownsReady.value = true
   } finally {
     dropdownsLoading.value = false
+  }
+}
+
+const handleReferenceUpdated = async (event: Event): Promise<void> => {
+  const customEvent = event as CustomEvent<{ key?: string }>
+  if (
+    customEvent.detail?.key === ReferenceTanstackKey.MEDICAL_CATEGORIES ||
+    customEvent.detail?.key === ReferenceTanstackKey.MEDICAL_DIAGNOSES ||
+    customEvent.detail?.key === ReferenceTanstackKey.PT_CASE_IMPRESSIONS
+  ) {
+    dropdownsReady.value = false
+    await initializeDropdowns()
+    dropdownsReady.value = true
   }
 }
 
@@ -1352,7 +1378,13 @@ const openEditPatient = async (patient: Patient): Promise<void> => {
 }
 
 onMounted(async (): Promise<void> => {
+  window.addEventListener("reference-updated", handleReferenceUpdated)
+  await ensureDropdownsLoaded()
   await applyAppointmentDrillDown()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener("reference-updated", handleReferenceUpdated)
 })
 
 watch(
