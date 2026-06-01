@@ -5,10 +5,8 @@
     :has-error="!!error"
   >
     <template #meta>
-      <strong>Patient's Name:</strong><span>{{ patientName }}</span>
-      <strong>Address:</strong><span>{{ patientAddress }}</span>
-      <strong>Age: 	</strong><span>{{ patientAge }}</span>
-      <strong>Period:</strong><span>{{ periodLabel }}</span>
+      <strong>BILLING DATE:</strong><span>{{ billingDateLabel }}</span>
+      <strong>REFERENCE NO.:</strong><span>{{ referenceNoLabel }}</span>
 
 
     </template>
@@ -69,14 +67,14 @@
         <table class="summary-table">
           <thead>
             <tr>
-              <th class="w-[80px] text-center">ITEM No.</th>
-              <th class="w-[120px] text-center">LOA Date Issued</th>
-              <th class="w-[120px] text-left">PT SERVICE RENDERED</th>
-              <th class="w-[140px] text-center">QTY.</th>
-              <th class="w-[140px] text-center">LATERALITY</th>
-              <th class="w-[150px] text-right">BODY AREA</th>
-               <th class="w-[150px] text-right">UNIT PRICE</th>
-               <th class="w-[150px] text-right">UNIT TOTAL</th>
+              <th class="w-[50px] text-center">ITEM No.</th>
+              <th class="w-[80px] text-center">LOA Date Issued</th>
+              <th class="w-[120px] text-center">PT SERVICE RENDERED</th>
+              <th class="w-[30px] text-center">QTY.</th>
+              <th class="w-[60px] text-center">LATERALITY</th>
+              <th class="w-[50px] text-center">BODY AREA</th>
+               <th class="w-[60px] text-center">UNIT PRICE</th>
+               <th class="w-[60px] text-center">UNIT TOTAL</th>
             </tr>
           </thead>
 
@@ -84,12 +82,12 @@
             <tr v-for="row in rows" :key="row.key">
               <td class="text-center">{{ row.itemNo }}</td>
               <td class="text-center">{{ row.treatmentDate }}</td>
-              <td class="text-left">{{ row.serviceName }}</td>
+              <td class="text-center">{{ row.serviceName }}</td>
               <td class="text-center">{{ row.quantity }}</td>
               <td class="text-center">{{ row.laterality }}</td>
-              <td class="text-right">{{ row.bodyArea }}</td>
-              <td class="text-right">{{ formatCurrency(row.unitPrice) }}</td>
-              <td class="text-right">{{ formatCurrency(row.unitTotal) }}</td>
+              <td class="text-center">{{ row.bodyArea }}</td>
+              <td class="text-center">{{ formatCurrency(row.unitPrice) }}</td>
+              <td class="text-center">{{ formatCurrency(row.unitTotal) }}</td>
             </tr>
           </tbody>
 
@@ -98,7 +96,7 @@
               <td colspan="7" class="text-right font-bold" style="padding-top: 12px; border-top: 1px solid #e5e7eb;">
                 Grand Total:
               </td>
-              <td class="text-right font-bold" style="padding-top: 12px; border-top: 1px solid #e5e7eb;">
+              <td class="text-center font-bold" style="padding-top: 12px; border-top: 1px solid #e5e7eb;">
                 {{ formatCurrency(grandTotal) }}
               </td>
             </tr>
@@ -207,6 +205,10 @@ const patientId = computed(() => {
   const parsed = Number(String(route.query.patient_id ?? "").trim())
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 })
+const hmoId = computed(() => {
+  const parsed = Number(String(route.query.hmo_id ?? "").trim())
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+})
 
 const patientName = computed(() => String(route.query.patient_name ?? "Patient").trim() || "Patient")
 const patientAddress = computed(() => billingDetail.value?.patient_address?.trim() || "N/A")
@@ -218,26 +220,51 @@ const hmoLabel = computed(() =>
   String(route.query.hmo_name ?? "HMO").trim() ||
   "HMO"
 )
+const firstNonBlank = (...values: unknown[]): string => {
+  for (const value of values) {
+    const text = String(value ?? "").trim()
+    if (text) return text
+  }
+
+  return ""
+}
 const sponsorHmoType = computed(() => sponsorRecord.value?.hmo_type_name?.trim() || "N/A")
 const sponsorCompanyName = computed(() => sponsorRecord.value?.company_name?.trim() || hmoLabel.value)
 const sponsorApprovalNo = computed(() => sponsorRecord.value?.approval_code?.trim() || "N/A")
 const dateSigned = computed(() => {
-  const dateValue = billingDetail.value?.hmo_loa_date?.trim() || sponsorInfo.value?.validity_start_date?.trim() || ""
+  const dateValue = firstNonBlank(
+    billingDetail.value?.hmo_loa_date,
+    billingDetail.value?.loa_date,
+    sponsorInfo.value?.validity_start_date
+  )
   if (!dateValue) return "N/A"
   const parsed = new Date(dateValue)
   return Number.isNaN(parsed.getTime()) ? dateValue : parsed.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })
 })
 const dateFrom = computed(() => String(route.query.from ?? "").trim())
 const dateTo = computed(() => String(route.query.to ?? "").trim())
-const periodLabel = computed(() => {
-  if (!dateFrom.value && !dateTo.value) return "-"
-  if (dateFrom.value && dateTo.value) return `${dateFrom.value} to ${dateTo.value}`
-  return dateFrom.value || dateTo.value || "-"
-})
+const billingDateLabel = computed(() => formatDate(billingDetail.value?.created_at))
+const referenceNoLabel = computed(() =>
+  billingDetail.value?.id
+    ? `BILLING-${billingDetail.value.id}`
+    : "N/A"
+)
 
 const grandTotal = computed(() => rows.value.reduce((sum, row) => sum + Number(row.unitTotal ?? 0), 0))
 
-const physicalTherapist = computed(() => billingDetail.value?.physical_therapist?.trim() || "N/A")
+const getTicketPhysicalTherapist = (billing?: BillingListItem | null): string =>
+  firstNonBlank(
+    ...(billing?.encounter_tickets ?? []).flatMap(ticket => [
+      ticket.billing_snapshot?.provider_name
+    ])
+  )
+
+const physicalTherapist = computed(() =>
+  firstNonBlank(
+    billingDetail.value?.physical_therapist,
+    getTicketPhysicalTherapist(billingDetail.value)
+  ) || "N/A"
+)
 const doctor = computed(() => billingDetail.value?.doctor?.trim() || "N/A")
 
 const formatDiagnosis = (value?: string | null): string => {
@@ -313,22 +340,21 @@ const normalizeBodyArea = (value?: string | null): string => {
   const text = String(value ?? "").trim()
   if (!text) return "N/A"
 
-  const withoutParentheses = text.replace(/\s*\([^)]*\)/g, "").trim()
-  if (withoutParentheses) return withoutParentheses
+  const withoutParentheses = text.replace(/\s*\((?:L|R|B|LEFT|RIGHT|BOTH|BILATERAL)\s*\)/gi, "").trim()
 
-  const suffixMatch = text.match(/^(.*?)[\s,:-]*\(?\s*(L|R|B|LEFT|RIGHT|BOTH|BILATERAL)\s*\)?$/i)
+  const suffixMatch = withoutParentheses.match(/^(.*?)[\s,:/-]*\b(L|R|B|LEFT|RIGHT|BOTH|BILATERAL)\b\s*$/i)
   if (suffixMatch) {
     const bodyArea = suffixMatch[1]?.trim()
     if (bodyArea) return bodyArea
   }
 
-  const prefixMatch = text.match(/^\(?\s*(L|R|B|LEFT|RIGHT|BOTH|BILATERAL)\s*\)?[\s,:-]*(.*)$/i)
+  const prefixMatch = withoutParentheses.match(/^\s*\b(L|R|B|LEFT|RIGHT|BOTH|BILATERAL)\b[\s,:/-]*(.*)$/i)
   if (prefixMatch) {
     const bodyArea = prefixMatch[2]?.trim()
     if (bodyArea) return bodyArea
   }
 
-  return text
+  return withoutParentheses || text
 }
 
 const diagnosis = computed(() => {
@@ -363,6 +389,29 @@ const parseLineItems = (billing: BillingSummarySource): Array<Record<string, unk
   }
 }
 
+const getLoaDate = (billing: BillingSummarySource): string =>
+  firstNonBlank(billing.hmo_loa_date, billing.loa_date, sponsorInfo.value?.validity_start_date)
+
+const enrichBillingItems = async (
+  items: BillingListItem[]
+): Promise<BillingSummarySource[]> => {
+  const detailedItems = await Promise.all(items.map(async item => {
+    try {
+      const detail = item.id > 0 ? await billingPhase1Service.getById(item.id) : undefined
+      return detail
+        ? {
+            ...item,
+            ...detail
+          }
+        : item
+    } catch {
+      return item
+    }
+  }))
+
+  return detailedItems as BillingSummarySource[]
+}
+
 const buildRows = (items: BillingSummarySource[]): BillingSummaryRow[] => {
   const output: BillingSummaryRow[] = []
   let itemNo = 1
@@ -377,7 +426,7 @@ const buildRows = (items: BillingSummarySource[]): BillingSummaryRow[] => {
       output.push({
         key: `${item.id}-${itemNo}`,
         itemNo,
-        treatmentDate: formatDate(item.created_at),
+        treatmentDate: formatDate(getLoaDate(item)),
         serviceName: item.service_name || "HMO Service",
         quantity: 1,
         laterality: "N/A",
@@ -404,7 +453,7 @@ const buildRows = (items: BillingSummarySource[]): BillingSummaryRow[] => {
       output.push({
         key: `${item.id}-${itemNo}-${lineIndex}`,
         itemNo,
-        treatmentDate: formatDate(item.created_at),
+        treatmentDate: formatDate(getLoaDate(item)),
         serviceName,
         quantity,
         laterality,
@@ -447,10 +496,22 @@ const load = async (): Promise<void> => {
       patientEvaluationVisitLogService.getAll(patientId.value)
     ])
 
-    billingDetail.value = (result?.content?.[0] ?? null) as BillingListItem | null
-    sponsorInfo.value = sponsorRecords.find(record => record.sponsor_context === "HMO") ?? sponsorRecords[0] ?? null
+    sponsorInfo.value =
+      sponsorRecords.find(record => record.sponsor_context === "HMO" && Number(record.hmo_id) === hmoId.value) ??
+      sponsorRecords.find(record => record.sponsor_context === "HMO") ??
+      sponsorRecords[0] ??
+      null
     evaluationVisitLogs.value = visitLogs ?? []
-    rows.value = buildRows((result?.content ?? []) as BillingSummarySource[])
+
+    const detailedItems = await enrichBillingItems((result?.content ?? []) as BillingListItem[])
+    billingDetail.value =
+      detailedItems.find(item => firstNonBlank(
+        item.physical_therapist,
+        getTicketPhysicalTherapist(item)
+      )) ??
+      detailedItems[0] ??
+      null
+    rows.value = buildRows(detailedItems)
   } catch (err: unknown) {
     error.value = err instanceof Error ? err.message : "Failed to load HMO billing summary"
   }

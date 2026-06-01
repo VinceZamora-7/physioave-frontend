@@ -99,7 +99,7 @@
               <th class="w-[80px] text-center">ITEM No.</th>
               <th class="w-[220px] text-center">TREATMENT DATE</th>
               <th class="text-left">PACKAGE NAME</th>
-              <th class="w-[150px] text-center">SESSION Completed</th>
+              <th class="w-[150px] text-center">Completed SESSION </th>
               <th class="w-[180px] text-right">OVERALL PRICE</th>
             </tr>
           </thead>
@@ -200,6 +200,7 @@ import { billingPhase1Service, type BillingListItem } from "@/features/billing/a
 import LguInvoiceLayout from "./LguInvoiceLayout.vue"
 import {
   formatLguPatientProgramStatus,
+  isLguDropoutStatus,
   resolveLguPatientProgramStatus,
   useLguInvoicePrintActions
 } from "./lgu-invoice.shared"
@@ -215,13 +216,19 @@ const sponsorInfo = ref<PatientHMOInformation | null>(null)
 const billingDetail = ref<BillingListItem | null>(null)
 const error = ref("")
 
+const NOT_AVAILABLE_LABEL = "N/A"
+
 const patientId = computed(() => {
   const raw = String(route.query.patient_id ?? "").trim()
   const parsed = Number(raw)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 })
 
-const parseRouteDate = (value: unknown): Date | null => {
+const parseDate = (value?: string | Date | null): Date | null => {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value
+  }
+
   const raw = String(value ?? "").trim()
   if (!raw) return null
 
@@ -239,11 +246,11 @@ const lguProgramLabel = computed(() =>
 )
 
 const transactionFromDate = computed(() =>
-  parseRouteDate(route.query.transaction_from ?? route.query.transaction_date)
+  parseDate(String(route.query.transaction_from ?? route.query.transaction_date ?? ""))
 )
 
 const transactionToDate = computed(() =>
-  parseRouteDate(route.query.transaction_to ?? route.query.transaction_date)
+  parseDate(String(route.query.transaction_to ?? route.query.transaction_date ?? ""))
 )
 
 const transactionPeriodEndDate = computed(() =>
@@ -254,18 +261,18 @@ const transactionPeriodLabel = computed(() => {
   const from = transactionFromDate.value
   const to = transactionToDate.value
 
-  if (!from && !to) return "N/A"
+  if (!from && !to) return NOT_AVAILABLE_LABEL
   if (from && to) return `${formatDate(from)} to ${formatDate(to)}`
 
   const singleDate = from ?? to
-  return singleDate ? formatDate(singleDate) : "N/A"
+  return singleDate ? formatDate(singleDate) : NOT_AVAILABLE_LABEL
 })
 
-const patientAddress = computed(() => billingDetail.value?.patient_address || "N/A")
-const patientAge = computed(() => billingDetail.value?.patient_age || "N/A")
-const physicalTherapistName = computed(() => billingDetail.value?.physical_therapist || "N/A")
-const doctorName = computed(() => billingDetail.value?.doctor || "N/A")
-const diagnosis = computed(() => billingDetail.value?.diagnosis || "N/A")
+const patientAddress = computed(() => billingDetail.value?.patient_address || NOT_AVAILABLE_LABEL)
+const patientAge = computed(() => billingDetail.value?.patient_age || NOT_AVAILABLE_LABEL)
+const physicalTherapistName = computed(() => billingDetail.value?.physical_therapist || NOT_AVAILABLE_LABEL)
+const doctorName = computed(() => billingDetail.value?.doctor || NOT_AVAILABLE_LABEL)
+const diagnosis = computed(() => billingDetail.value?.diagnosis || NOT_AVAILABLE_LABEL)
 
 const billingTo = computed(() =>
   billingDetail.value?.lgu_program_name ||
@@ -295,7 +302,7 @@ const profileStatusHeading = computed(() => {
 const referralFormNo = computed(() =>
   billingDetail.value?.lgu_patient_referral_form_no ||
   lguSponsor.value?.referral_form_no ||
-  "N/A"
+  NOT_AVAILABLE_LABEL
 )
 
 const dateIssued = computed(() =>
@@ -423,6 +430,24 @@ const getRecordNumber = (record: unknown, keys: string[]): number | null => {
   return null
 }
 
+const getRecordAmount = (record: unknown, keys: string[]): number | null => {
+  for (const key of keys) {
+    const value = getRecordValue(record, key)
+
+    if (value === undefined || value === null || String(value).trim() === "") {
+      continue
+    }
+
+    const parsed = Number(value)
+
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return parsed
+    }
+  }
+
+  return null
+}
+
 const parseBillingLineItems = (lineItemsJson?: string | null): Array<Record<string, unknown>> => {
   if (!lineItemsJson) return []
 
@@ -435,6 +460,16 @@ const parseBillingLineItems = (lineItemsJson?: string | null): Array<Record<stri
   } catch {
     return []
   }
+}
+
+const getBillingLineItems = (record: unknown): Array<Record<string, unknown>> => {
+  const lineItemsJson = String(
+    getRecordValue(record, "line_items_json") ??
+    getRecordValue(record, "lineItemsJson") ??
+    ""
+  ).trim()
+
+  return parseBillingLineItems(lineItemsJson)
 }
 
 const getAmountFromRecord = (record: unknown): number => {
@@ -458,6 +493,173 @@ const getAmountFromRecord = (record: unknown): number => {
     "packageTotal",
     "overall_price",
     "overallPrice"
+  ]) ?? 0
+}
+
+const getLineChildren = (record: unknown): Array<Record<string, unknown>> => {
+  const children = [
+    getRecordValue(record, "children"),
+    getRecordValue(record, "subItems"),
+    getRecordValue(record, "sub_items"),
+    getRecordValue(record, "items"),
+    getRecordValue(record, "services")
+  ]
+
+  return children.flatMap(value => {
+    return Array.isArray(value)
+      ? value.filter(item => item && typeof item === "object") as Array<Record<string, unknown>>
+      : []
+  })
+}
+
+const getLineQuantity = (record: unknown): number => {
+  const quantity = Math.max(1, Math.floor(Number(getRecordValue(record, "quantity") ?? 1)))
+  return Number.isFinite(quantity) ? quantity : 1
+}
+
+const hasOwnLineRate = (record: unknown, useDropoutRates: boolean): boolean => {
+  const rate = getRecordAmount(record, useDropoutRates
+    ? [
+        "dropout_unit_price",
+        "dropoutUnitPrice",
+        "dropout_price",
+        "dropoutPrice",
+        "unit_price",
+        "unitPrice",
+        "price"
+      ]
+    : [
+        "unit_price",
+        "unitPrice",
+        "price",
+        "package_unit_price",
+        "packageUnitPrice"
+      ])
+
+  return rate !== null
+}
+
+const getOwnLineRate = (record: unknown, useDropoutRates: boolean): number => {
+  return getRecordAmount(record, useDropoutRates
+    ? [
+        "dropout_unit_price",
+        "dropoutUnitPrice",
+        "dropout_price",
+        "dropoutPrice",
+        "unit_price",
+        "unitPrice",
+        "price"
+      ]
+    : [
+        "unit_price",
+        "unitPrice",
+        "price",
+        "package_unit_price",
+        "packageUnitPrice"
+      ]) ?? 0
+}
+
+const sumLineTreeAmount = (records: Array<Record<string, unknown>>, useDropoutRates: boolean): number =>
+  records.reduce((sum, record) => {
+    const children = getLineChildren(record)
+    const hasOwnRate = hasOwnLineRate(record, useDropoutRates)
+    const ownAmount = hasOwnRate
+      ? getLineQuantity(record) * getOwnLineRate(record, useDropoutRates)
+      : 0
+
+    return sum + ownAmount + (hasOwnRate && children.length ? 0 : sumLineTreeAmount(children, useDropoutRates))
+  }, 0)
+
+const getLineStartSession = (record: unknown): number => {
+  const parsed = Number(
+    getRecordValue(record, "sessionSequence") ??
+    getRecordValue(record, "session_sequence") ??
+    getRecordValue(record, "appliesOnSession") ??
+    getRecordValue(record, "applies_on_session") ??
+    getRecordValue(record, "startSession") ??
+    getRecordValue(record, "start_session") ??
+    1
+  )
+
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1
+}
+
+const filterLinesForSession = (
+  records: Array<Record<string, unknown>>,
+  sessionSequence: number,
+  parentOccurrences = 1
+): Array<Record<string, unknown>> =>
+  records.flatMap(record => {
+    const quantity = getLineQuantity(record)
+    const startSession = getLineStartSession(record)
+    const occurrences = Math.max(1, quantity * parentOccurrences)
+    const isAllocatedToSession =
+      sessionSequence >= startSession &&
+      sessionSequence < startSession + occurrences
+    const children = getLineChildren(record)
+
+    if (children.length) {
+      const allocatedChildren = filterLinesForSession(children, sessionSequence, occurrences)
+
+      return allocatedChildren.length
+        ? [{
+            ...record,
+            quantity: 1,
+            children: allocatedChildren
+          }]
+        : []
+    }
+
+    return isAllocatedToSession
+      ? [{
+          ...record,
+          quantity: 1
+        }]
+      : []
+  })
+
+const getPackageLine = (
+  record: unknown,
+  packageName: string,
+  authorizationKey?: string
+): Record<string, unknown> | undefined =>
+  getBillingLineItems(record).find(item => {
+    return String(item?.type ?? "").trim().toLowerCase() === "package" &&
+      recordMatchesPackage(item, packageName, authorizationKey)
+  })
+
+const getPackageDropoutAllocatedTotal = (
+  record: unknown,
+  packageName: string,
+  authorizationKey: string | undefined,
+  completedSessionSequences: number[]
+): number => {
+  const packageLine = getPackageLine(record, packageName, authorizationKey)
+  if (!packageLine) return 0
+
+  const children = getLineChildren(packageLine)
+  const childTotal = completedSessionSequences.reduce((sum, sessionSequence) => {
+    const allocatedChildren = filterLinesForSession(children, sessionSequence)
+    return sum + sumLineTreeAmount(allocatedChildren, true)
+  }, 0)
+
+  if (childTotal > 0) {
+    return childTotal
+  }
+
+  if (children.length || !completedSessionSequences.length) {
+    return 0
+  }
+
+  return getRecordAmount(packageLine, [
+    "dropout_total",
+    "dropoutTotal",
+    "dropout_price",
+    "dropoutPrice",
+    "lineTotal",
+    "line_total",
+    "price",
+    "total"
   ]) ?? 0
 }
 
@@ -510,13 +712,14 @@ const recordMatchesPackage = (
     source.description
   ].map(value => normalizeText(String(value ?? ""))).filter(Boolean)
 
-  const hasMatchingName = possibleNames.some(name => {
-    return (
-      name === normalizedPackageName ||
-      name.includes(normalizedPackageName) ||
-      normalizedPackageName.includes(name)
-    )
-  })
+  const hasMatchingName = !!normalizedPackageName &&
+    possibleNames.some(name => {
+      return (
+        name === normalizedPackageName ||
+        name.includes(normalizedPackageName) ||
+        normalizedPackageName.includes(name)
+      )
+    })
 
   return hasMatchingKey || hasMatchingName
 }
@@ -570,12 +773,7 @@ const getPackagePriceFromBillingRecord = (
 ): number => {
   if (!record) return 0
 
-  const lineItemsJson = String(getRecordValue(record, "line_items_json") ?? getRecordValue(record, "lineItemsJson") ?? "").trim()
-  const lineItems = parseBillingLineItems(lineItemsJson)
-
-  const packageLine = lineItems.find(item => {
-    return String(item?.type ?? "").trim().toLowerCase() === "package" && recordMatchesPackage(item, packageName, authorizationKey)
-  })
+  const packageLine = getPackageLine(record, packageName, authorizationKey)
 
   if (!packageLine) return 0
 
@@ -593,6 +791,34 @@ const getPackagePriceFromBillingRecord = (
   }
 
   return getAmountFromRecord(packageLine)
+}
+
+const getProgramStatusForGroup = (group: SessionGroup): string => {
+  const packageStatus = (detail.value?.package_availments ?? []).find(pkg => {
+    return recordMatchesPackage(pkg, group.packageName, group.key)
+  })?.status
+
+  const authorizationStatus = (detail.value?.authorizations ?? []).find((authorization, authorizationIndex) => {
+    const authorizationKey = getAuthorizationKey(authorization, authorizationIndex)
+    return authorizationKey === group.key || recordMatchesPackage(authorization, group.packageName, group.key)
+  })?.authorization_status
+
+  const appointmentStatuses = (detail.value?.appointments ?? [])
+    .filter(appointment => {
+      const sessionSource = getSessionSources().get(appointment.appointment_id)
+      const packageName = getAppointmentPackageName(appointment, sessionSource)
+      const groupKey = getAppointmentGroupKey(appointment, packageName, sessionSource)
+      return groupKey === group.key
+    })
+    .map(appointment => String(appointment.status ?? "").trim().toUpperCase())
+
+  if (appointmentStatuses.includes("CROSS_MONTH_DROPPED_OUT")) return "CROSS_MONTH_DROPPED_OUT"
+  if (appointmentStatuses.includes("DROPPED_OUT")) return "DROPPED_OUT"
+
+  return resolveLguPatientProgramStatus(
+    billingDetail.value?.lgu_patient_program_status ?? packageStatus ?? authorizationStatus,
+    detail.value?.dropout_status
+  )
 }
 
 const getAuthorizationTotalSessions = (
@@ -699,7 +925,9 @@ const getSessionSources = (): Map<number, SessionSource> => {
 }
 
 const getBillingAmountForGroup = (
-  group: SessionGroup
+  group: SessionGroup,
+  isOnlyInvoiceGroup: boolean,
+  completedSessionSequences: number[]
 ): number => {
   const billingIds = Array.from(
     new Set(
@@ -709,9 +937,51 @@ const getBillingAmountForGroup = (
     )
   )
 
+  const billingCandidates = (detail.value?.billings ?? []).filter(item => {
+    return recordMatchesPackage(item, group.packageName, group.key)
+  })
+
+  const billingsBySession = billingIds
+    .map(billingId => (detail.value?.billings ?? []).find(item => item.id === billingId))
+    .filter((billing): billing is LguPatientCreditDetail["billings"][number] => Boolean(billing))
+
+  const groupStatus = getProgramStatusForGroup(group)
+  const isDropoutGroup =
+    isLguDropoutStatus(groupStatus) ||
+    [...billingsBySession, ...billingCandidates].some(billing => {
+      return String(billing.pricing_source ?? "").trim().toUpperCase().includes("DROPOUT")
+    })
+
+  if (isDropoutGroup) {
+    const dropoutConfiguredTotal = [
+      billingDetail.value,
+      ...billingsBySession,
+      ...billingCandidates,
+      ...(detail.value?.billings ?? [])
+    ]
+      .map(record => getPackageDropoutAllocatedTotal(
+        record,
+        group.packageName,
+        group.key,
+        completedSessionSequences
+      ))
+      .find(amount => amount > 0) ?? 0
+
+    if (dropoutConfiguredTotal > 0) {
+      return Number(dropoutConfiguredTotal.toFixed(2))
+    }
+
+    const dropoutBillingTotal = [...billingsBySession, ...billingCandidates]
+      .filter(billing => String(billing.pricing_source ?? "").trim().toUpperCase().includes("DROPOUT"))
+      .reduce((sum, billing) => sum + getAmountFromRecord(billing), 0)
+
+    if (dropoutBillingTotal > 0) {
+      return dropoutBillingTotal
+    }
+  }
+
   if (billingIds.length) {
-    const billingTotal = billingIds.reduce((sum, billingId) => {
-      const billing = (detail.value?.billings ?? []).find(item => item.id === billingId)
+    const billingTotal = billingsBySession.reduce((sum, billing) => {
       return sum + getAmountFromRecord(billing)
     }, 0)
 
@@ -720,17 +990,17 @@ const getBillingAmountForGroup = (
     }
   }
 
-  const billingCandidates = (detail.value?.billings ?? []).filter(item => {
-    return recordMatchesPackage(item, group.packageName, group.key)
-  })
-
   const preferredBilling =
     billingCandidates.find(item => {
       const billingStatus = String(getRecordValue(item, "billing_status") ?? "").trim().toUpperCase()
       const amountDue = getAmountFromRecord(item)
-      return amountDue > 0 && ["COMPLETED", "BILLED", "PAID", "POSTED"].includes(billingStatus)
+      const pricingSource = String(item.pricing_source ?? "").trim().toUpperCase()
+      return amountDue > 0 && !pricingSource.includes("DROPOUT") && ["COMPLETED", "BILLED", "PAID", "POSTED"].includes(billingStatus)
     }) ??
-    billingCandidates.find(item => getAmountFromRecord(item) > 0) ??
+    billingCandidates.find(item => {
+      const pricingSource = String(item.pricing_source ?? "").trim().toUpperCase()
+      return getAmountFromRecord(item) > 0 && !pricingSource.includes("DROPOUT")
+    }) ??
     billingCandidates[0]
 
   const billingAmount = getAmountFromRecord(preferredBilling)
@@ -766,7 +1036,7 @@ const getBillingAmountForGroup = (
 
   const billingDetailAmount = getAmountFromRecord(billingDetail.value)
 
-  if (billingDetailAmount > 0 && invoiceRows.value.length <= 1) {
+  if (billingDetailAmount > 0 && isOnlyInvoiceGroup) {
     return billingDetailAmount
   }
 
@@ -801,7 +1071,7 @@ const formatCompletedTreatmentDate = (completedAppointments: CompletedAppointmen
     .sort((left, right) => left - right)
 
   if (!timestamps.length) {
-    return "N/A"
+    return NOT_AVAILABLE_LABEL
   }
 
   const firstDate = new Date(timestamps[0])
@@ -818,6 +1088,8 @@ const invoiceRows = computed<TableRow[]>(() => {
   const sessionSources = getSessionSources()
   const groups = new Map<string, SessionGroup>()
   const allAppointmentIdsByGroupKey = new Map<string, Set<number>>()
+  const allCompletedAppointmentIdsByGroupKey = new Map<string, Set<number>>()
+  const allCompletedSessionSequencesByGroupKey = new Map<string, Set<number>>()
 
   /*
     Denominator: all appointments for the package/authorization.
@@ -833,6 +1105,22 @@ const invoiceRows = computed<TableRow[]>(() => {
     }
 
     allAppointmentIdsByGroupKey.get(groupKey)?.add(appointment.appointment_id)
+
+    if (String(appointment.status ?? "").trim().toUpperCase() === "COMPLETED") {
+      if (!allCompletedAppointmentIdsByGroupKey.has(groupKey)) {
+        allCompletedAppointmentIdsByGroupKey.set(groupKey, new Set<number>())
+      }
+
+      allCompletedAppointmentIdsByGroupKey.get(groupKey)?.add(appointment.appointment_id)
+
+      if (sessionSource?.sessionSequence) {
+        if (!allCompletedSessionSequencesByGroupKey.has(groupKey)) {
+          allCompletedSessionSequencesByGroupKey.set(groupKey, new Set<number>())
+        }
+
+        allCompletedSessionSequencesByGroupKey.get(groupKey)?.add(sessionSource.sessionSequence)
+      }
+    }
   })
 
   /*
@@ -898,7 +1186,16 @@ const invoiceRows = computed<TableRow[]>(() => {
     })
 
   return Array.from(groups.values()).map((group, index) => {
-    const completedSessions = group.completedAppointmentIds.size
+    const completedSessions = Math.max(
+      group.completedAppointmentIds.size,
+      allCompletedAppointmentIdsByGroupKey.get(group.key)?.size ?? 0
+    )
+    const completedSessionSequences = Array.from(
+      allCompletedSessionSequencesByGroupKey.get(group.key) ?? new Set<number>()
+    ).sort((left, right) => left - right)
+    const fallbackCompletedSessionSequences = completedSessionSequences.length
+      ? completedSessionSequences
+      : Array.from({ length: completedSessions }, (_, sessionIndex) => sessionIndex + 1)
     const totalSessions = Math.max(
       group.totalSessions,
       allAppointmentIdsByGroupKey.get(group.key)?.size ?? 0,
@@ -912,7 +1209,7 @@ const invoiceRows = computed<TableRow[]>(() => {
       treatmentDate: formatCompletedTreatmentDate(group.completedAppointments),
       packageName: group.packageName,
       sessionSequence: `${completedSessions} of ${totalSessions}`,
-      overallPrice: getBillingAmountForGroup(group, completedSessions, totalSessions)
+      overallPrice: getBillingAmountForGroup(group, groups.size <= 1, fallbackCompletedSessionSequences)
     }
   })
 })
@@ -931,18 +1228,10 @@ const formatCurrency = (value?: number | null): string =>
         currency: "PHP"
       })
 
-const formatDateTime = (value?: string | null): string => {
-  if (!value) return "N/A"
-
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? "N/A" : date.toLocaleString("en-PH")
-}
-
 const formatDate = (value?: string | Date | null): string => {
-  if (!value) return "N/A"
+  const date = parseDate(value)
 
-  const date = value instanceof Date ? value : new Date(value)
-  return Number.isNaN(date.getTime()) ? "N/A" : date.toLocaleDateString("en-PH")
+  return date ? date.toLocaleDateString("en-PH") : NOT_AVAILABLE_LABEL
 }
 
 const load = async (): Promise<void> => {
@@ -989,19 +1278,13 @@ const load = async (): Promise<void> => {
 onMounted(() => {
   void load().then(() => {
     if (String(route.query.autoprint ?? "1") !== "0") {
-      window.setTimeout(() => window.print(), 50)
+      window.setTimeout(() => printPage(), 50)
     }
   })
 })
 </script>
 
-<style>
-.line {
-  display: grid;
-  grid-template-columns: 120px minmax(0, 1fr);
-  gap: 8px;
-}
-
+<style scoped>
 .profile-details {
   width: 100%;
   display: flex;
@@ -1126,37 +1409,5 @@ onMounted(() => {
 
 .table-wrap {
   overflow-x: auto;
-}
-
-.ticket-footer-wrap {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.footnote-full {
-  grid-column: 1 / -1;
-}
-
-.footnote-panel {
-  border: 1px solid #d1d5db;
-  border-radius: 14px;
-  background: #fff;
-  padding: 12px;
-}
-
-.ticket-label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: #1d4ed8;
-  margin-bottom: 4px;
-}
-
-.footnote-copy {
-  font-size: 13px;
-  line-height: 1.6;
-  color: #334155;
 }
 </style>

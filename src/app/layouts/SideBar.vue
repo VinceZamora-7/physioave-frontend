@@ -617,9 +617,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
-import IftaLabel from "primevue/iftalabel"
-import Select from "primevue/select"
-import { storeToRefs } from "pinia"
 import { useConfirm } from "primevue/useconfirm"
 import { useLogout } from "@/services/logout-tanstack.service"
 import { clinicStore } from "@/stores/clinic.store"
@@ -637,7 +634,6 @@ const route = useRoute()
 const confirm = useConfirm()
 const { mutate, isPending } = useLogout()
 const globalClinicStore = clinicStore()
-const { clinicOptions, isLoadingClinics, selectedClinicId, selectedClinic } = storeToRefs(globalClinicStore)
 
 const mobileOpen = ref(false)
 const userSnapshot = ref<Record<string, unknown> | null>(null)
@@ -833,9 +829,7 @@ const normalizedUserProviderType = computed(() => {
   return "NONE"
 })
 
-const isPhysicalTherapistUser = computed(() => normalizedUserProviderType.value === "PHYSICAL_THERAPIST")
-
-import { ROUTE_ACCESS_RULES, type RouteAccessRule } from "@/shared/permissions"
+import { ROUTE_ACCESS_RULES } from "@/shared/permissions"
 
 const userPermissionSet = computed(() => {
   const permissions = userSnapshot.value?.permissions
@@ -851,6 +845,36 @@ const userPermissionSet = computed(() => {
 const hasPermissionData = computed(() => userPermissionSet.value.size > 0)
 
 const hasAnyPermission = (...permissions: string[]) => permissions.some(permission => userPermissionSet.value.has(permission))
+
+const ADMIN_NAV_ROUTE_NAMES = [
+  "dashboard",
+  "general-settings",
+  "pt-team-setup",
+  "admin-setup",
+  "clinics",
+  "patients",
+  "promos-offers",
+  "promos-offers-single-service",
+  "promos-offers-package-service",
+  "promos-offers-hmo",
+  "promos-offers-lgu",
+  "appointments",
+  "patient-daily-log",
+  "billing",
+  "reports"
+]
+
+const hasAdminNavigationAccess = computed(() =>
+  ADMIN_NAV_ROUTE_NAMES.some(routeName => {
+    const rule = ROUTE_ACCESS_RULES[routeName]
+    return rule ? hasAnyPermission(...rule.anyOf) : false
+  })
+)
+
+const isPhysicalTherapistUser = computed(() =>
+  normalizedUserProviderType.value === "PHYSICAL_THERAPIST" &&
+  !hasAdminNavigationAccess.value
+)
 
 const canAccessRoute = (routeName: string): boolean => {
   const rule = ROUTE_ACCESS_RULES[routeName]

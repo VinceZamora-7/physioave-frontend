@@ -5,8 +5,6 @@
     :has-error="!!error"
   >
     <template #meta>
-      <strong>Partner Institution:</strong><span>{{ partnerLabel }}</span>
-      <strong>Billing Date:</strong><span>{{ billingDateLabel }}</span>
       <strong>Transaction Period:</strong><span>{{ periodLabel }}</span>
     </template>
 
@@ -52,17 +50,13 @@
         <table class="soa-table">
           <thead>
             <tr>
-              <th class="col-item text-center">ITEM No.</th>
-              <th class="col-patient">PATIENT NAME</th>
-              <th class="col-reference">REFERENCE NO.</th>
-              <th class="col-status">BILLING STATUS</th>
-              <th class="col-date text-center">TREATMENT DATE</th>
-              <th class="col-service">HMO SERVICE RENDERED</th>
-              <th class="col-qty text-center">QTY.</th>
-              <th class="col-laterality text-center">LATERALITY</th>
-              <th class="col-body text-center">BODY AREA</th>
-              <th class="col-unit-price text-right">UNIT PRICE</th>
-              <th class="col-total text-right">INVOICE BILLING TOTAL</th>
+              <th class="col-item text-center w-12">ITEM No.</th>
+              <th class="col-patient text-center">PATIENT NAME</th>
+              <th class="col-reference text-center">REFERENCE NO.</th>
+              <th class="col-status text-center">LOA Approval No.</th>
+              <th class="col-date text-center">LOA DATE ISSUED</th>
+              <th class="col-service text-center">PT SERVICE RENDERED</th>
+              <th class="col-qty text-center">INVOICE BILLING TOTAL</th>
             </tr>
           </thead>
 
@@ -70,23 +64,19 @@
             <template v-for="row in rows" :key="row.key">
               <tr v-if="row.kind === 'service'">
                 <td class="text-center">{{ row.itemNo }}</td>
-                <td>{{ row.patientName }}</td>
-                <td>{{ row.referenceNo }}</td>
-                <td>{{ row.billingStatus }}</td>
+                <td class="text-center">{{ row.patientName }}</td>
+                <td class="text-center">{{ formatDate(row.treatmentDate) }}</td>
+                <td class="text-center">{{ row.loaApprovalNo }}</td>
                 <td class="text-center">{{ formatDate(row.treatmentDate) }}</td>
                 <td>{{ row.serviceName }}</td>
-                <td class="text-center">{{ row.quantity }}</td>
-                <td class="text-center">{{ row.laterality }}</td>
-                <td class="text-center">{{ row.bodyArea }}</td>
-                <td class="text-right">{{ formatPrice(row.unitPrice) }}</td>
-                <td class="text-right">{{ formatPrice(row.unitTotal) }}</td>
+                <td class="text-center">{{ formatPrice(row.unitPrice) }}</td>
+
               </tr>
 
-              <tr v-else class="patient-total-row">
-                <td colspan="10" class="text-right">
-                  Patient Billing Summary Total:
-                </td>
-                <td class="text-right">
+              <tr v-else class="patient-total-row border-b-3 border-red-600">
+                <td colspan="7" class="text-right">
+                  Patient Billing Total:
+
                   {{ asCurrency(row.total) }}
                 </td>
               </tr>
@@ -95,10 +85,9 @@
 
           <tfoot>
             <tr class="grand-total-row">
-              <td colspan="10" class="text-right">
+              <td colspan="7" class="text-right">
                 GRAND TOTAL:
-              </td>
-              <td class="text-right">
+
                 {{ asCurrency(grandTotal) }}
               </td>
             </tr>
@@ -146,6 +135,7 @@ type ServiceHmoSoaRow = {
   itemNo: number
   patientName: string
   referenceNo: string
+  loaApprovalNo: string
   billingStatus: string
   treatmentDate: string | null
   serviceName: string
@@ -177,11 +167,9 @@ type HmoSoaLineItem = {
   bodyArea?: string
 }
 
-type HmoSoaSourceItem = HmoRecentHistoryItem & {
-  line_items_json?: string
-}
+type HmoSoaHistoryItem = HmoRecentHistoryItem & Pick<BillingListItem, "line_items_json" | "diagnosis" | "hmo_loa_number" | "hmo_approval_code">
 
-type HmoSoaHistoryItem = HmoRecentHistoryItem & Pick<BillingListItem, "line_items_json" | "diagnosis">
+type HmoSoaSourceItem = HmoSoaHistoryItem
 
 const route = useRoute()
 const { printPage, goBack } = useHmoInvoicePrintActions()
@@ -231,6 +219,15 @@ const asCurrency = (value?: number | null): string =>
 const formatPrice = (value?: number | null): string => {
   if (value === null || value === undefined) return "-"
   return Number(value) > 0 ? asCurrency(value) : "FREE"
+}
+
+const getLoaApprovalNo = (billing: HmoSoaSourceItem): string => {
+  return String(
+    billing.hmo_approval_code ??
+    billing.hmo_loa_number ??
+    billing.receipt_number ??
+    `BILLING-${billing.id}`
+  ).trim() || "N/A"
 }
 
 const parseLineItems = (billing: HmoSoaSourceItem): HmoSoaLineItem[] => {
@@ -313,7 +310,15 @@ const enrichHmoSoaItems = async (items: HmoRecentHistoryItem[]): Promise<HmoSoaH
   const detailedItems = await Promise.all(items.map(async item => {
     try {
       const detail = item.id > 0 ? await billingPhase1Service.getById(item.id) : undefined
-      return detail ? { ...item, line_items_json: detail.line_items_json, diagnosis: detail.diagnosis } : item
+      return detail
+        ? {
+            ...item,
+            line_items_json: detail.line_items_json,
+            diagnosis: detail.diagnosis,
+            hmo_loa_number: detail.hmo_loa_number,
+            hmo_approval_code: detail.hmo_approval_code
+          }
+        : item
     } catch {
       return item
     }
@@ -322,13 +327,13 @@ const enrichHmoSoaItems = async (items: HmoRecentHistoryItem[]): Promise<HmoSoaH
   return detailedItems as HmoSoaHistoryItem[]
 }
 
-const getTimestamp = (record: HmoRecentHistoryItem): number => {
+const getTimestamp = (record: HmoSoaSourceItem): number => {
   const parsed = new Date(record.created_at ?? "")
   return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime()
 }
 
 const buildRows = (items: HmoSoaSourceItem[]): SoaDisplayRow[] => {
-  const patientGroups = new Map<string, HmoRecentHistoryItem[]>()
+  const patientGroups = new Map<string, HmoSoaSourceItem[]>()
 
   items.forEach(item => {
     const key = String(item.patient_id ?? item.patient_name ?? "unknown").trim()
@@ -356,6 +361,7 @@ const buildRows = (items: HmoSoaSourceItem[]): SoaDisplayRow[] => {
         if (!lineItems.length) {
           const unitPrice = Number(item.total_amount ?? 0)
           patientTotal += unitPrice
+          const loaApprovalNo = getLoaApprovalNo(item)
 
           outputRows.push({
             kind: "service",
@@ -363,6 +369,7 @@ const buildRows = (items: HmoSoaSourceItem[]): SoaDisplayRow[] => {
             itemNo,
             patientName: item.patient_name || "Unknown Patient",
             referenceNo,
+            loaApprovalNo,
             billingStatus,
             treatmentDate: item.created_at,
             serviceName: item.service_name || "HMO Service",
@@ -384,6 +391,7 @@ const buildRows = (items: HmoSoaSourceItem[]): SoaDisplayRow[] => {
           patientTotal += unitTotal
           const laterality = resolveLaterality(lineItem, item)
           const bodyArea = resolveBodyArea(lineItem, item)
+          const loaApprovalNo = getLoaApprovalNo(item)
 
           outputRows.push({
             kind: "service",
@@ -391,6 +399,7 @@ const buildRows = (items: HmoSoaSourceItem[]): SoaDisplayRow[] => {
             itemNo,
             patientName: item.patient_name || "Unknown Patient",
             referenceNo,
+            loaApprovalNo,
             billingStatus,
             treatmentDate: item.created_at,
             serviceName: String(lineItem.name ?? item.service_name ?? "HMO Service"),

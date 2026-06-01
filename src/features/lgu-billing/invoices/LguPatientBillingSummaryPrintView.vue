@@ -39,6 +39,11 @@
                 <span class="profile-label">Age:</span>
                 <span class="profile-value">{{ patientAge }}</span>
               </div>
+
+              <div class="profile-row">
+                <span class="profile-label">Program Status:</span>
+                <span class="profile-value">{{ patientProgramStatus }}</span>
+              </div>
             </div>
 
             <div class="profile-group">
@@ -184,13 +189,13 @@ import { billingPhase1Service, type BillingListItem } from "@/features/billing/a
 import LguInvoiceLayout from "./LguInvoiceLayout.vue"
 import {
   formatLguPatientProgramStatus,
+  isLguDropoutStatus,
+  resolveLguPatientProgramStatus,
   useLguInvoicePrintActions
 } from "./lgu-invoice.shared"
 import { patientHMOInformationService } from "@/services/patient-hmo-information.service"
 import type { PatientHMOInformation } from "@/models/hmo-information"
 
-
-const dateSigned = computed(() => formatDate(new Date().toISOString()))
 const route = useRoute()
 const { printPage, goBack } = useLguInvoicePrintActions()
 
@@ -199,34 +204,66 @@ const sponsorInfo = ref<PatientHMOInformation | null>(null)
 const billingDetail = ref<BillingListItem | null>(null)
 const error = ref("")
 
+const NOT_AVAILABLE_LABEL = "N/A"
+
+const dateSigned = computed(() => formatDate(new Date()))
+
 const patientId = computed(() => {
   const raw = String(route.query.patient_id ?? "").trim()
   const parsed = Number(raw)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 })
 
+const parseDate = (value?: string | Date | null): Date | null => {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value
+  }
+
+  const raw = String(value ?? "").trim()
+  if (!raw) return null
+
+  const parsed = new Date(raw)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+const transactionFromDate = computed(() =>
+  parseDate(String(route.query.transaction_from ?? route.query.transaction_date ?? ""))
+)
+
+const transactionToDate = computed(() =>
+  parseDate(String(route.query.transaction_to ?? route.query.transaction_date ?? ""))
+)
+
+const transactionPeriodEndDate = computed(() =>
+  transactionToDate.value ?? transactionFromDate.value ?? null
+)
+
 const patientName = computed(() => detail.value?.patient_name || "Patient")
-const patientIdLabel = computed(() => patientId.value > 0 ? String(patientId.value) : "N/A")
+const patientIdLabel = computed(() => patientId.value > 0 ? String(patientId.value) : NOT_AVAILABLE_LABEL)
 const lguSponsor = computed(() => sponsorInfo.value)
 const lguProgramLabel = computed(() => lguSponsor.value?.lgu_program_name || lguSponsor.value?.company_name || "LGU")
-const patientAddress = computed(() => billingDetail.value?.patient_address || "N/A")
-const patientAge = computed(() => billingDetail.value?.patient_age || "N/A")
-const physicalTherapistName = computed(() => billingDetail.value?.physical_therapist || "N/A")
-const doctorName = computed(() => billingDetail.value?.doctor || "N/A")
-const diagnosis = computed(() => billingDetail.value?.diagnosis || "N/A")
-const billingTo = computed(() => billingDetail.value?.lgu_program_name || lguSponsor.value?.company_name || lguProgramLabel.value)
+const patientAddress = computed(() => billingDetail.value?.patient_address || NOT_AVAILABLE_LABEL)
+const patientAge = computed(() => billingDetail.value?.patient_age || NOT_AVAILABLE_LABEL)
+const physicalTherapistName = computed(() => billingDetail.value?.physical_therapist || NOT_AVAILABLE_LABEL)
+const doctorName = computed(() => billingDetail.value?.doctor || NOT_AVAILABLE_LABEL)
+const diagnosis = computed(() => billingDetail.value?.diagnosis || NOT_AVAILABLE_LABEL)
 const patientProgramStatus = computed(() =>
   formatLguPatientProgramStatus(
     billingDetail.value?.lgu_patient_program_status,
     detail.value?.dropout_status
   )
 )
-const referralFormNo = computed(() => billingDetail.value?.lgu_reference_label || lguSponsor.value?.referral_form_no || "N/A")
-const dateIssued = computed(() => formatDateTime(billingDetail.value?.lgu_date_issued || lguSponsor.value?.referral_issued_date))
+const normalizedPatientProgramStatus = computed(() =>
+  resolveLguPatientProgramStatus(
+    billingDetail.value?.lgu_patient_program_status,
+    detail.value?.dropout_status
+  )
+)
+const isDropoutPatient = computed(() => isLguDropoutStatus(normalizedPatientProgramStatus.value))
 const validityLabel = computed(() => {
   const start = formatDate(lguSponsor.value?.validity_start_date)
-  const end = formatDate(lguSponsor.value?.validity_end_date)
-  if (start === "N/A" && end === "N/A") return "N/A"
+  const end = formatDate(lguSponsor.value?.validity_end_date ?? transactionPeriodEndDate.value)
+  if (start === NOT_AVAILABLE_LABEL && end === NOT_AVAILABLE_LABEL) return NOT_AVAILABLE_LABEL
   return `${start} to ${end}`
 })
 
@@ -247,9 +284,21 @@ type InvoiceLineNode = {
   quantity?: number
   price?: number
   unitPrice?: number
+  unit_price?: number
+  dropoutUnitPrice?: number
+  dropout_unit_price?: number
+  dropoutPrice?: number
+  dropout_price?: number
   lineTotal?: number
   treatmentDate?: string
   sessionSequence?: string
+  session_sequence?: string | number
+  appliesOnSession?: string | number
+  applies_on_session?: string | number
+  startSession?: string | number
+  start_session?: string | number
+  allocatedSessionSequence?: number
+  allocatedTotalSessions?: number
   subItems?: InvoiceLineNode[]
   children?: InvoiceLineNode[]
 }
@@ -279,8 +328,8 @@ const parseInvoiceLineItems = (value?: string | null): InvoiceLineNode[] => {
 }
 
 const getDirectChildren = (item: InvoiceLineNode): InvoiceLineNode[] => [
-  ...(item.subItems ?? []),
-  ...(item.children ?? [])
+  ...(item.children ?? []),
+  ...(item.subItems ?? [])
 ]
 
 const getQuantity = (item: InvoiceLineNode): number => {
@@ -304,8 +353,163 @@ const getSessionUnitTotal = (item: InvoiceLineNode, quantity: number): number =>
     return lineTotal / quantity
   }
 
-  const unitTotal = Number(item.unitPrice ?? item.price ?? 0)
+  const unitTotal = Number(
+    isDropoutPatient.value
+      ? item.dropoutUnitPrice ??
+        item.dropout_unit_price ??
+        item.dropoutPrice ??
+        item.dropout_price ??
+        item.unitPrice ??
+        item.unit_price ??
+        item.price ??
+        0
+      : item.unitPrice ?? item.unit_price ?? item.price ?? 0
+  )
   return Number.isFinite(unitTotal) ? unitTotal : 0
+}
+
+const getLineStartSession = (item: InvoiceLineNode): number => {
+  const parsed = Number(
+    item.sessionSequence ??
+    item.session_sequence ??
+    item.appliesOnSession ??
+    item.applies_on_session ??
+    item.startSession ??
+    item.start_session ??
+    1
+  )
+
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1
+}
+
+const filterChildrenForSession = (
+  items: InvoiceLineNode[],
+  sessionSequence: number,
+  parentOccurrences = 1
+): InvoiceLineNode[] =>
+  items.flatMap(item => {
+    const quantity = getQuantity(item)
+    const startSession = getLineStartSession(item)
+    const occurrences = Math.max(1, quantity * parentOccurrences)
+    const allocatedSessionSequence = Math.max(1, sessionSequence - startSession + 1)
+    const isAllocatedToSession =
+      sessionSequence >= startSession &&
+      sessionSequence < startSession + occurrences
+    const children = getDirectChildren(item)
+
+    if (children.length) {
+      const allocatedChildren = filterChildrenForSession(children, sessionSequence, occurrences)
+
+      return allocatedChildren.length
+        ? [{
+          ...item,
+          quantity: 1,
+          allocatedSessionSequence,
+          allocatedTotalSessions: quantity,
+          lineTotal: undefined,
+          children: allocatedChildren,
+          subItems: undefined
+          }]
+        : []
+    }
+
+    return isAllocatedToSession
+      ? [{
+          ...item,
+          quantity: 1,
+          allocatedSessionSequence,
+          allocatedTotalSessions: quantity,
+          lineTotal: undefined
+        }]
+      : []
+  })
+
+const hasOwnRate = (item: InvoiceLineNode): boolean => {
+  const value = isDropoutPatient.value
+    ? item.dropoutUnitPrice ??
+      item.dropout_unit_price ??
+      item.dropoutPrice ??
+      item.dropout_price ??
+      item.unitPrice ??
+      item.unit_price ??
+      item.price
+    : item.unitPrice ?? item.unit_price ?? item.price
+
+  return value !== undefined && value !== null && Number.isFinite(Number(value))
+}
+
+const appointmentStatusById = computed(() => {
+  return new Map(
+    (detail.value?.appointments ?? []).map(appointment => [
+      appointment.appointment_id,
+      String(appointment.status ?? "").trim().toUpperCase()
+    ])
+  )
+})
+
+const completedSessionSequences = computed(() => {
+  const sequences = (detail.value?.authorizations ?? [])
+    .flatMap(authorization => authorization.sessions ?? [])
+    .filter(session => appointmentStatusById.value.get(session.appointment_id) === "COMPLETED")
+    .map(session => Math.max(1, Number(session.session_sequence ?? 1)))
+    .filter(sequence => Number.isFinite(sequence))
+    .sort((left, right) => left - right)
+
+  if (sequences.length) {
+    return Array.from(new Set(sequences))
+  }
+
+  const completedCount = (detail.value?.appointments ?? [])
+    .filter(appointment => String(appointment.status ?? "").trim().toUpperCase() === "COMPLETED")
+    .length
+
+  return Array.from({ length: completedCount }, (_, index) => index + 1)
+})
+
+const appendServiceRows = (
+  items: InvoiceLineNode[],
+  inherited: { treatmentDate?: string },
+  rows: TableRow[],
+  nextItemNoRef: { value: number },
+  level = 1
+): void => {
+  items.forEach(item => {
+    const quantity = getQuantity(item)
+    const itemName = String(item.name ?? "").trim() || "â€”"
+    const itemTreatmentDate = getTreatmentDate(item, inherited)
+    const unitTotal = getSessionUnitTotal(item, quantity)
+    const children = getDirectChildren(item)
+
+    if (children.length && !hasOwnRate(item)) {
+      appendServiceRows(children, {
+        treatmentDate: itemTreatmentDate
+      }, rows, nextItemNoRef, level + 1)
+      return
+    }
+
+    Array.from({ length: quantity }).forEach((_, sessionIndex) => {
+      const itemNo = nextItemNoRef.value++
+      const sessionNumber = isDropoutPatient.value
+        ? Math.max(1, Number(item.allocatedSessionSequence ?? getLineStartSession(item)))
+        : sessionIndex + 1
+      const sessionTotal = isDropoutPatient.value
+        ? Math.max(1, Number(item.allocatedTotalSessions ?? quantity))
+        : quantity
+
+      rows.push({
+        key: `${itemNo}-${String(item.id ?? item.name ?? "item")}-${sessionIndex + 1}`,
+        itemNo,
+        treatmentDate: itemTreatmentDate,
+        serviceName: itemName,
+        sessionSequence: isDropoutPatient.value
+          ? `${sessionNumber} / ${sessionTotal}`
+          : `${sessionIndex + 1} / ${sessionTotal}`,
+        unitTotal,
+        level,
+        isParent: false
+      })
+    })
+  })
 }
 
 const flattenInvoiceLineItems = (
@@ -319,6 +523,13 @@ const flattenInvoiceLineItems = (
     const parentTreatmentDate = getTreatmentDate(parent, inherited)
     const parentName = String(parent.name ?? "").trim() || "—"
 
+    const sourceChildren = getDirectChildren(parent)
+    const children = isDropoutPatient.value
+      ? completedSessionSequences.value.flatMap(sessionSequence => (
+          filterChildrenForSession(sourceChildren, sessionSequence)
+        ))
+      : sourceChildren
+
     rows.push({
       key: `${parentNo}-${String(parent.id ?? parent.name ?? "parent")}`,
       itemNo: parentNo,
@@ -330,29 +541,10 @@ const flattenInvoiceLineItems = (
       isParent: true
     })
 
-    getDirectChildren(parent).forEach(child => {
-      const quantity = getQuantity(child)
-      const childName = String(child.name ?? "").trim() || "—"
-      const childTreatmentDate = getTreatmentDate(child, {
-        treatmentDate: parentTreatmentDate
-      })
-      const unitTotal = getSessionUnitTotal(child, quantity)
+    appendServiceRows(children, {
+      treatmentDate: parentTreatmentDate
+    }, rows, nextItemNoRef)
 
-      Array.from({ length: quantity }).forEach((_, sessionIndex) => {
-        const childNo = nextItemNoRef.value++
-
-        rows.push({
-          key: `${childNo}-${String(child.id ?? child.name ?? "child")}-${sessionIndex + 1}`,
-          itemNo: childNo,
-          treatmentDate: childTreatmentDate,
-          serviceName: childName,
-          sessionSequence: `${sessionIndex + 1} / ${quantity}`,
-          unitTotal,
-          level: 1,
-          isParent: false
-        })
-      })
-    })
   })
 
   return rows
@@ -365,7 +557,7 @@ const invoiceRows = computed<TableRow[]>(() => {
 
   return (detail.value?.package_availments ?? []).map((pkg, index) => ({
     key: String(pkg.authorization_id),
-      itemNo: index + 1,
+    itemNo: index + 1,
     treatmentDate: billingDetail.value?.created_at || "",
     serviceName: pkg.package_name || "—",
     sessionSequence: `${pkg.used_count} / ${pkg.availed_count}`,
@@ -378,16 +570,9 @@ const formatCurrency = (value?: number | null): string =>
     ? ""
     : Number(value).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
 
-const formatDateTime = (value?: string): string => {
-  if (!value) return "N/A"
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? "N/A" : date.toLocaleString("en-PH")
-}
-
-const formatDate = (value?: string | null): string => {
-  if (!value) return "N/A"
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? "N/A" : date.toLocaleDateString("en-PH")
+const formatDate = (value?: string | Date | null): string => {
+  const date = parseDate(value)
+  return date ? date.toLocaleDateString("en-PH") : NOT_AVAILABLE_LABEL
 }
 
 const load = async (): Promise<void> => {
@@ -402,8 +587,13 @@ const load = async (): Promise<void> => {
   }
 
   try {
+    const periodYear = transactionPeriodEndDate.value?.getFullYear()
+    const periodMonth = transactionPeriodEndDate.value
+      ? transactionPeriodEndDate.value.getMonth() + 1
+      : undefined
+
     const [detailResult, sponsorResult] = await Promise.all([
-      lguBillingService.getPatientCreditDetail(patientId.value),
+      lguBillingService.getPatientCreditDetail(patientId.value, periodYear, periodMonth),
       patientHMOInformationService.getByPatientId(patientId.value)
     ])
     detail.value = detailResult ?? null
@@ -421,19 +611,13 @@ const load = async (): Promise<void> => {
 onMounted(() => {
   void load().then(() => {
     if (String(route.query.autoprint ?? "1") !== "0") {
-      window.setTimeout(() => window.print(), 50)
+      window.setTimeout(() => printPage(), 50)
     }
   })
 })
 </script>
 
-<style>
-.line {
-  display: grid;
-  grid-template-columns: 120px minmax(0, 1fr);
-  gap: 8px;
-}
-
+<style scoped>
 .profile-details {
   width: 100%;
   display: flex;
@@ -558,37 +742,5 @@ onMounted(() => {
 
 .table-wrap {
   overflow-x: auto;
-}
-
-.ticket-footer-wrap {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.footnote-full {
-  grid-column: 1 / -1;
-}
-
-.footnote-panel {
-  border: 1px solid #d1d5db;
-  border-radius: 14px;
-  background: #fff;
-  padding: 12px;
-}
-
-.ticket-label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: #1d4ed8;
-  margin-bottom: 4px;
-}
-
-.footnote-copy {
-  font-size: 13px;
-  line-height: 1.6;
-  color: #334155;
 }
 </style>

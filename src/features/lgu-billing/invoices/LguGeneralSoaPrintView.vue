@@ -1,14 +1,10 @@
 <template>
   <LguInvoiceLayout
     title="STATEMENT OF ACCOUNT"
-    :subtitle="`LGU statement for ${partnerLabel}`"
+    :subtitle="`statement for ${partnerLabel}`"
     :has-error="!!error"
   >
-    <template #meta>
-      <strong>Partner Institution:</strong><span>{{ partnerLabel }}</span>
-      <strong>Billing Date:</strong><span>{{ billingDateLabel }}</span>
-      <strong>Transaction Period:</strong><span>{{ periodLabel }}</span>
-    </template>
+
 
     <template #toolbar>
       <Button label="Print" icon="pi pi-print" @click="printPage" />
@@ -104,29 +100,26 @@
     </template>
 
     <template #bottom>
-      <section class="payment-box">
-        <h3>LGU DETAILS</h3>
-
-        <div><strong>Partner Institution:</strong> {{ partnerLabel }}</div>
-        <div><strong>Billing Date:</strong> {{ billingDateLabel }}</div>
-        <div><strong>Transaction Period:</strong> {{ periodLabel }}</div>
-      </section>
-
-      <section class="approval">
-        <div><strong>Approved By:</strong></div>
-
-        <div class="name">
-          RENALOU B. CORDOVA, PTRP, UK-PT
-        </div>
-
-        <div class="title">
-          Chief Operations Officer
-        </div>
-
-        <div class="signed">
-          <strong>Date Signed:</strong> {{ dateSigned }}
-        </div>
-      </section>
+      <div class="flex justify-end w-full">
+        <!-- <section class="payment-box">
+          <h3>LGU DETAILS</h3>
+          <div><strong>Partner Institution:</strong> {{ partnerLabel }}</div>
+          <div><strong>Billing Date:</strong> {{ billingDateLabel }}</div>
+          <div><strong>Transaction Period:</strong> {{ periodLabel }}</div>
+        </section> -->
+        <section class="approval">
+          <div><strong>Approved By:</strong></div>
+          <div class="name">
+            RENALOU B. CORDOVA, PTRP, UK-PT
+          </div>
+          <div class="title">
+            Chief Operations Officer
+          </div>
+          <div class="signed">
+            <strong>Date Signed:</strong> {{ dateSigned }}
+          </div>
+        </section>
+      </div>
     </template>
   </LguInvoiceLayout>
 </template>
@@ -141,7 +134,8 @@ import {
 } from "@/features/billing/api/billing-phase1.service"
 import {
   lguBillingService,
-  type LguDashboardHistoryItem
+  type LguDashboardHistoryItem,
+  type LguPatientCreditDetail
 } from "@/features/lgu-billing/api/lgu-billing.service"
 import LguInvoiceLayout from "./LguInvoiceLayout.vue"
 import {
@@ -152,6 +146,7 @@ import {
   useLguInvoicePrintActions
 } from "./lgu-invoice.shared"
 import { getApiErrorMessage } from "@/utils/actionable-error.util"
+import { patientHMOInformationService } from "@/services/patient-hmo-information.service"
 
 type Payer = "hmo" | "lgu"
 
@@ -176,6 +171,12 @@ type PatientTotalRow = {
 }
 
 type SoaDisplayRow = ServiceSoaRow | PatientTotalRow
+
+type PatientSoaContext = {
+  referralFormNo?: string | null
+  referralIssuedDate?: string | null
+  completedSessionSequences: number[]
+}
 
 type InvoiceLineItem = {
   id?: number | string
@@ -318,7 +319,6 @@ const CHILD_SERVICE_JSON_KEYS = [
 ]
 
 const CONTRACT_PRICE_KEYS = [
-  "price",
   "lgu_contract_price",
   "lguContractPrice",
   "lgu_price",
@@ -329,12 +329,18 @@ const CONTRACT_PRICE_KEYS = [
   "contractUnitPrice",
   "package_unit_price",
   "packageUnitPrice",
-  "dropout_unit_price",
-  "dropoutUnitPrice",
   "standard_unit_price",
   "standardUnitPrice",
   "approved_price",
-  "approvedPrice"
+  "approvedPrice",
+  "price"
+]
+
+const DROPOUT_PRICE_KEYS = [
+  "dropout_unit_price",
+  "dropoutUnitPrice",
+  "dropout_price",
+  "dropoutPrice"
 ]
 
 const UNIT_PRICE_KEYS = [
@@ -383,7 +389,7 @@ const dateSigned = computed(() => new Date().toLocaleDateString("en-PH"))
 
 const partnerLabel = computed(() => {
   if (payer.value === "lgu") {
-    return programName.value ? `LGU - ${programName.value}` : "LGU"
+    return programName.value ? `${programName.value}` : "LGU"
   }
 
   return hmoName.value ? `HMO - ${hmoName.value}` : "HMO"
@@ -522,12 +528,16 @@ const getTimestamp = (record: unknown): number => {
 const getPatientName = (item: unknown): string =>
   getText(item, ["patient_name", "patientName"], "Unknown Patient")
 
-const getReferralFormNo = (item: unknown): string =>
+const getReferralFormNo = (
+  item: unknown,
+  context?: PatientSoaContext
+): string =>
+  String(context?.referralFormNo ?? "").trim() ||
   getText(item, [
+    "lgu_patient_referral_form_no",
+    "lguPatientReferralFormNo",
     "referral_form_no",
     "referralFormNo",
-    "reference_label",
-    "referenceLabel"
   ], "-")
 
 const getReferenceNo = (item: unknown): string =>
@@ -614,8 +624,16 @@ const resolvePatientProgramStatus = (patientItems: unknown[]): string => {
 
 const getTreatmentDate = (
   lineItem: unknown,
-  parentItem: unknown
+  parentItem: unknown,
+  context?: PatientSoaContext
 ): string | null =>
+  String(context?.referralIssuedDate ?? "").trim() ||
+  getText(parentItem, [
+    "lgu_date_issued",
+    "lguDateIssued",
+    "referral_issued_date",
+    "referralIssuedDate"
+  ]) ||
   getText(lineItem, [
     "treatment_date",
     "treatmentDate",
@@ -663,20 +681,16 @@ const getQuantity = (record: unknown): number => {
 const getServiceQuantity = (
   lineItem: unknown,
   parentItem: unknown,
-  isDropoutPatient: boolean
+  isDropoutPatient: boolean,
+  completedSessionCount = 0
 ): number => {
+  void parentItem
+
   if (isDropoutPatient) {
-    return 1
+    return Math.max(1, Math.min(getQuantity(lineItem), Math.max(1, completedSessionCount)))
   }
 
-  const lineQuantity = getQuantity(lineItem)
-
-  if (lineQuantity > 1) {
-    return lineQuantity
-  }
-
-  const parentQuantity = getQuantity(parentItem)
-  return parentQuantity > 1 ? parentQuantity : 1
+  return getQuantity(lineItem)
 }
 
 const normalizeSessionSequence = (value: string): string => {
@@ -723,15 +737,24 @@ const getOccurrenceSessionSequence = (
   lineItem: unknown,
   parentItem: unknown,
   occurrence: number,
-  totalOccurrences: number
+  totalOccurrences: number,
+  isDropoutPatient = false,
+  sequenceOverride?: number,
+  configuredTotal?: number
 ): string => {
   const explicit = getSessionSequence(lineItem, parentItem)
+
+  if (isDropoutPatient) {
+    const sessionNo = Math.max(1, Math.floor(Number(sequenceOverride ?? occurrence)))
+    const totalSessions = Math.max(1, Math.floor(Number(configuredTotal ?? totalOccurrences)))
+    return `${sessionNo} of ${totalSessions}`
+  }
 
   if (totalOccurrences > 1) {
     return `${occurrence} of ${totalOccurrences}`
   }
 
-  return explicit
+  return explicit || "1 of 1"
 }
 
 const isPackageLine = (item: InvoiceLineItem): boolean => {
@@ -1003,10 +1026,7 @@ const getContractPrice = (
 ): number | null => {
   const priceKeys = isDropoutPatient
     ? [
-        "dropout_unit_price",
-        "dropoutUnitPrice",
-        "dropout_price",
-        "dropoutPrice",
+        ...DROPOUT_PRICE_KEYS,
         ...CONTRACT_PRICE_KEYS
       ]
     : CONTRACT_PRICE_KEYS
@@ -1049,9 +1069,82 @@ const getContractPrice = (
   return null
 }
 
+const getPatientId = (item: unknown): number | null => {
+  const parsed = getAmount(item, ["patient_id", "patientId"])
+  return parsed && parsed > 0 ? Math.floor(parsed) : null
+}
+
+const getCompletedSessionSequences = (detail: LguPatientCreditDetail | null): number[] => {
+  if (!detail) return []
+
+  const statusByAppointmentId = new Map(
+    (detail.appointments ?? []).map(appointment => [
+      appointment.appointment_id,
+      normalizeLguStatus(appointment.status)
+    ])
+  )
+
+  const sequences = (detail.authorizations ?? [])
+    .flatMap(authorization => authorization.sessions ?? [])
+    .filter(session => statusByAppointmentId.get(session.appointment_id) === "COMPLETED")
+    .map(session => Math.max(1, Math.floor(Number(session.session_sequence ?? 1))))
+    .filter(sequence => Number.isFinite(sequence))
+    .sort((left, right) => left - right)
+
+  if (sequences.length) {
+    return Array.from(new Set(sequences))
+  }
+
+  const completedCount = (detail.appointments ?? [])
+    .filter(appointment => normalizeLguStatus(appointment.status) === "COMPLETED")
+    .length
+
+  return Array.from({ length: completedCount }, (_, index) => index + 1)
+}
+
+const buildPatientSoaContextMap = async (
+  items: unknown[]
+): Promise<Map<string, PatientSoaContext>> => {
+  const patientIds = Array.from(
+    new Set(
+      items
+        .map(getPatientId)
+        .filter((patientId): patientId is number => Boolean(patientId))
+    )
+  )
+
+  const entries = await Promise.all(patientIds.map(async patientId => {
+    const [sponsorResult, detailResult] = await Promise.allSettled([
+      patientHMOInformationService.getByPatientId(patientId),
+      payer.value === "lgu"
+        ? lguBillingService.getPatientCreditDetail(patientId)
+        : Promise.resolve(null)
+    ])
+
+    const lguSponsor = sponsorResult.status === "fulfilled"
+      ? (sponsorResult.value ?? []).find(item => item.sponsor_context === "LGU")
+      : null
+    const detail = detailResult.status === "fulfilled"
+      ? detailResult.value ?? null
+      : null
+
+    return [
+      String(patientId),
+      {
+        referralFormNo: lguSponsor?.referral_form_no,
+        referralIssuedDate: lguSponsor?.referral_issued_date,
+        completedSessionSequences: getCompletedSessionSequences(detail)
+      }
+    ] as const
+  }))
+
+  return new Map(entries)
+}
+
 const buildStatementRows = (
   items: unknown[],
-  payerType: Payer
+  payerType: Payer,
+  patientContextById = new Map<string, PatientSoaContext>()
 ): SoaDisplayRow[] => {
   const patientGroups = new Map<string, unknown[]>()
 
@@ -1077,6 +1170,8 @@ const buildStatementRows = (
       const sortedItems = [...patientItems].sort((left, right) => {
         return getTimestamp(left) - getTimestamp(right)
       })
+      const patientContext = patientContextById.get(patientKey)
+      const completedSessionSequences = patientContext?.completedSessionSequences ?? []
 
       let patientTotal = 0
       let patientHasServiceRows = false
@@ -1094,11 +1189,18 @@ const buildStatementRows = (
         serviceLines.forEach((lineItem, lineIndex) => {
           const isDirectSoaServiceRow = lineItem === item
           const price = getContractPrice(lineItem, item, !isDirectSoaServiceRow, isDropoutPatient)
-          const quantity = getServiceQuantity(lineItem, item, isDropoutPatient)
+          const configuredQuantity = getQuantity(lineItem)
+          const quantity = getServiceQuantity(
+            lineItem,
+            item,
+            isDropoutPatient,
+            completedSessionSequences.length
+          )
 
           patientHasServiceRows = true
 
           for (let occurrence = 1; occurrence <= quantity; occurrence += 1) {
+            const completedSessionSequence = completedSessionSequences[occurrence - 1] ?? occurrence
             patientTotal += Number(price ?? 0)
 
             outputRows.push({
@@ -1106,12 +1208,20 @@ const buildStatementRows = (
               key: `service-${payerType}-${patientKey}-${itemIndex}-${lineIndex}-${occurrence}`,
               itemNo: isFirstPatientRow ? itemNo : null,
               patientName: isFirstPatientRow ? getPatientName(item) : "",
-              referralFormNo: isFirstPatientRow ? getReferralFormNo(item) : "",
+              referralFormNo: isFirstPatientRow ? getReferralFormNo(item, patientContext) : "",
               referenceNo: lineIndex === 0 && occurrence === 1 ? getReferenceNo(item) : "",
               programStatus: isFirstPatientRow ? formatProgramStatus(patientProgramStatus) : "",
-              treatmentDate: getTreatmentDate(lineItem, item),
+              treatmentDate: getTreatmentDate(lineItem, item, patientContext),
               serviceName: getServiceName(lineItem, item),
-              sessionSequence: getOccurrenceSessionSequence(lineItem, item, occurrence, quantity),
+              sessionSequence: getOccurrenceSessionSequence(
+                lineItem,
+                item,
+                occurrence,
+                quantity,
+                isDropoutPatient,
+                completedSessionSequence,
+                configuredQuantity
+              ),
               price
             })
 
@@ -1180,14 +1290,16 @@ const load = async (): Promise<void> => {
 
     try {
       const data = await fetchLguSoa(dateFrom.value, dateTo.value, programId.value)
-      rows.value = buildStatementRows(data as LguSoaHistoryItem[], "lgu")
+      const patientContextById = await buildPatientSoaContextMap(data)
+      rows.value = buildStatementRows(data as LguSoaHistoryItem[], "lgu", patientContextById)
     } catch (programFilteredError: unknown) {
       if (!programId.value) {
         throw programFilteredError
       }
 
       const data = await fetchLguSoa(dateFrom.value, dateTo.value)
-      rows.value = buildStatementRows(data as LguSoaHistoryItem[], "lgu")
+      const patientContextById = await buildPatientSoaContextMap(data)
+      rows.value = buildStatementRows(data as LguSoaHistoryItem[], "lgu", patientContextById)
     }
   } catch (err: unknown) {
     error.value = getApiErrorMessage(err, {
