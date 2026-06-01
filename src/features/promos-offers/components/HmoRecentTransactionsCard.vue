@@ -422,24 +422,24 @@ type HmoPrintableLine = {
 type HmoPrintableEvent = "print-patient-profile" | "print-patient-billing-summary" | "print-attendance-record"
 
 const hmoPrintables = [
-  {
-    title: "Patient HMO Profile",
-    buttonLabel: "Patient HMO Profile",
-    icon: "pi pi-id-card",
-    event: "print-patient-profile" as HmoPrintableEvent
-  },
+  // {
+  //   title: "Patient HMO Profile",
+  //   buttonLabel: "Patient HMO Profile",
+  //   icon: "pi pi-id-card",
+  //   event: "print-patient-profile" as HmoPrintableEvent
+  // },
   {
     title: "Patient Billing Summary",
     buttonLabel: "Patient Billing Summary",
     icon: "pi pi-receipt",
     event: "print-patient-billing-summary" as HmoPrintableEvent
   },
-  {
-    title: "Attendance & Treatment Record",
-    buttonLabel: "Attendance & Treatment Record",
-    icon: "pi pi-file-pdf",
-    event: "print-attendance-record" as HmoPrintableEvent
-  }
+  // {
+  //   title: "Attendance & Treatment Record",
+  //   buttonLabel: "Attendance & Treatment Record",
+  //   icon: "pi pi-file-pdf",
+  //   event: "print-attendance-record" as HmoPrintableEvent
+  // }
 ]
 
 const openHmoPrintRoute = (routeName: "hmo-patient-profile-print" | "hmo-patient-billing-summary-print" | "hmo-attendance-treatment-print"): Window | null => {

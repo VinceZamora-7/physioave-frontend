@@ -222,12 +222,12 @@ const lguPrintables = [
     icon: "pi pi-file",
     event: "export-patient-billing-summary" as LguPrintableEvent
   },
-  {
-    title: "Attendance & Treatment Record",
-    buttonLabel: "Print Attendance Record",
-    icon: "pi pi-calendar-clock",
-    event: "print-attendance-record" as LguPrintableEvent
-  },
+  // {
+  //   title: "Attendance & Treatment Record",
+  //   buttonLabel: "Print Attendance Record",
+  //   icon: "pi pi-calendar-clock",
+  //   event: "print-attendance-record" as LguPrintableEvent
+  // },
 ]
 
 const printPrintable = (event: LguPrintableEvent): void => {
