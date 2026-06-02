@@ -169,6 +169,61 @@
     <section class="app-section-card-comfy space-y-4">
       <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
+          <h3 class="app-section-title">Patient Clinical Dropdowns</h3>
+          <p class="text-sm opacity-70">Manage the options shown in Patients â†’ Evaluation Visit Log.</p>
+        </div>
+      </div>
+
+      <div class="grid gap-3 md:grid-cols-3">
+        <Button
+          label="Medical Categories"
+          icon="pi pi-list"
+          severity="secondary"
+          outlined
+          @click="medicalCategoryManager?.open()"
+        />
+        <Button
+          label="Doctor Diagnoses"
+          icon="pi pi-stethoscope"
+          severity="secondary"
+          outlined
+          @click="medicalDiagnosisManager?.open()"
+        />
+        <Button
+          label="PT Case Impressions"
+          icon="pi pi-clipboard"
+          severity="secondary"
+          outlined
+          @click="ptCaseImpressionManager?.open()"
+        />
+      </div>
+
+      <MedicalReferenceManagerDialog
+        ref="medicalCategoryManager"
+        title="Medical Categories"
+        item-label="Medical category"
+        endpoint="/references/medical-categories"
+        description="These options appear in the Medical Category dropdown."
+      />
+      <MedicalReferenceManagerDialog
+        ref="medicalDiagnosisManager"
+        title="Doctor Diagnoses"
+        item-label="Doctor diagnosis"
+        endpoint="/references/medical-diagnoses"
+        description="These options appear in the Doctor Diagnosis dropdown."
+      />
+      <MedicalReferenceManagerDialog
+        ref="ptCaseImpressionManager"
+        title="PT Case Impressions"
+        item-label="PT case impression"
+        endpoint="/references/pt-case-impressions"
+        description="These options appear in the PT Case Impression dropdown."
+      />
+    </section>
+
+    <section class="app-section-card-comfy space-y-4">
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
           <h3 class="app-section-title">Expense Items</h3>
           <p class="text-sm opacity-70">Manage the dropdown options shown when adding expenses in Reports.</p>
         </div>
@@ -230,6 +285,7 @@ import { authMeService, type AuthMe } from "@/services/auth-me.service"
 import { ptOutlinedBtn, ptPrimaryBtn } from "@/features/shared/table-header.styles"
 import ModeOfReferralManagerDialog from "@/features/general-settings/components/ModeOfReferralManagerDialog.vue"
 import ExpenseItemManagerDialog from "@/features/general-settings/components/ExpenseItemManagerDialog.vue"
+import MedicalReferenceManagerDialog from "@/features/general-settings/components/MedicalReferenceManagerDialog.vue"
 
 const router = useRouter()
 
@@ -237,6 +293,9 @@ const currentUser = ref<AuthMe>()
 const loadError = ref("")
 const modeOfReferralManager = ref<InstanceType<typeof ModeOfReferralManagerDialog> | null>(null)
 const expenseItemManager = ref<InstanceType<typeof ExpenseItemManagerDialog> | null>(null)
+const medicalCategoryManager = ref<InstanceType<typeof MedicalReferenceManagerDialog> | null>(null)
+const medicalDiagnosisManager = ref<InstanceType<typeof MedicalReferenceManagerDialog> | null>(null)
+const ptCaseImpressionManager = ref<InstanceType<typeof MedicalReferenceManagerDialog> | null>(null)
 
 const formatProviderType = (type?: string): string => {
   if (!type) return "—"

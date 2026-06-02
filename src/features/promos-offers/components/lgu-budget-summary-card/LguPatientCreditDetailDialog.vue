@@ -225,8 +225,8 @@ const lguPrintables = [
     event: "print-attendance-record" as LguPrintableEvent
   },
   {
-    title: "LGU Billing Statement",
-    buttonLabel: "Print Billing Statement",
+    title: "Patient Billing Summary",
+    buttonLabel: "Print Patient Billing Summary",
     icon: "pi pi-file-pdf",
     event: "open-patient-soa-picker" as LguPrintableEvent
   }

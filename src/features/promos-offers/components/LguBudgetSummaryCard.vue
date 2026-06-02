@@ -138,7 +138,11 @@
     <LguPatientSoaDialog
       v-model:visible="patientSoaPickerVisible"
       v-model:patient-soa-range="patientSoaRange"
+      v-model:patient-soa-mode="patientSoaMode"
+      v-model:selected-patient-soa-session-key="selectedPatientSoaSessionKey"
       :has-valid-patient-soa-range="hasValidPatientSoaRange"
+      :invoice-session-options="invoiceSessionOptions"
+      :format-date-time="formatDateTime"
       @export-patient-soa="exportPatientSoa"
     />
 
@@ -240,6 +244,8 @@ const patientSoaPickerVisible = ref(false)
 const exportsModalVisible = ref(false)
 const soaRange = ref<Date[] | null>(null)
 const patientSoaRange = ref<Date[] | null>(null)
+const patientSoaMode = ref<"range" | "session">("range")
+const selectedPatientSoaSessionKey = ref<string | null>(null)
 const bulkTicketRange = ref<Date[] | null>(null)
 const exportingBulkTickets = ref(false)
 const exportingLguPatients = ref(false)
@@ -1316,13 +1322,12 @@ const renderInvoiceSubItemBlankPriceTreeHtml = (
     ${item.children?.length ? renderInvoiceSubItemBlankPriceTreeHtml(item.children, depth + 1) : ""}
   `).join("")
 
-const renderPackageServiceRenderedHtml = (packageName: string, items: LguInvoiceSubItem[] | undefined): string => `
-  <div class="package-line">${escapeHtml(packageName)}</div>
-  ${renderInvoiceSubItemTreeHtml(items)}
-`
+const renderPackageServiceRenderedHtml = (packageName: string, items: LguInvoiceSubItem[] | undefined): string =>
+  items?.length
+    ? renderInvoiceSubItemTreeHtml(items)
+    : `<div class="package-line">${escapeHtml(packageName)}</div>`
 
 const renderPackageUnitPriceHtml = (items: LguInvoiceSubItem[] | undefined): string => `
-  <div class="package-line">&nbsp;</div>
   ${renderInvoiceSubItemPriceTreeHtml(items)}
 `
 
@@ -2000,29 +2005,49 @@ const exportPatientBillingSummary = async (): Promise<void> => {
 const exportPatientSoa = async (): Promise<void> => {
   const patient = selectedPatientDetail.value
   if (!patient) return
-  if (!hasValidPatientSoaRange.value) {
+  const isSingleSession = patientSoaMode.value === "session"
+  const selectedSession = isSingleSession
+    ? invoiceSessionOptions.value.find(option => option.key === selectedPatientSoaSessionKey.value) ?? null
+    : null
+
+  if (!isSingleSession && !hasValidPatientSoaRange.value) {
     errorToast(toast, "Select the SOA transaction period before printing.")
+    return
+  }
+  if (isSingleSession && !selectedSession) {
+    errorToast(toast, "Select one session before printing.")
     return
   }
 
   await loadLguInvoiceCatalog()
-  const [fromDate, toDate] = patientSoaRange.value as Date[]
+  const [rangeFromDate, rangeToDate] = hasValidPatientSoaRange.value
+    ? patientSoaRange.value as Date[]
+    : [new Date(), new Date()]
+  const sessionDate = selectedSession?.appointmentDate ? new Date(selectedSession.appointmentDate) : null
+  const fromDate = isSingleSession && sessionDate ? sessionDate : rangeFromDate
+  const toDate = isSingleSession && sessionDate ? sessionDate : rangeToDate
   const from = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate())
   const to = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate(), 23, 59, 59, 999)
-  const sessions = invoiceSessionOptions.value.filter(option => {
-    const appointmentDate = new Date(option.appointmentDate)
-    return !Number.isNaN(appointmentDate.getTime()) && appointmentDate >= from && appointmentDate <= to
-  })
+  const sessions = isSingleSession && selectedSession
+    ? [selectedSession]
+    : invoiceSessionOptions.value.filter(option => {
+        const appointmentDate = new Date(option.appointmentDate)
+        return !Number.isNaN(appointmentDate.getTime()) && appointmentDate >= from && appointmentDate <= to
+      })
   const billingDetails = await loadBillingDetailsForSessions(sessions)
   const headerBilling = latestBillingDetail(billingDetails)
   const rows = getStatementOfAccountRows(sessions)
-  const transactionPeriod = `${formatDateOnly(fromDate)} - ${formatDateOnly(toDate)}`
+  const transactionPeriod = isSingleSession && selectedSession
+    ? `${selectedSession.label} - ${formatDateOnly(fromDate)}`
+    : `${formatDateOnly(fromDate)} - ${formatDateOnly(toDate)}`
   const billingDate = formatDateOnly(headerBilling?.lgu_date_issued ? new Date(headerBilling.lgu_date_issued) : getMonthEndDate(toDate))
   const lguName = headerBilling?.lgu_program_name || selectedProgramName.value || "LGU"
   const lguReference = headerBilling?.lgu_patient_referral_form_no || headerBilling?.lgu_reference_label || selectedBillingMonth.value
   const patientName = headerBilling?.patient_name || patient.patient_name
   const lguStatus = formatLguStatus(headerBilling?.lgu_patient_program_status || selectedPatientStatusLabel())
-  const referenceNumber = `LGU-SOA-${patient.patient_id}-${formatYmd(fromDate)}-${formatYmd(toDate)}`
+  const referenceNumber = isSingleSession && selectedSession
+    ? `LGU-SOA-${patient.patient_id}-SESSION-${selectedSession.sessionSequence}-${formatYmd(fromDate)}`
+    : `LGU-SOA-${patient.patient_id}-${formatYmd(fromDate)}-${formatYmd(toDate)}`
   const grandTotal = Number(rows.reduce((sum, row) => sum + (row.isChildRow ? 0 : Number(row.unitTotal ?? 0)), 0).toFixed(2))
   let popup: Window
   try {
@@ -2040,9 +2065,9 @@ const exportPatientSoa = async (): Promise<void> => {
   ]
 
   renderStandardInvoiceWindow(popup, {
-    title: "Statement of the Account",
-    headerTitle: "STATEMENT OF THE ACCOUNT",
-    fileName: patientExportFileName("soa"),
+    title: "Patient Billing Summary",
+    headerTitle: "PATIENT BILLING SUMMARY",
+    fileName: patientExportFileName(isSingleSession ? `soa-session-${selectedSession?.sessionSequence ?? "single"}` : "soa"),
     billingDate: toDate.toISOString(),
     referenceNumber,
     topMetaRows: [
@@ -2152,22 +2177,93 @@ const inferLguPackageTotalSessions = (name?: string, fallback = 1): number => {
   return match ? Math.max(1, Number(match[1])) : Math.max(1, fallback)
 }
 
+const getDashboardSoaPatientKey = (row: LguDashboardHistoryItem): string =>
+  row.patient_id == null ? `name:${row.patient_name || "unknown"}` : `patient:${row.patient_id}`
+
+const getDashboardSoaPriceMode = (row: LguDashboardHistoryItem): LguInvoicePriceMode =>
+  String(row.program_status ?? "").toUpperCase().includes("DROPPED_OUT") ? "dropout" : "package"
+
+const getDashboardSoaPackageSubItems = (row: LguDashboardHistoryItem): LguInvoiceSubItem[] => {
+  const packageName = row.package_name || row.service_name || "LGU Package"
+  const sessionSequence = Math.max(1, Number(row.session_sequence ?? 1))
+  const priceMode = getDashboardSoaPriceMode(row)
+  const lines = parseClaimLineItems(row.line_items_json ?? undefined)
+  const packageLine = lines.find(line => String(line.type ?? "").toLowerCase() === "package")
+    ?? lines.find(line => line.subItems?.length)
+  const subItems = packageLine?.subItems?.length
+    ? enrichSubItemPrices(packageLine.subItems, priceMode)
+    : getPackageInvoiceSubItems(packageLine?.id, packageLine?.name || packageName, Math.max(1, Number(packageLine?.quantity ?? 1)), true, priceMode)
+  return filterSubItemsForSession(subItems, sessionSequence)
+}
+
+const getDashboardSoaRowAmount = (row: LguDashboardHistoryItem): number => {
+  const subItems = getDashboardSoaPackageSubItems(row)
+  const subItemTotal = sumSubItemTreeAmounts(subItems)
+  return subItems.length ? subItemTotal : Number(row.amount_out ?? 0)
+}
+
+const formatDashboardSoaSessionSequence = (row: LguDashboardHistoryItem): string => {
+  const sequence = Number(row.session_sequence ?? 0)
+  if (!Number.isFinite(sequence) || sequence <= 0) return "N/A"
+  const totalSessions = Number(row.total_sessions ?? 0)
+  return totalSessions > 0 ? `Session ${sequence} of ${totalSessions}` : `Session ${sequence}`
+}
+
 const renderDashboardStatementOfAccountRows = (rows: LguDashboardHistoryItem[]): string => {
-  if (!rows.length) return renderEmptyRow(10, "No SOA records found for the selected period.")
-  return rows.map((row, index) => `
-    <tr>
-      <td class="text-center">${index + 1}</td>
-      <td>${escapeHtml(row.patient_name || "N/A")}</td>
-      <td>${escapeHtml(row.reference_label || row.phase1_billing_public_id || row.receipt_number || "N/A")}</td>
-      <td>${escapeHtml(row.program_status || row.billing_status || row.usage_status || "N/A")}</td>
-      <td>${escapeHtml(row.physical_therapist || "N/A")}</td>
-      <td>${escapeHtml(row.doctor || "N/A")}</td>
-      <td>${escapeHtml(row.diagnosis || "N/A")}</td>
-      <td class="text-center">${escapeHtml(new Date(row.created_at).toLocaleDateString("en-PH"))}</td>
-      <td>${escapeHtml(row.service_name || "LGU Session")}</td>
-      <td class="text-right">${Number(row.amount_out ?? 0) > 0 ? escapeHtml(asCurrency(Number(row.amount_out ?? 0))) : "FREE"}</td>
-    </tr>
-  `).join("")
+  if (!rows.length) return renderEmptyRow(9, "No SOA records found for the selected period.")
+  const renderedRows: string[] = []
+  let itemNumber = 1
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index]
+    const currentPatientKey = getDashboardSoaPatientKey(row)
+    const previousRow = rows[index - 1]
+    const nextRow = rows[index + 1]
+    const isPatientStart = !previousRow || getDashboardSoaPatientKey(previousRow) !== currentPatientKey
+    const isPatientEnd = !nextRow || getDashboardSoaPatientKey(nextRow) !== currentPatientKey
+    const referenceNo = row.reference_label || row.phase1_billing_public_id || row.receipt_number || "N/A"
+    const previousReferenceNo = previousRow && getDashboardSoaPatientKey(previousRow) === currentPatientKey
+      ? previousRow.reference_label || previousRow.phase1_billing_public_id || previousRow.receipt_number || "N/A"
+      : null
+    const shouldShowReferenceNo = isPatientStart || referenceNo !== previousReferenceNo
+    const subItems = getDashboardSoaPackageSubItems(row)
+    const rowAmount = getDashboardSoaRowAmount(row)
+    const serviceRenderedHtml = subItems.length
+      ? renderPackageServiceRenderedHtml(row.package_name || row.service_name || "LGU Package", subItems)
+      : escapeHtml(row.service_name || "LGU Session")
+    const unitTotalHtml = subItems.length
+      ? renderPackageUnitPriceHtml(subItems)
+      : (rowAmount > 0 ? escapeHtml(asCurrency(rowAmount)) : "FREE")
+    const patientTotal = isPatientEnd
+      ? rows
+          .filter(groupRow => getDashboardSoaPatientKey(groupRow) === currentPatientKey)
+          .reduce((sum, groupRow) => sum + getDashboardSoaRowAmount(groupRow), 0)
+      : 0
+
+    renderedRows.push(`
+      <tr${isPatientStart ? ' class="item-group-start"' : ""}>
+        <td class="text-center">${isPatientStart ? itemNumber : ""}</td>
+        <td>${isPatientStart ? escapeHtml(row.patient_name || "N/A") : ""}</td>
+        <td>${isPatientStart ? escapeHtml(row.referral_form_no || "N/A") : ""}</td>
+        <td>${shouldShowReferenceNo ? escapeHtml(referenceNo) : ""}</td>
+        <td>${isPatientStart ? escapeHtml(row.program_status || row.billing_status || row.usage_status || "N/A") : ""}</td>
+        <td class="text-center">${escapeHtml(new Date(row.treatment_date || row.created_at).toLocaleDateString("en-PH"))}</td>
+        <td>${serviceRenderedHtml}</td>
+        <td class="text-center">${escapeHtml(formatDashboardSoaSessionSequence(row))}</td>
+        <td class="text-right">${unitTotalHtml}</td>
+      </tr>
+    `)
+
+    if (isPatientEnd) {
+      renderedRows.push(`
+        <tr class="session-divider-row">
+          <td colspan="8" class="text-right" style="font-weight: 700;">Patient Billing Summary Total:</td>
+          <td class="text-right" style="font-weight: 700;">${escapeHtml(asCurrency(patientTotal))}</td>
+        </tr>
+      `)
+      itemNumber += 1
+    }
+  }
+  return renderedRows.join("")
 }
 
 const generateSoa = async (): Promise<void> => {
@@ -2192,7 +2288,7 @@ const generateSoa = async (): Promise<void> => {
       limit: 5000,
       program_id: selectedProgramId.value ?? undefined
     }) ?? []).filter(row => Number(row.amount_out ?? 0) > 0 || !!row.patient_id || !!row.phase1_billing_id)
-    const grandTotal = rows.reduce((sum, row) => sum + Number(row.amount_out ?? 0), 0)
+    const grandTotal = rows.reduce((sum, row) => sum + getDashboardSoaRowAmount(row), 0)
     const detailRows: InvoiceDetailRow[] = [
       { label: "Billing To", value: lguName },
       { label: "Date Issued", value: new Date().toLocaleDateString("en-PH") },
@@ -2215,17 +2311,16 @@ const generateSoa = async (): Promise<void> => {
       columns: [
         { label: "ITEM No.", width: "58px", align: "center" },
         { label: "PATIENT NAME", width: "150px" },
+        { label: "REFERRAL FORM NO.", width: "130px" },
         { label: "REFERENCE NO.", width: "120px" },
         { label: "PROGRAM STATUS", width: "110px" },
-        { label: "PHYSICAL THERAPIST", width: "130px" },
-        { label: "DOCTOR", width: "120px" },
-        { label: "DIAGNOSIS", width: "150px" },
         { label: "TREATMENT DATE", width: "100px", align: "center" },
         { label: "PT SERVICE RENDERED" },
+        { label: "SESSION SEQUENCE", width: "120px", align: "center" },
         { label: "INVOICE BILLING TOTAL", width: "130px", align: "right" }
       ],
       tableRowsHtml: renderDashboardStatementOfAccountRows(rows),
-      emptyStateColspan: 10,
+      emptyStateColspan: 9,
       discount: 0,
       grandTotal,
       detailBoxTitle: "LGU DETAILS",

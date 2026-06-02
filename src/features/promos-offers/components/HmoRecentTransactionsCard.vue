@@ -868,8 +868,8 @@ const printPatientSoa = async (): Promise<void> => {
     const lines = details.flatMap(billing => parseBillingLineItems(billing))
     const grandTotal = Number(lines.reduce((sum, line) => sum + line.lineTotal, 0).toFixed(2))
     renderStandardInvoiceWindow(popup, {
-      title: "Statement of Account",
-      headerTitle: "STATEMENT OF ACCOUNT",
+      title: "Patient Billing Summary",
+      headerTitle: "PATIENT BILLING SUMMARY",
       fileName: `HMO-SOA-${selectedPatient.value.id}-${formatYmd(from)}-${formatYmd(to)}`,
       billingDate: to.toISOString(),
       referenceNumber: `HMO-SOA-${selectedPatient.value.id}`,

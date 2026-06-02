@@ -57,6 +57,9 @@ export interface MedicalHistory extends Reference {
 export interface MedicalDiagnose extends Reference {
 }
 
+export interface PtCaseImpression extends Reference {
+}
+
 export interface MedicalImaging extends Reference {
 }
 

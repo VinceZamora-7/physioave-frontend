@@ -21,6 +21,7 @@ export enum ReferenceTanstackKey {
   MODE_OF_REFERRALS = 'mode-of-referrals',
   MEDICAL_CATEGORIES = 'medical-categories',
   MEDICAL_DIAGNOSES = 'medical-diagnoses',
+  PT_CASE_IMPRESSIONS = 'pt-case-impressions',
   MEDICAL_HISTORIES = 'medical-histories',
   MEDICAL_IMAGINGS = 'medical-imagings',
   HMO_TYPES = 'hmo-types',
