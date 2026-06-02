@@ -1,9 +1,12 @@
 import { computed, ref, type Ref } from "vue"
+import { useQueryClient } from "@tanstack/vue-query"
 import type { ToastServiceMethods } from "primevue/toastservice"
 import {
   appointmentPhase1Service,
   type AppointmentDetail
 } from "@/features/appointments/api/appointment-phase1.service"
+import { appointmentContextTanstackService } from "@/features/appointments/queries/appointment-context.tanstack.service"
+import { AppointmentTanstackKey } from "@/utils/keys/tanstack-key"
 import { getApiErrorMessage } from "@/utils/actionable-error.util"
 import { errorToast, successToast } from "@/utils/toast.util"
 
@@ -29,6 +32,7 @@ export function useDropoutStatus(
   toast: ToastServiceMethods,
   onUpdated?: (detail: AppointmentDetail) => void
 ) {
+  const queryClient = useQueryClient()
   const dropoutLoading = ref(false)
   const dropoutStatusValue = computed<DropoutStatus>(() =>
     normalizeDropoutStatus(selectedDetail.value?.dropout_status)
@@ -90,8 +94,9 @@ export function useDropoutStatus(
           : `${baseMessage}.${clearedCount ? ` ${clearedCount} future appointment${clearedCount === 1 ? "" : "s"} cleared.` : ""}`
       )
 
-      const refreshed = await appointmentPhase1Service.getById(appointmentId)
-      onUpdated?.(refreshed)
+      await queryClient.invalidateQueries({ queryKey: [AppointmentTanstackKey.APPOINTMENT_CONTEXT, appointmentId] })
+      const refreshed = await appointmentContextTanstackService.fetchContext(queryClient, appointmentId)
+      onUpdated?.(refreshed.appointment)
     } catch (error: unknown) {
       errorToast(toast, extractDropoutErrorMessage(error))
     } finally {

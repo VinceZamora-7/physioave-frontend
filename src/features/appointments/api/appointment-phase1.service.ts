@@ -1,6 +1,6 @@
 import { pamsAPI } from "@/utils/axios-interceptor"
 import type { Pageable } from "@/models/paging"
-import axios, { HttpStatusCode, type AxiosRequestConfig, type AxiosResponse } from "axios"
+import type { AxiosRequestConfig, AxiosResponse } from "axios"
 
 export type AppointmentPhase = "EVAL" | "SESSION" | "RE_EVAL"
 export type AppointmentLocationContext = "IN_CLINIC" | "HOME_CARE"
@@ -168,6 +168,16 @@ export interface AppointmentDetail extends AppointmentListItem {
   checkout_summary: AppointmentCheckoutSummary
   encounter_ticket?: AppointmentEncounterTicket
   lgu_credit_summary?: LguCreditSummary
+}
+
+export interface AppointmentContext {
+  appointment: AppointmentDetail
+  related: {
+    patient_id: number
+    billing_id?: number | null
+    patient_link: string
+    billing_link?: string
+  }
 }
 
 export interface StaffReference {
@@ -457,104 +467,31 @@ export interface DropoutStatusUpdatePayload {
 }
 
 const APPOINTMENTS_PATH = "/appointments"
-const REFRESH_TOKENS_PATH = "/refresh-tokens"
-const AUTH_ERROR_STATUSES = new Set<number>([HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden])
-
-let refreshPromise: Promise<unknown> | null = null
 
 const branchParams = (clinicId?: number): QueryParams => (
   clinicId ? { clinic_id: clinicId } : { all_branches: true }
 )
 
-const extractAxiosErrorMessage = (error: unknown): string => {
-  if (!axios.isAxiosError(error)) return ""
-
-  const responseData = error.response?.data
-
-  if (typeof responseData === "string") return responseData
-  if (responseData && typeof responseData === "object") {
-    const data = responseData as Record<string, unknown>
-    return String(data.message || data.detail || data.error || error.message || "")
-  }
-
-  return String(error.message || "")
-}
-
-const hasJwtMessage = (message: string): boolean => {
-  const normalizedMessage = message.toLowerCase()
-
-  return (
-    normalizedMessage.includes("expired") ||
-    normalizedMessage.includes("jwt") ||
-    normalizedMessage.includes("token")
-  )
-}
-
-const shouldRefreshToken = (error: unknown): boolean => {
-  if (!axios.isAxiosError(error)) return false
-
-  const status = error.response?.status
-  const message = extractAxiosErrorMessage(error)
-
-  if (status && AUTH_ERROR_STATUSES.has(status)) return true
-
-  // Keep support for backends that incorrectly return 500 for expired JWT,
-  // but avoid refreshing on every real server error.
-  return status === HttpStatusCode.InternalServerError && hasJwtMessage(message)
-}
-
-const ensureRefreshed = async (): Promise<void> => {
-  if (!refreshPromise) {
-    refreshPromise = pamsAPI.post(REFRESH_TOKENS_PATH).finally(() => {
-      refreshPromise = null
-    })
-  }
-
-  await refreshPromise
-}
-
-const withRefreshRetry = async <T>(operation: () => Promise<T>): Promise<T> => {
-  try {
-    return await operation()
-  } catch (error: unknown) {
-    if (!shouldRefreshToken(error)) throw error
-
-    await ensureRefreshed()
-    return await operation()
-  }
-}
-
 const getData = async <T>(url: string, config?: AxiosRequestConfig): Promise<T> => {
-  return await withRefreshRetry(async () => {
-    const { data } = await pamsAPI.get<T>(url, config)
-    return data
-  })
+  const { data } = await pamsAPI.get<T>(url, config)
+  return data
 }
 
 const postData = async <T, TPayload = unknown>(url: string, payload?: TPayload): Promise<T> => {
-  return await withRefreshRetry(async () => {
-    const { data } = await pamsAPI.post<T>(url, payload)
-    return data
-  })
+  const { data } = await pamsAPI.post<T>(url, payload)
+  return data
 }
 
 const patchData = async <T, TPayload = unknown>(url: string, payload?: TPayload): Promise<T> => {
-  return await withRefreshRetry(async () => {
-    const { data } = await pamsAPI.patch<T>(url, payload)
-    return data
-  })
+  const { data } = await pamsAPI.patch<T>(url, payload)
+  return data
 }
 
 const requestVoid = async (config: AxiosRequestConfig): Promise<void> => {
-  await withRefreshRetry(async () => {
-    await pamsAPI.request(config)
-  })
+  await pamsAPI.request(config)
 }
 
 export const appointmentPhase1Service = {
-  ensureRefreshed,
-  withRefreshRetry,
-
   getAll(params: QueryParams = {}): Promise<Pageable<AppointmentListItem>> {
     return getData<Pageable<AppointmentListItem>>(APPOINTMENTS_PATH, { params })
   },
@@ -626,6 +563,10 @@ export const appointmentPhase1Service = {
     return getData<AppointmentDetail>(`${APPOINTMENTS_PATH}/${id}`)
   },
 
+  getContext(id: number): Promise<AppointmentContext> {
+    return getData<AppointmentContext>(`${APPOINTMENTS_PATH}/${id}/context`)
+  },
+
   create(payload: AppointmentCreatePayload): Promise<AppointmentCreateResult> {
     return postData<AppointmentCreateResult, AppointmentCreatePayload>(APPOINTMENTS_PATH, payload)
   },
@@ -687,11 +628,9 @@ export const appointmentPhase1Service = {
   },
 
   exportCsv(params: QueryParams): Promise<AxiosResponse<Blob>> {
-    return withRefreshRetry(async () => {
-      return await pamsAPI.get<Blob>(`${APPOINTMENTS_PATH}/export/csv`, {
-        params,
-        responseType: "blob"
-      })
+    return pamsAPI.get<Blob>(`${APPOINTMENTS_PATH}/export/csv`, {
+      params,
+      responseType: "blob"
     })
   }
 }

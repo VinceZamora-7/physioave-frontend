@@ -411,6 +411,7 @@
 import { computed, onMounted, ref, watch } from "vue"
 import { storeToRefs } from "pinia"
 import { useRoute } from "vue-router"
+import { useQueryClient } from "@tanstack/vue-query"
 import Button from "primevue/button"
 import Column from "primevue/column"
 import DataTable from "primevue/datatable"
@@ -422,12 +423,10 @@ import Tag from "primevue/tag"
 import { useConfirm } from "primevue/useconfirm"
 import { useToast } from "primevue/usetoast"
 
-import ClinicTreatmentAreasCard from "@/features/clinics/components/ClinicTreatmentAreasCard.vue"
 import RoleAccessManagerDialog from "@/features/staff/components/RoleAccessManagerDialog.vue"
 import SpecialtyManagerDialog from "@/features/staff/components/SpecialtyManagerDialog.vue"
 import StaffEditorDialog from "@/features/staff/components/StaffEditorDialog.vue"
 import { staffService } from "@/features/staff/api/staff.service"
-import { authMeService, type AuthMe } from "@/services/auth-me.service"
 import {
   googleCalendarSyncService,
   type GoogleCalendarSyncStatus
@@ -436,14 +435,16 @@ import { pamsAPI } from "@/utils/axios-interceptor"
 import { getApiErrorMessage } from "@/utils/actionable-error.util"
 import type { Lookup } from "@/models/global.model"
 import type { Pageable } from "@/models/paging"
-import { defaultPage } from "@/models/paging"
 import { Status } from "@/utils/global.type"
-import type { Clinic } from "@/features/clinics/types/clinic"
 import type { Role, SpecialtyTag } from "@/models/reference"
 import type { Staff } from "@/features/staff/types/staff"
 import { errorToast, successToast } from "@/utils/toast.util"
 import { ptInputText, ptOutlinedBtn, ptPrimaryBtn, ptSelect } from "@/features/shared/table-header.styles"
 import { clinicStore } from "@/stores/clinic.store"
+import { useAuthSessionStore } from "@/stores/auth-session.store"
+import { isPtAppointmentProvider } from "@/utils/appointment-provider.util"
+import { accessMatrixService } from "@/features/staff/api/access-matrix.service"
+import { accessMatrixTanstackService } from "@/features/staff/queries/access-matrix.tanstack.service"
 
 type StatusFilterValue = "ACTIVE" | "INACTIVE"
 type SpecialtyDisplayFilter = "ACTIVE" | "ALL"
@@ -451,14 +452,15 @@ type SpecialtyDisplayFilter = "ACTIVE" | "ALL"
 const toast = useToast()
 const confirm = useConfirm()
 const route = useRoute()
+const queryClient = useQueryClient()
 const globalClinicStore = clinicStore()
 const { clinicOptions: clinics, selectedClinicId, selectedClinic } = storeToRefs(globalClinicStore)
+const authSession = useAuthSessionStore()
+const { currentUser } = storeToRefs(authSession)
 
-const currentUser = ref<AuthMe>()
 const calendarSyncStatus = ref<GoogleCalendarSyncStatus>()
 const loadError = ref("")
 const isInitializing = ref(false)
-const isRefreshing = ref(false)
 const isStaffLoading = ref(false)
 const isReferenceLoading = ref(false)
 const isCalendarSyncBusy = ref(false)
@@ -498,7 +500,6 @@ const PT_DEFAULT_PERMISSION_NAMES = new Set([
   "Appointment::UPDATE",
   "Appointment::DELETE",
   "Appointment::MANAGE_STATUS",
-  "Dashboard::READ",
 ])
 
 const COMMON_SPECIALTY_PRESETS = [
@@ -512,19 +513,15 @@ const COMMON_SPECIALTY_PRESETS = [
   "Burns & Wound Care",
 ]
 
-const permissionSet = computed(() => new Set(currentUser.value?.permissions ?? []))
-const hasAnyPermission = (...permissions: string[]): boolean =>
-  permissions.some(permission => permissionSet.value.has(permission))
-
-const canReadClinics = computed(() => hasAnyPermission("Clinic::READ", "Clinic::LOOKUP", "Clinic::UPDATE", "Clinic::CREATE"))
-const canReadStaff = computed(() => hasAnyPermission("Staff::READ", "Staff::LOOKUP", "Staff::UPDATE", "Staff::CREATE"))
-const canReadReferences = computed(() => hasAnyPermission("Reference::LOOKUP", "Reference::UPDATE", "Reference::CREATE"))
-const canManageTreatmentAreas = computed(() => hasAnyPermission("Clinic::UPDATE"))
-const canManageStaff = computed(() => hasAnyPermission("Staff::CREATE", "Staff::UPDATE"))
-const canManageSpecialties = computed(() => hasAnyPermission("Reference::CREATE", "Reference::UPDATE"))
+const canReadClinics = computed(() => authSession.hasAnyPermission("Clinic::READ", "Clinic::LOOKUP", "Clinic::UPDATE", "Clinic::CREATE"))
+const canReadStaff = computed(() => authSession.hasAnyPermission("Staff::READ", "Staff::LOOKUP", "Staff::UPDATE", "Staff::CREATE"))
+const canReadReferences = computed(() => authSession.hasAnyPermission("Reference::LOOKUP", "Reference::UPDATE", "Reference::CREATE"))
+const canManageTreatmentAreas = computed(() => authSession.hasAnyPermission("Clinic::UPDATE"))
+const canManageStaff = computed(() => authSession.hasAnyPermission("Staff::CREATE", "Staff::UPDATE"))
+const canManageSpecialties = computed(() => authSession.hasAnyPermission("Reference::CREATE", "Reference::UPDATE"))
 const canManageRoleAccess = computed(() =>
-  hasAnyPermission("Reference::CREATE", "Reference::UPDATE")
-  && hasAnyPermission("AccessMatrix::CREATE", "AccessMatrix::DELETE")
+  authSession.hasAnyPermission("Reference::CREATE", "Reference::UPDATE")
+  && authSession.hasAnyPermission("AccessMatrix::CREATE", "AccessMatrix::DELETE")
 )
 const canViewSettings = computed(() =>
   canReadClinics.value || canReadStaff.value || canReadReferences.value || canManageTreatmentAreas.value || canManageStaff.value
@@ -539,13 +536,7 @@ const canSeeOperationsSetup = computed(() =>
   || canSeeSpecialtiesSection.value
   || canSeeRoleAccessSection.value
 )
-const canSeeBranchScopeSection = computed(() =>
-  canSeePtDirectorySection.value || canSeeTreatmentAreasSection.value
-)
-const isMobileCalendarEligibleRole = computed(() => {
-  const providerType = String(currentUser.value?.appointment_provider_type ?? "").trim().toUpperCase()
-  return providerType === "PHYSICAL_THERAPIST" || providerType === "PT_ASSISTANT" || providerType === "INTERN"
-})
+const isMobileCalendarEligibleRole = computed(() => isPtAppointmentProvider(currentUser.value))
 const canSeeMobileCalendarSection = computed(() =>
   isMobileCalendarEligibleRole.value
 )
@@ -686,16 +677,6 @@ const roleAppointmentUsageSeverity = (role: Role): "success" | "info" | "warn" |
   return "secondary"
 }
 
-const roleSpecialtyLabel = (role: Role): string => {
-  if (role.appointment_provider_type === "NONE") return "No specialty needed"
-  return role.requires_specialty_tag ? "Specialty required" : "Specialty optional"
-}
-
-const roleSpecialtySeverity = (role: Role): "warn" | "contrast" | "secondary" => {
-  if (role.appointment_provider_type === "NONE") return "secondary"
-  return role.requires_specialty_tag ? "warn" : "contrast"
-}
-
 const roleStatusLabel = (role: Role): string =>
   role.is_active ? "Active" : "Inactive"
 
@@ -707,22 +688,6 @@ const specialtyStatusLabel = (specialty: SpecialtyTag): string =>
 
 const specialtyStatusSeverity = (specialty: SpecialtyTag): "success" | "secondary" =>
   specialty.is_active ? "success" : "secondary"
-
-const roleAppointmentHelpText = (role: Role): string => {
-  if (role.appointment_provider_type === "PHYSICAL_THERAPIST") {
-    return "This job title can be selected as a PT during appointment booking."
-  }
-  if (role.appointment_provider_type === "DOCTOR_CONSULTANT") {
-    return "This job title can be selected as a doctor consultant during appointment booking."
-  }
-  if (role.appointment_provider_type === "PT_ASSISTANT") {
-    return "This job title can be selected as PT Assistant during appointment booking."
-  }
-  if (role.appointment_provider_type === "INTERN") {
-    return "This job title can be selected as Intern during appointment booking."
-  }
-  return "This job title is for staff access and reporting only, not for appointment provider selection."
-}
 
 const extractApiErrorMessage = (error: unknown, fallback: string): string =>
   getApiErrorMessage(error, {
@@ -745,12 +710,10 @@ const formatCalendarSyncDateTime = (value?: string): string => {
 }
 
 const fetchCurrentUser = async (): Promise<void> => {
-  const me = await authMeService.get()
+  const me = await authSession.ensureLoaded()
   if (!me) {
     throw new Error("Unable to load your account profile.")
   }
-  currentUser.value = me
-  localStorage.setItem("auth_user", JSON.stringify(me))
 }
 
 const fetchCalendarSyncStatus = async (): Promise<void> => {
@@ -761,7 +724,7 @@ const fetchClinics = async (): Promise<void> => {
   if (!canReadClinics.value) {
     return
   }
-  await globalClinicStore.loadClinics()
+  await globalClinicStore.initializeFromAuthSession()
 }
 
 const fetchReferences = async (): Promise<void> => {
@@ -810,25 +773,6 @@ const fetchStaffs = async (): Promise<void> => {
     staffs.value = response?.content ?? []
   } finally {
     isStaffLoading.value = false
-  }
-}
-
-const refreshAll = async (): Promise<void> => {
-  if (!currentUser.value) return
-
-  isRefreshing.value = true
-  loadError.value = ""
-  try {
-    await Promise.all([
-      fetchClinics(),
-      fetchReferences(),
-      fetchCalendarSyncStatus()
-    ])
-    await fetchStaffs()
-  } catch (error: unknown) {
-    loadError.value = extractApiErrorMessage(error, "Failed to refresh the operations settings dashboard")
-  } finally {
-    isRefreshing.value = false
   }
 }
 
@@ -908,20 +852,15 @@ const quickSetupStandardRoles = async (): Promise<void> => {
 
     await Promise.all(
       newRoles.map(async (role) => {
-        const { data } = await pamsAPI.get<Pageable<{ id: number; name: string }>>("/references/permissions/unassigned", {
-          params: { role_id: role.id, page: 1, size: 500, status: "ACTIVE" }
-        })
-        const ptPermissionIds = (data?.content ?? [])
+        const permissions = await accessMatrixTanstackService.fetchUnassignedPermissions(queryClient, role.id)
+        const ptPermissionIds = (permissions.content ?? [])
           .filter((p) => PT_DEFAULT_PERMISSION_NAMES.has(p.name))
           .map((p) => p.id)
 
-        await Promise.all(
-          ptPermissionIds.map((permissionId) =>
-            pamsAPI.post("/access-matrix", null, {
-              params: { role_id: role.id, permission_id: permissionId }
-            })
-          )
-        )
+        await accessMatrixService.applyPermissionChanges(role.id, {
+          grant_permission_ids: ptPermissionIds,
+        })
+        await accessMatrixTanstackService.invalidateRole(queryClient, role.id)
       })
     )
 

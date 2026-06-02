@@ -389,6 +389,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue"
+import { useQueryClient } from "@tanstack/vue-query"
+import { storeToRefs } from "pinia"
 import Button from "primevue/button"
 import Column from "primevue/column"
 import ConfirmDialog from "primevue/confirmdialog"
@@ -401,23 +403,19 @@ import Select from "primevue/select"
 import Tag from "primevue/tag"
 import { useConfirm } from "primevue/useconfirm"
 import { useToast } from "primevue/usetoast"
-import {authMeService} from "@/services/auth-me.service"
 import { hmoMachineRateService } from "@/services/hmo-machine-rate.service"
 import { hmoService } from "@/services/hmo.service"
-import { machineService } from "@/services/machine.service"
 import { Status } from "@/utils/global.type"
 import { errorToast, successToast } from "@/utils/toast.util"
-import { hasAnyStoredPermission, readStoredAuthSnapshot } from "@/utils/auth-user.util"
 import PromosCatalogManagerDialog from "@/features/promos-offers/components/PromosCatalogManagerDialog.vue"
 import { ptPrimaryBtn } from "@/features/shared/table-header.styles"
-import {
-  isLocalEditablePromosService,
-  loadBackendPromosMasterCatalog,
-  normalizePromosServiceName
-} from "@/features/promos-offers/composables/promos-master-catalog.composable"
+import { isLocalEditablePromosService } from "@/features/promos-offers/composables/promos-master-catalog.composable"
 import { pamsAPI } from "@/utils/axios-interceptor"
-import type { Pageable } from "@/models/paging"
 import HmoRecentTransactionsCard from "@/features/promos-offers/components/HmoRecentTransactionsCard.vue"
+import { useAuthSessionStore } from "@/stores/auth-session.store"
+import { serviceCatalogContextTanstackService } from "@/features/services/queries/service-catalog-context.tanstack.service"
+import { ServiceCatalogTanstackKey } from "@/utils/keys/tanstack-key"
+import type { ServiceCatalogItem } from "@/features/services/api/service-catalog-context.service"
 
 type ServiceType = "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service"
 
@@ -454,13 +452,12 @@ type ServiceCatalogMatrixRow = {
 
 const toast = useToast()
 const confirm = useConfirm()
+const queryClient = useQueryClient()
+const authSession = useAuthSessionStore()
+const { roleName } = storeToRefs(authSession)
 
 const catalogManagerVisible = ref(false)
 const serviceCatalogVisible = ref(false)
-const authSnapshot = ref(readStoredAuthSnapshot())
-window.addEventListener("auth-user-updated", () => {
-  authSnapshot.value = readStoredAuthSnapshot()
-})
 const isLoading = ref(false)
 const dialogVisible = ref(false)
 const editingId = ref<string | null>(null)
@@ -468,7 +465,6 @@ const profileDialogVisible = ref(false)
 const rateDialogVisible = ref(false)
 const editingRateIndex = ref<number | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
-const currentRoleName = ref<string>("")
 
 const PRIVILEGED_ROLE_KEYWORDS = [
   "chief operations officer",
@@ -535,52 +531,30 @@ const selectedProfileRateMap = computed(() => {
 })
 
 const canViewConfidentialRates = computed(() => {
-  const normalized = currentRoleName.value.trim().toLowerCase()
+  const normalized = roleName.value.trim().toLowerCase()
   if (!normalized) return false
   return PRIVILEGED_ROLE_KEYWORDS.some(keyword => normalized.includes(keyword))
 })
 
 const canManageCatalog = computed(() => {
-  if (/owner/i.test(authSnapshot.value.roleName)) return true
-  return hasAnyStoredPermission(
-    authSnapshot.value.permissions,
+  if (/owner/i.test(roleName.value)) return true
+  return authSession.hasAnyPermission(
     "Service::CREATE",
     "Service::UPDATE",
     "Service::DELETE"
   )
 })
 
-const resolveRoleFromStorage = (): string => {
-  const candidateKeys = ["auth_user", "currentUser", "user", "profile", "loggedInUser", "google_user"]
-  for (const key of candidateKeys) {
-    const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key)
-    if (!raw) continue
-
-    try {
-      const parsed = JSON.parse(raw) as Record<string, unknown>
-      const role = String(parsed.role_name ?? parsed.role ?? parsed.userRole ?? parsed.primaryRole ?? "").trim()
-      if (role) return role
-
-      if (Array.isArray(parsed.roles) && parsed.roles.length > 0) {
-        const first = parsed.roles[0]
-        if (typeof first === "string" && first.trim()) return first.trim()
-        if (first && typeof first === "object") {
-          const roleObj = first as Record<string, unknown>
-          const nested = String(roleObj.name ?? roleObj.role ?? "").trim()
-          if (nested) return nested
-        }
-      }
-    } catch {
-      // Ignore malformed storage entries.
-    }
-  }
-  return ""
-}
-
 const ensureConfidentialAccess = (): boolean => {
   if (canViewConfidentialRates.value) return true
   errorToast(toast, "Confidential negotiated HMO rates are restricted to COO/Operations Manager")
   return false
+}
+
+const invalidateSelectedProfileRates = async (): Promise<void> => {
+  const hmoId = Number(selectedProfileId.value)
+  if (!Number.isFinite(hmoId) || hmoId <= 0) return
+  await queryClient.invalidateQueries({queryKey: [ServiceCatalogTanstackKey.SERVICE_CATALOG_CONTEXT, "HMO", hmoId]})
 }
 
 const typeOptions = [
@@ -693,65 +667,30 @@ const parseNumericId = (value: string, prefix: string): number => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 }
 
+const catalogItemToHmoService = (type: ServiceType, item: ServiceCatalogItem): HmoService => ({
+  id: `${type}-${item.id}`,
+  type,
+  name: item.name,
+  price: Number(item.price ?? item.effective_price ?? 0),
+  status: item.is_active ? "Active" : "Inactive"
+})
+
+const invalidateGlobalServiceCatalog = async (): Promise<void> => {
+  await queryClient.invalidateQueries({queryKey: [ServiceCatalogTanstackKey.SERVICE_CATALOG_CONTEXT, "GLOBAL", null]})
+}
+
 const loadServices = async (): Promise<void> => {
   try {
     isLoading.value = true
-    const { machineServices: backendMachines, techniqueServices: backendTechniques } = await loadBackendPromosMasterCatalog()
-    machineServices.value = backendMachines as HmoService[]
-    techniqueServices.value = backendTechniques as HmoService[]
-
-    // DB-backed "custom" services used by billing (evaluations + add-ons).
-    const results = await Promise.allSettled([
-      pamsAPI.get<Pageable<{ id: number; name: string; price: number; is_active: boolean }>>("/evaluations", {
-        params: { page: 1, size: 1000, name: "", status: "ALL" }
-      }),
-      pamsAPI.get<Pageable<{ id: number; name: string; price: number; is_active: boolean }>>("/add-on-machines", {
-        params: { page: 1, size: 1000, name: "", status: "ALL" }
-      }),
-      pamsAPI.get<Pageable<{ id: number; name: string; price: number; is_active: boolean }>>("/add-on-techniques", {
-        params: { page: 1, size: 1000, name: "", status: "ALL" }
-      }),
-      pamsAPI.get<Pageable<{ id: number; name: string; price: number; is_active: boolean }>>("/add-on-home-services", {
-        params: { page: 1, size: 1000, name: "", status: "ALL" }
-      })
-    ])
-
-    const getContent = <T,>(idx: number): T[] => {
-      const res = results[idx]
-      if (res?.status !== "fulfilled") return []
-      return (res.value.data?.content ?? []) as T[]
-    }
-
-    const evalServices: HmoService[] = getContent<{ id: number; name: string; price: number; is_active: boolean }>(0).map(item => ({
-      id: `evaluation-${item.id}`,
-      type: "evaluation",
-      name: String(item.name ?? ""),
-      price: Number(item.price ?? 0),
-      status: item.is_active ? "Active" : "Inactive"
-    }))
-    const addOnMachineServices: HmoService[] = getContent<{ id: number; name: string; price: number; is_active: boolean }>(1).map(item => ({
-      id: `add-on-machine-${item.id}`,
-      type: "add-on-machine",
-      name: String(item.name ?? ""),
-      price: Number(item.price ?? 0),
-      status: item.is_active ? "Active" : "Inactive"
-    }))
-    const addOnTechniqueServices: HmoService[] = getContent<{ id: number; name: string; price: number; is_active: boolean }>(2).map(item => ({
-      id: `add-on-technique-${item.id}`,
-      type: "add-on-technique",
-      name: String(item.name ?? ""),
-      price: Number(item.price ?? 0),
-      status: item.is_active ? "Active" : "Inactive"
-    }))
-    const addOnHomeServices: HmoService[] = getContent<{ id: number; name: string; price: number; is_active: boolean }>(3).map(item => ({
-      id: `add-on-home-service-${item.id}`,
-      type: "add-on-home-service",
-      name: String(item.name ?? ""),
-      price: Number(item.price ?? 0),
-      status: item.is_active ? "Active" : "Inactive"
-    }))
-
-    customServices.value = [...evalServices, ...addOnMachineServices, ...addOnTechniqueServices, ...addOnHomeServices]
+    const context = await serviceCatalogContextTanstackService.fetchContext(queryClient, {scope: "GLOBAL"})
+    machineServices.value = (context?.services.machines ?? []).map(item => catalogItemToHmoService("machine", item))
+    techniqueServices.value = (context?.services.techniques ?? []).map(item => catalogItemToHmoService("technique", item))
+    customServices.value = [
+      ...(context?.services.evaluations ?? []).map(item => catalogItemToHmoService("evaluation", item)),
+      ...(context?.services.add_on_machines ?? []).map(item => catalogItemToHmoService("add-on-machine", item)),
+      ...(context?.services.add_on_techniques ?? []).map(item => catalogItemToHmoService("add-on-technique", item)),
+      ...(context?.services.add_on_home_services ?? []).map(item => catalogItemToHmoService("add-on-home-service", item)),
+    ]
   } catch {
     machineServices.value = []
     techniqueServices.value = []
@@ -764,17 +703,14 @@ const loadServices = async (): Promise<void> => {
 
 const loadMachineCatalog = async (): Promise<void> => {
   try {
-    const lookup = await machineService.getAllLookup({
-      page: 1,
-      size: 1000,
-      name: "",
-      status: Status.ACTIVE
-    })
-    machineCatalog.value = (lookup?.content ?? []).map(machine => ({
-      id: Number(machine.id),
-      name: machine.name,
-      price: Number(machine.price ?? 0)
-    }))
+    const context = await serviceCatalogContextTanstackService.fetchContext(queryClient, {scope: "GLOBAL"})
+    machineCatalog.value = (context?.services.machines ?? [])
+      .filter(machine => machine.is_active)
+      .map(machine => ({
+        id: Number(machine.id),
+        name: machine.name,
+        price: Number(machine.price ?? 0)
+      }))
   } catch {
     machineCatalog.value = []
   }
@@ -792,12 +728,14 @@ const loadSelectedProfileRates = async (): Promise<void> => {
     return
   }
 
-  const rates = await hmoMachineRateService.getAll(hmoId)
-  selectedProfileRates.value = (rates ?? []).map(rate => ({
-    serviceId: String(rate.machine_id),
-    serviceName: rate.machine_name,
-    rate: Number(rate.rate)
-  }))
+  const catalogContext = await serviceCatalogContextTanstackService.fetchContext(queryClient, {scope: "HMO", hmo_id: hmoId})
+  selectedProfileRates.value = (catalogContext?.services.machines ?? [])
+    .filter(machine => machine.hmo_rate != null)
+    .map(machine => ({
+      serviceId: String(machine.id),
+      serviceName: machine.name,
+      rate: Number(machine.hmo_rate)
+    }))
 }
 
 const loadProfilesAndRates = async (): Promise<void> => {
@@ -926,6 +864,7 @@ const saveRate = async (): Promise<void> => {
   }
 
   await hmoMachineRateService.upsert(Number(selectedProfileId.value), machineId, Number(rateForm.rate))
+  await invalidateSelectedProfileRates()
   await loadSelectedProfileRates()
   rateDialogVisible.value = false
   successToast(toast, editingRateIndex.value == null ? "Custom rate added" : "Custom rate updated")
@@ -946,6 +885,7 @@ const confirmDeleteRate = (rate: HmoPriceListRate): void => {
       }
 
       await hmoMachineRateService.remove(Number(selectedProfileId.value), machineId)
+      await invalidateSelectedProfileRates()
       await loadSelectedProfileRates()
       successToast(toast, "Custom rate deleted")
     }
@@ -1046,6 +986,7 @@ const onSelectPriceListFile = async (event: Event): Promise<void> => {
         hmoMachineRateService.upsert(Number(selectedProfileId.value), entry.machineId, entry.rate)
       )
     )
+    await invalidateSelectedProfileRates()
     await loadSelectedProfileRates()
 
     if (skippedCount > 0) {
@@ -1071,6 +1012,7 @@ const clearSelectedProfilePriceList = async (): Promise<void> => {
       .map(machineId => hmoMachineRateService.remove(Number(selectedProfileId.value), machineId))
 
     await Promise.all(deleteTasks)
+    await invalidateSelectedProfileRates()
     await loadSelectedProfileRates()
     successToast(toast, "Custom price list cleared")
   } catch {
@@ -1194,6 +1136,7 @@ const saveService = async (): Promise<void> => {
     }
 
     dialogVisible.value = false
+    await invalidateGlobalServiceCatalog()
     await loadServices()
   } catch {
     errorToast(toast, "Failed to save HMO service")
@@ -1232,6 +1175,7 @@ const confirmDelete = (service: HmoService): void => {
         if (!id) throw new Error("Invalid id")
         await pamsAPI.patch(`${endpoint}/${id}/status`)
         successToast(toast, "HMO service updated")
+        await invalidateGlobalServiceCatalog()
         await loadServices()
       } catch {
         errorToast(toast, "Failed to update service status")
@@ -1242,24 +1186,8 @@ const confirmDelete = (service: HmoService): void => {
   })
 }
 
-onMounted(() => {
-  currentRoleName.value = resolveRoleFromStorage()
-  void authMeService.get()
-    .then((me) => {
-      const role = String(me?.role_name ?? "").trim()
-      if (!role) return
-
-      const wasPrivileged = canViewConfidentialRates.value
-      currentRoleName.value = role
-      if (!wasPrivileged && canViewConfidentialRates.value) {
-        void loadProfilesAndRates()
-        void loadMachineCatalog()
-      }
-    })
-    .catch(() => {
-      // Keep storage-derived role fallback.
-    })
-
+onMounted(async () => {
+  await authSession.ensureLoaded().catch(() => undefined)
   void loadServices()
   if (canViewConfidentialRates.value) {
     void loadProfilesAndRates()

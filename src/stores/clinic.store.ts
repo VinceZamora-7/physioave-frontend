@@ -3,16 +3,20 @@ import {defineStore} from 'pinia'
 import {clinicService} from "@/features/clinics/api/clinic.service"
 import type {Clinic} from "@/features/clinics/types/clinic";
 import {defaultPage, defaultPageSize} from "@/models/paging"
+import { useAuthSessionStore } from "@/stores/auth-session.store"
 
 const SELECTED_CLINIC_STORAGE_KEY = "selected_clinic_id"
+
+const normalizeClinicId = (id: number | string | null | undefined): number | undefined => {
+  const parsed = typeof id === "number" ? id : Number(id)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+}
 
 const readStoredClinicId = (): number | undefined => {
   const raw = localStorage.getItem(SELECTED_CLINIC_STORAGE_KEY)
   if (!raw) return undefined
 
-  const parsed = Number(raw)
-  if (!Number.isFinite(parsed) || parsed <= 0) return undefined
-  return parsed
+  return normalizeClinicId(raw)
 }
 
 export const clinicStore = defineStore('clinicStore', () => {
@@ -21,9 +25,20 @@ export const clinicStore = defineStore('clinicStore', () => {
   const isLoadingClinics = ref(false)
   const hasLoadedClinics = ref(false)
   const selectedClinicId = ref<number | undefined>(readStoredClinicId())
+  const sessionClinicId = ref<number | undefined>()
+  const canViewAllBranches = ref(true)
+  const hasSessionClinicContext = ref(false)
 
   const selectedClinic = computed(() =>
     clinicOptions.value.find((item) => item.id === selectedClinicId.value)
+  )
+  const isBranchLocked = computed(() =>
+    hasSessionClinicContext.value &&
+    !canViewAllBranches.value &&
+    sessionClinicId.value !== undefined
+  )
+  const canSelectAllBranches = computed(() =>
+    !hasSessionClinicContext.value || canViewAllBranches.value
   )
 
   const persistSelectedClinicId = (id: number | undefined) => {
@@ -36,14 +51,21 @@ export const clinicStore = defineStore('clinicStore', () => {
   }
 
   const setSelectedClinicId = (id: number | string | undefined) => {
-    const parsed = typeof id === "number" ? id : Number(id)
-    const normalized = Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+    const normalized = isBranchLocked.value
+      ? sessionClinicId.value
+      : normalizeClinicId(id)
+
     selectedClinicId.value = normalized
     clinic.value = clinicOptions.value.find((item) => item.id === normalized)
     persistSelectedClinicId(normalized)
   }
 
   const ensureSelectedClinic = () => {
+    if (isBranchLocked.value) {
+      setSelectedClinicId(sessionClinicId.value)
+      return
+    }
+
     // Undefined means "All branches" (no clinic filter).
     if (selectedClinicId.value == null) {
       clinic.value = undefined
@@ -52,7 +74,7 @@ export const clinicStore = defineStore('clinicStore', () => {
 
     const isSelectedStillValid = clinicOptions.value.some((item) => item.id === selectedClinicId.value)
     if (!isSelectedStillValid) {
-      setSelectedClinicId(clinicOptions.value[0]?.id)
+      setSelectedClinicId(canSelectAllBranches.value ? undefined : clinicOptions.value[0]?.id)
       return
     }
 
@@ -87,8 +109,24 @@ export const clinicStore = defineStore('clinicStore', () => {
     }
   }
 
+  const initializeFromAuthSession = async (force = false): Promise<Clinic[]> => {
+    const authSession = useAuthSessionStore()
+    const user = await authSession.ensureLoaded()
+
+    sessionClinicId.value = normalizeClinicId(user.clinic_id)
+    canViewAllBranches.value = Boolean(user.can_view_all_branches)
+    hasSessionClinicContext.value = true
+
+    const clinics = await loadClinics(force)
+    ensureSelectedClinic()
+    return clinics
+  }
+
   const resetClinic = () => {
     clinic.value = undefined
+    sessionClinicId.value = undefined
+    canViewAllBranches.value = true
+    hasSessionClinicContext.value = false
     setSelectedClinicId(undefined)
     clinicOptions.value = []
     hasLoadedClinics.value = false
@@ -100,8 +138,14 @@ export const clinicStore = defineStore('clinicStore', () => {
     isLoadingClinics,
     selectedClinicId,
     selectedClinic,
+    sessionClinicId,
+    canViewAllBranches,
+    hasSessionClinicContext,
+    isBranchLocked,
+    canSelectAllBranches,
     setSelectedClinicId,
     loadClinics,
+    initializeFromAuthSession,
     resetClinic,
   }
 })

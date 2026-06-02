@@ -55,6 +55,8 @@ export interface BillingListItem {
   patient_name: string
   appointment_id?: number
   appointment_public_id?: string
+  patient_link?: string
+  appointment_link?: string
   billing_type: string
   service_type: string
   service_name?: string
@@ -90,6 +92,7 @@ export interface BillingListItem {
   hmo_company_name?: string
   hmo_loa_number?: string
   hmo_loa_date?: string
+  loa_date?: string | null
   hmo_approval_code?: string
   hmo_validity_start?: string
   hmo_validity_end?: string
@@ -168,6 +171,17 @@ export interface BillingEncounterTicket {
       originalPrice?: number
     }>
   }
+}
+
+export interface BillingContext {
+  billing: BillingListItem
+  related: {
+    patient_id: number
+    appointment_id?: number | null
+    patient_link: string
+    appointment_link?: string
+  }
+  payment_log: BillingPaymentLogEntry[]
 }
 
 export interface BillingRequest {
@@ -375,6 +389,10 @@ export const billingPhase1Service = {
     const {data} = await pamsAPI.get<BillingListItem>(`/billings/${id}`)
     return data
   },
+  async getContext(id: number): Promise<BillingContext | undefined> {
+    const {data} = await pamsAPI.get<BillingContext>(`/billings/${id}/context`)
+    return data
+  },
   async update(id: number, payload: BillingRequest): Promise<void> {
     await pamsAPI.put(`/billings/${id}`, payload)
   },
@@ -428,7 +446,7 @@ export const billingPhase1Service = {
     return data
   },
   async getHmoSoa(params: HmoSoaParams): Promise<HmoRecentHistoryItem[] | undefined> {
-    const { data } = await pamsAPI.get<HmoRecentHistoryItem[]>("/hmos/invoices/soa", { params })
+    const { data } = await pamsAPI.get<HmoRecentHistoryItem[]>("/billings/hmo-recent-history", { params })
     return data
   },
   async getLguSoa(params: { from: string; to: string; limit?: number; program_id?: number }): Promise<LguDashboardHistoryItem[] | undefined> {
@@ -438,23 +456,23 @@ export const billingPhase1Service = {
       return lguBillingService.getPatientCreditDetail(patientId, periodYear, periodMonth)
     },
   async getDailyIncomeExpense(date?: string, clinic_id?: number): Promise<DailyIncomeExpenseReport | undefined> {
-    const {data} = await pamsAPI.get<DailyIncomeExpenseReport>("/billings/daily-income-expense", {
+    const {data} = await pamsAPI.get<DailyIncomeExpenseReport>("/daily-income-expense", {
       params: {date, ...(clinic_id ? {clinic_id} : {})}
     })
     return data
   },
   async getMonthlyIncomeExpense(month?: string, date?: string, clinic_id?: number): Promise<MonthlyIncomeExpenseReport | undefined> {
-    const {data} = await pamsAPI.get<MonthlyIncomeExpenseReport>("/billings/monthly-income-expense", {
+    const {data} = await pamsAPI.get<MonthlyIncomeExpenseReport>("/monthly-income-expense", {
       params: {month, date, ...(clinic_id ? {clinic_id} : {})}
     })
     return data
   },
   async addDailyExpense(payload: DailyExpenseRequest): Promise<DailyExpenseEntry | undefined> {
-    const {data} = await pamsAPI.post<DailyExpenseEntry>("/billings/daily-income-expense/expenses", payload)
+    const {data} = await pamsAPI.post<DailyExpenseEntry>("/daily-income-expense/expenses", payload)
     return data
   },
   async deleteDailyExpense(id: number): Promise<void> {
-    await pamsAPI.delete(`/billings/daily-income-expense/expenses/${id}`)
+    await pamsAPI.delete(`/daily-income-expense/expenses/${id}`)
   },
   async createLguMonthlyClaim(payload: { appointment_id?: number; billing_id?: number; billing_month: string }): Promise<LguMonthlyClaimResult | undefined> {
     return lguBillingService.createMonthlyClaim(payload)

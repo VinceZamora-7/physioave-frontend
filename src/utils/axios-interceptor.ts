@@ -1,16 +1,22 @@
-import axios from "axios";
+import axios, { HttpStatusCode, type AxiosError, type InternalAxiosRequestConfig } from "axios";
+import { clearAuthUserCache } from "@/utils/auth-user.util";
+
+declare module "axios" {
+  export interface AxiosRequestConfig {
+    skipAuthRefresh?: boolean
+    authRefreshRetry?: boolean
+  }
+
+  export interface InternalAxiosRequestConfig {
+    skipAuthRefresh?: boolean
+    authRefreshRetry?: boolean
+  }
+}
 
 /**
  * Helpers
  */
 const scheme = import.meta.env.VITE_SCHEME || "http";
-
-function joinUrl(...parts: Array<string | undefined>) {
-  return parts
-    .filter(Boolean)
-    .map((p) => String(p).replace(/^\/+|\/+$/g, "")) // trim leading/trailing slashes
-    .join("/");
-}
 
 function normalizeBaseUrl(value: unknown): string | null {
   const raw = String(value ?? "").trim();
@@ -75,3 +81,59 @@ export const pamsAPI = axios.create({
   baseURL: pamsBaseURL,
   withCredentials: true
 })
+
+let refreshTokenPromise: Promise<void> | null = null
+
+const getRequestPath = (config?: InternalAxiosRequestConfig): string => {
+  const rawUrl = String(config?.url ?? "")
+  try {
+    const parsed = new URL(rawUrl, pamsBaseURL)
+    return parsed.pathname.replace(/^\/api\/v\d+\/pams/, "")
+  } catch {
+    return rawUrl
+  }
+}
+
+const shouldAttemptAuthRefresh = (error: AxiosError): boolean => {
+  const config = error.config
+  if (!config) return false
+  if (config.skipAuthRefresh || config.authRefreshRetry) return false
+  if (error.response?.status !== HttpStatusCode.Unauthorized) return false
+
+  const path = getRequestPath(config)
+  return path !== "/refresh-tokens" && path !== "/auth/login" && !path.startsWith("/setup/")
+}
+
+const refreshAccessToken = async (): Promise<void> => {
+  if (!refreshTokenPromise) {
+    refreshTokenPromise = pamsAPI
+      .post<void>("/refresh-tokens", undefined, { skipAuthRefresh: true })
+      .then(() => undefined)
+      .finally(() => {
+        refreshTokenPromise = null
+      })
+  }
+
+  return refreshTokenPromise
+}
+
+pamsAPI.interceptors.response.use(
+  response => response,
+  async (error: AxiosError) => {
+    if (!shouldAttemptAuthRefresh(error)) {
+      return Promise.reject(error)
+    }
+
+    try {
+      await refreshAccessToken()
+      const originalRequest = error.config
+      if (!originalRequest) return Promise.reject(error)
+
+      originalRequest.authRefreshRetry = true
+      return await pamsAPI.request(originalRequest)
+    } catch (refreshError) {
+      clearAuthUserCache()
+      return Promise.reject(refreshError)
+    }
+  }
+)

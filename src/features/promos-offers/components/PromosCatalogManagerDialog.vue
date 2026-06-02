@@ -339,7 +339,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from "vue"
+import { computed, reactive, ref, watch } from "vue"
+import { storeToRefs } from "pinia"
 import Button from "primevue/button"
 import Column from "primevue/column"
 import ConfirmDialog from "primevue/confirmdialog"
@@ -354,8 +355,8 @@ import { useConfirm } from "primevue/useconfirm"
 import { useToast } from "primevue/usetoast"
 import { pamsAPI } from "@/utils/axios-interceptor"
 import { errorToast, successToast } from "@/utils/toast.util"
-import { readStoredAuthSnapshot, hasAnyStoredPermission } from "@/utils/auth-user.util"
 import { loadBackendPromosMasterCatalog } from "@/features/promos-offers/composables/promos-master-catalog.composable"
+import { useAuthSessionStore } from "@/stores/auth-session.store"
 
 type ServiceType =
   | "machine"
@@ -398,6 +399,8 @@ const visibleProxy = computed({
 
 const toast = useToast()
 const confirm = useConfirm()
+const authSession = useAuthSessionStore()
+const { roleName } = storeToRefs(authSession)
 
 const activeSection = ref<"services" | "bundles">("services")
 const recycleVisible = ref(false)
@@ -405,27 +408,22 @@ const recycleSection = ref<"services" | "bundles" | "packages">("services")
 // Main list should only show Active records (inactive are visible via Recycle Bin).
 const activeOnly = ref(true)
 
-const authSnapshot = ref(readStoredAuthSnapshot())
-const refreshAuthSnapshot = (): void => {
-  authSnapshot.value = readStoredAuthSnapshot()
-}
-
 const canCreateService = computed(() =>
-  hasAnyStoredPermission(authSnapshot.value.permissions, "Service::CREATE") ||
-  /owner/i.test(authSnapshot.value.roleName)
+  authSession.hasAnyPermission("Service::CREATE") ||
+  /owner/i.test(roleName.value)
 )
 const canUpdateService = computed(() =>
-  hasAnyStoredPermission(authSnapshot.value.permissions, "Service::UPDATE", "Service::DELETE") ||
-  /owner/i.test(authSnapshot.value.roleName)
+  authSession.hasAnyPermission("Service::UPDATE", "Service::DELETE") ||
+  /owner/i.test(roleName.value)
 )
 
 const canCreateBundle = computed(() =>
-  hasAnyStoredPermission(authSnapshot.value.permissions, "ServiceBundle::CREATE", "ServiceBundle::UPDATE") ||
-  /owner/i.test(authSnapshot.value.roleName)
+  authSession.hasAnyPermission("ServiceBundle::CREATE", "ServiceBundle::UPDATE") ||
+  /owner/i.test(roleName.value)
 )
 const canUpdateBundle = computed(() =>
-  hasAnyStoredPermission(authSnapshot.value.permissions, "ServiceBundle::UPDATE", "ServiceBundle::DELETE") ||
-  /owner/i.test(authSnapshot.value.roleName)
+  authSession.hasAnyPermission("ServiceBundle::UPDATE", "ServiceBundle::DELETE") ||
+  /owner/i.test(roleName.value)
 )
 
 const isLoadingServices = ref(false)
@@ -558,7 +556,7 @@ const loadServices = async (): Promise<void> => {
       ...addOnTechniqueServices,
       ...addOnHomeServices
     ]
-  } catch (e) {
+  } catch {
     services.value = []
     errorToast(toast, "Failed to load services catalog")
   } finally {
@@ -611,7 +609,7 @@ const loadPackages = async (): Promise<void> => {
 }
 
 const refreshAll = async (): Promise<void> => {
-  refreshAuthSnapshot()
+  await authSession.ensureLoaded()
   await Promise.all([loadServices(), loadBundles(), loadPackages()])
   emit("refreshed")
 }
@@ -863,14 +861,9 @@ const restorePackage = async (row: PackageRow): Promise<void> => {
 
 watch(visibleProxy, (next) => {
   if (!next) return
-  refreshAuthSnapshot()
   if (props.recycleOnly) {
     recycleVisible.value = true
   }
   void refreshAll()
-})
-
-onMounted(() => {
-  window.addEventListener("auth-user-updated", refreshAuthSnapshot)
 })
 </script>

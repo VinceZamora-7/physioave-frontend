@@ -272,9 +272,7 @@ import {
   patientHmoInformationTanstackService
 } from "@/services/patient-hmo-information.tanstack.service.ts";
 import {patientHMOInformationService} from "@/services/patient-hmo-information.service.ts";
-import {useRefreshToken} from "@/composables/refresh-token.composable.ts";
 import type {
-  PatientHMOInformation,
   PatientHMOInformationHistoryEntry,
   PatientHMOInformationPayload
 } from "@/models/hmo-information.ts";
@@ -545,7 +543,8 @@ watch(patientId, () => {
 const resetQueries = async (): Promise<void> => {
   await Promise.all([
     queryClient.invalidateQueries({queryKey: [PatientTanstackKey.PATIENT_HMO_INFORMATION]}),
-    queryClient.invalidateQueries({queryKey: [PatientTanstackKey.PATIENT_HMO_INFORMATION_HISTORY]})
+    queryClient.invalidateQueries({queryKey: [PatientTanstackKey.PATIENT_HMO_INFORMATION_HISTORY]}),
+    queryClient.invalidateQueries({queryKey: [PatientTanstackKey.PATIENT_CONTEXT, patientId.value]})
   ])
 }
 

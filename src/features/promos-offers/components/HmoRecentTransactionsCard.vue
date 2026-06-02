@@ -277,6 +277,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue"
+import { storeToRefs } from "pinia"
+import { useRouter } from "vue-router"
 import { useToast } from "primevue/usetoast"
 import Button from "primevue/button"
 import Column from "primevue/column"
@@ -291,22 +293,19 @@ import type { Pageable } from "@/models/paging"
 import type { Patient } from "@/features/patients/types/patient"
 import type { Lookup } from "@/models/global.model"
 import { billingPhase1Service, type BillingListItem, type HmoRecentHistoryItem } from "@/features/billing/api/billing-phase1.service"
-import { renderHmoInvoiceWindow } from "@/features/billing/invoices/hmo-invoice.util"
 import {
   escapeHtml,
-  renderStandardInvoiceWindow,
-  type InvoiceDetailRow
+  renderStandardInvoiceWindow
 } from "@/features/billing/invoices/invoice-layout.util"
-import {
-  openEncounterTicketPdfWindow,
-  renderAttendanceRecordPdfWindow,
-  type EncounterTicketPdfCard
-} from "@/utils/encounter-ticket-pdf.util"
 import { pamsAPI } from "@/utils/axios-interceptor"
 import { getApiErrorMessage } from "@/utils/actionable-error.util"
 import { errorToast, successToast } from "@/utils/toast.util"
+import { useAuthSessionStore } from "@/stores/auth-session.store"
 
 const toast = useToast()
+const router = useRouter()
+const authSession = useAuthSessionStore()
+const { roleName } = storeToRefs(authSession)
 const hmoOptions = ref<Lookup[]>([])
 const selectedHmoId = ref<number | null>(null)
 const selectedMonth = ref<Date>(new Date())
@@ -328,25 +327,8 @@ const patientBillingError = ref("")
 
 const MANAGER_ROLE_KEYWORDS = ["owner", "chief", "coo", "operations", "manager", "admin"]
 
-const resolveRoleFromStorage = (): string => {
-  const candidateKeys = ["auth_user", "currentUser", "user", "profile", "loggedInUser", "google_user"]
-  for (const key of candidateKeys) {
-    const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key)
-    if (!raw) continue
-    try {
-      const parsed = JSON.parse(raw) as Record<string, unknown>
-      const role = String(parsed.role_name ?? parsed.role ?? parsed.userRole ?? parsed.primaryRole ?? "").trim()
-      if (role) return role
-    } catch {
-      // Ignore malformed storage entries.
-    }
-  }
-  return ""
-}
-
-const currentRoleName = ref(resolveRoleFromStorage())
 const canManageHmoDashboard = computed(() => {
-  const normalized = currentRoleName.value.trim().toLowerCase()
+  const normalized = roleName.value.trim().toLowerCase()
   return !!normalized && MANAGER_ROLE_KEYWORDS.some(keyword => normalized.includes(keyword))
 })
 
@@ -406,45 +388,53 @@ const totalOutstanding = computed(() =>
   Math.max(0, Number((totalAmount.value - totalPaid.value).toFixed(2)))
 )
 
-type HmoPrintableLine = {
-  name: string
-  quantity: number
-  unitPrice: number
-  lineTotal: number
-  treatmentDate?: string
-  laterality?: string
-  bodyArea?: string
-  referenceNumber?: string
-}
-
-type HmoPrintableEvent = "print-individual-billing" | "print-hmo-invoice" | "print-attendance-record" | "print-billing-statement"
+type HmoPrintableEvent = "print-patient-profile" | "print-patient-billing-summary" | "print-attendance-record"
 
 const hmoPrintables = [
+  // {
+  //   title: "Patient HMO Profile",
+  //   buttonLabel: "Patient HMO Profile",
+  //   icon: "pi pi-id-card",
+  //   event: "print-patient-profile" as HmoPrintableEvent
+  // },
   {
-    title: "Individual Billing",
-    buttonLabel: "Print Individual Billing",
-    icon: "pi pi-id-card",
-    event: "print-individual-billing" as HmoPrintableEvent
-  },
-  {
-    title: "HMO Invoice",
-    buttonLabel: "Print Invoice",
+    title: "Patient Billing Summary",
+    buttonLabel: "Patient Billing Summary",
     icon: "pi pi-receipt",
-    event: "print-hmo-invoice" as HmoPrintableEvent
+    event: "print-patient-billing-summary" as HmoPrintableEvent
   },
-  {
-    title: "Attendance & Treatment Record",
-    buttonLabel: "Print Attendance Record",
-    icon: "pi pi-calendar-clock",
-    event: "print-attendance-record" as HmoPrintableEvent
-  },
-  {
-    title: "HMO Billing Statement",
-    buttonLabel: "Print Billing Statement",
-    icon: "pi pi-file-pdf",
-    event: "print-billing-statement" as HmoPrintableEvent
-  }
+  // {
+  //   title: "Attendance & Treatment Record",
+  //   buttonLabel: "Attendance & Treatment Record",
+  //   icon: "pi pi-file-pdf",
+  //   event: "print-attendance-record" as HmoPrintableEvent
+  // }
 ]
+
+const openHmoPrintRoute = (routeName: "hmo-patient-profile-print" | "hmo-patient-billing-summary-print" | "hmo-attendance-treatment-print"): Window | null => {
+  if (!selectedPatient.value) return null
+
+  const { from, to } = getSelectedMonthRange()
+  const href = router.resolve({
+    name: routeName,
+    query: {
+      patient_id: String(selectedPatient.value.id),
+      patient_name: selectedPatientName.value,
+      hmo_id: selectedHmoId.value ? String(selectedHmoId.value) : undefined,
+      hmo_name: selectedHmoName.value,
+      from: formatYmd(from),
+      to: formatYmd(to),
+      autoprint: "1"
+    }
+  }).href
+
+  const popup = window.open(href, "_blank")
+  if (!popup || popup.closed) {
+    patientBillingError.value = "Unable to open the print view. Allow pop-ups for this site, then try again."
+    return null
+  }
+  return popup
+}
 
 const openPrintWindow = (title: string): Window | null => {
   const popup = window.open("", "_blank")
@@ -460,59 +450,6 @@ const getBillingReference = (billing: Pick<BillingListItem, "id" | "public_id" |
 
 const getBillingOutstanding = (billing: Pick<BillingListItem, "total_amount" | "amount_due" | "amount_paid">): number =>
   Math.max(0, Number((Number(billing.total_amount ?? billing.amount_due ?? 0) - Number(billing.amount_paid ?? 0)).toFixed(2)))
-
-const parseBillingLineItems = (billing: BillingListItem): HmoPrintableLine[] => {
-  try {
-    const parsed = JSON.parse(billing.line_items_json || "[]") as Array<Record<string, unknown>>
-    if (Array.isArray(parsed) && parsed.length) {
-      return parsed.map(item => {
-        const quantity = Math.max(1, Number(item.quantity ?? 1))
-        const unitPrice = Number(item.price ?? item.unitPrice ?? item.unit_price ?? 0)
-        const lineTotal = Number(item.lineTotal ?? item.line_total ?? (quantity * unitPrice))
-        return {
-          name: String(item.name ?? billing.service_name ?? "HMO Service"),
-          quantity,
-          unitPrice,
-          lineTotal,
-          treatmentDate: String(item.treatmentDate ?? item.treatment_date ?? billing.created_at ?? ""),
-          laterality: String(item.laterality ?? item.laterality_name ?? ""),
-          bodyArea: String(item.body_area ?? item.bodyArea ?? ""),
-          referenceNumber: getBillingReference(billing)
-        }
-      })
-    }
-  } catch {
-    // Fall through to the billing-level fallback below.
-  }
-
-  const fallbackTotal = Number(billing.total_amount ?? billing.amount_due ?? 0)
-  return [{
-    name: billing.service_name || "HMO Service",
-    quantity: 1,
-    unitPrice: fallbackTotal,
-    lineTotal: fallbackTotal,
-    treatmentDate: billing.created_at,
-    referenceNumber: getBillingReference(billing)
-  }]
-}
-
-const renderHmoPrintableRows = (lines: HmoPrintableLine[]): string => {
-  if (!lines.length) {
-    return `<tr><td colspan="8" class="text-center">No HMO service lines found.</td></tr>`
-  }
-  return lines.map((line, index) => `
-    <tr>
-      <td class="text-center">${index + 1}</td>
-      <td class="text-center">${escapeHtml(formatDateOnly(line.treatmentDate))}</td>
-      <td>${escapeHtml(line.name)}</td>
-      <td class="text-center">${escapeHtml(line.quantity)}</td>
-      <td class="text-center">${escapeHtml(line.laterality || "N/A")}</td>
-      <td class="text-center">${escapeHtml(line.bodyArea || "N/A")}</td>
-      <td class="text-right">${escapeHtml(asCurrency(line.unitPrice))}</td>
-      <td class="text-right">${escapeHtml(asCurrency(line.lineTotal))}</td>
-    </tr>
-  `).join("")
-}
 
 const renderBulkHmoSoaRows = (rows: HmoRecentHistoryItem[]): string => {
   if (!rows.length) {
@@ -533,14 +470,6 @@ const renderBulkHmoSoaRows = (rows: HmoRecentHistoryItem[]): string => {
     </tr>
   `).join("")
 }
-
-const getHmoDetailRows = (billing?: Partial<BillingListItem>): InvoiceDetailRow[] => [
-  { label: "Billing To", value: billing?.hmo_name || selectedHmoName.value || "HMO" },
-  { label: "HMO Type", value: billing?.hmo_type_name || "N/A" },
-  { label: "Company Name", value: billing?.hmo_company_name || "N/A" },
-  { label: "LOA Approval No.", value: billing?.hmo_loa_number || billing?.hmo_approval_code || "N/A" },
-  { label: "LOA Approval date", value: formatDateOnly(billing?.hmo_loa_date) }
-]
 
 const getSelectedMonthRange = (): { from: Date; to: Date } => {
   const from = new Date(selectedPeriodYear.value, selectedPeriodMonth.value - 1, 1)
@@ -672,10 +601,23 @@ const refreshPatientBillings = async (): Promise<void> => {
   await loadPatientBillings()
 }
 
-const openHmoSoaDialog = (): void => {
+const openHmoSoaDialog = async (): Promise<void> => {
   const { from, to } = getSelectedMonthRange()
-  soaRange.value = [from, to]
-  soaVisible.value = true
+  const href = router.resolve({
+    name: "hmo-soa-print",
+    query: {
+      hmo_id: selectedHmoId.value ? String(selectedHmoId.value) : undefined,
+      hmo_name: selectedHmoName.value || undefined,
+      from: formatYmd(from),
+      to: formatYmd(to),
+      autoprint: "1"
+    }
+  }).href
+
+  const popup = window.open(href, "_blank")
+  if (!popup || popup.closed) {
+    patientBillingError.value = "Unable to open the HMO SOA print view. Allow pop-ups for this site, then try again."
+  }
 }
 
 const openPatientBillings = async (patient: Patient): Promise<void> => {
@@ -762,62 +704,8 @@ const generateSoa = async (): Promise<void> => {
   }
 }
 
-const getBillingDetail = async (billing: BillingListItem): Promise<BillingListItem> => {
-  const detail = await billingPhase1Service.getById(billing.id)
-  return detail ?? billing
-}
-
-const loadSelectedPatientBillingDetails = async (): Promise<BillingListItem[]> => {
-  if (!selectedPatientBillings.value.length) return []
-  return Promise.all(selectedPatientBillings.value.map(getBillingDetail))
-}
-
 const printPatientIndividualBilling = async (): Promise<void> => {
-  if (!selectedPatient.value || !selectedPatientBillings.value.length) return
-  const popup = openPrintWindow("HMO individual billing")
-  if (!popup) return
-  try {
-    const details = await loadSelectedPatientBillingDetails()
-    const representative = details[0]
-    const lines = details.flatMap(billing => parseBillingLineItems(billing))
-    const grandTotal = Number(lines.reduce((sum, line) => sum + line.lineTotal, 0).toFixed(2))
-    renderStandardInvoiceWindow(popup, {
-      title: "HMO Individual Billing",
-      headerTitle: "HMO INDIVIDUAL BILLING",
-      fileName: `HMO-INDIVIDUAL-BILLING-${selectedPatient.value.id}-${formatYmd(new Date())}`,
-      billingDate: representative?.hmo_loa_date || representative?.created_at || new Date().toISOString(),
-      referenceNumber: `HMO-BILLING-${selectedPatient.value.id}`,
-      patientName: representative?.patient_name || selectedPatientName.value,
-      patientAddress: representative?.patient_address,
-      patientAge: representative?.patient_age,
-      patientGender: representative?.patient_gender,
-      physicalTherapist: representative?.physical_therapist,
-      doctor: representative?.doctor,
-      diagnosis: representative?.diagnosis,
-      columns: [
-        { label: "ITEM No.", width: "60px", align: "center" },
-        { label: "TREATMENT DATE", width: "110px", align: "center" },
-        { label: "PT SERVICE RENDERED" },
-        { label: "QTY", width: "50px", align: "center" },
-        { label: "LATERALITY", width: "100px", align: "center" },
-        { label: "BODY AREA", width: "110px", align: "center" },
-        { label: "UNIT PRICE", width: "110px", align: "right" },
-        { label: "UNIT TOTAL", width: "110px", align: "right" }
-      ],
-      tableRowsHtml: renderHmoPrintableRows(lines),
-      emptyStateColspan: 8,
-      discount: Number(details.reduce((sum, billing) => sum + Number(billing.discount_amount ?? 0), 0).toFixed(2)),
-      grandTotal,
-      detailBoxTitle: "HMO DETAILS",
-      detailRows: getHmoDetailRows(representative),
-      renderErrorMessage: "The HMO individual billing could not be rendered. Please try again.",
-      pageSize: "A4 landscape",
-      maxWidthPx: 1200
-    })
-  } catch (err: unknown) {
-    popup.close()
-    patientBillingError.value = getApiErrorMessage(err, { baseMessage: "Failed to print HMO individual billing" })
-  }
+  if (!openHmoPrintRoute("hmo-patient-profile-print")) return
 }
 
 const printPatientHmoInvoice = async (): Promise<void> => {
@@ -951,46 +839,17 @@ const buildHmoEncounterTicketCards = (detail: BillingListItem): EncounterTicketP
     })
 
 const printPatientAttendanceRecord = async (): Promise<void> => {
-  if (!selectedPatient.value || !selectedPatientBillings.value.length) return
-
-  let popup: Window
-  try {
-    popup = openEncounterTicketPdfWindow("Attendance & Treatment Record")
-  } catch {
+  if (!openHmoPrintRoute("hmo-attendance-treatment-print")) {
     patientBillingError.value = "Unable to open attendance record. Allow pop-ups for this site, then try again."
-    return
-  }
-
-  try {
-    const details = await loadSelectedPatientBillingDetails()
-    const cards = details
-      .flatMap(buildHmoEncounterTicketCards)
-      .filter(card => card.attendanceStatus === "Attended")
-      .sort((left, right) => String(left.attendedAt ?? left.signedOffAt ?? "").localeCompare(String(right.attendedAt ?? right.signedOffAt ?? "")))
-
-    if (!cards.length) {
-      popup.close()
-      patientBillingError.value = "No locked attended encounter tickets found for this patient"
-      return
-    }
-
-    renderAttendanceRecordPdfWindow(popup, cards, {
-      title: "Attendance & Treatment Record",
-      subtitle: `${selectedPatientName.value} - ${cards.length} locked encounter ticket${cards.length === 1 ? "" : "s"}`,
-      fileName: `hmo-attendance-treatment-record-${selectedPatient.value.id}`
-    })
-  } catch (err: unknown) {
-    popup.close()
-    patientBillingError.value = getApiErrorMessage(err, { baseMessage: "Failed to print attendance and treatment record" })
   }
 }
 
 const printHmoPrintable = (event: HmoPrintableEvent): void => {
-  if (event === "print-individual-billing") {
+  if (event === "print-patient-profile") {
     void printPatientIndividualBilling()
     return
   }
-  if (event === "print-hmo-invoice") {
+  if (event === "print-patient-billing-summary") {
     void printPatientHmoInvoice()
     return
   }
@@ -998,7 +857,7 @@ const printHmoPrintable = (event: HmoPrintableEvent): void => {
     void printPatientAttendanceRecord()
     return
   }
-  void printPatientSoa()
+  void printPatientAttendanceRecord()
 }
 
 watch([selectedHmoId, selectedMonth], () => {
@@ -1006,7 +865,7 @@ watch([selectedHmoId, selectedMonth], () => {
 })
 
 onMounted(async () => {
-  currentRoleName.value = resolveRoleFromStorage()
+  await authSession.ensureLoaded().catch(() => undefined)
   await loadProfiles()
   await loadDashboard()
 })

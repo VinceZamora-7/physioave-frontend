@@ -40,8 +40,27 @@ export enum RefreshTokenTanstackKey {
   REFRESH_TOKENS = 'refresh-tokens',
 }
 
+export enum AccessMatrixTanstackKey {
+  ASSIGNED_PERMISSIONS = 'access-matrix-assigned-permissions',
+  UNASSIGNED_PERMISSIONS = 'access-matrix-unassigned-permissions',
+  ASSIGNED_PERMISSION_IDS = 'access-matrix-assigned-permission-ids',
+}
+
+export enum AppointmentTanstackKey {
+  APPOINTMENT_CONTEXT = 'appointmentContext',
+}
+
+export enum BillingTanstackKey {
+  BILLING_CONTEXT = 'billingContext',
+}
+
+export enum ServiceCatalogTanstackKey {
+  SERVICE_CATALOG_CONTEXT = 'serviceCatalogContext',
+}
+
 export enum PatientTanstackKey {
   PATIENTS = 'patients',
+  PATIENT_CONTEXT = 'patientContext',
   PATIENTS_INFINITE_QUERY = 'patientsInfiniteQuery',
   PATIENTS_EXPORT = 'patientsExport',
   PATIENTS_LOOKUP = 'patientsLookup',

@@ -94,18 +94,17 @@ import {
 import type { Clinic } from "@/features/clinics/types/clinic"
 import { ClinicTanstackKey } from "@/utils/keys/tanstack-key"
 import { clinicStore } from "@/stores/clinic.store"
-import { hasAnyStoredPermission, readStoredAuthSnapshot } from "@/utils/auth-user.util"
+import { useAuthSessionStore } from "@/stores/auth-session.store"
 
 const router = useRouter()
 const toast = useToast()
 const confirm = useConfirm()
 const queryClient = useQueryClient()
 const useClinicStore = clinicStore()
+const authSession = useAuthSessionStore()
 
 const editor = ref<InstanceType<typeof ClinicEditorDialog> | null>(null)
 const selectedClinic = ref<Clinic>()
-const roleName = ref("")
-const permissionSet = ref<Set<string>>(new Set())
 
 // loading states
 const isExportLoading = useIsLoading(ClinicTanstackKey.CLINICS_EXPORT)
@@ -130,7 +129,7 @@ const requestParams = computed(
 )
 
 const canManageTreatmentAreas = computed(() =>
-  hasAnyStoredPermission(permissionSet.value, "Clinic::UPDATE", "Clinic::CREATE")
+  authSession.hasAnyPermission("Clinic::UPDATE", "Clinic::CREATE")
 )
 
 // query
@@ -150,12 +149,6 @@ watchDebounced(
 const resetFilters = () => {
   selectedSearch.value = undefined
   selectedStatus.value = defaultStatus
-}
-
-const syncRoleFromStorage = () => {
-  const snapshot = readStoredAuthSnapshot()
-  roleName.value = snapshot.roleName
-  permissionSet.value = snapshot.permissions
 }
 
 // open dialog
@@ -244,5 +237,5 @@ watch(
   { immediate: true }
 )
 
-syncRoleFromStorage()
+void authSession.ensureLoaded()
 </script>

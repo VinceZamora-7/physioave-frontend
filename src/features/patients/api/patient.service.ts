@@ -1,6 +1,7 @@
 import type {Pageable} from "@/models/paging.ts";
 import type {
   Patient,
+  PatientContext,
   PatientEditRequestPayload,
   PatientExportRequestParams,
   PatientRequestBody,
@@ -27,6 +28,8 @@ interface PatientService {
   toggleStatus(id: number): Promise<void | undefined>
 
   getById(id: number): Promise<Patient | undefined>
+
+  getContext(id: number): Promise<PatientContext | undefined>
 
   uploadProfileImage(id: number, payload: {file_name: string, media_type: string, content_base64: string}): Promise<void | undefined>
 
@@ -113,6 +116,15 @@ export const patientService: PatientService = {
     try {
       const {data: patient} = await pamsAPI.get<Patient>(`${ResourceKey.PATIENTS}/${id}`)
       return patient
+    } catch (error: unknown) {
+      errorHandler(error)
+    }
+  },
+
+  async getContext(id: number): Promise<PatientContext | undefined> {
+    try {
+      const {data: patientContext} = await pamsAPI.get<PatientContext>(`${ResourceKey.PATIENTS}/${id}/context`)
+      return patientContext
     } catch (error: unknown) {
       errorHandler(error)
     }

@@ -233,6 +233,7 @@
             :medical-category-options="medicalCategoryOptions"
             :medical-diagnosis-options="medicalDiagnosisOptions"
             :pt-case-impression-options="ptCaseImpressionOptions"
+            :pt-case-impression-options="ptCaseImpressionOptions"
           />
 
           <div class="app-detail-card app-detail-card-primary">
@@ -475,7 +476,7 @@
 
 <script setup lang="ts">
 
-import {computed, defineAsyncComponent, onMounted, ref, useTemplateRef, watch} from "vue";
+import {computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, useTemplateRef, watch} from "vue";
 import {storeToRefs} from "pinia";
 import {useConfirm} from "primevue/useconfirm";
 import {useToast} from "primevue/usetoast";
@@ -539,6 +540,7 @@ import type {
   MedicalHistory,
   MedicalImaging,
   ModeOfReferral,
+  PTCaseImpression,
   ReferralChannel,
   Religion
 } from "@/models/reference.ts";
@@ -565,12 +567,10 @@ import {
 } from "@/utils/keys/tanstack-key.ts";
 import {IndexedDBKey} from "@/utils/keys/indexeddb-key.ts";
 import {patientTanstackService} from "@/features/patients/queries/patient.tanstack.service";
-import {fileServerTanstackService} from "@/services/file-server.tanstack.service.ts";
 import {hmoService} from "@/features/hmos/api/hmo.service";
 import {staffService} from "@/features/staff/api/staff.service";
 import {pamsAPI} from "@/utils/axios-interceptor.ts";
 import {lguBillingService} from "@/features/lgu-billing/api/lgu-billing.service";
-import {patientHMOInformationService} from "@/services/patient-hmo-information.service.ts";
 import type {PatientHMOInformation} from "@/models/hmo-information.ts";
 
 type ToggleDialogExpose = {
@@ -670,7 +670,8 @@ const openViewSponsorInfo = async (patient: Patient): Promise<void> => {
   viewSponsorInfoLoading.value = true
   viewSponsorInfoVisible.value = true
   try {
-    viewSponsorInfoData.value = await patientHMOInformationService.getByPatientId(patient.id)
+    const patientContext = await patientTanstackService.fetchContext(queryClient, patient.id)
+    viewSponsorInfoData.value = patientContext?.sponsor_information ?? []
   } finally {
     viewSponsorInfoLoading.value = false
   }
@@ -775,8 +776,9 @@ const loadSelectedPatientProfileImage = async (patientId?: number): Promise<void
   }
 }
 
-const onPatientRowClick = (patient: Patient): void => {
+const onPatientRowClick = async (patient: Patient): Promise<void> => {
   selectedPatientDetails.value = patient
+  await ensureDropdownsLoaded()
   patientDetailsVisible.value = true
   void loadSelectedPatientProfileImage(patient.id)
 }
@@ -853,7 +855,7 @@ const tryOpenDrillDownPatient = (): void => {
     : undefined
 
   const target = byId ?? byName ?? content[0]
-  onPatientRowClick(target)
+  void onPatientRowClick(target)
 
   pendingPatientDrillDownId.value = undefined
   pendingPatientDrillDownName.value = undefined
@@ -919,6 +921,10 @@ const medicalCategoryOptions = computed<string[]>(() => {
 
 const medicalDiagnosisOptions = computed<string[]>(() => {
   return Array.from(new Set((medicalDiagnoses.value ?? []).map((item) => item.name).filter(Boolean))).sort((a, b) => a.localeCompare(b))
+})
+
+const ptCaseImpressionOptions = computed<string[]>(() => {
+  return Array.from(new Set((ptCaseImpressions.value ?? []).map((item) => item.name).filter(Boolean))).sort((a, b) => a.localeCompare(b))
 })
 
 const ptCaseImpressionOptions = computed<string[]>(() => {
@@ -1335,19 +1341,35 @@ const initializeDropdowns = async (): Promise<void> => {
 }
 
 const resetQueries = async (): Promise<void> => {
-  await queryClient.invalidateQueries({queryKey: [PatientTanstackKey.PATIENTS]})
+  await Promise.all([
+    queryClient.invalidateQueries({queryKey: [PatientTanstackKey.PATIENTS]}),
+    queryClient.invalidateQueries({queryKey: [PatientTanstackKey.PATIENT_CONTEXT]})
+  ])
 }
 
 const dropdownsReady = ref(false)
 const dropdownsLoading = ref(false)
 const ensureDropdownsLoaded = async (): Promise<void> => {
-  if (dropdownsReady.value || dropdownsLoading.value) return
+  if (dropdownsLoading.value) return
   dropdownsLoading.value = true
   try {
     await initializeDropdowns()
     dropdownsReady.value = true
   } finally {
     dropdownsLoading.value = false
+  }
+}
+
+const handleReferenceUpdated = async (event: Event): Promise<void> => {
+  const customEvent = event as CustomEvent<{ key?: string }>
+  if (
+    customEvent.detail?.key === ReferenceTanstackKey.MEDICAL_CATEGORIES ||
+    customEvent.detail?.key === ReferenceTanstackKey.MEDICAL_DIAGNOSES ||
+    customEvent.detail?.key === ReferenceTanstackKey.PT_CASE_IMPRESSIONS
+  ) {
+    dropdownsReady.value = false
+    await initializeDropdowns()
+    dropdownsReady.value = true
   }
 }
 
@@ -1364,7 +1386,13 @@ const openEditPatient = async (patient: Patient): Promise<void> => {
 }
 
 onMounted(async (): Promise<void> => {
+  window.addEventListener("reference-updated", handleReferenceUpdated)
+  await ensureDropdownsLoaded()
   await applyAppointmentDrillDown()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener("reference-updated", handleReferenceUpdated)
 })
 
 watch(

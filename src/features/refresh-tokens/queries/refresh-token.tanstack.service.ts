@@ -19,13 +19,6 @@ export const refreshTokenTanstackService = {
     })
   },
 
-  refresh(key: RefreshTokenTanstackKey = RefreshTokenTanstackKey.REFRESH_TOKENS) {
-    return useMutation<void | undefined, APIError, void>({
-      mutationKey: [key],
-      mutationFn: refreshTokenService.refresh
-    })
-  },
-
   delete(key: RefreshTokenTanstackKey = RefreshTokenTanstackKey.REFRESH_TOKENS) {
     return useMutation<void | undefined, APIError, number>({
       mutationKey: [key],

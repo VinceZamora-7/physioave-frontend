@@ -200,16 +200,15 @@ const props = defineProps<{
 const visibleModel = defineModel<boolean>("visible", { required: true })
 
 const emit = defineEmits<{
-  "open-invoice-session-picker": []
-  "export-patient-billing-summary": []
   "print-attendance-record": []
-  "open-patient-soa-picker": []
   "export-patient-lgu-details": []
+  "export-patient-billing-summary": []
   "create-claims": []
   "download-claim-pdf": [billingId: number]
 }>()
 
-type LguPrintableEvent = "print-attendance-record" | "open-patient-soa-picker" | "export-patient-lgu-details"
+type LguPrintableEvent = "print-attendance-record" | "export-patient-lgu-details"
+  | "export-patient-billing-summary"
 
 const lguPrintables = [
   {
@@ -219,10 +218,10 @@ const lguPrintables = [
     event: "export-patient-lgu-details" as LguPrintableEvent
   },
   {
-    title: "Attendance & Treatment Record",
-    buttonLabel: "Print Attendance Record",
-    icon: "pi pi-calendar-clock",
-    event: "print-attendance-record" as LguPrintableEvent
+    title: "Patient Billing Summary",
+    buttonLabel: "Print Patient Billing Summary",
+    icon: "pi pi-file",
+    event: "export-patient-billing-summary" as LguPrintableEvent
   },
   {
     title: "Patient Billing Summary",
@@ -237,8 +236,8 @@ const printPrintable = (event: LguPrintableEvent): void => {
     emit("print-attendance-record")
     return
   }
-  if (event === "open-patient-soa-picker") {
-    emit("open-patient-soa-picker")
+  if (event === "export-patient-billing-summary") {
+    emit("export-patient-billing-summary")
     return
   }
   emit("export-patient-lgu-details")

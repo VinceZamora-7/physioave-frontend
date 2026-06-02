@@ -132,6 +132,7 @@ export interface LguDashboardHistoryItem {
   billing_amount_due?: number | null
   amount_paid?: number | null
   program_status?: string | null
+  pricing_source?: string | null
   physical_therapist?: string | null
   doctor?: string | null
   diagnosis?: string | null
@@ -146,6 +147,7 @@ export interface LguDashboardHistoryItem {
   balance_after?: number | null
   reference_label?: string | null
   notes?: string | null
+  line_items_json?: string | null
 }
 
 export interface LguMonthlyClaimResult {
@@ -201,8 +203,13 @@ export const lguBillingService = {
     return data
   },
   async getSoa(params: { from: string; to: string; limit?: number; program_id?: number }): Promise<LguDashboardHistoryItem[] | undefined> {
-    const { data } = await pamsAPI.get<LguDashboardHistoryItem[]>("/lgu-billing/invoices/soa", { params })
-    return data
+    try {
+      const { data } = await pamsAPI.get<LguDashboardHistoryItem[]>("/lgu-soa", { params })
+      return data
+    } catch (error) {
+      const { data } = await pamsAPI.get<LguDashboardHistoryItem[]>('/lgu-billing/invoices/soa', { params })
+      return data
+    }
   },
   async getPatientCreditDetail(patientId: number, periodYear?: number, periodMonth?: number): Promise<LguPatientCreditDetail | null | undefined> {
     const { data } = await pamsAPI.get<LguPatientCreditDetail | null>("/lgu-billing/patient-credit-detail", {

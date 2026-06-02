@@ -491,7 +491,7 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
           <div class="top">
             <div>
               <img class="logo" src="/app-logo.png" alt="PhysioAve" />
-              <h1 class="invoice-title"><span>${escapeHtml(invoice.headerTitle || "INVOICE BILLING")}</span></h1>
+              <h1 class="invoice-title"><span>${escapeHtml(invoice.headerTitle || "Billing Summary")}</span></h1>
             </div>
             <div class="meta-grid">
               ${topMetaRows}

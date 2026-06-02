@@ -240,6 +240,24 @@
     </section>
 
     <section class="app-section-card-comfy space-y-4">
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 class="app-section-title">Evaluation Visit Dropdowns</h3>
+          <p class="text-sm opacity-70">Manage the dropdown choices used by the Evaluation Visit Log.</p>
+        </div>
+
+        <Button
+          label="Manage Evaluation Dropdowns"
+          icon="pi pi-sliders-h"
+          :pt="ptPrimaryBtn"
+          @click="evaluationDropdownManager?.open()"
+        />
+      </div>
+
+      <EvaluationDropdownManagerDialog ref="evaluationDropdownManager" />
+    </section>
+
+    <section class="app-section-card-comfy space-y-4">
       <h3 class="app-section-title">System Information</h3>
 
       <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -276,20 +294,19 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from "vue"
+import { storeToRefs } from "pinia"
 import Button from "primevue/button"
 import Message from "primevue/message"
 import Tag from "primevue/tag"
-import { useRouter } from "vue-router"
 
-import { authMeService, type AuthMe } from "@/services/auth-me.service"
 import { ptOutlinedBtn, ptPrimaryBtn } from "@/features/shared/table-header.styles"
 import ModeOfReferralManagerDialog from "@/features/general-settings/components/ModeOfReferralManagerDialog.vue"
 import ExpenseItemManagerDialog from "@/features/general-settings/components/ExpenseItemManagerDialog.vue"
 import MedicalReferenceManagerDialog from "@/features/general-settings/components/MedicalReferenceManagerDialog.vue"
 
-const router = useRouter()
+const authSession = useAuthSessionStore()
+const { currentUser } = storeToRefs(authSession)
 
-const currentUser = ref<AuthMe>()
 const loadError = ref("")
 const modeOfReferralManager = ref<InstanceType<typeof ModeOfReferralManagerDialog> | null>(null)
 const expenseItemManager = ref<InstanceType<typeof ExpenseItemManagerDialog> | null>(null)
@@ -307,7 +324,7 @@ const formatProviderType = (type?: string): string => {
 
 onMounted(async () => {
   try {
-    currentUser.value = await authMeService.get()
+    await authSession.ensureLoaded()
   } catch {
     loadError.value = "Could not load account information."
   }

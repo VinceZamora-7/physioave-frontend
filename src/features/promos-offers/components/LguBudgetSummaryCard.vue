@@ -126,11 +126,9 @@
       :lgu-status-severity="lguStatusSeverity"
       :as-currency="asCurrency"
       :get-billing-summary-amount="getPatientBillingSummaryAmount"
-      @open-invoice-session-picker="openInvoiceSessionPicker"
-      @export-patient-billing-summary="exportPatientBillingSummary"
       @print-attendance-record="exportPatientAttendanceRecord"
-      @open-patient-soa-picker="openPatientSoaPicker"
       @export-patient-lgu-details="exportPatientLguDetails"
+      @export-patient-billing-summary="exportPatientProfileBillingSummary"
       @create-claims="createClaimsForEligibleAppointments"
       @download-claim-pdf="downloadClaimPdf"
     />
@@ -158,16 +156,19 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue"
+import { storeToRefs } from "pinia"
+import { useRouter } from "vue-router"
+import { useQueryClient } from "@tanstack/vue-query"
 import Button from "primevue/button"
+import Calendar from "primevue/calendar"
+import Dialog from "primevue/dialog"
 import { useToast } from "primevue/usetoast"
 import LguBudgetSetup from "./lgu-budget-summary-card/LguBudgetSetup.vue"
 import LguBudgetSnapshot from "./lgu-budget-summary-card/LguBudgetSnapshot.vue"
 import LguDashboardHeader from "./lgu-budget-summary-card/LguDashboardHeader.vue"
 import LguDashboardTables from "./lgu-budget-summary-card/LguDashboardTables.vue"
 import LguExportsDialog from "./lgu-budget-summary-card/LguExportsDialog.vue"
-import LguInvoiceSessionDialog from "./lgu-budget-summary-card/LguInvoiceSessionDialog.vue"
 import LguPatientCreditDetailDialog from "./lgu-budget-summary-card/LguPatientCreditDetailDialog.vue"
-import LguPatientSoaDialog from "./lgu-budget-summary-card/LguPatientSoaDialog.vue"
 import type { LguInvoiceSessionOption } from "./lgu-budget-summary-card/types"
 import {
   billingPhase1Service,
@@ -193,14 +194,12 @@ import {
   renderEncounterTicketBulkPdfWindow,
   type EncounterTicketPdfCard
 } from "@/utils/encounter-ticket-pdf.util"
-import {
-  renderStandardInvoiceWindow,
-  type InvoiceDetailRow
-} from "@/features/billing/invoices/invoice-layout.util"
 import { LGU_BILLING_TYPE, isLguBillingType } from "@/features/promos-offers/lgu/lgu-billing-type.module"
 import type { Patient } from "@/features/patients/types/patient"
 import type { PatientHMOInformation } from "@/models/hmo-information"
-import { patientHMOInformationService } from "@/services/patient-hmo-information.service"
+import { patientTanstackService } from "@/features/patients/queries/patient.tanstack.service"
+import { billingContextTanstackService } from "@/features/billing/queries/billing-context.tanstack.service"
+import { useAuthSessionStore } from "@/stores/auth-session.store"
 
 type LocalLguBudgetDraft = {
   baseMonthlyBudget?: number
@@ -208,7 +207,15 @@ type LocalLguBudgetDraft = {
 }
 
 const toast = useToast()
-const currentRoleName = ref<string>("")
+const router = useRouter()
+const queryClient = useQueryClient()
+const authSession = useAuthSessionStore()
+const { roleName } = storeToRefs(authSession)
+
+const fetchBillingDetail = async (billingId: number): Promise<BillingListItem | undefined> => {
+  return (await billingContextTanstackService.fetchContext(queryClient, billingId))?.billing
+}
+
 const budgetLedgerVisible = ref(false)
 const lguPrograms = ref<LguProgramLookup[]>([])
 const loadingPrograms = ref(false)
@@ -239,9 +246,39 @@ const loadingPatientDetail = ref(false)
 const patientDetailError = ref("")
 const isCreatingClaims = ref(false)
 const printingClaimBillingId = ref<number | null>(null)
-const invoiceSessionPickerVisible = ref(false)
-const patientSoaPickerVisible = ref(false)
 const exportsModalVisible = ref(false)
+const showPatientProfilePrintDialog = ref(false)
+const patientProfilePrintTarget = ref<"profile" | "billing_summary">("profile")
+const patientProfileTransactionRange = ref<Date[] | null>(null)
+const invoiceSessionOptions = computed<LguInvoiceSessionOption[]>(() => {
+  const patientDetail = selectedPatientDetail.value
+  if (!patientDetail) return []
+
+  const billingsById = new Map((patientDetail.billings ?? []).map(billing => [billing.id, billing]))
+  const fallbackPackageName = patientDetail.package_availments[0]?.package_name || "LGU Package"
+
+  return (patientDetail.authorizations ?? []).flatMap(authorization => {
+    const totalSessions = Math.max(1, Number(authorization.total_sessions ?? authorization.sessions.length ?? 1))
+    return (authorization.sessions ?? []).map(session => {
+      const billingId = session.dropout_billing_id ?? session.monthly_billing_id ?? null
+      const billing = billingId ? billingsById.get(billingId) : undefined
+
+      return {
+        key: String(session.id),
+        label: `Session ${session.session_sequence}`,
+        packageName: authorization.package_name || fallbackPackageName,
+        serviceName: session.service_name || authorization.package_name || fallbackPackageName,
+        appointmentId: session.appointment_id,
+        appointmentDate: session.appointment_date,
+        sessionSequence: session.session_sequence,
+        totalSessions,
+        billingId,
+        claimLabel: billing?.public_id || (billingId ? `BILLING-${billingId}` : "-"),
+        session
+      }
+    })
+  })
+})
 const soaRange = ref<Date[] | null>(null)
 const patientSoaRange = ref<Date[] | null>(null)
 const patientSoaMode = ref<"range" | "session">("range")
@@ -316,44 +353,10 @@ const hasValidSoaRange = computed(() => {
   return Array.isArray(r) && r.length === 2 && r[0] instanceof Date && r[1] instanceof Date
 })
 
-const hasValidPatientSoaRange = computed(() => {
-  const r = patientSoaRange.value
-  return Array.isArray(r) && r.length === 2 && r[0] instanceof Date && r[1] instanceof Date
-})
-
 const hasValidBulkTicketRange = computed(() => {
   const r = bulkTicketRange.value
   return Array.isArray(r) && r.length === 2 && r[0] instanceof Date && r[1] instanceof Date
 })
-
-const invoiceSessionOptions = computed<LguInvoiceSessionOption[]>(() =>
-  (selectedPatientDetail.value?.authorizations ?? []).flatMap(authorization => {
-    const totalSessions = Math.max(authorization.total_sessions, authorization.sessions.length, 1)
-    return authorization.sessions.map(session => {
-      const dropoutBillingId = Number(session.dropout_billing_id ?? 0) > 0 ? Number(session.dropout_billing_id) : null
-      const monthlyBillingId = Number(session.monthly_billing_id ?? 0) > 0 ? Number(session.monthly_billing_id) : null
-      const billingId = dropoutBillingId ?? monthlyBillingId
-      const claimLabel = dropoutBillingId
-        ? "Dropout Claim"
-        : monthlyBillingId
-          ? "Monthly Claim"
-          : "Not Claimed"
-      return {
-        key: `${authorization.authorization_id}-${session.id}`,
-        label: `Session ${session.session_sequence} of ${totalSessions}`,
-        packageName: authorization.package_name || "LGU Package",
-        serviceName: session.service_name || "LGU Session",
-        appointmentId: session.appointment_id,
-        appointmentDate: session.appointment_date,
-        sessionSequence: session.session_sequence,
-        totalSessions,
-        billingId,
-        claimLabel,
-        session
-      }
-    })
-  })
-)
 
 const MANAGER_ROLE_KEYWORDS = [
   "manager",
@@ -1055,16 +1058,6 @@ type PatientLguDetailsExportContext = {
   billingDetails: BillingListItem[]
 }
 
-const patientExportFileName = (suffix: string): string => {
-  const patient = selectedPatientDetail.value
-  const name = String(patient?.patient_name || `patient-${patient?.patient_id ?? "lgu"}`)
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-  return `${name || "lgu-patient"}-${suffix}-${selectedBillingMonth.value}`
-}
-
 const selectedPatientStatusLabel = (): string =>
   formatLguStatus(
     selectedPatientDetail.value?.package_availments[0]?.status
@@ -1088,12 +1081,6 @@ const getPatientInitials = (fullName?: string): string => {
   return `${first}${last}`.toUpperCase() || "NA"
 }
 
-const formatReferralChannel = (channel?: string | null): string => {
-  if (channel === "ONLINE") return "Online"
-  if (channel === "OFFLINE") return "Offline"
-  return "N/A"
-}
-
 const formatPatientAddress = (patient?: Patient | null): string => {
   if (!patient) return "N/A"
   const addressParts = [
@@ -1112,8 +1099,8 @@ const loadPatientLguDetailsExportContext = async (patientId: number): Promise<Pa
     .map(billing => Number(billing.id))
     .filter(id => Number.isFinite(id) && id > 0)
 
-  const [patientResult, imageResult, transactionsResult, lguInformationResult, billingDetailsResult] = await Promise.allSettled([
-    pamsAPI.get<Patient>(`/patients/${patientId}`).then(response => response.data),
+  const [patientContextResult, imageResult, transactionsResult, billingDetailsResult] = await Promise.allSettled([
+    patientTanstackService.fetchContext(queryClient, patientId),
     pamsAPI.get<Blob>(`/patients/${patientId}/profile-image/file?t=${Date.now()}`, {
       responseType: "blob"
     }).then(response => blobToDataUrl(response.data)),
@@ -1123,8 +1110,7 @@ const loadPatientLguDetailsExportContext = async (patientId: number): Promise<Pa
       selectedBudgetPeriodMonth.value,
       selectedProgramId.value ?? undefined
     ),
-    patientHMOInformationService.getByPatientId(patientId),
-    Promise.all(billingIds.map(id => billingPhase1Service.getById(id)))
+    Promise.all(billingIds.map(id => fetchBillingDetail(id)))
   ])
 
   const transactions = transactionsResult.status === "fulfilled"
@@ -1132,9 +1118,9 @@ const loadPatientLguDetailsExportContext = async (patientId: number): Promise<Pa
     : lguTransactionHistory.value.filter(entry => Number(entry.patient_id ?? 0) === patientId)
 
   return {
-    patientDetails: patientResult.status === "fulfilled" ? patientResult.value : null,
-    lguInformation: lguInformationResult.status === "fulfilled"
-      ? (lguInformationResult.value ?? []).find(entry => entry.sponsor_context === "LGU") ?? null
+    patientDetails: patientContextResult.status === "fulfilled" ? patientContextResult.value?.patient ?? null : null,
+    lguInformation: patientContextResult.status === "fulfilled"
+      ? (patientContextResult.value?.sponsor_information ?? []).find(entry => entry.sponsor_context === "LGU") ?? null
       : null,
     profileImageDataUrl: imageResult.status === "fulfilled" ? imageResult.value : null,
     transactions,
@@ -1693,7 +1679,7 @@ const loadBillingDetailsForSessions = async (sessions: LguInvoiceSessionOption[]
       .filter(id => Number.isFinite(id) && id > 0)
   ))
 
-  const results = await Promise.allSettled(billingIds.map(id => billingPhase1Service.getById(id)))
+  const results = await Promise.allSettled(billingIds.map(id => fetchBillingDetail(id)))
   const details: BillingListItem[] = []
   for (const result of results) {
     if (result.status === "fulfilled" && result.value) {
@@ -1955,54 +1941,16 @@ const renderLguProfileBodyHtml = (context: PatientLguDetailsExportContext): stri
   ${renderProfileIncludedServicesHtml()}
 `
 
-const exportPatientBillingSummary = async (): Promise<void> => {
+const exportPatientLguDetails = async (): Promise<void> => {
   const patient = selectedPatientDetail.value
   if (!patient) return
-  await loadLguInvoiceCatalog()
-  const sessions = invoiceSessionOptions.value
-  const rows = getBillingSummaryInvoiceRows(sessions)
-  const referenceNumber = `LGU-SUMMARY-${patient.patient_id}-${selectedBillingMonth.value}`
-  const grandTotal = Number(rows.reduce((sum, row) => sum + Number(row.unitTotal ?? 0), 0).toFixed(2))
-  let popup: Window
-  try {
-    popup = openClaimPrintWindow(referenceNumber)
-  } catch {
-    errorToast(toast, "Unable to open billing summary. Allow pop-ups for this site, then try again.")
-    return
-  }
-
-  const detailRows: InvoiceDetailRow[] = [
-    { label: "Billing To", value: selectedProgramName.value || "LGU" },
-    { label: "Referral Form No.", value: "N/A" },
-    { label: "Date Issued", value: new Date().toLocaleDateString("en-PH") },
-    { label: "Patient Program Status", value: selectedPatientStatusLabel() }
-  ]
-
-  renderStandardInvoiceWindow(popup, {
-    title: "Patient Billing Summary",
-    headerTitle: "PATIENT BILLING SUMMARY",
-    fileName: patientExportFileName("billing-summary"),
-    billingDate: new Date().toISOString(),
-    referenceNumber,
-    patientName: patient.patient_name,
-    columns: [
-      { label: "ITEM No.", width: "68px", align: "center" },
-      { label: "TREATMENT DATE", width: "110px", align: "center" },
-      { label: "PT SERVICE RENDERED" },
-      { label: "SESSION SEQUENCE", width: "120px", align: "center" },
-      { label: "UNIT TOTAL", width: "126px", align: "right" }
-    ],
-    tableRowsHtml: renderBillingSummaryInvoiceRows(rows),
-    emptyStateColspan: 5,
-    discount: 0,
-    grandTotal,
-    detailBoxTitle: "LGU DETAILS",
-    detailRows,
-    renderErrorMessage: "The LGU billing summary could not be rendered. Please try again."
-  })
+  patientProfilePrintTarget.value = "profile"
+  const today = new Date()
+  patientProfileTransactionRange.value = [new Date(today.getFullYear(), today.getMonth(), 1), today]
+  showPatientProfilePrintDialog.value = true
 }
 
-const exportPatientSoa = async (): Promise<void> => {
+const exportPatientProfileBillingSummary = async (): Promise<void> => {
   const patient = selectedPatientDetail.value
   if (!patient) return
   const isSingleSession = patientSoaMode.value === "session"
@@ -2172,9 +2120,11 @@ const exportPatientLguDetails = async (): Promise<void> => {
   })
 }
 
-const inferLguPackageTotalSessions = (name?: string, fallback = 1): number => {
-  const match = String(name ?? "").match(/\((\d+)\)\s*Sessions?/i)
-  return match ? Math.max(1, Number(match[1])) : Math.max(1, fallback)
+const formatDashboardSoaSessionSequence = (row: LguDashboardHistoryItem): string => {
+  const sequence = Number(row.session_sequence ?? 0)
+  if (!Number.isFinite(sequence) || sequence <= 0) return "N/A"
+  const totalSessions = Number(row.total_sessions ?? 0)
+  return totalSessions > 0 ? `Session ${sequence} of ${totalSessions}` : `Session ${sequence}`
 }
 
 const getDashboardSoaPatientKey = (row: LguDashboardHistoryItem): string =>
@@ -2534,7 +2484,7 @@ const exportBulkLguEncounterTickets = async (): Promise<void> => {
       return
     }
 
-    const details = (await Promise.all(billingIds.map(id => billingPhase1Service.getById(id)))).filter((d): d is BillingListItem => !!d)
+    const details = (await Promise.all(billingIds.map(id => fetchBillingDetail(id)))).filter((d): d is BillingListItem => !!d)
     const cards = details
       .flatMap(d => buildEncounterTicketCards(d))
       .sort((a, b) => new Date(a.signedOffAt).getTime() - new Date(b.signedOffAt).getTime())
@@ -2558,55 +2508,41 @@ const exportBulkLguEncounterTickets = async (): Promise<void> => {
   }
 }
 
+void [
+  renderEncounterTicketPdfWindow,
+  renderAttendanceRecordPdfWindow,
+  formatDateOnly,
+  getMonthEndDate,
+  loadPatientLguDetailsExportContext,
+  renderBillingRows,
+  renderAppointmentRows,
+  renderAvailedSessionRows,
+  renderPackageRows,
+  renderProfileField,
+  loadBillingDetailsForSessions,
+  latestBillingDetail,
+  renderProfileAppointmentsHtml,
+  renderLguProfileBodyHtml,
+  exportPatientProfileBillingSummary,
+  renderDashboardStatementOfAccountRows,
+  exportBulkLguEncounterTickets
+]
+
 const exportPatientAttendanceRecord = async (): Promise<void> => {
   const patient = selectedPatientDetail.value
   if (!patient) return
 
-  const billingIds = patient.billings
-    .map(billing => Number(billing.id))
-    .filter(id => Number.isFinite(id) && id > 0)
-
-  if (!billingIds.length) {
-    errorToast(toast, "No LGU billing statements are available for this patient's attendance record")
-    return
-  }
-
-  let popup: Window
-  try {
-    popup = openEncounterTicketPdfWindow("Attendance & Treatment Record")
-  } catch {
-    errorToast(toast, "Unable to open attendance record. Allow pop-ups for this site, then try again.")
-    return
-  }
-
-  try {
-    const details = (await Promise.all(billingIds.map(id => billingPhase1Service.getById(id))))
-      .filter((detail): detail is BillingListItem => !!detail)
-
-    const cards = details
-      .flatMap(detail => buildEncounterTicketCards(detail))
-      .filter(card => card.attendanceStatus === "Attended")
-      .sort((left, right) => {
-        const leftDate = String(left.attendedAt ?? left.signedOffAt ?? "")
-        const rightDate = String(right.attendedAt ?? right.signedOffAt ?? "")
-        return leftDate.localeCompare(rightDate)
-      })
-
-    if (!cards.length) {
-      popup.close()
-      errorToast(toast, "No locked attended encounter tickets found for this patient")
-      return
-    }
-
-    renderAttendanceRecordPdfWindow(popup, cards, {
-      title: "Attendance & Treatment Record",
-      subtitle: `${patient.patient_name} - ${cards.length} locked encounter ticket${cards.length === 1 ? "" : "s"}`,
-      fileName: `lgu-attendance-treatment-record-${patient.patient_id}`
-    })
-  } catch (error: unknown) {
-    popup.close()
-    errorToast(toast, extractApiErrorMessage(error, "Failed to export attendance and treatment record"))
-  }
+  const popup = openPrintableRouteWindow(
+    {
+      name: "lgu-attendance-treatment-print",
+      query: {
+        patient_id: String(patient.patient_id),
+        autoprint: "1"
+      }
+    },
+    "Unable to open attendance record. Allow pop-ups for this site, then try again."
+  )
+  if (!popup) return
 }
 
 const firstDroppedOutAppointmentId = computed<number | null>(() => {
@@ -2809,7 +2745,7 @@ const lguOperationalCards = computed(() => [
 ])
 
 const canManageLguDashboard = computed(() => {
-  const normalized = currentRoleName.value.trim().toLowerCase()
+  const normalized = roleName.value.trim().toLowerCase()
   if (!normalized) return false
   return MANAGER_ROLE_KEYWORDS.some(keyword => normalized.includes(keyword))
 })
@@ -2821,31 +2757,6 @@ const lguProgramOptions = computed(() =>
 const selectedProgramName = computed(() =>
   lguProgramOptions.value.find(p => p.id === selectedProgramId.value)?.label ?? ""
 )
-
-const resolveRoleFromStorage = (): string => {
-  const candidateKeys = ["auth_user", "currentUser", "user", "profile", "loggedInUser", "google_user"]
-  for (const key of candidateKeys) {
-    const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key)
-    if (!raw) continue
-    try {
-      const parsed = JSON.parse(raw) as Record<string, unknown>
-      const role = String(parsed.role_name ?? parsed.role ?? parsed.userRole ?? parsed.primaryRole ?? "").trim()
-      if (role) return role
-      if (Array.isArray(parsed.roles) && parsed.roles.length > 0) {
-        const first = parsed.roles[0]
-        if (typeof first === "string" && first.trim()) return first.trim()
-        if (first && typeof first === "object") {
-          const roleObj = first as Record<string, unknown>
-          const nested = String(roleObj.name ?? roleObj.role ?? "").trim()
-          if (nested) return nested
-        }
-      }
-    } catch {
-      // Ignore malformed storage entries.
-    }
-  }
-  return ""
-}
 
 const extractApiErrorMessage = (error: unknown, fallback: string): string =>
   getApiErrorMessage(error, {
@@ -2979,28 +2890,12 @@ const loadDashboardBudget = async (): Promise<void> => {
     }
   }
 
-  const openInvoiceSessionPicker = (): void => {
-    invoiceSessionPickerVisible.value = true
-  }
-
-  const openPatientSoaPicker = (): void => {
-    patientSoaPickerVisible.value = true
-  }
-
-  const printSessionInvoice = async (option: LguInvoiceSessionOption): Promise<void> => {
-    if (!option.billingId) {
-      errorToast(toast, "This session does not have a generated LGU claim yet")
-      return
-    }
-    await downloadClaimPdf(option.billingId, option)
-  }
-
   const downloadClaimPdf = async (billingId: number, sessionOption?: LguInvoiceSessionOption): Promise<void> => {
     if (!billingId || printingClaimBillingId.value) return
     printingClaimBillingId.value = billingId
     let popup: Window | null = null
     try {
-      const detail = await billingPhase1Service.getById(billingId)
+      const detail = await fetchBillingDetail(billingId)
       if (!detail) {
         errorToast(toast, "LGU claim billing could not be loaded")
         return
@@ -3415,7 +3310,7 @@ const createNewProgram = async (): Promise<void> => {
 }
 
 onMounted(async () => {
-  currentRoleName.value = resolveRoleFromStorage()
+  await authSession.ensureLoaded().catch(() => undefined)
   await loadLguPrograms()
   void Promise.all([
     loadDashboardBudget(),
