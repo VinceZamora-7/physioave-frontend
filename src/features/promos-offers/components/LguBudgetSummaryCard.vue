@@ -168,7 +168,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue"
+import { storeToRefs } from "pinia"
 import { useRouter } from "vue-router"
+import { useQueryClient } from "@tanstack/vue-query"
 import Button from "primevue/button"
 import Calendar from "primevue/calendar"
 import Dialog from "primevue/dialog"
@@ -207,7 +209,9 @@ import {
 import { LGU_BILLING_TYPE, isLguBillingType } from "@/features/promos-offers/lgu/lgu-billing-type.module"
 import type { Patient } from "@/features/patients/types/patient"
 import type { PatientHMOInformation } from "@/models/hmo-information"
-import { patientHMOInformationService } from "@/services/patient-hmo-information.service"
+import { patientTanstackService } from "@/features/patients/queries/patient.tanstack.service"
+import { billingContextTanstackService } from "@/features/billing/queries/billing-context.tanstack.service"
+import { useAuthSessionStore } from "@/stores/auth-session.store"
 
 type LocalLguBudgetDraft = {
   baseMonthlyBudget?: number
@@ -216,7 +220,14 @@ type LocalLguBudgetDraft = {
 
 const toast = useToast()
 const router = useRouter()
-const currentRoleName = ref<string>("")
+const queryClient = useQueryClient()
+const authSession = useAuthSessionStore()
+const { roleName } = storeToRefs(authSession)
+
+const fetchBillingDetail = async (billingId: number): Promise<BillingListItem | undefined> => {
+  return (await billingContextTanstackService.fetchContext(queryClient, billingId))?.billing
+}
+
 const budgetLedgerVisible = ref(false)
 const lguPrograms = ref<LguProgramLookup[]>([])
 const loadingPrograms = ref(false)
@@ -1097,8 +1108,8 @@ const loadPatientLguDetailsExportContext = async (patientId: number): Promise<Pa
     .map(billing => Number(billing.id))
     .filter(id => Number.isFinite(id) && id > 0)
 
-  const [patientResult, imageResult, transactionsResult, lguInformationResult, billingDetailsResult] = await Promise.allSettled([
-    pamsAPI.get<Patient>(`/patients/${patientId}`).then(response => response.data),
+  const [patientContextResult, imageResult, transactionsResult, billingDetailsResult] = await Promise.allSettled([
+    patientTanstackService.fetchContext(queryClient, patientId),
     pamsAPI.get<Blob>(`/patients/${patientId}/profile-image/file?t=${Date.now()}`, {
       responseType: "blob"
     }).then(response => blobToDataUrl(response.data)),
@@ -1108,8 +1119,7 @@ const loadPatientLguDetailsExportContext = async (patientId: number): Promise<Pa
       selectedBudgetPeriodMonth.value,
       selectedProgramId.value ?? undefined
     ),
-    patientHMOInformationService.getByPatientId(patientId),
-    Promise.all(billingIds.map(id => billingPhase1Service.getById(id)))
+    Promise.all(billingIds.map(id => fetchBillingDetail(id)))
   ])
 
   const transactions = transactionsResult.status === "fulfilled"
@@ -1117,9 +1127,9 @@ const loadPatientLguDetailsExportContext = async (patientId: number): Promise<Pa
     : lguTransactionHistory.value.filter(entry => Number(entry.patient_id ?? 0) === patientId)
 
   return {
-    patientDetails: patientResult.status === "fulfilled" ? patientResult.value : null,
-    lguInformation: lguInformationResult.status === "fulfilled"
-      ? (lguInformationResult.value ?? []).find(entry => entry.sponsor_context === "LGU") ?? null
+    patientDetails: patientContextResult.status === "fulfilled" ? patientContextResult.value?.patient ?? null : null,
+    lguInformation: patientContextResult.status === "fulfilled"
+      ? (patientContextResult.value?.sponsor_information ?? []).find(entry => entry.sponsor_context === "LGU") ?? null
       : null,
     profileImageDataUrl: imageResult.status === "fulfilled" ? imageResult.value : null,
     transactions,
@@ -1691,7 +1701,7 @@ const loadBillingDetailsForSessions = async (sessions: LguInvoiceSessionOption[]
       .filter(id => Number.isFinite(id) && id > 0)
   ))
 
-  const results = await Promise.allSettled(billingIds.map(id => billingPhase1Service.getById(id)))
+  const results = await Promise.allSettled(billingIds.map(id => fetchBillingDetail(id)))
   const details: BillingListItem[] = []
   for (const result of results) {
     if (result.status === "fulfilled" && result.value) {
@@ -2242,7 +2252,7 @@ const exportBulkLguEncounterTickets = async (): Promise<void> => {
       return
     }
 
-    const details = (await Promise.all(billingIds.map(id => billingPhase1Service.getById(id)))).filter((d): d is BillingListItem => !!d)
+    const details = (await Promise.all(billingIds.map(id => fetchBillingDetail(id)))).filter((d): d is BillingListItem => !!d)
     const cards = details
       .flatMap(d => buildEncounterTicketCards(d))
       .sort((a, b) => new Date(a.signedOffAt).getTime() - new Date(b.signedOffAt).getTime())
@@ -2503,7 +2513,7 @@ const lguOperationalCards = computed(() => [
 ])
 
 const canManageLguDashboard = computed(() => {
-  const normalized = currentRoleName.value.trim().toLowerCase()
+  const normalized = roleName.value.trim().toLowerCase()
   if (!normalized) return false
   return MANAGER_ROLE_KEYWORDS.some(keyword => normalized.includes(keyword))
 })
@@ -2515,31 +2525,6 @@ const lguProgramOptions = computed(() =>
 const selectedProgramName = computed(() =>
   lguProgramOptions.value.find(p => p.id === selectedProgramId.value)?.label ?? ""
 )
-
-const resolveRoleFromStorage = (): string => {
-  const candidateKeys = ["auth_user", "currentUser", "user", "profile", "loggedInUser", "google_user"]
-  for (const key of candidateKeys) {
-    const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key)
-    if (!raw) continue
-    try {
-      const parsed = JSON.parse(raw) as Record<string, unknown>
-      const role = String(parsed.role_name ?? parsed.role ?? parsed.userRole ?? parsed.primaryRole ?? "").trim()
-      if (role) return role
-      if (Array.isArray(parsed.roles) && parsed.roles.length > 0) {
-        const first = parsed.roles[0]
-        if (typeof first === "string" && first.trim()) return first.trim()
-        if (first && typeof first === "object") {
-          const roleObj = first as Record<string, unknown>
-          const nested = String(roleObj.name ?? roleObj.role ?? "").trim()
-          if (nested) return nested
-        }
-      }
-    } catch {
-      // Ignore malformed storage entries.
-    }
-  }
-  return ""
-}
 
 const extractApiErrorMessage = (error: unknown, fallback: string): string =>
   getApiErrorMessage(error, {
@@ -2678,7 +2663,7 @@ const loadDashboardBudget = async (): Promise<void> => {
     printingClaimBillingId.value = billingId
     let popup: Window | null = null
     try {
-      const detail = await billingPhase1Service.getById(billingId)
+      const detail = await fetchBillingDetail(billingId)
       if (!detail) {
         errorToast(toast, "LGU claim billing could not be loaded")
         return
@@ -3093,7 +3078,7 @@ const createNewProgram = async (): Promise<void> => {
 }
 
 onMounted(async () => {
-  currentRoleName.value = resolveRoleFromStorage()
+  await authSession.ensureLoaded().catch(() => undefined)
   await loadLguPrograms()
   void Promise.all([
     loadDashboardBudget(),

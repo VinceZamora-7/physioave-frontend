@@ -215,6 +215,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue"
+import { storeToRefs } from "pinia"
 import Button from "primevue/button"
 import Column from "primevue/column"
 import DataTable from "primevue/datatable"
@@ -227,6 +228,7 @@ import { errorToast, successToast } from "@/utils/toast.util"
 import {readActivePromosServiceCatalog} from "@/features/promos-offers/composables/promos-storage.composable"
 import PromosCatalogManagerDialog from "@/features/promos-offers/components/PromosCatalogManagerDialog.vue"
 import ServiceBundlesManager from "@/features/promos-offers/components/ServiceBundlesManager.vue"
+import { useAuthSessionStore } from "@/stores/auth-session.store"
 
 interface BillingPickerLookup {
   id: string | number
@@ -236,13 +238,12 @@ interface BillingPickerLookup {
   status?: string
 }
 
-type ServiceType = "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service"
-
 const toast = useToast()
+const authSession = useAuthSessionStore()
+const { roleName } = storeToRefs(authSession)
 const isLoading = ref(false)
 const catalogManagerVisible = ref(false)
 const allServices = ref<BillingPickerLookup[]>([])
-const currentRoleName = ref<string>("")
 
 const lguCoverage = ref<Record<string | number, boolean>>({})
 const lguBudget = ref<Record<string | number, number>>({})
@@ -345,35 +346,10 @@ const remainingAvailableFund = computed(() =>
 )
 
 const canManageLguDashboard = computed(() => {
-  const normalized = currentRoleName.value.trim().toLowerCase()
+  const normalized = roleName.value.trim().toLowerCase()
   if (!normalized) return false
   return MANAGER_ROLE_KEYWORDS.some(keyword => normalized.includes(keyword))
 })
-
-const resolveRoleFromStorage = (): string => {
-  const candidateKeys = ["auth_user", "currentUser", "user", "profile", "loggedInUser", "google_user"]
-  for (const key of candidateKeys) {
-    const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key)
-    if (!raw) continue
-    try {
-      const parsed = JSON.parse(raw) as Record<string, unknown>
-      const role = String(parsed.role_name ?? parsed.role ?? parsed.userRole ?? parsed.primaryRole ?? "").trim()
-      if (role) return role
-      if (Array.isArray(parsed.roles) && parsed.roles.length > 0) {
-        const first = parsed.roles[0]
-        if (typeof first === "string" && first.trim()) return first.trim()
-        if (first && typeof first === "object") {
-          const roleObj = first as Record<string, unknown>
-          const nested = String(roleObj.name ?? roleObj.role ?? "").trim()
-          if (nested) return nested
-        }
-      }
-    } catch {
-      // Ignore malformed storage entries.
-    }
-  }
-  return ""
-}
 
 const loadDashboardBudget = (): void => {
   try {
@@ -508,9 +484,10 @@ const saveLguConfiguration = async (): Promise<void> => {
 
     await pamsAPI.post("/package-service-offers", payload)
     successToast(toast, `Saved LGU package for ${selectedServiceIds.length} service${selectedServiceIds.length !== 1 ? 's' : ''}`)
-  } catch (err: any) {
-    if (err?.response?.data?.message) {
-      errorToast(toast, err.response.data.message)
+  } catch (err: unknown) {
+    const errorLike = err as { response?: { data?: { message?: string } } }
+    if (errorLike.response?.data?.message) {
+      errorToast(toast, errorLike.response.data.message)
     } else {
       errorToast(toast, "Failed to save LGU configuration")
     }
@@ -518,7 +495,7 @@ const saveLguConfiguration = async (): Promise<void> => {
 }
 
 onMounted(async () => {
-  currentRoleName.value = resolveRoleFromStorage()
+  await authSession.ensureLoaded().catch(() => undefined)
   loadDashboardBudget()
   await loadServices()
 })

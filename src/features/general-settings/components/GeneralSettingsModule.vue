@@ -239,20 +239,20 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from "vue"
+import { storeToRefs } from "pinia"
 import Button from "primevue/button"
 import Message from "primevue/message"
 import Tag from "primevue/tag"
-import { useRouter } from "vue-router"
 
-import { authMeService, type AuthMe } from "@/services/auth-me.service"
 import { ptOutlinedBtn, ptPrimaryBtn } from "@/features/shared/table-header.styles"
 import ModeOfReferralManagerDialog from "@/features/general-settings/components/ModeOfReferralManagerDialog.vue"
 import ExpenseItemManagerDialog from "@/features/general-settings/components/ExpenseItemManagerDialog.vue"
 import EvaluationDropdownManagerDialog from "@/features/general-settings/components/EvaluationDropdownManagerDialog.vue"
+import { useAuthSessionStore } from "@/stores/auth-session.store"
 
-const router = useRouter()
+const authSession = useAuthSessionStore()
+const { currentUser } = storeToRefs(authSession)
 
-const currentUser = ref<AuthMe>()
 const loadError = ref("")
 const modeOfReferralManager = ref<InstanceType<typeof ModeOfReferralManagerDialog> | null>(null)
 const expenseItemManager = ref<InstanceType<typeof ExpenseItemManagerDialog> | null>(null)
@@ -268,7 +268,7 @@ const formatProviderType = (type?: string): string => {
 
 onMounted(async () => {
   try {
-    currentUser.value = await authMeService.get()
+    await authSession.ensureLoaded()
   } catch {
     loadError.value = "Could not load account information."
   }

@@ -335,7 +335,7 @@
   <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
     <div class="space-y-4">
 
-      <!-- ── Essentials ── -->
+      <!-- -- Essentials -- -->
       <section :class="createModalEssentialsClass">
         <div class="flex items-start justify-between gap-3">
           <div>
@@ -643,7 +643,7 @@
 </section>
       </section>
 
-      <!-- ── Services ── -->
+      <!-- -- Services -- -->
       <section :class="createModalServicesClass">
         <div class="flex items-center justify-between gap-3">
           <div>
@@ -883,7 +883,7 @@
 
     </div>
 
-    <!-- ── Schedule (sidebar) ── -->
+    <!-- -- Schedule (sidebar) -- -->
 <section :class="createModalScheduleClass">
   <div>
     <h4 :class="createModalSectionTitleClass">Schedule</h4>
@@ -1132,6 +1132,7 @@
 import AppointmentEncounterTicketDialog from "@/features/appointments/components/AppointmentEncounterTicketDialog.vue";
 import {computed, defineAsyncComponent, onMounted, ref, watch} from "vue";
 import {storeToRefs} from "pinia";
+import {useQueryClient} from "@tanstack/vue-query";
 import {useRouter} from "vue-router";
 import axios from "axios";
 import {useConfirm} from "primevue/useconfirm";
@@ -1170,22 +1171,25 @@ import type {Patient} from "@/features/patients/types/patient";
 import type {Staff} from "@/features/staff/types/staff";
 import {pamsAPI} from "@/utils/axios-interceptor";
 import type {Pageable} from "@/models/paging";
-import type {OfferLookupDTO} from "@/models/global.model";
-import {patientHMOInformationService} from "@/services/patient-hmo-information.service";
 import type {PatientHMOInformation} from "@/models/hmo-information";
-import {hmoMachineRateService} from "@/services/hmo-machine-rate.service";
-import {hmoTechniqueRateService} from "@/services/hmo-technique-rate.service";
-import {hmoEvaluationRateService} from "@/services/hmo-evaluation-rate.service";
-import {hmoAddOnRateService} from "@/services/hmo-add-on-rate.service";
+import {patientTanstackService} from "@/features/patients/queries/patient.tanstack.service";
 import {createReferenceService} from "@/services/reference.service";
-import {ReferenceTanstackKey} from "@/utils/keys/tanstack-key";
+import {AppointmentTanstackKey, ReferenceTanstackKey} from "@/utils/keys/tanstack-key";
 import type {AppointmentProviderType, SpecialtyTag, TreatmentArea} from "@/models/reference";
 import { ptInputText, ptModalPrimaryBtn, ptOutlinedBtn, ptPrimaryBtn, ptSelect } from "@/features/shared/table-header.styles";
-import { readStoredAuthSnapshot } from "@/utils/auth-user.util"
 import {clinicStore} from "@/stores/clinic.store"
+import {useAuthSessionStore} from "@/stores/auth-session.store"
 import AppointmentCheckoutPanel from "@/features/appointments/components/AppointmentCheckoutPanel.vue"
 import AppointmentCalendarSection from "@/features/appointments/components/AppointmentCalendarSection.vue"
 import AppointmentTableSection from "@/features/appointments/components/AppointmentTableSection.vue"
+import {appointmentContextTanstackService} from "@/features/appointments/queries/appointment-context.tanstack.service"
+import {serviceCatalogContextTanstackService} from "@/features/services/queries/service-catalog-context.tanstack.service"
+import type {
+  ServiceCatalogBundle,
+  ServiceCatalogContext,
+  ServiceCatalogItem,
+  ServiceCatalogScope
+} from "@/features/services/api/service-catalog-context.service"
 
 
 const BillingModule = defineAsyncComponent(() => import("@/features/billing/components/BillingModule.vue"))
@@ -1199,10 +1203,10 @@ interface BillingPickerLookup {
 const router = useRouter()
 const toast = useToast()
 const confirm = useConfirm()
+const queryClient = useQueryClient()
 const globalClinicStore = clinicStore()
 const {clinicOptions, selectedClinicId} = storeToRefs(globalClinicStore)
-const roleName = ref("")
-const permissionSet = ref<Set<string>>(new Set())
+const authSession = useAuthSessionStore()
 
 const tableAppointments = ref<AppointmentListItem[]>([])
 const tableTotalElements = ref(0)
@@ -1210,6 +1214,16 @@ const tableSectionRef = ref<InstanceType<typeof AppointmentTableSection>>()
 const selectedDetail = ref<AppointmentDetail>()
 const detailPanelVisible = ref(false)
 const billingOverlayVisible = ref(false)
+
+const fetchAppointmentDetail = async (appointmentId: number): Promise<AppointmentDetail> => {
+  const context = await appointmentContextTanstackService.fetchContext(queryClient, appointmentId)
+  return context.appointment
+}
+
+const invalidateAppointmentContext = async (appointmentId?: number): Promise<void> => {
+  if (!appointmentId) return
+  await queryClient.invalidateQueries({queryKey: [AppointmentTanstackKey.APPOINTMENT_CONTEXT, appointmentId]})
+}
 const billingOverlayMode = ref<'detail' | 'edit'>('detail')
 const encounterTicketVisible = ref(false)
 const isEncounterTicketSaving = ref(false)
@@ -1351,6 +1365,9 @@ const createSlotDuration = ref<SlotDurationMinutes>(60)
 const allSinglePayServices = ref<SingleService[]>([])
 const allBundledServices = ref<BundledService[]>([])
 const allPackageServiceOffers = ref<PackageServiceOffer[]>([])
+const lguSinglePayServices = ref<SingleService[]>([])
+const lguBundledServices = ref<BundledService[]>([])
+const lguPackageServiceOffers = ref<PackageServiceOffer[]>([])
 
 // Service selection state
 type ServiceMode = "individual" | "bundled"
@@ -1387,13 +1404,6 @@ const createPatientEvaluationRateMap = ref<Map<number, number>>(new Map())
 const createPatientAddOnMachineRateMap = ref<Map<number, number>>(new Map())
 const createPatientAddOnTechniqueRateMap = ref<Map<number, number>>(new Map())
 const createPatientAddOnHomeServiceRateMap = ref<Map<number, number>>(new Map())
-// Null = no HMO filter active; Set = only these IDs are covered by the HMO plan
-const createHmoMachineIds = ref<Set<number> | null>(null)
-const createHmoTechniqueIds = ref<Set<number> | null>(null)
-const createHmoEvaluationIds = ref<Set<number> | null>(null)
-const createHmoAddOnMachineIds = ref<Set<number> | null>(null)
-const createHmoAddOnTechniqueIds = ref<Set<number> | null>(null)
-const createHmoAddOnHomeServiceIds = ref<Set<number> | null>(null)
 const createDayAppointments = ref<AppointmentListItem[]>([])
 const createDayAppointmentsKey = ref("")
 const isCreateSlotsLoading = ref(false)
@@ -1747,11 +1757,6 @@ const normalizePackageServiceOffer = (value: unknown): PackageServiceOffer | nul
   }
 }
 
-function filterServicesByHmoIds<T extends { id: string; type: string }>(services: T[], allowed: Set<number> | null): T[] {
-  if (createBillingType.value !== "HMO_BILLING" || allowed === null) return services
-  return services.filter(s => allowed.has(Number(s.id)))
-}
-
 const createModalCardClass = "app-create-modal-section"
 const createModalEssentialsClass = `${createModalCardClass} app-create-modal-section-care`
 const createModalServicesClass = `${createModalCardClass} app-create-modal-section-services`
@@ -1781,6 +1786,106 @@ const formatCreateLineType = (type: string): string => {
   }
 }
 
+const catalogServiceId = (type: SingleService["type"], itemId: number | string, scope: ServiceCatalogScope): string =>
+  scope === "LGU" ? `lgu-${type}-${itemId}` : String(itemId)
+
+const catalogItemToSingleService = (
+  type: SingleService["type"],
+  item: ServiceCatalogItem,
+  scope: ServiceCatalogScope
+): SingleService => ({
+  id: catalogServiceId(type, item.id, scope),
+  type,
+  name: item.name,
+  price: Number(item.effective_price ?? item.price ?? 0),
+  status: item.is_active ? "Active" : "Inactive"
+})
+
+const catalogBundleTypeMap: Record<string, SingleService["type"]> = {
+  MACHINE: "machine",
+  TECHNIQUE: "technique",
+  EVALUATION: "evaluation",
+  ADD_ON_MACHINE: "add-on-machine",
+  ADD_ON_TECHNIQUE: "add-on-technique",
+  ADD_ON_HOME_SERVICE: "add-on-home-service",
+}
+
+const catalogBundleToBundledService = (bundle: ServiceCatalogBundle, scope: ServiceCatalogScope): BundledService => {
+  const collect = (itemType: string): string[] =>
+    bundle.items
+      .filter(item => item.item_type === itemType && item.item_id != null)
+      .map(item => catalogServiceId(catalogBundleTypeMap[itemType], Number(item.item_id), scope))
+
+  return {
+    id: scope === "LGU" ? `lgu-${bundle.id}` : String(bundle.id),
+    name: bundle.name,
+    machineIds: collect("MACHINE"),
+    techniqueIds: collect("TECHNIQUE"),
+    evaluationIds: collect("EVALUATION"),
+    addOnIds: [
+      ...collect("ADD_ON_MACHINE"),
+      ...collect("ADD_ON_TECHNIQUE"),
+      ...collect("ADD_ON_HOME_SERVICE"),
+    ],
+    bundledPrice: Number(bundle.bundled_price ?? 0),
+    status: bundle.is_active ? "Active" : "Inactive"
+  }
+}
+
+const catalogPackageItemId = (
+  type: SingleService["type"],
+  id: string | number,
+  scope: ServiceCatalogScope
+): string => catalogServiceId(type, id, scope)
+
+const mapCatalogPackageItems = (
+  items: Array<{id: number | string; qty?: number}> | undefined,
+  type: SingleService["type"],
+  scope: ServiceCatalogScope
+): Array<{id: string; qty: number}> =>
+  (items ?? []).map(item => ({
+    id: catalogPackageItemId(type, item.id, scope),
+    qty: Math.max(1, Number(item.qty ?? 1))
+  }))
+
+const catalogContextToServices = (context: ServiceCatalogContext): SingleService[] => [
+  ...context.services.machines.map(item => catalogItemToSingleService("machine", item, context.scope)),
+  ...context.services.techniques.map(item => catalogItemToSingleService("technique", item, context.scope)),
+  ...context.services.evaluations.map(item => catalogItemToSingleService("evaluation", item, context.scope)),
+  ...context.services.add_on_machines.map(item => catalogItemToSingleService("add-on-machine", item, context.scope)),
+  ...context.services.add_on_techniques.map(item => catalogItemToSingleService("add-on-technique", item, context.scope)),
+  ...context.services.add_on_home_services.map(item => catalogItemToSingleService("add-on-home-service", item, context.scope)),
+]
+
+const catalogContextToPackageOffers = (context: ServiceCatalogContext): PackageServiceOffer[] =>
+  context.package_offers.map(item => ({
+    id: context.scope === "LGU" ? `lgu-${item.id}` : String(item.id),
+    name: item.name,
+    offerScope: item.offer_scope,
+    bundleId: item.bundle_template_id == null ? undefined : context.scope === "LGU" ? `lgu-${item.bundle_template_id}` : String(item.bundle_template_id),
+    bundleQty: Number(item.bundle_qty ?? 1),
+    bundleItems: item.bundle_items?.map(entry => ({id: String(entry.id), qty: Math.max(1, Number(entry.qty ?? 1))})),
+    machineIds: item.machine_ids?.map(id => catalogPackageItemId("machine", id, context.scope)),
+    machineQty: Number(item.machine_qty ?? 1),
+    machineItems: mapCatalogPackageItems(item.machine_items, "machine", context.scope),
+    techniqueIds: item.technique_ids?.map(id => catalogPackageItemId("technique", id, context.scope)),
+    techniqueQty: Number(item.technique_qty ?? 1),
+    techniqueItems: mapCatalogPackageItems(item.technique_items, "technique", context.scope),
+    evaluationIds: item.evaluation_ids?.map(id => catalogPackageItemId("evaluation", id, context.scope)) ?? [],
+    evaluationItems: mapCatalogPackageItems(item.evaluation_items, "evaluation", context.scope),
+    addOnIds: [
+      ...mapCatalogPackageItems(item.add_on_items, "add-on-machine", context.scope).map(entry => entry.id),
+    ],
+    addOnQty: 1,
+    addOnItems: mapCatalogPackageItems(item.add_on_items, "add-on-machine", context.scope),
+    sessionIds: item.session_ids?.map(String),
+    sessionQty: Number(item.session_qty ?? 1),
+    sessionItems: item.session_items?.map(entry => ({id: String(entry.id), qty: Math.max(1, Number(entry.qty ?? 1))})),
+    evaluationQty: Number(item.evaluation_qty ?? 1),
+    packagePrice: Number(item.package_price ?? 0),
+    status: item.is_active ? "Active" : "Inactive"
+  }))
+
 const createLineSeverity = (type: string): "info" | "success" | "warning" | "secondary" | "contrast" => {
   switch (type) {
     case "machine":
@@ -1800,30 +1905,39 @@ const createLineSeverity = (type: string): "info" | "success" | "warning" | "sec
   }
 }
 
+const activeSinglePayServices = computed(() =>
+  createBillingType.value === "LGU_BILLING" ? lguSinglePayServices.value : allSinglePayServices.value
+)
+
+const activeBundledServiceCatalog = computed(() =>
+  createBillingType.value === "LGU_BILLING" ? lguBundledServices.value : allBundledServices.value
+)
+
+const activePackageServiceCatalog = computed(() =>
+  createBillingType.value === "LGU_BILLING" ? lguPackageServiceOffers.value : allPackageServiceOffers.value
+)
+
 const machineServices = computed(() =>
-  filterServicesByHmoIds(allSinglePayServices.value.filter(s => s.type === "machine"), createHmoMachineIds.value)
+  activeSinglePayServices.value.filter(s => s.type === "machine")
 )
 
 const techniqueServices = computed(() =>
-  filterServicesByHmoIds(allSinglePayServices.value.filter(s => s.type === "technique"), createHmoTechniqueIds.value)
+  activeSinglePayServices.value.filter(s => s.type === "technique")
 )
 
 const evaluationServices = computed(() =>
-  filterServicesByHmoIds(allSinglePayServices.value.filter(s => s.type === "evaluation"), createHmoEvaluationIds.value)
+  activeSinglePayServices.value.filter(s => s.type === "evaluation")
 )
 
 const currentAddOnServices = computed(() => {
   const type = selectedAddOnType.value
   if (type === "add-on-machine") {
     return [
-      ...filterServicesByHmoIds(allSinglePayServices.value.filter(s => s.type === "add-on-machine"), createHmoAddOnMachineIds.value),
-      ...filterServicesByHmoIds(allSinglePayServices.value.filter(s => s.type === "add-on-technique"), createHmoAddOnTechniqueIds.value)
+      ...activeSinglePayServices.value.filter(s => s.type === "add-on-machine"),
+      ...activeSinglePayServices.value.filter(s => s.type === "add-on-technique")
     ]
   }
-  return filterServicesByHmoIds(
-    allSinglePayServices.value.filter(s => s.type === "add-on-home-service"),
-    createHmoAddOnHomeServiceIds.value
-  )
+  return activeSinglePayServices.value.filter(s => s.type === "add-on-home-service")
 })
 
 const hasHomeServiceAddOn = computed(() =>
@@ -2024,6 +2138,20 @@ const updatePackageSessionStart = (
   cascadePackageSessionStarts(index)
 }
 
+const buildCreateHmoRateMap = (items: ServiceCatalogItem[]): {map: Map<number, number>; ids: Set<number>} => {
+  const map = new Map<number, number>()
+  const ids = new Set<number>()
+  for (const item of items) {
+    const id = Number(item.id)
+    const price = Number(item.hmo_rate)
+    if (Number.isFinite(id) && id > 0 && Number.isFinite(price) && price >= 0) {
+      map.set(id, price)
+      ids.add(id)
+    }
+  }
+  return {map, ids}
+}
+
 const syncCreatePatientHmoRates = async (): Promise<void> => {
   createPatientHmoId.value = null
   createPatientHmoInfo.value = null
@@ -2033,12 +2161,6 @@ const syncCreatePatientHmoRates = async (): Promise<void> => {
   createPatientAddOnMachineRateMap.value = new Map()
   createPatientAddOnTechniqueRateMap.value = new Map()
   createPatientAddOnHomeServiceRateMap.value = new Map()
-  createHmoMachineIds.value = null
-  createHmoTechniqueIds.value = null
-  createHmoEvaluationIds.value = null
-  createHmoAddOnMachineIds.value = null
-  createHmoAddOnTechniqueIds.value = null
-  createHmoAddOnHomeServiceIds.value = null
 
   if (createBillingType.value !== "HMO_BILLING") return
   const patientId = Number(createPatient.value)
@@ -2046,7 +2168,8 @@ const syncCreatePatientHmoRates = async (): Promise<void> => {
 
   syncingCreateHmoRates.value = true
   try {
-  const sponsorEntries = await patientHMOInformationService.getByPatientId(patientId)
+  const patientContext = await patientTanstackService.fetchContext(queryClient, patientId)
+  const sponsorEntries = patientContext?.sponsor_information ?? []
   const hmoInfo = sponsorEntries.find(entry => entry.sponsor_context === 'HMO' && Number(entry.hmo_id) > 0) ?? null
   createPatientHmoInfo.value = hmoInfo
   const hmoId = Number(hmoInfo?.hmo_id)
@@ -2054,86 +2177,31 @@ const syncCreatePatientHmoRates = async (): Promise<void> => {
 
   createPatientHmoId.value = hmoId
 
-  const [machineRates, techniqueRates, evaluationRates, addOnRates] = await Promise.all([
-    hmoMachineRateService.getAll(hmoId),
-    hmoTechniqueRateService.getAll(hmoId),
-    hmoEvaluationRateService.getAll(hmoId),
-    hmoAddOnRateService.getAll(hmoId),
-  ])
+  const catalogContext = await serviceCatalogContextTanstackService.fetchContext(queryClient, {scope: "HMO", hmo_id: hmoId})
+  const machines = buildCreateHmoRateMap(catalogContext?.services.machines ?? [])
+  const techniques = buildCreateHmoRateMap(catalogContext?.services.techniques ?? [])
+  const evaluations = buildCreateHmoRateMap(catalogContext?.services.evaluations ?? [])
+  const addOnMachines = buildCreateHmoRateMap(catalogContext?.services.add_on_machines ?? [])
+  const addOnTechniques = buildCreateHmoRateMap(catalogContext?.services.add_on_techniques ?? [])
+  const addOnHomeServices = buildCreateHmoRateMap(catalogContext?.services.add_on_home_services ?? [])
 
-  const machineMap = new Map<number, number>()
-  const machineIds = new Set<number>()
-  for (const r of machineRates ?? []) {
-    const id = Number(r.machine_id); const price = Number(r.rate)
-    if (Number.isFinite(id) && id > 0 && Number.isFinite(price) && price >= 0) {
-      machineMap.set(id, price); machineIds.add(id)
-    }
-  }
-  createPatientMachineRateMap.value = machineMap
-  createHmoMachineIds.value = machineIds
-
-  const techniqueMap = new Map<number, number>()
-  const techniqueIds = new Set<number>()
-  for (const r of techniqueRates ?? []) {
-    const id = Number(r.technique_id); const price = Number(r.rate)
-    if (Number.isFinite(id) && id > 0 && Number.isFinite(price) && price >= 0) {
-      techniqueMap.set(id, price); techniqueIds.add(id)
-    }
-  }
-  createPatientTechniqueRateMap.value = techniqueMap
-  createHmoTechniqueIds.value = techniqueIds
-
-  const evaluationMap = new Map<number, number>()
-  const evaluationIds = new Set<number>()
-  for (const r of evaluationRates ?? []) {
-    const id = Number(r.evaluation_id); const price = Number(r.rate)
-    if (Number.isFinite(id) && id > 0 && Number.isFinite(price) && price >= 0) {
-      evaluationMap.set(id, price); evaluationIds.add(id)
-    }
-  }
-  createPatientEvaluationRateMap.value = evaluationMap
-  createHmoEvaluationIds.value = evaluationIds
-
-  const addOnMachineMap = new Map<number, number>()
-  const addOnMachineIds = new Set<number>()
-  const addOnTechniqueMap = new Map<number, number>()
-  const addOnTechniqueIds = new Set<number>()
-  const addOnHomeServiceMap = new Map<number, number>()
-  const addOnHomeServiceIds = new Set<number>()
-  for (const r of addOnRates ?? []) {
-    const price = Number(r.rate)
-    if (!Number.isFinite(price) || price < 0) continue
-    if (r.add_on_type === "ADD_ON_MACHINE" && r.add_on_machine_id != null) {
-      const id = Number(r.add_on_machine_id)
-      if (id > 0) { addOnMachineMap.set(id, price); addOnMachineIds.add(id) }
-    } else if (r.add_on_type === "ADD_ON_TECHNIQUE" && r.add_on_technique_id != null) {
-      const id = Number(r.add_on_technique_id)
-      if (id > 0) { addOnTechniqueMap.set(id, price); addOnTechniqueIds.add(id) }
-    } else if (r.add_on_type === "ADD_ON_HOME_SERVICE" && r.add_on_home_service_id != null) {
-      const id = Number(r.add_on_home_service_id)
-      if (id > 0) { addOnHomeServiceMap.set(id, price); addOnHomeServiceIds.add(id) }
-    }
-  }
-  createPatientAddOnMachineRateMap.value = addOnMachineMap
-  createHmoAddOnMachineIds.value = addOnMachineIds
-  createPatientAddOnTechniqueRateMap.value = addOnTechniqueMap
-  createHmoAddOnTechniqueIds.value = addOnTechniqueIds
-  createPatientAddOnHomeServiceRateMap.value = addOnHomeServiceMap
-  createHmoAddOnHomeServiceIds.value = addOnHomeServiceIds
+  createPatientMachineRateMap.value = machines.map
+  createPatientTechniqueRateMap.value = techniques.map
+  createPatientEvaluationRateMap.value = evaluations.map
+  createPatientAddOnMachineRateMap.value = addOnMachines.map
+  createPatientAddOnTechniqueRateMap.value = addOnTechniques.map
+  createPatientAddOnHomeServiceRateMap.value = addOnHomeServices.map
   } finally {
     syncingCreateHmoRates.value = false
   }
 }
 
 const activeBundledServices = computed(() =>
-  allBundledServices.value.filter(b => b.status !== "Inactive")
+  activeBundledServiceCatalog.value.filter(b => b.status !== "Inactive")
 )
 
 const activePackageServiceOffers = computed(() =>
-  allPackageServiceOffers.value.filter(p =>
-    p.status !== "Inactive" &&
-    (createBillingType.value === "LGU_BILLING" || p.offerScope !== "LGU")
-  )
+  activePackageServiceCatalog.value.filter(p => p.status !== "Inactive")
 )
 
 const formatLocalDateKey = (date: Date): string => {
@@ -2322,8 +2390,8 @@ const toggleDropoutStatus = async () => {
         `${baseMessage}.${clearedCount ? ` ${clearedCount} future appointment${clearedCount === 1 ? "" : "s"} cleared.` : ""}`
       )
     }
-    // Refresh detail
-    selectedDetail.value = await appointmentPhase1Service.getById(selectedDetail.value.id)
+    await invalidateAppointmentContext(selectedDetail.value.id)
+    selectedDetail.value = await fetchAppointmentDetail(selectedDetail.value.id)
   } catch (error: unknown) {
     errorToast(toast, extractApiErrorMessage(error, "Failed to update dropout status"))
   } finally {
@@ -2374,8 +2442,8 @@ const submitLguMonthlyClaim = async (): Promise<void> => {
 
     if (result) {
       lguMonthlyClaimVisible.value = false
-      // Refresh the appointment detail
-      selectedDetail.value = await appointmentPhase1Service.getById(selectedDetail.value.id)
+      await invalidateAppointmentContext(selectedDetail.value.id)
+      selectedDetail.value = await fetchAppointmentDetail(selectedDetail.value.id)
       successToast(
         toast,
         `Month-end LGU claim created successfully. Billing ID: ${result.billing_public_id} (${result.consumed_count} credits)`
@@ -2512,11 +2580,6 @@ const isFinishedAppointmentStatus = (status?: string): boolean => {
 
 const formatDateTime = (value: string | Date): string => new Date(value).toLocaleString()
 
-const fetchLookup = async (path: string): Promise<BillingPickerLookup[]> => {
-  const {data} = await pamsAPI.get<Pageable<OfferLookupDTO>>(path, {params: {page: 1, size: 500, status: Status.ACTIVE}})
-  return (data?.content ?? []).map(item => ({id: item.id, name: item.name, price: Number(item.price)}))
-}
-
 const loadTreatmentAreaOptions = async (): Promise<void> => {
   if (!selectedClinicId.value) {
     treatmentAreaOptions.value = []
@@ -2537,7 +2600,7 @@ const loadTreatmentAreaOptions = async (): Promise<void> => {
   }
 }
 
-const loadSinglePayServices = async (): Promise<void> => {
+const loadCachedServiceCatalogFallback = (): void => {
   try {
     const stored = localStorage.getItem("singlePayServices")
     allSinglePayServices.value = stored ? JSON.parse(stored) : []
@@ -2566,119 +2629,39 @@ const loadSinglePayServices = async (): Promise<void> => {
   } catch {
     allPackageServiceOffers.value = []
   }
-
-  try {
-    const { data } = await pamsAPI.get<Pageable<Record<string, unknown>>>("/service-bundles", {
-      params: { page: 1, size: 500, name: "", status: Status.ACTIVE }
-    })
-    const dbBundles = (data?.content ?? [])
-      .map(normalizeBundledService)
-      .filter((item): item is BundledService => item !== null)
-
-    if (dbBundles.length > 0) {
-      allBundledServices.value = dbBundles
-    }
-  } catch {
-    // Keep local cache fallback for offline/stale deployments.
-  }
-
-  try {
-    const { data } = await pamsAPI.get<Pageable<Record<string, unknown>>>("/package-service-offers", {
-      params: { page: 1, size: 500, name: "", status: Status.ACTIVE, scope: "ALL" }
-    })
-    const dbPackageOffers = (data?.content ?? [])
-      .map(normalizePackageServiceOffer)
-      .filter((item): item is PackageServiceOffer => item !== null)
-
-    if (dbPackageOffers.length > 0) {
-      allPackageServiceOffers.value = dbPackageOffers
-    }
-  } catch {
-    // Keep local cache fallback for offline/stale deployments.
-  }
-
-  // Fallback: booking users might not have Promos/Offers module access that populates localStorage,
-  // or may have stale/partial cached data (e.g. evaluation only). In either case, load lookup APIs.
-  const hasMachineCatalog = allSinglePayServices.value.some(service => service.type === "machine")
-  const hasTechniqueCatalog = allSinglePayServices.value.some(service => service.type === "technique")
-
-  if (!allSinglePayServices.value.length || !hasMachineCatalog || !hasTechniqueCatalog) {
-    const [machinesResult, techniquesResult, evaluationsResult, addOnMachinesResult, addOnTechniquesResult, addOnHomeServicesResult] = await Promise.allSettled([
-      fetchLookup("/machines/lookup"),
-      fetchLookup("/techniques/lookup"),
-      fetchLookup("/evaluations/lookup"),
-      fetchLookup("/add-on-machines/lookup"),
-      fetchLookup("/add-on-techniques/lookup"),
-      fetchLookup("/add-on-home-services/lookup")
-    ])
-
-    const asLookup = (result: PromiseSettledResult<BillingPickerLookup[]>): BillingPickerLookup[] =>
-      result.status === "fulfilled" ? result.value : []
-
-    const machines = asLookup(machinesResult).map(item => ({
-      id: String(item.id),
-      type: "machine" as const,
-      name: item.name,
-      price: Number(item.price ?? 0),
-      status: "Active"
-    }))
-
-    const techniques = asLookup(techniquesResult).map(item => ({
-      id: String(item.id),
-      type: "technique" as const,
-      name: item.name,
-      price: Number(item.price ?? 0),
-      status: "Active"
-    }))
-
-    const evaluations = asLookup(evaluationsResult).map(item => ({
-      id: String(item.id),
-      type: "evaluation" as const,
-      name: item.name,
-      price: Number(item.price ?? 0),
-      status: "Active"
-    }))
-
-    const addOnMachines = asLookup(addOnMachinesResult).map(item => ({
-      id: String(item.id),
-      type: "add-on-machine" as const,
-      name: item.name,
-      price: Number(item.price ?? 0),
-      status: "Active"
-    }))
-
-    const addOnTechniques = asLookup(addOnTechniquesResult).map(item => ({
-      id: String(item.id),
-      type: "add-on-technique" as const,
-      name: item.name,
-      price: Number(item.price ?? 0),
-      status: "Active"
-    }))
-
-    const addOnHomeServices = asLookup(addOnHomeServicesResult).map(item => ({
-      id: String(item.id),
-      type: "add-on-home-service" as const,
-      name: item.name,
-      price: Number(item.price ?? 0),
-      status: "Active"
-    }))
-
-    const localEvaluations = allSinglePayServices.value.filter(service => service.type === "evaluation")
-    const localAddOnMachines = allSinglePayServices.value.filter(service => service.type === "add-on-machine")
-    const localAddOnTechniques = allSinglePayServices.value.filter(service => service.type === "add-on-technique")
-    const localAddOnHomeServices = allSinglePayServices.value.filter(service => service.type === "add-on-home-service")
-
-    allSinglePayServices.value = [
-      ...machines,
-      ...techniques,
-      ...(localEvaluations.length ? localEvaluations : evaluations),
-      ...(localAddOnMachines.length ? localAddOnMachines : addOnMachines),
-      ...(localAddOnTechniques.length ? localAddOnTechniques : addOnTechniques),
-      ...(localAddOnHomeServices.length ? localAddOnHomeServices : addOnHomeServices)
-    ]
-  }
 }
 
+const applyCatalogContext = (context?: ServiceCatalogContext): void => {
+  if (!context) return
+  const services = catalogContextToServices(context)
+  const bundles = context.bundles.map(bundle => catalogBundleToBundledService(bundle, context.scope))
+  const packageOffers = catalogContextToPackageOffers(context)
+
+  if (context.scope === "LGU") {
+    lguSinglePayServices.value = services
+    lguBundledServices.value = bundles
+    lguPackageServiceOffers.value = packageOffers
+    return
+  }
+
+  allSinglePayServices.value = services
+  allBundledServices.value = bundles
+  allPackageServiceOffers.value = packageOffers
+}
+
+const loadSinglePayServices = async (): Promise<void> => {
+  loadCachedServiceCatalogFallback()
+  try {
+    const [globalContext, lguContext] = await Promise.all([
+      serviceCatalogContextTanstackService.fetchContext(queryClient, {scope: "GLOBAL"}),
+      serviceCatalogContextTanstackService.fetchContext(queryClient, {scope: "LGU"}),
+    ])
+    applyCatalogContext(globalContext)
+    applyCatalogContext(lguContext)
+  } catch {
+    // Keep local cache fallback for offline/stale deployments.
+  }
+}
 const removeHomeServiceAddOn = (): void => {
   selectedServiceLines.value = selectedServiceLines.value.filter(line => line.type !== "add-on-home-service")
   if (isCreateLocationContextAuto.value && createLocationContext.value === "HOME_CARE") {
@@ -2693,7 +2676,7 @@ const setHomeServiceAddOn = (serviceId?: string): void => {
     return
   }
 
-  const service = allSinglePayServices.value.find(item => item.id === serviceId && item.type === "add-on-home-service")
+  const service = activeSinglePayServices.value.find(item => item.id === serviceId && item.type === "add-on-home-service")
 
   if (!service) return
 
@@ -2701,7 +2684,8 @@ const setHomeServiceAddOn = (serviceId?: string): void => {
     type: service.type,
     id: service.id,
     name: service.name,
-    price: service.price
+    price: service.price,
+    originalPrice: service.price
   }
 
   if (createLocationContext.value !== "HOME_CARE") {
@@ -2720,7 +2704,7 @@ const setHomeServiceAddOn = (serviceId?: string): void => {
 }
 
 const calculatePackageOfferRegularTotal = (item: PackageServiceOffer): number => {
-  const bundle = item.bundleId ? allBundledServices.value.find(entry => entry.id === item.bundleId) : undefined
+  const bundle = item.bundleId ? activeBundledServiceCatalog.value.find(entry => entry.id === item.bundleId) : undefined
   const bundlePortion = Number(bundle?.bundledPrice ?? 0) * Number(item.bundleQty ?? 1)
   const machineItems = item.machineItems?.length
     ? item.machineItems
@@ -2736,26 +2720,26 @@ const calculatePackageOfferRegularTotal = (item: PackageServiceOffer): number =>
     : (item.addOnIds ?? []).map(id => ({id, qty: Number(item.addOnQty ?? 1)}))
 
   const machinePortion = machineItems.reduce((sum, entry) => {
-    const unitPrice = allSinglePayServices.value.find(service => service.id === entry.id)?.price ?? 0
+    const unitPrice = activeSinglePayServices.value.find(service => service.id === entry.id)?.price ?? 0
     return sum + unitPrice * Number(entry.qty ?? 1)
   }, 0)
   const techniquePortion = techniqueItems.reduce((sum, entry) => {
-    const unitPrice = allSinglePayServices.value.find(service => service.id === entry.id)?.price ?? 0
+    const unitPrice = activeSinglePayServices.value.find(service => service.id === entry.id)?.price ?? 0
     return sum + unitPrice * Number(entry.qty ?? 1)
   }, 0)
   const evaluationPortion = evaluationItems.reduce((sum, entry) => {
-    const unitPrice = allSinglePayServices.value.find(service => service.id === entry.id)?.price ?? 0
+    const unitPrice = activeSinglePayServices.value.find(service => service.id === entry.id)?.price ?? 0
     return sum + unitPrice * Number(entry.qty ?? 1)
   }, 0)
   const addOnPortion = addOnItems.reduce((sum, entry) => {
-    const unitPrice = allSinglePayServices.value.find(service => service.id === entry.id)?.price ?? 0
+    const unitPrice = activeSinglePayServices.value.find(service => service.id === entry.id)?.price ?? 0
     return sum + unitPrice * Number(entry.qty ?? 1)
   }, 0)
   return bundlePortion + machinePortion + techniquePortion + evaluationPortion + addOnPortion
 }
 
 const selectPackageOffer = (packageId: string): void => {
-  const pkg = allPackageServiceOffers.value.find(item => item.id === packageId)
+  const pkg = activePackageServiceCatalog.value.find(item => item.id === packageId)
   if (!pkg) return
 
   selectedServiceLines.value = selectedServiceLines.value.filter(line => line.type !== "package")
@@ -2777,13 +2761,13 @@ const selectBundle = (bundleId: string): void => {
     return
   }
 
-  const bundle = allBundledServices.value.find(b => b.id === bundleId)
+  const bundle = activeBundledServiceCatalog.value.find(b => b.id === bundleId)
   if (!bundle) return
 
   // Calculate original price from individual services
   const allIds = [...bundle.machineIds, ...bundle.techniqueIds, ...bundle.evaluationIds, ...bundle.addOnIds]
   const originalPrice = allIds.reduce((sum, id) => {
-    return sum + (allSinglePayServices.value.find(s => s.id === id)?.price ?? 0)
+    return sum + (activeSinglePayServices.value.find(s => s.id === id)?.price ?? 0)
   }, 0)
 
   // Prevent adding the same bundle twice
@@ -2822,7 +2806,7 @@ const addServiceLine = (type: string): void => {
 
   if (!serviceId) return
 
-  const service = allSinglePayServices.value.find(s => {
+  const service = activeSinglePayServices.value.find(s => {
     if (s.id !== serviceId) return false
     if (type === "add-on-machine") return s.type === "add-on-machine" || s.type === "add-on-technique"
     return s.type === type
@@ -2844,7 +2828,8 @@ const addServiceLine = (type: string): void => {
       type: resolvedLineType,
       id: service.id,
       name: service.name,
-      price: service.price
+      price: service.price,
+      originalPrice: service.price
     })
   }
 
@@ -3260,12 +3245,6 @@ const openCreateDialog = async (): Promise<void> => {
   createPatientAddOnMachineRateMap.value = new Map()
   createPatientAddOnTechniqueRateMap.value = new Map()
   createPatientAddOnHomeServiceRateMap.value = new Map()
-  createHmoMachineIds.value = null
-  createHmoTechniqueIds.value = null
-  createHmoEvaluationIds.value = null
-  createHmoAddOnMachineIds.value = null
-  createHmoAddOnTechniqueIds.value = null
-  createHmoAddOnHomeServiceIds.value = null
   await loadSinglePayServices()
   const base = alignToClinicStart(findNextAllowedDate(new Date(calendarDate.value)))
   createSlotDuration.value = 60
@@ -3466,7 +3445,7 @@ const closeDetailPanel = (): void => {
 
 const selectAppointment = async (appointment: AppointmentListItem): Promise<void> => {
   try {
-    selectedDetail.value = await appointmentPhase1Service.getById(appointment.id)
+    selectedDetail.value = await fetchAppointmentDetail(appointment.id)
     detailPanelVisible.value = true
   } catch (error: unknown) {
     errorToast(toast, extractApiErrorMessage(error, "Failed to load appointment detail"))
@@ -3515,8 +3494,9 @@ const submitEncounterTicket = async (): Promise<void> => {
     await appointmentPhase1Service.processEncounterTicket(appointmentId, payload)
     successToast(toast, isSelectedEncounterTicketLocked.value ? "HMO LOA details updated" : "Digital sign-off slip saved and attendance marked complete")
     encounterTicketVisible.value = false
+    await invalidateAppointmentContext(appointmentId)
     await refreshAll()
-    selectedDetail.value = await appointmentPhase1Service.getById(appointmentId)
+    selectedDetail.value = await fetchAppointmentDetail(appointmentId)
     detailPanelVisible.value = true
   } catch (error: unknown) {
     errorToast(toast, extractApiErrorMessage(error, "Failed to process encounter ticket"))
@@ -3554,17 +3534,12 @@ const submitReschedule = async (): Promise<void> => {
     await refreshAll()
     await calendarSectionRef.value?.refreshDots()
     if (selectedDetail.value?.id === activeAppointment.value.id) {
-      selectedDetail.value = await appointmentPhase1Service.getById(activeAppointment.value.id)
+      await invalidateAppointmentContext(activeAppointment.value.id)
+      selectedDetail.value = await fetchAppointmentDetail(activeAppointment.value.id)
     }
   } catch (error: unknown) {
     errorToast(toast, extractApiErrorMessage(error, "Reschedule failed"))
   }
-}
-
-const syncRoleFromStorage = () => {
-  const snapshot = readStoredAuthSnapshot()
-  roleName.value = snapshot.roleName
-  permissionSet.value = snapshot.permissions
 }
 
 const confirmDeleteAppointment = (appointment: AppointmentListItem): void => {
@@ -3585,6 +3560,7 @@ const confirmDeleteAppointment = (appointment: AppointmentListItem): void => {
     accept: async () => {
       try {
         await appointmentPhase1Service.delete(appointment.id)
+        await invalidateAppointmentContext(appointment.id)
         successToast(toast, "Appointment deleted")
         if (selectedDetail.value?.id === appointment.id) {
           closeDetailPanel()
@@ -3758,7 +3734,19 @@ watch(createLocationContext, (locationContext) => {
   }
 })
 
-watch(createBillingType, (billingType) => {
+watch(createBillingType, (billingType, previousBillingType) => {
+  if (previousBillingType && billingType !== previousBillingType) {
+    selectedMachineId.value = undefined
+    selectedTechniqueId.value = undefined
+    selectedEvaluationId.value = undefined
+    selectedAddOnId.value = undefined
+    selectedBundleId.value = undefined
+    selectedPackageOfferId.value = undefined
+    selectedPackageOfferDetail.value = null
+    packageSessionSchedules.value = []
+    selectedServiceLines.value = []
+  }
+
   if (billingType === "HMO_BILLING" || billingType === "SELF_PAY_PACKAGE") {
     serviceMode.value = "individual"
     selectedBundleId.value = undefined
@@ -3795,8 +3783,10 @@ watch([createPatient, createBillingType], async () => {
 })
 
 onMounted(async () => {
-  syncRoleFromStorage()
+  await authSession.ensureLoaded()
   await globalClinicStore.loadClinics()
   await tableSectionRef.value?.refresh()
 })
 </script>
+
+

@@ -355,6 +355,8 @@
 
 <script setup lang="ts">
 import {computed, onMounted, ref} from "vue"
+import {storeToRefs} from "pinia"
+import {useQueryClient} from "@tanstack/vue-query"
 import {useToast} from "primevue/usetoast"
 import Button from "primevue/button"
 import DatePicker from "primevue/datepicker"
@@ -374,15 +376,19 @@ import {
   type AppointmentPhase,
   type AppointmentPtCompletionPayload
 } from "@/features/appointments/api/appointment-phase1.service"
-import {authMeService, type AuthMe} from "@/services/auth-me.service"
 import {getApiErrorMessage} from "@/utils/actionable-error.util"
 import {errorToast, successToast} from "@/utils/toast.util"
 import {ptOutlinedBtn, ptPrimaryBtn} from "@/features/shared/table-header.styles"
 import { isPtAppointmentProvider } from "@/utils/appointment-provider.util"
+import {useAuthSessionStore} from "@/stores/auth-session.store"
+import {appointmentContextTanstackService} from "@/features/appointments/queries/appointment-context.tanstack.service"
+import {AppointmentTanstackKey} from "@/utils/keys/tanstack-key"
 
 const toast = useToast()
+const queryClient = useQueryClient()
+const authSession = useAuthSessionStore()
+const {currentUser} = storeToRefs(authSession)
 
-const currentUser = ref<AuthMe>()
 const appointments = ref<AppointmentListItem[]>([])
 const isLoading = ref(false)
 const loadError = ref("")
@@ -424,6 +430,16 @@ const isSelectedPtEncounterTicketLocked = computed(() =>
   Boolean(selectedPtEncounterTicket.value?.pt_signature_data_url?.trim())
 )
 const selectedPtEncounterTicketHasSignature = computed(() => Boolean(selectedPtEncounterTicket.value?.pt_signature_data_url?.trim()))
+
+const fetchAppointmentDetail = async (appointmentId: number): Promise<AppointmentDetail> => {
+  const context = await appointmentContextTanstackService.fetchContext(queryClient, appointmentId)
+  return context.appointment
+}
+
+const invalidateAppointmentContext = async (appointmentId: number): Promise<void> => {
+  await queryClient.invalidateQueries({queryKey: [AppointmentTanstackKey.APPOINTMENT_CONTEXT, appointmentId]})
+}
+
 const todaysAppointmentsCount = computed(() => {
   const todayKey = formatDateKey(new Date())
   return appointments.value.filter(appointment => formatDateKey(new Date(appointment.starts_at)) === todayKey).length
@@ -533,7 +549,7 @@ const refreshSchedule = async (): Promise<void> => {
   loadError.value = ""
 
   try {
-    currentUser.value = await authMeService.get()
+    await authSession.ensureLoaded()
 
     if (!currentUser.value) {
       loadError.value = "Could not load the current user."
@@ -579,7 +595,7 @@ const seedPtCompletionForm = (ticket?: AppointmentEncounterTicket): void => {
 
 const openPtCompletionDialog = async (appointment: AppointmentListItem): Promise<void> => {
   try {
-    const detail = await appointmentPhase1Service.getById(appointment.id)
+    const detail = await fetchAppointmentDetail(appointment.id)
     if (!detail) {
       errorToast(toast, "Failed to load the selected appointment")
       return
@@ -610,6 +626,7 @@ const submitPtCompletion = async (): Promise<void> => {
   try {
     isPtCompletionSaving.value = true
     await appointmentPhase1Service.processPtCompletion(appointmentId, payload)
+    await invalidateAppointmentContext(appointmentId)
     successToast(toast, "PT sign-off saved and the appointment is now marked completed")
     ptCompletionVisible.value = false
     await refreshSchedule()

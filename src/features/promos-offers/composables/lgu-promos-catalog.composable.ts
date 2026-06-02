@@ -1,5 +1,4 @@
 import {computed, ref} from "vue"
-import axios, {HttpStatusCode} from "axios"
 import {useToast} from "primevue/usetoast"
 import type {Pageable} from "@/models/paging.ts"
 import type {OfferLookupDTO} from "@/models/global.model.ts"
@@ -20,10 +19,13 @@ export interface SingleService {
   status: string
 }
 
+type BackendCatalogRow = Record<string, unknown>
+
+const toServiceStatus = (value: unknown): string => value ? "Active" : "Inactive"
+
 export function useLguPromosCatalog() {
   const toast = useToast()
   const isLoading = ref(false)
-  const refreshPromise = ref<Promise<unknown> | null>(null)
 
   const machineServices = ref<SingleService[]>([])
   const techniqueServices = ref<SingleService[]>([])
@@ -58,34 +60,8 @@ export function useLguPromosCatalog() {
     return sessionLookupServices.value.find(s => s.id === id)?.price ?? 0
   }
 
-  const ensureRefreshed = async (): Promise<void> => {
-    if (!refreshPromise.value) {
-      refreshPromise.value = pamsAPI.post("/refresh-tokens").finally(() => {
-        refreshPromise.value = null
-      })
-    }
-    await refreshPromise.value
-  }
-
   const withRefreshRetry = async <T>(operation: () => Promise<T>): Promise<T> => {
-    try {
-      return await operation()
-    } catch (error: unknown) {
-      if (axios.isAxiosError(error)) {
-        const status = error.response?.status
-        const message = String(error.response?.data?.message || error.response?.data?.detail || error.message || "").toLowerCase()
-        const shouldRefresh =
-          status === HttpStatusCode.Unauthorized ||
-          status === HttpStatusCode.InternalServerError ||
-          message.includes("expired") ||
-          message.includes("jwt")
-        if (shouldRefresh) {
-          await ensureRefreshed()
-          return await operation()
-        }
-      }
-      throw error
-    }
+    return await operation()
   }
 
   const loadCatalog = async (): Promise<void> => {
@@ -93,33 +69,33 @@ export function useLguPromosCatalog() {
       const [machinesRes, techniquesRes, evaluationsRes, addOnMachinesRes, addOnTechniquesRes, addOnHomeRes] = await Promise.all([
         withRefreshRetry(() => listLguMachines()),
         withRefreshRetry(() => listLguTechniques()),
-        withRefreshRetry(() => listLguLocalServices<any>("evaluation")),
-        withRefreshRetry(() => listLguLocalServices<any>("add-on-machine")),
-        withRefreshRetry(() => listLguLocalServices<any>("add-on-technique")),
-        withRefreshRetry(() => listLguLocalServices<any>("add-on-home-service")),
+        withRefreshRetry(() => listLguLocalServices<BackendCatalogRow>("evaluation")),
+        withRefreshRetry(() => listLguLocalServices<BackendCatalogRow>("add-on-machine")),
+        withRefreshRetry(() => listLguLocalServices<BackendCatalogRow>("add-on-technique")),
+        withRefreshRetry(() => listLguLocalServices<BackendCatalogRow>("add-on-home-service")),
       ])
 
-      machineServices.value = (machinesRes.content ?? []).map((item: any) => ({
+      machineServices.value = (machinesRes.content ?? []).map((item) => ({
         id: `machine-${item.id}`,
         type: "machine" as ServiceType,
         name: String(item.name ?? ""),
         price: Number(item.price ?? 0),
-        status: item.is_active ? "Active" : "Inactive"
+        status: toServiceStatus(item.is_active)
       }))
 
-      techniqueServices.value = (techniquesRes.content ?? []).map((item: any) => ({
+      techniqueServices.value = (techniquesRes.content ?? []).map((item) => ({
         id: `technique-${item.id}`,
         type: "technique" as ServiceType,
         name: String(item.name ?? ""),
         price: Number(item.price ?? 0),
-        status: item.is_active ? "Active" : "Inactive"
+        status: toServiceStatus(item.is_active)
       }))
 
       customServices.value = [
-        ...(evaluationsRes.content ?? []).map((item: any) => ({id: `evaluation-${item.id}`, type: "evaluation" as ServiceType, name: String(item.name ?? ""), price: Number(item.price ?? 0), status: item.is_active ? "Active" : "Inactive"})),
-        ...(addOnMachinesRes.content ?? []).map((item: any) => ({id: `add-on-machine-${item.id}`, type: "add-on-machine" as ServiceType, name: String(item.name ?? item.machine_name ?? ""), price: Number(item.add_on_price ?? item.price ?? 0), status: item.is_active ? "Active" : "Inactive"})),
-        ...(addOnTechniquesRes.content ?? []).map((item: any) => ({id: `add-on-technique-${item.id}`, type: "add-on-technique" as ServiceType, name: String(item.name ?? item.technique_name ?? ""), price: Number(item.add_on_price ?? item.price ?? 0), status: item.is_active ? "Active" : "Inactive"})),
-        ...(addOnHomeRes.content ?? []).map((item: any) => ({id: `add-on-home-service-${item.id}`, type: "add-on-home-service" as ServiceType, name: String(item.name ?? item.label ?? `Home Service - ${item.start ?? ""} km`), price: Number(item.add_on_price ?? item.price ?? 0), status: item.is_active ? "Active" : "Inactive"})),
+        ...(evaluationsRes.content ?? []).map((item) => ({id: `evaluation-${item.id}`, type: "evaluation" as ServiceType, name: String(item.name ?? ""), price: Number(item.price ?? 0), status: toServiceStatus(item.is_active)})),
+        ...(addOnMachinesRes.content ?? []).map((item) => ({id: `add-on-machine-${item.id}`, type: "add-on-machine" as ServiceType, name: String(item.name ?? item.machine_name ?? ""), price: Number(item.add_on_price ?? item.price ?? 0), status: toServiceStatus(item.is_active)})),
+        ...(addOnTechniquesRes.content ?? []).map((item) => ({id: `add-on-technique-${item.id}`, type: "add-on-technique" as ServiceType, name: String(item.name ?? item.technique_name ?? ""), price: Number(item.add_on_price ?? item.price ?? 0), status: toServiceStatus(item.is_active)})),
+        ...(addOnHomeRes.content ?? []).map((item) => ({id: `add-on-home-service-${item.id}`, type: "add-on-home-service" as ServiceType, name: String(item.name ?? item.label ?? `Home Service - ${item.start ?? ""} km`), price: Number(item.add_on_price ?? item.price ?? 0), status: toServiceStatus(item.is_active)})),
       ]
     } catch {
       machineServices.value = []

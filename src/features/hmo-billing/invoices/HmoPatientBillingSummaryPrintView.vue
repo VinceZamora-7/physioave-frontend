@@ -165,10 +165,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue"
 import { useRoute } from "vue-router"
+import { useQueryClient } from "@tanstack/vue-query"
 import Button from "primevue/button"
 import { billingPhase1Service, type BillingListItem } from "@/features/billing/api/billing-phase1.service"
+import { billingContextTanstackService } from "@/features/billing/queries/billing-context.tanstack.service"
 import { patientEvaluationVisitLogService, type PatientEvaluationVisitLogItem } from "@/features/patients/api/patient-evaluation-visit-log.service"
-import { patientHMOInformationService } from "@/services/patient-hmo-information.service"
+import { patientTanstackService } from "@/features/patients/queries/patient.tanstack.service"
 import type { PatientHMOInformation } from "@/models/hmo-information"
 import HmoInvoiceLayout from "./HmoInvoiceLayout.vue"
 import { formatHmoStatus, useHmoInvoicePrintActions } from "./hmo-invoice.shared"
@@ -193,6 +195,7 @@ type BillingSummarySource = BillingListItem & {
 }
 
 const route = useRoute()
+const queryClient = useQueryClient()
 const { printPage, goBack } = useHmoInvoicePrintActions()
 
 const rows = ref<BillingSummaryRow[]>([])
@@ -207,6 +210,10 @@ const patientId = computed(() => {
 })
 const hmoId = computed(() => {
   const parsed = Number(String(route.query.hmo_id ?? "").trim())
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+})
+const billingId = computed(() => {
+  const parsed = Number(String(route.query.billing_id ?? route.query.id ?? "").trim())
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 })
 
@@ -231,23 +238,16 @@ const firstNonBlank = (...values: unknown[]): string => {
 const sponsorHmoType = computed(() => sponsorRecord.value?.hmo_type_name?.trim() || "N/A")
 const sponsorCompanyName = computed(() => sponsorRecord.value?.company_name?.trim() || hmoLabel.value)
 const sponsorApprovalNo = computed(() => sponsorRecord.value?.approval_code?.trim() || "N/A")
-const dateSigned = computed(() => {
-  const dateValue = firstNonBlank(
-    billingDetail.value?.hmo_loa_date,
-    billingDetail.value?.loa_date,
-    sponsorInfo.value?.validity_start_date
-  )
-  if (!dateValue) return "N/A"
-  const parsed = new Date(dateValue)
-  return Number.isNaN(parsed.getTime()) ? dateValue : parsed.toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })
-})
+const dateSigned = computed(() =>
+  new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })
+)
 const dateFrom = computed(() => String(route.query.from ?? "").trim())
 const dateTo = computed(() => String(route.query.to ?? "").trim())
 const billingDateLabel = computed(() => formatDate(billingDetail.value?.created_at))
+const getBillingRecordId = (billing?: Pick<BillingListItem, "id" | "public_id"> | null): string =>
+  billing ? firstNonBlank(billing.public_id, `BILLING-${billing.id}`) : "N/A"
 const referenceNoLabel = computed(() =>
-  billingDetail.value?.id
-    ? `BILLING-${billingDetail.value.id}`
-    : "N/A"
+  getBillingRecordId(billingDetail.value)
 )
 
 const grandTotal = computed(() => rows.value.reduce((sum, row) => sum + Number(row.unitTotal ?? 0), 0))
@@ -397,7 +397,8 @@ const enrichBillingItems = async (
 ): Promise<BillingSummarySource[]> => {
   const detailedItems = await Promise.all(items.map(async item => {
     try {
-      const detail = item.id > 0 ? await billingPhase1Service.getById(item.id) : undefined
+      const context = item.id > 0 ? await billingContextTanstackService.fetchContext(queryClient, item.id) : undefined
+      const detail = context?.billing
       return detail
         ? {
             ...item,
@@ -418,7 +419,7 @@ const buildRows = (items: BillingSummarySource[]): BillingSummaryRow[] => {
 
   items.forEach(item => {
     const lineItems = parseLineItems(item)
-    const referenceNo = item.receipt_number || `BILLING-${item.id}`
+    const referenceNo = getBillingRecordId(item)
     const billingStatus = formatHmoStatus(item.billing_status)
 
     if (!lineItems.length) {
@@ -477,13 +478,37 @@ const load = async (): Promise<void> => {
   sponsorInfo.value = null
   billingDetail.value = null
 
-  if (!patientId.value) {
+  if (!patientId.value && !billingId.value) {
     error.value = "Patient ID is required."
     return
   }
 
   try {
-    const [result, sponsorRecords, visitLogs] = await Promise.all([
+    if (billingId.value) {
+      const context = await billingContextTanstackService.fetchContext(queryClient, billingId.value)
+      const detail = context?.billing ?? null
+      if (!detail) {
+        error.value = "Billing record was not found."
+        return
+      }
+
+      billingDetail.value = detail
+      const [patientContext, visitLogs] = await Promise.all([
+        patientTanstackService.fetchContext(queryClient, Number(detail.patient_id)),
+        patientEvaluationVisitLogService.getAll(Number(detail.patient_id))
+      ])
+      const sponsorRecords = patientContext?.sponsor_information ?? []
+      sponsorInfo.value =
+        sponsorRecords.find(record => record.sponsor_context === "HMO" && Number(record.hmo_id) === hmoId.value) ??
+        sponsorRecords.find(record => record.sponsor_context === "HMO") ??
+        sponsorRecords[0] ??
+        null
+      evaluationVisitLogs.value = visitLogs ?? []
+      rows.value = buildRows([detail])
+      return
+    }
+
+    const [result, patientContext, visitLogs] = await Promise.all([
       billingPhase1Service.getAll({
         patient_id: patientId.value,
         billing_type: "HMO_BILLING",
@@ -492,10 +517,11 @@ const load = async (): Promise<void> => {
         page: 1,
         size: 5000
       }),
-      patientHMOInformationService.getByPatientId(patientId.value),
+      patientTanstackService.fetchContext(queryClient, patientId.value),
       patientEvaluationVisitLogService.getAll(patientId.value)
     ])
 
+    const sponsorRecords = patientContext?.sponsor_information ?? []
     sponsorInfo.value =
       sponsorRecords.find(record => record.sponsor_context === "HMO" && Number(record.hmo_id) === hmoId.value) ??
       sponsorRecords.find(record => record.sponsor_context === "HMO") ??

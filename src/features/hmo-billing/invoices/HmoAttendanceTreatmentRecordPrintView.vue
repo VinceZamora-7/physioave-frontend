@@ -279,9 +279,9 @@ const load = async (): Promise<void> => {
       to_date: dateTo.value || new Date().toISOString().slice(0, 10),
       page: 1,
       size: 1000
-    }) ?? []
+    })
 
-    const billings = data.content ?? []
+    const billings = data?.content ?? []
     billingRows.value = buildBillingRows(billings)
     attendedRows.value = buildAttendanceRows(billings)
   } catch (err: unknown) {

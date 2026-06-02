@@ -26,13 +26,14 @@ import {
 import {ptOutlinedBtn, ptPrimaryBtn} from "@/features/shared/table-header.styles"
 import {getApiErrorMessage} from "@/utils/actionable-error.util"
 import {errorToast, successToast} from "@/utils/toast.util"
-import {authMeService, type AuthMe} from "@/services/auth-me.service"
 import {clinicStore} from "@/stores/clinic.store"
+import {useAuthSessionStore} from "@/stores/auth-session.store"
 import {pamsAPI} from "@/utils/axios-interceptor"
 
 const toast = useToast()
 const confirm = useConfirm()
 const route = useRoute()
+const authSession = useAuthSessionStore()
 
 const isLoading = ref(false)
 const isSavingExpense = ref(false)
@@ -59,11 +60,8 @@ type ExpenseItemRow = { id: number; name: string; is_active: boolean }
 const expenseItems = ref<ExpenseItemRow[]>([])
 const activeExpenseItems = computed(() => expenseItems.value.filter(item => item.is_active))
 
-const user = ref<AuthMe | null>(null)
-const userPermissions = computed(() => user.value?.permissions ?? [])
-
 const hasAnyPermission = (...permissions: string[]): boolean => {
-  return permissions.some(permission => userPermissions.value.includes(permission))
+  return authSession.hasAnyPermission(...permissions)
 }
 
 const canViewEodReports = computed(() => hasAnyPermission("Appointment::READ"))
@@ -260,17 +258,86 @@ const getFinanceReportsErrorMessage = (error: unknown): string =>
     retryHint: "Refresh and try again."
   })
 
+const getHttpStatus = (error: unknown): number | undefined => {
+  if (!error || typeof error !== "object") return undefined
+
+  const candidate = error as { status?: unknown; response?: { status?: unknown } }
+  const status = candidate.status ?? candidate.response?.status
+  return typeof status === "number" ? status : undefined
+}
+
+const createEmptyDailyReport = (date: string): DailyIncomeExpenseReport => ({
+  selected_date: date,
+  summary: {
+    income_entry_count: 0,
+    expense_entry_count: 0,
+    unbilled_appointment_count: 0,
+    incomplete_billing_count: 0,
+    partial_billing_count: 0,
+    gross_income: 0,
+    cash_collected: 0,
+    outstanding_balance: 0,
+    incomplete_billing_balance: 0,
+    expense_total: 0,
+    net_cash: 0
+  },
+  incomes: [],
+  expenses: []
+})
+
+const createEmptyMonthlyReport = (month: string): MonthlyIncomeExpenseReport => ({
+  selected_month: month,
+  summary: {
+    active_day_count: 0,
+    days_with_income: 0,
+    days_with_expenses: 0,
+    income_entry_count: 0,
+    expense_entry_count: 0,
+    unbilled_appointment_count: 0,
+    incomplete_billing_count: 0,
+    partial_billing_count: 0,
+    gross_income: 0,
+    cash_collected: 0,
+    outstanding_balance: 0,
+    incomplete_billing_balance: 0,
+    expense_total: 0,
+    net_cash: 0
+  },
+  days: []
+})
+
 const refreshReport = async (): Promise<void> => {
   if (!canViewFinanceReports.value) return
   try {
     isLoading.value = true
     const clinicId = selectedClinicId.value
-    const [dailyReport, monthReport] = await Promise.all([
-      billingPhase1Service.getDailyIncomeExpense(toDateParam(selectedDate.value), clinicId),
-      billingPhase1Service.getMonthlyIncomeExpense(selectedMonthParam.value, toDateParam(selectedDate.value), clinicId)
+    const dailyDate = toDateParam(selectedDate.value)
+    const monthParam = selectedMonthParam.value
+    const [dailyReportResult, monthReportResult] = await Promise.allSettled([
+      billingPhase1Service.getDailyIncomeExpense(dailyDate, clinicId),
+      billingPhase1Service.getMonthlyIncomeExpense(monthParam, dailyDate, clinicId)
     ])
-    report.value = dailyReport
-    monthlyReport.value = monthReport
+
+    if (dailyReportResult.status === "fulfilled") {
+      report.value = dailyReportResult.value
+    } else {
+      report.value = createEmptyDailyReport(dailyDate)
+    }
+
+    if (monthReportResult.status === "fulfilled") {
+      monthlyReport.value = monthReportResult.value
+    } else {
+      monthlyReport.value = createEmptyMonthlyReport(monthParam)
+    }
+
+    const fatalErrors = [dailyReportResult, monthReportResult]
+      .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+      .map((result) => result.reason)
+      .filter((error) => getHttpStatus(error) !== 400)
+
+    if (fatalErrors.length > 0) {
+      throw fatalErrors[0]
+    }
   } catch (error: unknown) {
     errorToast(toast, getFinanceReportsErrorMessage(error))
   } finally {
@@ -510,12 +577,12 @@ watch(() => route.query.section, () => {
 
 onMounted(async () => {
   try {
-    user.value = await authMeService.get() ?? null
+    await authSession.ensureLoaded()
   } catch {
     // Ignore
   }
   try {
-    await globalClinicStore.loadClinics()
+    await globalClinicStore.initializeFromAuthSession()
   } catch (error: unknown) {
     errorToast(
       toast,

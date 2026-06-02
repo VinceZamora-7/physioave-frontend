@@ -547,7 +547,6 @@ import InputText from "primevue/inputtext"
 import MultiSelect from "primevue/multiselect"
 import Select from "primevue/select"
 import Tag from "primevue/tag"
-import axios, {HttpStatusCode} from "axios"
 import {useConfirm} from "primevue/useconfirm"
 import {useToast} from "primevue/usetoast"
 import type {Pageable} from "@/models/paging.ts"
@@ -561,8 +560,7 @@ import {
 } from "@/features/promos-offers/composables/promos-storage.composable"
 import {
   isLocalEditablePromosService,
-  loadBackendPromosMasterCatalog,
-  normalizePromosServiceName
+  loadBackendPromosMasterCatalog
 } from "@/features/promos-offers/composables/promos-master-catalog.composable"
 import ServiceBundlesManager from "@/features/promos-offers/components/ServiceBundlesManager.vue"
 import PackageOffersManager from "@/features/promos-offers/components/PackageOffersManager.vue"
@@ -622,6 +620,19 @@ type ServiceCatalogMatrixRow = {
   addOns?: SingleService
 }
 
+type BackendCatalogRow = Record<string, unknown>
+type QuantityItem = {id?: unknown; qty?: unknown}
+
+const asUnknownArray = (value: unknown): unknown[] => Array.isArray(value) ? value : []
+const toStringArray = (value: unknown): string[] => asUnknownArray(value).map(id => String(id))
+const toQuantityItems = (value: unknown): Array<{id: string; qty: number}> =>
+  asUnknownArray(value).map(entry => {
+    const item = entry && typeof entry === "object" ? entry as QuantityItem : {}
+    return {id: String(item.id ?? ""), qty: Number(item.qty ?? 1)}
+  })
+const toPrefixedNumberArray = (value: unknown, prefix: string): string[] =>
+  asUnknownArray(value).map(id => `${prefix}-${Number(id)}`)
+
 const toast = useToast()
 const confirm = useConfirm()
 const catalogManagerVisible = ref(false)
@@ -653,7 +664,6 @@ const bundleDialogVisible = ref(false)
 const editingBundleId = ref<number | null>(null)
 const packageDialogVisible = ref(false)
 const editingPackageId = ref<number | null>(null)
-const refreshPromise = ref<Promise<unknown> | null>(null)
 
 const customServices = ref<SingleService[]>([])
 const machineServices = ref<SingleService[]>([])
@@ -674,38 +684,8 @@ const parseNumericId = (value: string, prefix: string): number => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 }
 
-const ensureRefreshed = async (): Promise<void> => {
-  if (!refreshPromise.value) {
-    refreshPromise.value = pamsAPI.post("/refresh-tokens")
-      .finally(() => {
-        refreshPromise.value = null
-      })
-  }
-
-  await refreshPromise.value
-}
-
 const withRefreshRetry = async <T>(operation: () => Promise<T>): Promise<T> => {
-  try {
-    return await operation()
-  } catch (error: unknown) {
-    if (axios.isAxiosError(error)) {
-      const status = error.response?.status
-      const message = String(error.response?.data?.message || error.response?.data?.detail || error.message || "").toLowerCase()
-      const shouldRefresh =
-        status === HttpStatusCode.Unauthorized ||
-        status === HttpStatusCode.InternalServerError ||
-        message.includes("expired") ||
-        message.includes("jwt")
-
-      if (shouldRefresh) {
-        await ensureRefreshed()
-        return await operation()
-      }
-    }
-
-    throw error
-  }
+  return await operation()
 }
 
 const typeOptions = [
@@ -805,7 +785,7 @@ const bundleFormData = reactive<{
 
 const packageFormData = reactive<{
   name: string
-  bundleId?: any
+  bundleId?: number
   bundleQty: number
   machineIds: string[]
   machineItems: Array<{id: string; qty: number}>
@@ -935,7 +915,7 @@ const calcOriginalPrice = (bundle: BundledService): number => {
   return ids.reduce((sum, id) => sum + getServicePrice(id), 0)
 }
 
-const calcPackageRegularTotal = (item: PackageService | {bundleId?: number | string; bundleQty: number; machineIds?: string[]; machineItems?: Array<{id: string; qty: number}>; techniqueIds?: string[]; techniqueItems?: Array<{id: string; qty: number}>; evaluationIds: string[]; evaluationItems?: Array<{id: string; qty: number}>; addOnIds?: string[]; addOnItems?: Array<{id: string; qty: number}>; sessionIds?: string[]; sessionItems?: Array<{id: string; qty: number}>}): number => {
+const calcPackageRegularTotal = (item: PackageService | {bundleId?: number | string; bundleQty: number; machineIds?: string[]; machineItems?: Array<{id: string; qty: number}>; techniqueIds?: string[]; techniqueItems?: Array<{id: string; qty: number}>; evaluationIds: string[]; evaluationQty?: number; evaluationItems?: Array<{id: string; qty: number}>; addOnIds?: string[]; addOnItems?: Array<{id: string; qty: number}>; sessionIds?: string[]; sessionItems?: Array<{id: string; qty: number}>}): number => {
   const typed = item as PackageService
   const bundleId = (typed.bundleId === undefined || typed.bundleId === null || String(typed.bundleId).trim() === "")
     ? null
@@ -993,34 +973,34 @@ const loadServices = async (): Promise<void> => {
 
     // DB-backed "custom" services: evaluations + add-ons
     const [evaluationsRes, addOnMachinesRes, addOnTechniquesRes, addOnHomeRes] = await Promise.all([
-      withRefreshRetry(() => pamsAPI.get<Pageable<any>>("/evaluations", { params: { page: 1, size: 1000, name: "", status: "ALL" } })),
-      withRefreshRetry(() => pamsAPI.get<Pageable<any>>("/add-on-machines", { params: { page: 1, size: 1000, name: "", status: "ALL" } })),
-      withRefreshRetry(() => pamsAPI.get<Pageable<any>>("/add-on-techniques", { params: { page: 1, size: 1000, name: "", status: "ALL" } })),
-      withRefreshRetry(() => pamsAPI.get<Pageable<any>>("/add-on-home-services", { params: { page: 1, size: 1000, name: "", status: "ALL" } })),
+      withRefreshRetry(() => pamsAPI.get<Pageable<BackendCatalogRow>>("/evaluations", { params: { page: 1, size: 1000, name: "", status: "ALL" } })),
+      withRefreshRetry(() => pamsAPI.get<Pageable<BackendCatalogRow>>("/add-on-machines", { params: { page: 1, size: 1000, name: "", status: "ALL" } })),
+      withRefreshRetry(() => pamsAPI.get<Pageable<BackendCatalogRow>>("/add-on-techniques", { params: { page: 1, size: 1000, name: "", status: "ALL" } })),
+      withRefreshRetry(() => pamsAPI.get<Pageable<BackendCatalogRow>>("/add-on-home-services", { params: { page: 1, size: 1000, name: "", status: "ALL" } })),
     ])
 
-    const evalServices: SingleService[] = (evaluationsRes.data?.content ?? []).map((item: any) => ({
+    const evalServices: SingleService[] = (evaluationsRes.data?.content ?? []).map((item) => ({
       id: `evaluation-${item.id}`,
       type: "evaluation",
       name: String(item.name ?? ""),
       price: Number(item.price ?? 0),
       status: item.is_active ? "Active" : "Inactive",
     }))
-    const addOnMachineServices: SingleService[] = (addOnMachinesRes.data?.content ?? []).map((item: any) => ({
+    const addOnMachineServices: SingleService[] = (addOnMachinesRes.data?.content ?? []).map((item) => ({
       id: `add-on-machine-${item.id}`,
       type: "add-on-machine",
       name: String(item.name ?? ""),
       price: Number(item.price ?? 0),
       status: item.is_active ? "Active" : "Inactive",
     }))
-    const addOnTechniqueServices: SingleService[] = (addOnTechniquesRes.data?.content ?? []).map((item: any) => ({
+    const addOnTechniqueServices: SingleService[] = (addOnTechniquesRes.data?.content ?? []).map((item) => ({
       id: `add-on-technique-${item.id}`,
       type: "add-on-technique",
       name: String(item.name ?? ""),
       price: Number(item.price ?? 0),
       status: item.is_active ? "Active" : "Inactive",
     }))
-    const addOnHomeServices: SingleService[] = (addOnHomeRes.data?.content ?? []).map((item: any) => ({
+    const addOnHomeServices: SingleService[] = (addOnHomeRes.data?.content ?? []).map((item) => ({
       id: `add-on-home-service-${item.id}`,
       type: "add-on-home-service",
       name: String(item.name ?? ""),
@@ -1032,32 +1012,32 @@ const loadServices = async (): Promise<void> => {
 
     // Package offers are DB-backed (package_service_offer table).
     const { data } = await withRefreshRetry(() =>
-      pamsAPI.get<Pageable<any>>("/package-service-offers", {
+      pamsAPI.get<Pageable<BackendCatalogRow>>("/package-service-offers", {
         params: { page: 1, size: 500, name: "", status: "ALL" }
       })
     )
 
-    const rawPackages = (data?.content ?? []) as Array<Record<string, any>>
+    const rawPackages = (data?.content ?? []) as BackendCatalogRow[]
     allPackages.value = rawPackages.map((row) => ({
       id: Number(row.id),
       name: String(row.name ?? ""),
       bundleId: row.bundle_template_id === null || row.bundle_template_id === undefined ? undefined : Number(row.bundle_template_id),
       bundleQty: Number(row.bundle_qty ?? 1),
-      machineIds: (row.machine_ids ?? []).map((id: any) => String(id)),
+      machineIds: toStringArray(row.machine_ids),
       machineQty: Number(row.machine_qty ?? 1),
-      machineItems: (row.machine_items ?? []).map((entry: any) => ({ id: String(entry.id), qty: Number(entry.qty ?? 1) })),
-      techniqueIds: (row.technique_ids ?? []).map((id: any) => String(id)),
+      machineItems: toQuantityItems(row.machine_items),
+      techniqueIds: toStringArray(row.technique_ids),
       techniqueQty: Number(row.technique_qty ?? 1),
-      techniqueItems: (row.technique_items ?? []).map((entry: any) => ({ id: String(entry.id), qty: Number(entry.qty ?? 1) })),
-      evaluationIds: (row.evaluation_ids ?? []).map((id: any) => String(id)),
+      techniqueItems: toQuantityItems(row.technique_items),
+      evaluationIds: toStringArray(row.evaluation_ids),
       evaluationQty: Number(row.evaluation_qty ?? 1),
-      evaluationItems: (row.evaluation_items ?? []).map((entry: any) => ({ id: String(entry.id), qty: Number(entry.qty ?? 1) })),
-      addOnIds: (row.add_on_ids ?? []).map((id: any) => String(id)),
+      evaluationItems: toQuantityItems(row.evaluation_items),
+      addOnIds: toStringArray(row.add_on_ids),
       addOnQty: Number(row.add_on_qty ?? 1),
-      addOnItems: (row.add_on_items ?? []).map((entry: any) => ({ id: String(entry.id), qty: Number(entry.qty ?? 1) })),
-      sessionIds: (row.session_ids ?? []).map((id: any) => String(id)),
+      addOnItems: toQuantityItems(row.add_on_items),
+      sessionIds: toStringArray(row.session_ids),
       sessionQty: Number(row.session_qty ?? 1),
-      sessionItems: (row.session_items ?? []).map((entry: any) => ({ id: String(entry.id), qty: Number(entry.qty ?? 1) })),
+      sessionItems: toQuantityItems(row.session_items),
       packagePrice: Number(row.package_price ?? 0),
       status: String(row.status ?? (row.is_active ? "Active" : "Inactive"))
     }))
@@ -1072,22 +1052,22 @@ const loadServices = async (): Promise<void> => {
 const loadBundles = async (): Promise<void> => {
   try {
     const { data } = await withRefreshRetry(() =>
-      pamsAPI.get<Pageable<any>>("/service-bundles", {
+      pamsAPI.get<Pageable<BackendCatalogRow>>("/service-bundles", {
         params: { page: 1, size: 500, name: "", status: "ALL" }
       })
     )
 
-    const rows = (data?.content ?? []) as Array<Record<string, any>>
+    const rows = (data?.content ?? []) as BackendCatalogRow[]
     allBundles.value = rows.map((row) => ({
       id: Number(row.id),
       name: String(row.name ?? ""),
-      machineIds: (row.machine_ids ?? []).map((id: any) => `machine-${Number(id)}`),
-      techniqueIds: (row.technique_ids ?? []).map((id: any) => `technique-${Number(id)}`),
-      evaluationIds: (row.evaluation_ids ?? []).map((id: any) => `evaluation-${Number(id)}`),
+      machineIds: toPrefixedNumberArray(row.machine_ids, "machine"),
+      techniqueIds: toPrefixedNumberArray(row.technique_ids, "technique"),
+      evaluationIds: toPrefixedNumberArray(row.evaluation_ids, "evaluation"),
       addOnIds: [
-        ...(row.add_on_machine_ids ?? []).map((id: any) => `add-on-machine-${Number(id)}`),
-        ...(row.add_on_technique_ids ?? []).map((id: any) => `add-on-technique-${Number(id)}`),
-        ...(row.add_on_home_service_ids ?? []).map((id: any) => `add-on-home-service-${Number(id)}`),
+        ...toPrefixedNumberArray(row.add_on_machine_ids, "add-on-machine"),
+        ...toPrefixedNumberArray(row.add_on_technique_ids, "add-on-technique"),
+        ...toPrefixedNumberArray(row.add_on_home_service_ids, "add-on-home-service"),
       ],
       bundledPrice: Number(row.bundled_price ?? 0),
       status: String(row.status ?? (row.is_active ? "Active" : "Inactive")),
@@ -1095,11 +1075,6 @@ const loadBundles = async (): Promise<void> => {
   } catch {
     allBundles.value = []
   }
-}
-
-const loadPackages = (): void => {
-  // DB-backed; handled in loadServices().
-  allPackages.value = []
 }
 
 const loadSessionLookupServices = async (): Promise<void> => {

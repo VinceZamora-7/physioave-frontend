@@ -1,8 +1,8 @@
-<template>
+﻿<template>
   <component :is="embedded ? 'div' : 'main'" :class="embedded ? 'space-y-4' : 'app-page-shell space-y-4'">
     <template v-if="!overlayOnly">
 
-      <!-- ── Section 1: Billing Records Table ────────────────────────────── -->
+      <!-- â”€â”€ Section 1: Billing Records Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
       <section class="app-section-card-comfy space-y-3">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -15,7 +15,7 @@
               label="New Billing"
               icon="pi pi-plus"
               size="small"
-              @click="resetBillingForm(); posExpanded = true"
+              @click="openNewBillingForm"
             />
           </div>
         </div>
@@ -26,7 +26,7 @@
           <div class="flex items-center gap-3 flex-wrap">
             <div class="flex-1 min-w-48">
               <IftaLabel>
-                <InputText v-model="tableFilterQuery" fluid placeholder="Patient name, label, receipt no…" />
+                <InputText v-model="tableFilterQuery" fluid placeholder="Patient name, label, receipt noâ€¦" />
                 <label>Search</label>
               </IftaLabel>
             </div>
@@ -157,7 +157,7 @@
           <Column header="Label / Receipt" >
             <template #body="{data}">
               <div>
-                <div>{{ data.service_name || "—" }}</div>
+                <div>{{ data.service_name || "â€”" }}</div>
                 <div v-if="data.receipt_number" class="text-xs opacity-50">{{ data.receipt_number }}</div>
               </div>
             </template>
@@ -192,9 +192,9 @@
         </DataTable>
       </section>
 
-      <!-- ── Section 2: POS / Create & Edit Billing ───────────────────────── -->
+      <!-- â”€â”€ Section 2: POS / Create & Edit Billing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
       <section ref="posSection" class="app-section-card-comfy space-y-4">
-        <!-- POS section header — always visible -->
+        <!-- POS section header â€” always visible -->
         <div class="flex items-center justify-between gap-3">
           <div>
             <h2 class="app-section-title">
@@ -214,7 +214,7 @@
               :label="posExpanded ? 'Collapse' : 'Expand'"
               text
               size="small"
-              @click="posExpanded = !posExpanded"
+              @click="toggleBillingForm"
             />
             <Button
               v-if="editingBillingId"
@@ -232,7 +232,7 @@
         <Transition name="filter-expand">
           <div v-if="posExpanded" class="space-y-4">
 
-            <!-- ── Billing Mode Banner ──────────────────────────────────── -->
+            <!-- â”€â”€ Billing Mode Banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
             <Transition name="billing-mode">
               <div
                 v-if="form.billing_type"
@@ -256,7 +256,7 @@
                   filter
                   showClear
                   fluid
-                  placeholder="Search patient…"
+                  placeholder="Search patientâ€¦"
                 />
                 <label>Patient Name</label>
               </IftaLabel>
@@ -282,8 +282,8 @@
             <template v-if="form.billing_type === 'HMO_BILLING'">
               <Message v-if="billingPatientHmoInfo" severity="info" :closable="false" size="small">
                 <span class="font-medium">{{ billingPatientHmoInfo.hmo_name }}</span>
-                &nbsp;·&nbsp;{{ billingPatientHmoInfo.hmo_type_name }}
-                &nbsp;·&nbsp;{{ billingPatientHmoInfo.company_name }}
+                &nbsp;Â·&nbsp;{{ billingPatientHmoInfo.hmo_type_name }}
+                &nbsp;Â·&nbsp;{{ billingPatientHmoInfo.company_name }}
               </Message>
               <Message v-else-if="form.patient_id && !syncingBillingHmoRates" severity="warn" :closable="false" size="small">
                 No HMO information on file for this patient. Register HMO via the Patients module first.
@@ -302,7 +302,7 @@
 
             <template v-if="form.billing_type === 'LGU_BILLING'">
               <Message v-if="loadingLguBudgetSummary" severity="secondary" :closable="false" size="small">
-                Loading active LGU fund summary…
+                Loading active LGU fund summaryâ€¦
               </Message>
               <Message v-else-if="activeLguBudgetSummary" severity="info" :closable="false" size="small">
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -310,7 +310,7 @@
                   <span class="opacity-70">{{ activeLguBudgetSummary.period_year }}-{{ String(activeLguBudgetSummary.period_month).padStart(2, "0") }}</span>
                   <span>Remaining: <strong>{{ asCurrency(activeLguBudgetSummary.remaining_amount) }}</strong></span>
                   <template v-if="lguProjectedRemainingAfterSave != null">
-                    <span class="opacity-60">→</span>
+                    <span class="opacity-60">â†’</span>
                     <span :class="lguProjectedRemainingAfterSave != null && lguProjectedRemainingAfterSave < 0 ? 'text-amber-600 font-semibold' : ''">
                       After save: {{ asCurrency(lguProjectedRemainingAfterSave) }}
                     </span>
@@ -328,7 +328,7 @@
               </Message>
             </template>
 
-            <!-- ── Line Items ─────────────────────────────────────────── -->
+            <!-- â”€â”€ Line Items â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
             <section class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3 space-y-3">
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <h4 class="text-sm font-semibold">Line Items</h4>
@@ -514,9 +514,9 @@
                         />
                       </div>
                       <div
-                        v-if="resolveBillingLineOriginalPrice(data) > resolveEffectiveBillingLinePrice(data)"
-                        class="text-xs opacity-50 line-through"
-                      >{{ asCurrency(resolveBillingLineOriginalPrice(data)) }}</div>
+                        v-if="billingLineHasCustomPriceBasis(data)"
+                        class="text-xs opacity-50"
+                      >Original: {{ asCurrency(resolveBillingLineOriginalPrice(data)) }}</div>
                     </div>
                   </template>
                 </Column>
@@ -537,9 +537,9 @@
                     <div>
                       <div class="font-medium">{{ asCurrency(resolveEffectiveBillingLinePrice(data) * data.quantity) }}</div>
                       <div
-                        v-if="resolveBillingLineOriginalPrice(data) > resolveEffectiveBillingLinePrice(data)"
-                        class="text-xs opacity-50 line-through"
-                      >{{ asCurrency(resolveBillingLineOriginalPrice(data) * data.quantity) }}</div>
+                        v-if="billingLineHasCustomPriceBasis(data)"
+                        class="text-xs opacity-50"
+                      >Original: {{ asCurrency(resolveBillingLineOriginalPrice(data) * data.quantity) }}</div>
                     </div>
                   </template>
                 </Column>
@@ -552,7 +552,7 @@
               </DataTable>
             </section>
 
-            <!-- ── Discounts ───────────────────────────────────────────── -->
+            <!-- â”€â”€ Discounts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
             <section class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3 space-y-3">
               <h4 class="text-sm font-semibold">Discounts</h4>
 
@@ -560,7 +560,7 @@
                 <label class="flex items-center gap-2 text-sm cursor-pointer select-none">
                   <input v-model="form.senior_pwd_id_presented" type="checkbox" />
                   <span>Senior / PWD ID presented
-                    <span class="opacity-50 text-xs">(20% discount on one item — RA 9994)</span>
+                    <span class="opacity-50 text-xs">(20% discount on one item â€” RA 9994)</span>
                   </span>
                 </label>
 
@@ -572,7 +572,7 @@
                     <i class="pi pi-info-circle" />
                     <span>
                       Auto-applied to <strong>{{ selectedLines.find(l => l.key === seniorDiscountEffectiveTargetKey)?.name }}</strong>
-                      — because a {{ form.billing_type === 'SELF_PAY_PACKAGE' ? 'Package' : 'Bundle' }} is in the cart.
+                      â€” because a {{ form.billing_type === 'SELF_PAY_PACKAGE' ? 'Package' : 'Bundle' }} is in the cart.
                     </span>
                   </div>
 
@@ -626,7 +626,7 @@
               </div>
             </section>
 
-            <!-- ── Payment ─────────────────────────────────────────────── -->
+            <!-- â”€â”€ Payment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
             <section class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3 space-y-3">
               <h4 class="text-sm font-semibold">Payment</h4>
               <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -679,7 +679,7 @@
                       v-if="Number(form.amount_tendered ?? 0) > 0 && Number(form.amount_tendered ?? 0) < posSummary.totalDue"
                       class="text-xs text-orange-600 dark:text-orange-400 mt-1"
                     >
-                      Insufficient — short by {{ asCurrency(posSummary.totalDue - Number(form.amount_tendered ?? 0)) }}
+                      Insufficient â€” short by {{ asCurrency(posSummary.totalDue - Number(form.amount_tendered ?? 0)) }}
                     </div>
                   </div>
                 </template>
@@ -694,7 +694,7 @@
               </div>
             </section>
 
-            <!-- ── Sticky Financial Summary ────────────────────────────── -->
+            <!-- â”€â”€ Sticky Financial Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
             <div class="sticky bottom-0 z-10 rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-surface,var(--app-bg)))] shadow-sm p-3">
               <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3 text-sm">
                 <div>
@@ -703,11 +703,11 @@
                 </div>
                 <div v-if="posSummary.seniorDiscountAmount > 0">
                   <div class="text-xs opacity-60">Senior/PWD</div>
-                  <div class="font-semibold text-orange-500">−{{ asCurrency(posSummary.seniorDiscountAmount) }}</div>
+                  <div class="font-semibold text-orange-500">âˆ’{{ asCurrency(posSummary.seniorDiscountAmount) }}</div>
                 </div>
                 <div v-if="posSummary.customDiscountAmount > 0">
                   <div class="text-xs opacity-60">Discount</div>
-                  <div class="font-semibold text-orange-500">−{{ asCurrency(posSummary.customDiscountAmount) }}</div>
+                  <div class="font-semibold text-orange-500">âˆ’{{ asCurrency(posSummary.customDiscountAmount) }}</div>
                 </div>
                 <template v-if="vatEnabled">
                   <div>
@@ -747,7 +747,7 @@
       </section>
     </template>
 
-    <!-- ── Billing Detail Dialog ──────────────────────────────────────────── -->
+    <!-- â”€â”€ Billing Detail Dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <Dialog
       v-model:visible="billingDetailsVisible"
       header="Billing Detail"
@@ -763,7 +763,7 @@
             <div>
               <h3 class="text-lg font-semibold">Billing Detail</h3>
               <p class="mt-1 text-xs opacity-60">
-                1) Verify essentials and totals · 2) Tender or complete claim workflow · 3) Review line items · 4) Optional audit review
+                1) Verify essentials and totals Â· 2) Tender or complete claim workflow Â· 3) Review line items Â· 4) Optional audit review
               </p>
             </div>
             <div class="flex flex-wrap gap-2">
@@ -879,7 +879,7 @@
         <div class="order-4 rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 space-y-3">
           <template v-if="isSelectedBillingSelfPay">
             <div>
-              <h4 class="text-sm font-semibold">Step 2 · Tender Payment</h4>
+              <h4 class="text-sm font-semibold">Step 2 Â· Tender Payment</h4>
               <p class="text-xs opacity-60 mt-0.5">Record payment directly from the detail modal.</p>
             </div>
 
@@ -906,7 +906,7 @@
                   </div>
                   <div>
                     <div class="opacity-60 uppercase tracking-wide">Tendered / Applied</div>
-                    <div class="font-medium">{{ asCurrency(entry.amountTendered) }} → {{ asCurrency(entry.amountApplied) }}</div>
+                    <div class="font-medium">{{ asCurrency(entry.amountTendered) }} â†’ {{ asCurrency(entry.amountApplied) }}</div>
                   </div>
                   <div>
                     <div class="opacity-60 uppercase tracking-wide">Balance After</div>
@@ -973,7 +973,7 @@
                   v-if="billingTenderInputAmount > 0 && billingTenderInputAmount < selectedBillingOutstanding"
                   class="text-xs text-orange-600 dark:text-orange-400 self-center"
                 >
-                  Insufficient — short by {{ asCurrency(selectedBillingOutstanding - billingTenderInputAmount) }}
+                  Insufficient â€” short by {{ asCurrency(selectedBillingOutstanding - billingTenderInputAmount) }}
                 </div>
               </div>
 
@@ -1006,7 +1006,7 @@
 
           <template v-else>
             <div>
-              <h4 class="text-sm font-semibold">Step 2 · Claim Workflow</h4>
+              <h4 class="text-sm font-semibold">Step 2 Â· Claim Workflow</h4>
               <p class="text-xs opacity-60 mt-0.5">Claim-based billings are tracked here and not tendered via POS.</p>
             </div>
             <Message :severity="isSelectedBillingMarkedBilled ? 'success' : 'info'" :closable="false">
@@ -1051,7 +1051,7 @@
         <div class="order-5 rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 space-y-3">
           <div class="flex items-center justify-between gap-3">
             <div>
-              <h4 class="text-sm font-semibold">Step 3 · Line Items</h4>
+              <h4 class="text-sm font-semibold">Step 3 Â· Line Items</h4>
               <p class="mt-1 text-xs opacity-60">
                 {{ selectedBillingLines.length }} item{{ selectedBillingLines.length !== 1 ? "s" : "" }} on this billing.
               </p>
@@ -1086,8 +1086,8 @@
                 </div>
                 <div class="shrink-0 text-right">
                   <div class="font-medium">{{ asCurrency(line.price * line.quantity) }}</div>
-                  <div v-if="line.originalPrice && line.originalPrice > line.price" class="text-xs opacity-50 line-through">
-                    {{ asCurrency(line.originalPrice * line.quantity) }}
+                  <div v-if="line.originalPrice && line.originalPrice !== line.price" class="text-xs opacity-50">
+                    Original: {{ asCurrency(line.originalPrice * line.quantity) }}
                   </div>
                 </div>
               </div>
@@ -1128,7 +1128,7 @@
         >
           <div class="flex items-center justify-between gap-3">
             <div>
-              <h4 class="text-sm font-semibold">Step 4 · Encounter Tickets</h4>
+              <h4 class="text-sm font-semibold">Step 4 Â· Encounter Tickets</h4>
               <p class="mt-1 text-xs opacity-60">Patient-signed attendance slips permanently locked after sign-off.</p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
@@ -1164,7 +1164,7 @@
                   </div>
                   <div class="text-xs opacity-60">
                     Signed {{ formatDateTime(ticket.signed_off_at) }}
-                    <span v-if="ticket.locked_at"> · Locked {{ formatDateTime(ticket.locked_at) }}</span>
+                    <span v-if="ticket.locked_at"> Â· Locked {{ formatDateTime(ticket.locked_at) }}</span>
                   </div>
                 </div>
                 <div class="text-sm">
@@ -1256,7 +1256,7 @@
       </template>
     </Dialog>
 
-    <!-- ── Edit Drawer — uses the shared LineItemEditor composable section ── -->
+    <!-- â”€â”€ Edit Drawer â€” uses the shared LineItemEditor composable section â”€â”€ -->
     <Drawer
       v-model:visible="billingEditDrawerVisible"
       position="right"
@@ -1272,7 +1272,7 @@
 
         <section class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 space-y-3">
           <div>
-            <h4 class="text-sm font-semibold">1 · Bill Identity</h4>
+            <h4 class="text-sm font-semibold">1 Â· Bill Identity</h4>
             <p class="mt-0.5 text-xs opacity-60">Patient, billing type, and optional label.</p>
           </div>
           <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -1297,7 +1297,7 @@
 
         <section v-if="editingBillingId" class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 space-y-3">
           <div>
-            <h4 class="text-sm font-semibold">Accounting · Payment History</h4>
+            <h4 class="text-sm font-semibold">Accounting Â· Payment History</h4>
             <p class="mt-0.5 text-xs opacity-60">Immutable payment ledger for this billing. Entries cannot be edited or deleted.</p>
           </div>
 
@@ -1317,7 +1317,7 @@
               </div>
               <div>
                 <div class="opacity-60 uppercase tracking-wide">Tendered / Applied</div>
-                <div class="font-medium">{{ asCurrency(entry.amountTendered) }} → {{ asCurrency(entry.amountApplied) }}</div>
+                <div class="font-medium">{{ asCurrency(entry.amountTendered) }} â†’ {{ asCurrency(entry.amountApplied) }}</div>
               </div>
               <div>
                 <div class="opacity-60 uppercase tracking-wide">Balance After</div>
@@ -1346,7 +1346,7 @@
         <section class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 space-y-3">
           <div class="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <h4 class="text-sm font-semibold">2 · Charge Breakdown</h4>
+              <h4 class="text-sm font-semibold">2 Â· Charge Breakdown</h4>
               <p class="mt-0.5 text-xs opacity-60">Add services, add-ons, or packages.</p>
             </div>
             <Button v-if="canCreateBundleFromSelection" size="small" outlined icon="pi pi-box" label="Create Bundle" :disabled="isEditingPaidBilling" @click="openCreateBundleFromSelection" />
@@ -1378,7 +1378,7 @@
 
           <div v-if="selectedLines.length === 0" class="rounded-lg border border-dashed border-[rgb(var(--app-border))] py-6 text-center space-y-1">
             <i class="pi pi-inbox text-2xl opacity-30" />
-            <p class="text-sm opacity-50">No line items — use the controls above to add services.</p>
+            <p class="text-sm opacity-50">No line items â€” use the controls above to add services.</p>
           </div>
 
           <DataTable v-else :value="selectedLines" size="small" dataKey="key" class="rounded-lg border border-[rgb(var(--app-border))]">
@@ -1403,7 +1403,7 @@
                     <InputNumber :modelValue="resolveEffectiveBillingLinePrice(data)" :min="0" :minFractionDigits="2" :maxFractionDigits="2" inputClass="w-24 text-sm" :disabled="isEditingPaidBilling" @update:modelValue="val => setLinePriceOverride(data.key, val)" />
                     <Button v-if="data.priceOverride != null" text rounded size="small" severity="secondary" icon="pi pi-times" v-tooltip.top="'Reset price'" class="p-0 flex-shrink-0" :disabled="isEditingPaidBilling" @click="clearLinePriceOverride(data.key)" />
                   </div>
-                  <div v-if="resolveBillingLineOriginalPrice(data) > resolveEffectiveBillingLinePrice(data)" class="text-xs opacity-50 line-through">{{ asCurrency(resolveBillingLineOriginalPrice(data)) }}</div>
+                  <div v-if="billingLineHasCustomPriceBasis(data)" class="text-xs opacity-50">Original: {{ asCurrency(resolveBillingLineOriginalPrice(data)) }}</div>
                 </div>
               </template>
             </Column>
@@ -1416,7 +1416,7 @@
               <template #body="{data}">
                 <div>
                   <div class="font-medium">{{ asCurrency(resolveEffectiveBillingLinePrice(data) * data.quantity) }}</div>
-                  <div v-if="resolveBillingLineOriginalPrice(data) > resolveEffectiveBillingLinePrice(data)" class="text-xs opacity-50 line-through">{{ asCurrency(resolveBillingLineOriginalPrice(data) * data.quantity) }}</div>
+                  <div v-if="billingLineHasCustomPriceBasis(data)" class="text-xs opacity-50">Original: {{ asCurrency(resolveBillingLineOriginalPrice(data) * data.quantity) }}</div>
                 </div>
               </template>
             </Column>
@@ -1430,17 +1430,17 @@
 
         <section class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 space-y-3">
           <div>
-            <h4 class="text-sm font-semibold">3 · Pricing and Discounts</h4>
+            <h4 class="text-sm font-semibold">3 Â· Pricing and Discounts</h4>
             <p class="mt-0.5 text-xs opacity-60">Apply Senior/PWD or custom discount before computing the total.</p>
           </div>
 
           <label class="flex items-center gap-2 text-sm cursor-pointer select-none">
             <input v-model="form.senior_pwd_id_presented" type="checkbox" :disabled="isEditingPaidBilling" />
-            <span>Senior / PWD ID presented <span class="opacity-60 text-xs">(20% discount — RA 9994)</span></span>
+            <span>Senior / PWD ID presented <span class="opacity-60 text-xs">(20% discount â€” RA 9994)</span></span>
           </label>
           <div v-if="form.senior_pwd_id_presented && seniorDiscountIsAutoAssigned && seniorDiscountEffectiveTargetKey" class="text-xs text-sky-700 dark:text-sky-400 pl-5">
             Auto-applied to: <strong>{{ selectedLines.find(l => l.key === seniorDiscountEffectiveTargetKey)?.name }}</strong>
-            — because a {{ form.billing_type === 'SELF_PAY_PACKAGE' ? 'Package' : 'Bundle' }} is in the cart.
+            â€” because a {{ form.billing_type === 'SELF_PAY_PACKAGE' ? 'Package' : 'Bundle' }} is in the cart.
           </div>
           <IftaLabel v-if="form.senior_pwd_id_presented && !seniorDiscountIsAutoAssigned && selectedLines.length > 0" class="md:w-1/2 pl-5">
             <Select v-model="seniorDiscountTargetKey" :options="seniorDiscountSelectableLines" optionLabel="label" optionValue="key" showClear fluid placeholder="Select service for 20% discount" :disabled="isEditingPaidBilling" />
@@ -1494,7 +1494,7 @@
       </div>
     </Drawer>
 
-    <!-- ── Create Bundle Dialog ──────────────────────────────────────────── -->
+    <!-- â”€â”€ Create Bundle Dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <Dialog v-model:visible="createBundleDialogVisible" header="Create New Bundle" modal :style="{width: '520px'}">
       <div class="space-y-3">
         <p class="text-sm opacity-70">Save selected individual items as a reusable bundled service.</p>
@@ -1549,8 +1549,9 @@
 
 <script setup lang="ts">
 import {computed, nextTick, onMounted, ref, watch} from "vue"
-import {useRoute} from "vue-router"
+import {useRoute, useRouter} from "vue-router"
 import {storeToRefs} from "pinia"
+import {useQueryClient} from "@tanstack/vue-query"
 import {clinicStore} from "@/stores/clinic.store"
 
 const props = withDefaults(defineProps<{embedded?: boolean; overlayOnly?: boolean; initialView?: 'detail' | 'edit'}>(), {embedded: false, overlayOnly: false, initialView: 'edit'})
@@ -1586,38 +1587,38 @@ import {pamsAPI} from "@/utils/axios-interceptor"
 import type {Lookup} from "@/models/global.model"
 import type {Pageable} from "@/models/paging"
 import {defaultPage} from "@/models/paging"
-import type {OfferLookupDTO} from "@/models/global.model"
 import type {Patient} from "@/features/patients/types/patient"
 import {type BillingPickerLookup} from "@/features/billing/components/SingleServiceItemPicker.vue"
 import {errorToast, successToast} from "@/utils/toast.util"
 import {Status} from "@/utils/global.type"
-import {patientHMOInformationService} from "@/services/patient-hmo-information.service"
-import {hmoMachineRateService} from "@/services/hmo-machine-rate.service"
-import {hmoTechniqueRateService} from "@/services/hmo-technique-rate.service"
-import {hmoEvaluationRateService} from "@/services/hmo-evaluation-rate.service"
-import {hmoAddOnRateService} from "@/services/hmo-add-on-rate.service"
 import type {PatientHMOInformation} from "@/models/hmo-information"
+import {patientTanstackService} from "@/features/patients/queries/patient.tanstack.service"
 import {openEncounterTicketPdfWindow, renderEncounterTicketPdfWindow, type EncounterTicketPdfCard} from "@/utils/encounter-ticket-pdf.util"
 import {getApiErrorMessage} from "@/utils/actionable-error.util"
-import {openBillingReceiptWindow, renderBillingReceiptWindow, type BillingReceiptPrintBreakdownGroup, type BillingReceiptPrintSubItem} from "@/utils/billing-receipt-print.util"
-import {renderSingleServiceInvoiceWindow} from "@/features/billing/invoices/single-service-invoice.util"
-import {renderPackageServiceInvoiceWindow} from "@/features/billing/invoices/package-service-invoice.util"
-import {renderHmoInvoiceWindow} from "@/features/billing/invoices/hmo-invoice.util"
-import {renderLguInvoiceWindow} from "@/features/lgu-billing/invoices/lgu-invoice.util"
+import type {BillingReceiptPrintBreakdownGroup, BillingReceiptPrintSubItem} from "@/utils/billing-receipt-print.util"
 import {lguBillingService} from "@/features/lgu-billing/api/lgu-billing.service"
-import {renderPatientCopyInvoiceWindow} from "@/features/billing/invoices/patient-copy-invoice.util"
-import {readActivePromosServiceCatalog} from "@/features/promos-offers/composables/promos-storage.composable"
-import { hasAnyStoredPermission, readStoredAuthSnapshot } from "@/utils/auth-user.util"
-import {authMeService, type AuthMe} from "@/services/auth-me.service"
+import {useAuthSessionStore} from "@/stores/auth-session.store"
+import {billingContextTanstackService} from "@/features/billing/queries/billing-context.tanstack.service"
+import {BillingTanstackKey} from "@/utils/keys/tanstack-key"
+import {serviceCatalogContextTanstackService} from "@/features/services/queries/service-catalog-context.tanstack.service"
+import type {
+  ServiceCatalogBundle,
+  ServiceCatalogContext,
+  ServiceCatalogItem,
+  ServiceCatalogScope
+} from "@/features/services/api/service-catalog-context.service"
 
 const route = useRoute()
+const router = useRouter()
 const toast = useToast()
+const queryClient = useQueryClient()
 
-// ── Clinic branch ─────────────────────────────────────────────────────────────
+// â”€â”€ Clinic branch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const globalClinicStore = clinicStore()
 const { selectedClinicId } = storeToRefs(globalClinicStore)
+const authSession = useAuthSessionStore()
 
-// ── State ─────────────────────────────────────────────────────────────────────
+// â”€â”€ State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const isLoading = ref(false)
 const copyingFromLastSession = ref(false)
 const billings = ref<BillingListItem[]>([])
@@ -1636,18 +1637,18 @@ const filtersExpanded = ref(false)
 const posExpanded = ref(false)
 const posSection = ref<HTMLElement | null>(null)
 
-// ── VAT ───────────────────────────────────────────────────────────────────────
+// â”€â”€ VAT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Non-VAT clinic: vatEnabled = false. Fields are OMITTED from payload (not zeroed)
 // when vatEnabled is false to keep BIR audit records clean.
 const VAT_RATE = 0.12
 const vatEnabled = ref(false)
 
-// ── Bundle / Package / local catalog ─────────────────────────────────────────
+// â”€â”€ Bundle / Package / local catalog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const createBundleDialogVisible = ref(false)
 const createBundleName = ref("")
 const createBundleDiscountedPrice = ref<number>(0)
 
-// ── Table filters ─────────────────────────────────────────────────────────────
+// â”€â”€ Table filters â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const tableFilterQuery = ref("")
 const tableFilterBillingType = ref<BillingType>()
 const tableFilterPaymentType = ref<string>()
@@ -1658,115 +1659,14 @@ const tableFilterMinDue = ref<number | null>(null)
 const tableFilterMaxDue = ref<number | null>(null)
 const tableFilterOutstandingOnly = ref(false)
 
-// ── LGU budget ────────────────────────────────────────────────────────────────
+// â”€â”€ LGU budget â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const activeLguBudgetSummary = ref<LguBudgetSummary | null>(null)
 const loadingLguBudgetSummary = ref(false)
 const lguBudgetSummaryError = ref("")
 
-// ── Role ──────────────────────────────────────────────────────────────────────
-const roleName = ref("")
-const permissionSet = ref<Set<string>>(new Set())
-const currentUser = ref<AuthMe | null>(null)
-
-const OWNER_EQUIVALENT_REQUIRED_AUTHORITIES = [
-  "Dashboard::READ",
-  "AccessMatrix::READ",
-  "AccessMatrix::CREATE",
-  "AccessMatrix::UPDATE",
-  "AccessMatrix::DELETE",
-  "Reference::LOOKUP",
-  "Reference::READ",
-  "Reference::CREATE",
-  "Reference::UPDATE",
-  "Reference::DELETE",
-  "Clinic::LOOKUP",
-  "Clinic::READ",
-  "Clinic::CREATE",
-  "Clinic::UPDATE",
-  "Clinic::DELETE",
-  "Clinic::MANAGE_STAFFS",
-  "Clinic::MANAGE_PATIENTS",
-  "Staff::LOOKUP",
-  "Staff::READ",
-  "Staff::CREATE",
-  "Staff::UPDATE",
-  "Staff::DELETE",
-  "Staff::MANAGE_APPOINTMENTS",
-  "Staff::MANAGE_STATUS",
-  "Patient::LOOKUP",
-  "Patient::READ",
-  "Patient::CREATE",
-  "Patient::UPDATE",
-  "Patient::DELETE",
-  "Patient::MANAGE_BILLS",
-  "Patient::MANAGE_APPOINTMENTS",
-  "Patient::MANAGE_ATTACHMENTS",
-  "Patient::MANAGE_MEDICAL_INFORMATION",
-  "Appointment::LOOKUP",
-  "Appointment::READ",
-  "Appointment::CREATE",
-  "Appointment::UPDATE",
-  "Appointment::DELETE",
-  "Appointment::MANAGE_BILL",
-  "Appointment::MANAGE_STATUS",
-  "Appointment::OVERRIDE_RESCHEDULE_LIMIT",
-  "Service::LOOKUP",
-  "Service::READ",
-  "Service::CREATE",
-  "Service::UPDATE",
-  "Service::DELETE",
-  "HMO::LOOKUP",
-  "HMO::READ",
-  "HMO::CREATE",
-  "HMO::UPDATE",
-  "HMO::DELETE",
-  "HMO::MANAGE_EVALUATIONS",
-  "HMO::MANAGE_MACHINES",
-  "HMO::MANAGE_TECHNIQUES",
-  "CashBill::LOOKUP",
-  "CashBill::READ",
-  "CashBill::CREATE",
-  "CashBill::UPDATE",
-  "CashBill::DELETE",
-  "CashBill::MANAGE_STATUS",
-  "CashBill::APPLY_DISCOUNT",
-  "CashBill::MANAGE_CONFORMED_DETAILS",
-  "CashBill::MANAGE_PAYMENT_DETAILS",
-  "CashBill::MANAGE_SERVICE_ITEMS",
-  "CashBill::MANAGE_ADD_ON_ITEMS",
-  "HMOBill::LOOKUP",
-  "HMOBill::READ",
-  "HMOBill::CREATE",
-  "HMOBill::UPDATE",
-  "HMOBill::DELETE",
-  "HMOBill::MANAGE_STATUS",
-  "HMOBill::APPLY_DISCOUNT",
-  "HMOBill::MANAGE_CONFORMED_DETAILS",
-  "HMOBill::MANAGE_PAYMENT_DETAILS",
-  "HMOBill::MANAGE_LOA_DETAILS",
-  "HMOBill::MANAGE_SERVICE_ITEMS"
-] as const
-
-const isOwnerOrOwnerEquivalent = computed(() =>
-  roleName.value.trim().toLowerCase() === "owner" ||
-  OWNER_EQUIVALENT_REQUIRED_AUTHORITIES.every(permission => permissionSet.value.has(permission))
-)
-
-const invoiceApprovalSignature = computed(() => {
-  if (!currentUser.value || !isOwnerOrOwnerEquivalent.value) return {}
-  const approvedBy = currentUser.value.name.trim()
-  const approverTitle = currentUser.value.role_name.trim()
-  if (!approvedBy) return {}
-
-  return {
-    approvedBy,
-    approverTitle
-  }
-})
-
 const billingDetailCardClass = "rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3"
 
-// ── Error extraction ──────────────────────────────────────────────────────────
+// â”€â”€ Error extraction â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const extractApiErrorMessage = (error: unknown, fallback: string): string =>
   getApiErrorMessage(error, {
     baseMessage: fallback,
@@ -1776,7 +1676,7 @@ const extractApiErrorMessage = (error: unknown, fallback: string): string =>
     retryHint: "Please try again."
   })
 
-// ── Local catalog types ───────────────────────────────────────────────────────
+// â”€â”€ Local catalog types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 type LocalService  = {id: string; type: string; name: string; price: number; status: string}
 type LocalBundle   = {id: string; name: string; machineIds: string[]; techniqueIds: string[]; evaluationIds: string[]; addOnIds: string[]; bundledPrice: number; status: string}
 type LocalPackageItem = {
@@ -1804,14 +1704,14 @@ const localPackageOffers = ref<LocalPackageOffer[]>([])
 const sessionServices    = ref<BillingPickerLookup[]>([])
 const patientOptions     = ref<Lookup[]>([])
 const canEditReceipt     = computed(() =>
-  hasAnyStoredPermission(permissionSet.value, "CashBill::UPDATE", "HMOBill::UPDATE", "CashBill::CREATE", "HMOBill::CREATE")
+  authSession.hasAnyPermission("CashBill::UPDATE", "HMOBill::UPDATE", "CashBill::CREATE", "HMOBill::CREATE")
 )
 
 const isBillingStatusPaid = (value?: string): boolean => displayBillingStatus(value) === "PAID"
 const isSelectedBillingPaid = computed(() => isBillingStatusPaid(selectedBillingDetail.value?.billing_status))
 const isEditingPaidBilling = computed(() => isBillingStatusPaid(editingBillingStatus.value))
 
-// ── Normalisation helpers (unchanged from original) ────────────────────────────
+// â”€â”€ Normalisation helpers (unchanged from original) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const toOptionalStringId = (value: unknown): string | undefined => {
   const n = String(value ?? "").trim(); return n || undefined
 }
@@ -1836,13 +1736,22 @@ const parseMaybeJsonArray = (value: unknown): unknown[] => {
   const t = value.trim(); if (!t) return []
   try { const p = JSON.parse(t) as unknown; return Array.isArray(p) ? p : [] } catch { return [] }
 }
-const normalizeStringIdArray = (value: unknown): string[] =>
-  parseMaybeJsonArray(value).map(e => toOptionalStringId(e)).filter((e): e is string => !!e)
-const normalizeQtyItems = (value: unknown): LocalPackageItem[] =>
+const toCatalogServiceId = (type: string, id: unknown): string | undefined => {
+  const raw = toOptionalStringId(id)
+  if (!raw) return undefined
+  return raw.startsWith(`${type}-`) ? raw : `${type}-${raw}`
+}
+const normalizeStringIdArray = (value: unknown, type?: string): string[] =>
+  parseMaybeJsonArray(value)
+    .map(e => type ? toCatalogServiceId(type, e) : toOptionalStringId(e))
+    .filter((e): e is string => !!e)
+const normalizeQtyItems = (value: unknown, type?: string): LocalPackageItem[] =>
   parseMaybeJsonArray(value).flatMap(entry => {
     if (!entry || typeof entry !== "object") return []
     const raw = entry as Record<string, unknown>
-    const id = toOptionalStringId(raw.id ?? raw.item_id ?? raw.service_id ?? raw.session_id)
+    const id = type
+      ? toCatalogServiceId(type, raw.id ?? raw.item_id ?? raw.service_id ?? raw.session_id)
+      : toOptionalStringId(raw.id ?? raw.item_id ?? raw.service_id ?? raw.session_id)
     if (!id) return []
     const standardUnitPrice = normalizeOptionalAmount(raw.standardUnitPrice, raw.standard_unit_price, raw.referencePrice, raw.reference_price)
     const packageUnitPrice = normalizeOptionalAmount(raw.packageUnitPrice, raw.package_unit_price, raw.contractPrice, raw.contract_price, raw.allocatedPrice, raw.allocated_price)
@@ -1893,23 +1802,24 @@ const normalizePackageServiceOffer = (value: unknown): LocalPackageOffer | null 
   const raw = value as Record<string,unknown>
   const id = toOptionalStringId(raw.id); const name = typeof raw.name === "string" ? raw.name.trim() : ""
   if (!id || !name) return null
+  const prefixScope = String(raw.offer_scope ?? raw.offerScope ?? "").trim().toUpperCase() === "LGU" ? "lgu-" : ""
   return {
     id, name,
     bundleId: toOptionalStringId(raw.bundleId ?? raw.bundle_template_id),
     bundleQty: normalizePositiveInt(raw.bundleQty ?? raw.bundle_qty, 1),
     bundleItems: normalizeQtyItems(raw.bundleItems ?? raw.bundle_items ?? raw.bundle_items_json),
-    machineIds: normalizeStringIdArray(raw.machineIds ?? raw.machine_ids ?? raw.machine_ids_json),
+    machineIds: normalizeStringIdArray(raw.machineIds ?? raw.machine_ids ?? raw.machine_ids_json, `${prefixScope}machine`),
     machineQty: normalizePositiveInt(raw.machineQty ?? raw.machine_qty, 1),
-    machineItems: normalizeQtyItems(raw.machineItems ?? raw.machine_items ?? raw.machine_items_json),
-    techniqueIds: normalizeStringIdArray(raw.techniqueIds ?? raw.technique_ids ?? raw.technique_ids_json),
+    machineItems: normalizeQtyItems(raw.machineItems ?? raw.machine_items ?? raw.machine_items_json, `${prefixScope}machine`),
+    techniqueIds: normalizeStringIdArray(raw.techniqueIds ?? raw.technique_ids ?? raw.technique_ids_json, `${prefixScope}technique`),
     techniqueQty: normalizePositiveInt(raw.techniqueQty ?? raw.technique_qty, 1),
-    techniqueItems: normalizeQtyItems(raw.techniqueItems ?? raw.technique_items ?? raw.technique_items_json),
-    evaluationIds: normalizeStringIdArray(raw.evaluationIds ?? raw.evaluation_ids ?? raw.evaluation_ids_json),
+    techniqueItems: normalizeQtyItems(raw.techniqueItems ?? raw.technique_items ?? raw.technique_items_json, `${prefixScope}technique`),
+    evaluationIds: normalizeStringIdArray(raw.evaluationIds ?? raw.evaluation_ids ?? raw.evaluation_ids_json, `${prefixScope}evaluation`),
     evaluationQty: normalizePositiveInt(raw.evaluationQty ?? raw.evaluation_qty, 1),
-    evaluationItems: normalizeQtyItems(raw.evaluationItems ?? raw.evaluation_items ?? raw.evaluation_items_json),
-    addOnIds: normalizeStringIdArray(raw.addOnIds ?? raw.add_on_ids ?? raw.add_on_ids_json),
+    evaluationItems: normalizeQtyItems(raw.evaluationItems ?? raw.evaluation_items ?? raw.evaluation_items_json, `${prefixScope}evaluation`),
+    addOnIds: normalizeStringIdArray(raw.addOnIds ?? raw.add_on_ids ?? raw.add_on_ids_json, `${prefixScope}add-on-machine`),
     addOnQty: normalizePositiveInt(raw.addOnQty ?? raw.add_on_qty, 1),
-    addOnItems: normalizeQtyItems(raw.addOnItems ?? raw.add_on_items ?? raw.add_on_items_json),
+    addOnItems: normalizeQtyItems(raw.addOnItems ?? raw.add_on_items ?? raw.add_on_items_json, `${prefixScope}add-on-machine`),
     sessionIds: normalizeStringIdArray(raw.sessionIds ?? raw.session_ids ?? raw.session_ids_json),
     sessionQty: normalizePositiveInt(raw.sessionQty ?? raw.session_qty, 1),
     sessionItems: normalizeQtyItems(raw.sessionItems ?? raw.session_items ?? raw.session_items_json),
@@ -1927,7 +1837,7 @@ const formatPatientName = (patient: Partial<Patient>): string => {
     .join(" ")
 }
 
-// ── Patient options ───────────────────────────────────────────────────────────
+// â”€â”€ Patient options â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const loadPatientOptions = async (): Promise<void> => {
   const lookupResponse = await patientService.getAllLookup({
     pageable_request: {page: defaultPage, size: 1000, name: undefined, status: Status.ACTIVE},
@@ -1943,22 +1853,12 @@ const loadPatientOptions = async (): Promise<void> => {
   patientOptions.value = (allPatientsResponse?.content ?? []).map(patient => ({id: patient.id, name: formatPatientName(patient)}))
 }
 
-// ── Role sync ─────────────────────────────────────────────────────────────────
-const syncRoleFromStorage = (): void => {
-  const snapshot = readStoredAuthSnapshot()
-  roleName.value = snapshot.roleName
-  permissionSet.value = snapshot.permissions
-}
-
+// â”€â”€ Role sync â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const loadCurrentUser = async (): Promise<void> => {
-  currentUser.value = await authMeService.get() ?? null
-  if (!currentUser.value) return
-
-  localStorage.setItem("auth_user", JSON.stringify(currentUser.value))
-  syncRoleFromStorage()
+  await authSession.ensureLoaded()
 }
 
-// ── Local catalog ─────────────────────────────────────────────────────────────
+// â”€â”€ Local catalog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const loadLocalData = (): void => {
   try { localServices.value = JSON.parse(localStorage.getItem("singlePayServices") || "[]") } catch { localServices.value = [] }
   try { localBundles.value = JSON.parse(localStorage.getItem("bundledServices") || "[]") } catch { localBundles.value = [] }
@@ -1970,15 +1870,101 @@ const loadLocalData = (): void => {
   } catch { localPackageOffers.value = [] }
 }
 
+const catalogItemToPicker = (type: BillingPickerLookup["type"], item: ServiceCatalogItem): BillingPickerLookup => ({
+  id: item.id,
+  name: item.name,
+  price: Number(item.effective_price ?? item.price ?? 0),
+  type,
+})
+
+const catalogItemToLocalService = (type: string, item: ServiceCatalogItem, scope: ServiceCatalogScope = "GLOBAL"): LocalService => ({
+  id: toCatalogServiceId(scope === "LGU" ? `lgu-${type}` : type, item.id) ?? String(item.id),
+  type,
+  name: item.name,
+  price: Number(item.effective_price ?? item.price ?? 0),
+  status: item.is_active ? "Active" : "Inactive",
+})
+
+const catalogBundleTypeMap: Record<string, string> = {
+  MACHINE: "machine",
+  TECHNIQUE: "technique",
+  EVALUATION: "evaluation",
+  ADD_ON_MACHINE: "add-on-machine",
+  ADD_ON_TECHNIQUE: "add-on-technique",
+  ADD_ON_HOME_SERVICE: "add-on-home-service",
+}
+
+const catalogBundleToLocalBundle = (bundle: ServiceCatalogBundle, scope: ServiceCatalogScope = "GLOBAL"): LocalBundle => {
+  const collect = (type: string): string[] =>
+    bundle.items
+      .filter(item => item.item_type === type && item.item_id != null)
+      .map(item => toCatalogServiceId(scope === "LGU" ? `lgu-${catalogBundleTypeMap[type]}` : catalogBundleTypeMap[type], item.item_id))
+      .filter((id): id is string => !!id)
+
+  return {
+    id: String(bundle.id),
+    name: bundle.name,
+    machineIds: collect("MACHINE"),
+    techniqueIds: collect("TECHNIQUE"),
+    evaluationIds: collect("EVALUATION"),
+    addOnIds: [
+      ...collect("ADD_ON_MACHINE"),
+      ...collect("ADD_ON_TECHNIQUE"),
+      ...collect("ADD_ON_HOME_SERVICE"),
+    ],
+    bundledPrice: Number(bundle.bundled_price ?? 0),
+    status: bundle.is_active ? "Active" : "Inactive",
+  }
+}
+
+const mergeById = <T extends {id: string}>(fallbackItems: T[], primaryItems: T[]): T[] => {
+  const merged = new Map<string, T>()
+  fallbackItems.forEach(item => merged.set(item.id, item))
+  primaryItems.forEach(item => merged.set(item.id, item))
+  return Array.from(merged.values())
+}
+
+const loadCatalogContext = async (
+  scope: ServiceCatalogScope,
+  hmoId?: number | null
+): Promise<ServiceCatalogContext | undefined> =>
+  serviceCatalogContextTanstackService.fetchContext(queryClient, {scope, hmo_id: hmoId})
+
+const catalogContextToLocalServices = (context: ServiceCatalogContext): LocalService[] => [
+  ...context.services.machines.map(item => catalogItemToLocalService("machine", item, context.scope)),
+  ...context.services.techniques.map(item => catalogItemToLocalService("technique", item, context.scope)),
+  ...context.services.evaluations.map(item => catalogItemToLocalService("evaluation", item, context.scope)),
+  ...context.services.add_on_machines.map(item => catalogItemToLocalService("add-on-machine", item, context.scope)),
+  ...context.services.add_on_techniques.map(item => catalogItemToLocalService("add-on-technique", item, context.scope)),
+  ...context.services.add_on_home_services.map(item => catalogItemToLocalService("add-on-home-service", item, context.scope)),
+]
+
+const mergeCatalogContextLocalData = (context: ServiceCatalogContext): void => {
+  localServices.value = mergeById(localServices.value, catalogContextToLocalServices(context))
+  localBundles.value = mergeById(localBundles.value, context.bundles.map(bundle => catalogBundleToLocalBundle(bundle, context.scope)))
+}
+
+const applyServiceCatalogContext = (context: ServiceCatalogContext): void => {
+  machines.value = context.services.machines.map(item => catalogItemToPicker("machine", item))
+  techniques.value = context.services.techniques.map(item => catalogItemToPicker("technique", item))
+  evaluations.value = context.services.evaluations.map(item => catalogItemToPicker("evaluation", item))
+  addOnMachines.value = context.services.add_on_machines.map(item => catalogItemToPicker("add-on-machine", item))
+  addOnTechniques.value = context.services.add_on_techniques.map(item => catalogItemToPicker("add-on-technique", item))
+  addOnHomeServices.value = context.services.add_on_home_services.map(item => catalogItemToPicker("add-on-home-service", item))
+  mergeCatalogContextLocalData(context)
+}
+
 const loadDbPackageOffers = async (): Promise<void> => {
   try {
-    const [globalResponse, lguResponse] = await Promise.all([
-      pamsAPI.get<Pageable<unknown>>("/package-service-offers", {params: {page: 1, size: 1000, status: "ALL", scope: "GLOBAL"}}),
-      pamsAPI.get<Pageable<unknown>>("/package-service-offers", {params: {page: 1, size: 1000, status: "ALL", scope: "LGU"}})
+    const [globalContext, lguContext] = await Promise.all([
+      loadCatalogContext("GLOBAL"),
+      loadCatalogContext("LGU"),
     ])
+    if (globalContext) applyServiceCatalogContext(globalContext)
+    if (lguContext) mergeCatalogContextLocalData(lguContext)
     const normalized = [
-      ...(globalResponse.data?.content ?? []),
-      ...(lguResponse.data?.content ?? [])
+      ...(globalContext?.package_offers ?? []),
+      ...(lguContext?.package_offers ?? [])
     ]
       .map(normalizePackageServiceOffer)
       .filter((item): item is LocalPackageOffer => item !== null)
@@ -2064,7 +2050,7 @@ const getPackageReceiptGroups = (pkgId?: string|number, pkgName?: string, multip
   if (pkg.bundleId) {
     const bundle = findBundle(pkg.bundleId)
     getBundleReceiptGroups(pkg.bundleId, bundle?.name, Math.max(1, Number(pkg.bundleQty ?? 1) * multiplier))
-      .forEach(g => groups.push({label: bundle ? `Bundle · ${g.label} (${bundle.name})` : `Bundle · ${g.label}`, items: g.items}))
+      .forEach(g => groups.push({label: bundle ? `Bundle Â· ${g.label} (${bundle.name})` : `Bundle Â· ${g.label}`, items: g.items}))
   }
   const itemGroups = [
     {label: "Machines",   items: buildBreakdownItems(expandQtyItems(pkg.machineItems,   pkg.machineIds,   pkg.machineQty),   resolveLocalServiceSummary,   multiplier)},
@@ -2077,7 +2063,7 @@ const getPackageReceiptGroups = (pkgId?: string|number, pkgName?: string, multip
   return groups
 }
 
-// ── Line parsing ──────────────────────────────────────────────────────────────
+// â”€â”€ Line parsing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 type PackageInvoicePrintSubItem = {
   name: string
   quantity: number
@@ -2085,203 +2071,6 @@ type PackageInvoicePrintSubItem = {
   dropoutUnitPrice?: number
   children?: PackageInvoicePrintSubItem[]
 }
-const findLocalServiceByName = (name?: string): LocalService | undefined => {
-  const normalized = String(name ?? "").trim().toLowerCase()
-  return normalized ? localServices.value.find(service => service.name.trim().toLowerCase() === normalized) : undefined
-}
-const findLiveBillingLookupByName = (name?: string): BillingPickerLookup | undefined => {
-  const normalized = String(name ?? "").trim().toLowerCase()
-  if (!normalized) return undefined
-  return [
-    ...machines.value,
-    ...techniques.value,
-    ...evaluations.value,
-    ...addOnMachines.value,
-    ...addOnTechniques.value,
-    ...addOnHomeServices.value,
-    ...sessionServices.value
-  ].find(service => service.name.trim().toLowerCase() === normalized)
-}
-const findSessionServiceByName = (name?: string): BillingPickerLookup | undefined => {
-  const normalized = String(name ?? "").trim().toLowerCase()
-  return normalized ? sessionServices.value.find(service => service.name.trim().toLowerCase() === normalized) : undefined
-}
-type PackageInvoicePrintPriceMode = "package" | "dropout"
-
-const findPackageBundleItem = (pkg: LocalPackageOffer): LocalPackageItem | undefined => {
-  const bundle = findBundle(pkg.bundleId)
-  return pkg.bundleItems?.find(item =>
-    String(item.id) === String(pkg.bundleId) ||
-    String(item.id) === String(bundle?.id) ||
-    String(item.id) === String(pkg.bundleId).replace(/^bundle-/, "")
-  )
-}
-
-const getConfiguredPackageItemPrice = (
-  item: LocalPackageItem | undefined,
-  priceMode: PackageInvoicePrintPriceMode
-): number | undefined => {
-  if (!item) return undefined
-  return priceMode === "dropout"
-    ? item.dropoutUnitPrice ?? item.standardUnitPrice ?? item.packageUnitPrice
-    : item.packageUnitPrice
-}
-
-const findConfiguredPackageItemByName = (
-  pkg: LocalPackageOffer,
-  name?: string
-): LocalPackageItem | undefined => {
-  const normalizedName = String(name ?? "").trim().toLowerCase()
-  if (!normalizedName) return undefined
-  const items = [
-    ...(pkg.machineItems ?? []),
-    ...(pkg.techniqueItems ?? []),
-    ...(pkg.evaluationItems ?? []),
-    ...(pkg.addOnItems ?? []),
-    ...(pkg.sessionItems ?? [])
-  ]
-  return items.find(item => {
-    const resolved = resolveLocalServiceSummary(item.id) ?? resolveSessionServiceSummary(item.id)
-    return resolved?.name.trim().toLowerCase() === normalizedName
-  })
-}
-
-const applyConfiguredPackageRates = (
-  pkg: LocalPackageOffer | undefined,
-  items: PackageInvoicePrintSubItem[] | undefined,
-  priceMode: PackageInvoicePrintPriceMode
-): PackageInvoicePrintSubItem[] | undefined => {
-  if (!items?.length || !pkg) return items
-  const bundle = findBundle(pkg.bundleId)
-  const bundleItem = findPackageBundleItem(pkg)
-  return items.map(item => {
-    const isBundleContainer = Boolean(
-      item.children?.length &&
-      bundleItem &&
-      bundle?.name &&
-      item.name.trim().toLowerCase() === bundle.name.trim().toLowerCase()
-    )
-    const configuredItem = isBundleContainer ? bundleItem : findConfiguredPackageItemByName(pkg, item.name)
-    const configuredUnitPrice = getConfiguredPackageItemPrice(configuredItem, priceMode)
-    return {
-      ...item,
-      unitPrice: configuredUnitPrice ?? item.unitPrice,
-      dropoutUnitPrice: priceMode === "dropout"
-        ? item.dropoutUnitPrice ?? configuredUnitPrice
-        : item.dropoutUnitPrice,
-      children: applyConfiguredPackageRates(pkg, item.children, priceMode)
-    }
-  })
-}
-
-const buildPackageInvoiceSubItems = (
-  entries: Array<LocalPackageItem | {id?:string;qty:number}>,
-  resolveItem: (id:string) => {name:string;price:number}|undefined,
-  multiplier: number,
-  includePrices: boolean,
-  priceMode: PackageInvoicePrintPriceMode
-): PackageInvoicePrintSubItem[] =>
-  entries.flatMap(entry => {
-    if (!entry.id) return []
-    const resolved = resolveItem(entry.id)
-    if (!resolved) return []
-    const configuredPrice = getConfiguredPackageItemPrice(entry as LocalPackageItem, priceMode)
-    return [{
-      name: resolved.name,
-      quantity: Math.max(1, Number(entry.qty ?? 1) * multiplier),
-      unitPrice: includePrices ? configuredPrice ?? Number(resolved.price ?? 0) : undefined,
-      dropoutUnitPrice: includePrices ? (entry as LocalPackageItem).dropoutUnitPrice : undefined
-    }]
-  })
-
-const enrichPackageInvoiceSubItemPrices = (
-  items?: PackageInvoicePrintSubItem[],
-  priceMode: PackageInvoicePrintPriceMode = "package"
-): PackageInvoicePrintSubItem[] | undefined => {
-  if (!items?.length) return items
-  return items.map(item => {
-    const bundle = item.children?.length ? findBundle(undefined, item.name) : undefined
-    const bundledPrice = bundle ? Number(bundle.bundledPrice ?? 0) : undefined
-    const explicitPrice = priceMode === "dropout"
-      ? item.dropoutUnitPrice ?? item.unitPrice
-      : item.unitPrice
-    return {
-      ...item,
-      unitPrice: explicitPrice ?? (item.children?.length
-        ? (bundledPrice !== undefined && Number.isFinite(bundledPrice) && bundledPrice >= 0 ? bundledPrice : undefined)
-        : findLiveBillingLookupByName(item.name)?.price ?? findLocalServiceByName(item.name)?.price ?? findSessionServiceByName(item.name)?.price),
-      children: enrichPackageInvoiceSubItemPrices(item.children, priceMode)
-    }
-  })
-}
-const hasNestedInvoiceSubItems = (items?: PackageInvoicePrintSubItem[]): boolean =>
-  Boolean(items?.some(item => (item.children?.length ?? 0) > 0 || hasNestedInvoiceSubItems(item.children)))
-const getPackageInvoiceSubItems = (
-  pkgId?: string|number,
-  pkgName?: string,
-  multiplier = 1,
-  includePrices = false,
-  priceMode: PackageInvoicePrintPriceMode = "package"
-): PackageInvoicePrintSubItem[] => {
-  const pkg = findPackageOffer(pkgId, pkgName)
-  if (!pkg) return []
-  if (pkg.invoiceSubItems?.length) {
-    const multiply = (items: PackageInvoicePrintSubItem[]): PackageInvoicePrintSubItem[] =>
-      items.map(item => ({
-        name: item.name,
-        quantity: Math.max(1, Number(item.quantity ?? 1) * multiplier),
-        unitPrice: includePrices ? item.unitPrice : undefined,
-        dropoutUnitPrice: includePrices ? item.dropoutUnitPrice : undefined,
-        children: item.children?.length ? multiply(item.children) : undefined
-      }))
-    const configuredSubItems = applyConfiguredPackageRates(pkg, pkg.invoiceSubItems, priceMode) ?? pkg.invoiceSubItems
-    const multiplied = multiply(configuredSubItems)
-    return includePrices ? enrichPackageInvoiceSubItemPrices(multiplied, priceMode) ?? multiplied : multiplied
-  }
-
-  const subItems: PackageInvoicePrintSubItem[] = []
-  if (pkg.bundleId) {
-    const bundle = findBundle(pkg.bundleId)
-    const bundleItem = pkg.bundleItems?.find(item =>
-      String(item.id) === String(pkg.bundleId) ||
-      String(item.id) === String(bundle?.id) ||
-      String(item.id) === String(pkg.bundleId).replace(/^bundle-/, "")
-    )
-    const bundleQuantity = Math.max(1, Number(bundleItem?.qty ?? pkg.bundleQty ?? 1))
-    const bundlePrice = priceMode === "dropout"
-      ? bundleItem?.dropoutUnitPrice ?? bundleItem?.standardUnitPrice ?? bundleItem?.packageUnitPrice ?? Number(bundle?.bundledPrice ?? 0)
-      : bundleItem?.packageUnitPrice ?? Number(bundle?.bundledPrice ?? 0)
-    const bundleChildren = getBundleReceiptGroups(
-      pkg.bundleId,
-      bundle?.name,
-      Math.max(1, bundleQuantity * multiplier)
-    ).flatMap(group => group.items.map(item => ({
-      name: item.name,
-      quantity: item.quantity,
-      unitPrice: includePrices ? item.unitPrice : undefined
-    })))
-
-    subItems.push({
-      name: bundle?.name ?? "Bundle",
-      quantity: Math.max(1, bundleQuantity * multiplier),
-      unitPrice: includePrices ? bundlePrice : undefined,
-      dropoutUnitPrice: includePrices ? bundleItem?.dropoutUnitPrice : undefined,
-      children: bundleChildren
-    })
-  }
-
-  const directItems = [
-    ...buildPackageInvoiceSubItems(expandQtyItems(pkg.machineItems, pkg.machineIds, pkg.machineQty), resolveLocalServiceSummary, multiplier, includePrices, priceMode),
-    ...buildPackageInvoiceSubItems(expandQtyItems(pkg.techniqueItems, pkg.techniqueIds, pkg.techniqueQty), resolveLocalServiceSummary, multiplier, includePrices, priceMode),
-    ...buildPackageInvoiceSubItems(expandQtyItems(pkg.evaluationItems, pkg.evaluationIds, pkg.evaluationQty), resolveLocalServiceSummary, multiplier, includePrices, priceMode),
-    ...buildPackageInvoiceSubItems(expandQtyItems(pkg.addOnItems, pkg.addOnIds, pkg.addOnQty), resolveLocalServiceSummary, multiplier, includePrices, priceMode),
-    ...buildPackageInvoiceSubItems(expandQtyItems(pkg.sessionItems, pkg.sessionIds, pkg.sessionQty), resolveSessionServiceSummary, multiplier, includePrices, priceMode)
-  ]
-
-  directItems.forEach(item => subItems.push(item))
-  return subItems
-}
-
 type ParsedLine = {key:string;id:string;type:string;name:string;price:number;quantity:number;originalPrice?:number}
 const parsedLineItems = (raw?: string): ParsedLine[] => {
   if (!raw) return []
@@ -2290,7 +2079,7 @@ const parsedLineItems = (raw?: string): ParsedLine[] => {
     if (!Array.isArray(parsed)) return []
     return parsed.map((line, i) => ({
       key: `${i}-${line.id ?? line.name}`,
-      id: String(line.id ?? ""), type: line.type ?? "service", name: line.name ?? "—",
+      id: String(line.id ?? ""), type: line.type ?? "service", name: line.name ?? "â€”",
       price: Number(line.price ?? 0), quantity: Math.max(1, Number(line.quantity ?? 1)),
       originalPrice: line.originalPrice ? Number(line.originalPrice) : undefined
     }))
@@ -2300,7 +2089,7 @@ const parsedLineItems = (raw?: string): ParsedLine[] => {
 const selectedBillingLines            = computed(() => parsedLineItems(selectedBillingDetail.value?.line_items_json))
 const selectedBillingEncounterTickets = computed(() => selectedBillingDetail.value?.encounter_tickets ?? [])
 
-// ── Encounter ticket helpers ──────────────────────────────────────────────────
+// â”€â”€ Encounter ticket helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const formatEncounterTicketPackageSource = (value?: string): string => {
   const n = String(value ?? "").trim().toUpperCase()
   if (n === "PATIENT_PACKAGE_SERVICE_PURCHASE") return "Linked from patient package service purchase"
@@ -2319,7 +2108,7 @@ const describeEncounterTicketPackageSource = (ticket: BillingEncounterTicket): s
   const source = ticket.active_billing_package_source?.trim() || ticket.billing_snapshot?.active_billing_package_source?.trim() || ""
   if (!source) return undefined
   const id = ticket.active_billing_package_id?.trim() || ticket.billing_snapshot?.active_billing_package_id?.trim() || ""
-  return id ? `${formatEncounterTicketPackageSource(source)} · Linked ID ${id}` : formatEncounterTicketPackageSource(source)
+  return id ? `${formatEncounterTicketPackageSource(source)} Â· Linked ID ${id}` : formatEncounterTicketPackageSource(source)
 }
 
 const getSelectedBillingLineBreakdownGroups = (line: {type:string;id:string|number;name:string;quantity:number}): BillingReceiptPrintBreakdownGroup[] => {
@@ -2341,22 +2130,7 @@ const selectedBillingOutstanding = computed(() =>
   Math.max(0, selectedBillingTotalDue.value - selectedBillingAmountPaid.value)
 )
 
-const selectedBillingReceiptLines = computed(() =>
-  selectedBillingLines.value.map(line => ({
-    id: line.id,
-    type: line.type,
-    typeLabel: line.type === "bundle" ? "Bundle" : line.type === "package" ? "Package" : formatType(line.type),
-    name: line.name,
-    quantity: Number(line.quantity ?? 1),
-    unitPrice: Number(line.price ?? 0),
-    lineTotal: Number(line.price ?? 0) * Number(line.quantity ?? 1),
-    originalLineTotal: line.originalPrice && line.originalPrice > line.price
-      ? Number(line.originalPrice) * Number(line.quantity ?? 1) : undefined,
-    breakdownGroups: getSelectedBillingLineBreakdownGroups(line)
-  }))
-)
-
-// ── Detail modal payment state ────────────────────────────────────────────────
+// â”€â”€ Detail modal payment state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const billingDetailPaymentType = ref("")
 const billingTenderReferenceNo = ref("")
 const billingTenderAmount      = ref<number>(0)
@@ -2413,7 +2187,7 @@ const selectedBillingDiscountTypeLabel = computed(() => {
 
 const selectedBillingDiscountNote = computed(() => {
   if (selectedBillingDiscountAmount.value <= 0) return ""
-  return `Discount applied: ${selectedBillingDiscountTypeLabel.value} · ${asCurrency(selectedBillingDiscountAmount.value)} deducted from subtotal.`
+  return `Discount applied: ${selectedBillingDiscountTypeLabel.value} Â· ${asCurrency(selectedBillingDiscountAmount.value)} deducted from subtotal.`
 })
 
 const canSaveBillingTender = computed(() =>
@@ -2424,7 +2198,7 @@ const canSaveBillingTender = computed(() =>
   !!billingDetailPaymentType.value.trim()
 )
 
-// ── Claim workflow messages ────────────────────────────────────────────────────
+// â”€â”€ Claim workflow messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const getClaimWorkflowMessage = (billingType?: string, billingStatus?: string): string => {
   const n = String(billingType ?? "").trim().toUpperCase()
   const s = displayBillingStatus(billingStatus)
@@ -2443,7 +2217,7 @@ const getClaimWorkflowMessage = (billingType?: string, billingStatus?: string): 
 const formClaimWorkflowMessage       = computed(() => getClaimWorkflowMessage(form.value.billing_type))
 const selectedBillingClaimWorkflowMessage = computed(() => getClaimWorkflowMessage(selectedBillingDetail.value?.billing_type, selectedBillingDetail.value?.billing_status))
 
-// ── Formatting helpers ────────────────────────────────────────────────────────
+// â”€â”€ Formatting helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const formatDateTime = (value?: string|number|Date): string =>
   value ? new Date(value).toLocaleString("en-PH", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }) : "N/A"
 const formatDate = (value?: string|number|Date): string =>
@@ -2458,7 +2232,7 @@ const displayBillingType = (value?: string): string => {
   return value?.trim() || "N/A"
 }
 
-// ── Billing mode banner ───────────────────────────────────────────────────────
+// â”€â”€ Billing mode banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const billingModeBannerClass = computed(() => {
   if (form.value.billing_type === "HMO_BILLING")     return "bg-blue-50 dark:bg-blue-950 text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-800"
   if (form.value.billing_type === "LGU_BILLING")     return "bg-amber-50 dark:bg-amber-950 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800"
@@ -2475,10 +2249,10 @@ const billingModeIcon = computed(() => {
 })
 const billingModeLabel = computed(() => displayBillingType(form.value.billing_type))
 const billingModeHint  = computed(() => {
-  if (form.value.billing_type === "HMO_BILLING")      return "HMO negotiated rates apply · Items filtered to plan coverage"
-  if (form.value.billing_type === "LGU_BILLING")      return "LGU guarantee workflow · Budget monitored per period"
-  if (form.value.billing_type === "SELF_PAY_SINGLE")  return "Standard catalogue prices · Cash or e-wallet payment"
-  if (form.value.billing_type === "SELF_PAY_PACKAGE") return "Package pricing applies · Bundles and package offers available"
+  if (form.value.billing_type === "HMO_BILLING")      return "HMO negotiated rates apply Â· Items filtered to plan coverage"
+  if (form.value.billing_type === "LGU_BILLING")      return "LGU guarantee workflow Â· Budget monitored per period"
+  if (form.value.billing_type === "SELF_PAY_SINGLE")  return "Standard catalogue prices Â· Cash or e-wallet payment"
+  if (form.value.billing_type === "SELF_PAY_PACKAGE") return "Package pricing applies Â· Bundles and package offers available"
   return ""
 })
 
@@ -2491,7 +2265,7 @@ const billingStatusSeverity = (value?: string): "success"|"warn"|"danger"|"info"
   return "info"
 }
 
-// ── Route helpers ─────────────────────────────────────────────────────────────
+// â”€â”€ Route helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const getRouteQueryValue = (value: unknown): string|undefined => {
   if (Array.isArray(value)) return typeof value[0] === "string" ? value[0] : undefined
   return typeof value === "string" ? value : undefined
@@ -2540,7 +2314,7 @@ const getDefaultBillingPaymentType = (billing: BillingListItem): string => {
   return "Cash"
 }
 
-// ── Table computed options ────────────────────────────────────────────────────
+// â”€â”€ Table computed options â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const tablePaymentTypeOptions = computed(() => {
   const values = new Set(selfPayPaymentOptions.map(o => o.value))
   values.add("HMO"); values.add("LGU")
@@ -2582,7 +2356,7 @@ const filteredBillings = computed(() => {
   })
 })
 
-// ── Encounter ticket PDF export ───────────────────────────────────────────────
+// â”€â”€ Encounter ticket PDF export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const buildEncounterTicketDeductionSummary = (billingType?: string): string => {
   const n = String(billingType ?? "").trim().toUpperCase().replace(/[: -]/g, "_")
   if (["HMO","HMO_BILLING"].includes(n))               return "Deducting 1 Session from HMO Allocation"
@@ -2649,9 +2423,22 @@ const exportSelectedBillingEncounterTicketsPdf = (): void => {
   } catch (e) { errorToast(toast, extractApiErrorMessage(e, "Failed to export billing encounter tickets")) }
 }
 
+const fetchBillingContextDetail = async (billingId: number): Promise<{detail?: BillingListItem; paymentLog: BillingPaymentLogEntry[]}> => {
+  const context = await billingContextTanstackService.fetchContext(queryClient, billingId)
+  return {
+    detail: context?.billing,
+    paymentLog: context?.payment_log ?? []
+  }
+}
+
+const invalidateBillingContext = async (billingId?: number): Promise<void> => {
+  if (!billingId) return
+  await queryClient.invalidateQueries({queryKey: [BillingTanstackKey.BILLING_CONTEXT, billingId]})
+}
+
 const getBillingDetailForEncounterTicketExport = async (billingId: number): Promise<BillingListItem|undefined> => {
   if (selectedBillingDetail.value?.id === billingId && selectedBillingDetail.value.encounter_tickets) return selectedBillingDetail.value
-  return await billingPhase1Service.getById(billingId)
+  return (await fetchBillingContextDetail(billingId)).detail
 }
 
 const exportBillingEncounterTicketPack = async (billingIds: number[], sourceLabel: string): Promise<void> => {
@@ -2671,10 +2458,10 @@ const exportBillingEncounterTicketPack = async (billingIds: number[], sourceLabe
 }
 
 const exportSelectedEncounterTicketsPdf = async (): Promise<void> =>
-  exportBillingEncounterTicketPack(selectedBillingRows.value.map(i => i.id), `Selected · ${selectedBillingRows.value.length} chosen`)
+  exportBillingEncounterTicketPack(selectedBillingRows.value.map(i => i.id), `Selected Â· ${selectedBillingRows.value.length} chosen`)
 
 const exportFilteredEncounterTicketsPdf = async (): Promise<void> =>
-  exportBillingEncounterTicketPack(filteredBillings.value.map(i => i.id), `Filtered · ${filteredBillings.value.length} shown`)
+  exportBillingEncounterTicketPack(filteredBillings.value.map(i => i.id), `Filtered Â· ${filteredBillings.value.length} shown`)
 
 const resetTableFilters = (): void => {
   tableFilterQuery.value = ""; tableFilterBillingType.value = undefined; tableFilterPaymentType.value = undefined
@@ -2682,7 +2469,7 @@ const resetTableFilters = (): void => {
   tableFilterMinDue.value = null; tableFilterMaxDue.value = null; tableFilterOutstandingOnly.value = false
 }
 
-// ── Static options ────────────────────────────────────────────────────────────
+// â”€â”€ Static options â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const selfPayPaymentOptions = [
   {label: "Cash",     value: "Cash"},
   {label: "GCash",    value: "GCash"},
@@ -2695,7 +2482,7 @@ const discountTypeOptions: Array<{label:string;value:DiscountType}> = [
 ]
 const isSelfPay = computed(() => form.value.billing_type === "SELF_PAY_SINGLE" || form.value.billing_type === "SELF_PAY_PACKAGE")
 
-// ── Service lookups ───────────────────────────────────────────────────────────
+// â”€â”€ Service lookups â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const machines         = ref<BillingPickerLookup[]>([])
 const techniques       = ref<BillingPickerLookup[]>([])
 const evaluations      = ref<BillingPickerLookup[]>([])
@@ -2703,7 +2490,7 @@ const addOnMachines    = ref<BillingPickerLookup[]>([])
 const addOnTechniques  = ref<BillingPickerLookup[]>([])
 const addOnHomeServices= ref<BillingPickerLookup[]>([])
 
-// ── HMO rate maps and ID filters ──────────────────────────────────────────────
+// â”€â”€ HMO rate maps and ID filters â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const billingPatientHmoId               = ref<number|null>(null)
 const billingPatientHmoInfo             = ref<PatientHMOInformation|null>(null)
 const syncingBillingHmoRates            = ref(false)
@@ -2713,14 +2500,8 @@ const billingPatientEvaluationRateMap   = ref<Map<number,number>>(new Map())
 const billingPatientAddOnMachineRateMap = ref<Map<number,number>>(new Map())
 const billingPatientAddOnTechniqueRateMap     = ref<Map<number,number>>(new Map())
 const billingPatientAddOnHomeServiceRateMap   = ref<Map<number,number>>(new Map())
-const billingHmoMachineIds              = ref<Set<number>|null>(null)
-const billingHmoTechniqueIds            = ref<Set<number>|null>(null)
-const billingHmoEvaluationIds           = ref<Set<number>|null>(null)
-const billingHmoAddOnMachineIds         = ref<Set<number>|null>(null)
-const billingHmoAddOnTechniqueIds       = ref<Set<number>|null>(null)
-const billingHmoAddOnHomeServiceIds     = ref<Set<number>|null>(null)
 
-// ── Selected lines ────────────────────────────────────────────────────────────
+// â”€â”€ Selected lines â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 type SelectedLine = {key:string;id:number|string;type:string;name:string;price:number;quantity:number;originalPrice?:number;priceOverride?:number;body_area?:string}
 const selectedLines      = ref<SelectedLine[]>([])
 const selectedLineType   = ref<SelectedLine["type"]>("machine")
@@ -2743,11 +2524,6 @@ const lineTypeOptions: Array<{label:string;value:SelectedLine["type"]}> = [
   {label: "Add-on (Home Service)", value: "add-on-home-service"},
 ]
 
-const filterByHmoIds = (items: BillingPickerLookup[], allowed: Set<number>|null): BillingPickerLookup[] => {
-  if (form.value.billing_type !== "HMO_BILLING" || allowed === null) return items
-  return items.filter(i => allowed.has(Number(i.id)))
-}
-
 const billingTypeOptions = [
   {label: "Self Pay: Single Service",  value: "SELF_PAY_SINGLE"},
   {label: "Self Pay: Package Service", value: "SELF_PAY_PACKAGE"},
@@ -2757,17 +2533,17 @@ const billingTypeOptions = [
 
 const currentLineTypeOptions = computed(() => {
   const type = selectedLineType.value
-  if (type === "machine")           return filterByHmoIds(machines.value,       billingHmoMachineIds.value)
-  if (type === "technique")         return filterByHmoIds(techniques.value,      billingHmoTechniqueIds.value)
-  if (type === "evaluation")        return filterByHmoIds(evaluations.value,     billingHmoEvaluationIds.value)
+  if (type === "machine")           return machines.value
+  if (type === "technique")         return techniques.value
+  if (type === "evaluation")        return evaluations.value
   if (type === "add-on-machine")    return [
-    ...filterByHmoIds(addOnMachines.value,   billingHmoAddOnMachineIds.value).map(i => ({...i, type: "add-on-machine" as const})),
-    ...filterByHmoIds(addOnTechniques.value, billingHmoAddOnTechniqueIds.value).map(i => ({...i, type: "add-on-technique" as const})),
+    ...addOnMachines.value.map(i => ({...i, type: "add-on-machine" as const})),
+    ...addOnTechniques.value.map(i => ({...i, type: "add-on-technique" as const})),
   ]
-  return filterByHmoIds(addOnHomeServices.value, billingHmoAddOnHomeServiceIds.value)
+  return addOnHomeServices.value
 })
 
-// ── Bundle creation from selection ───────────────────────────────────────────
+// â”€â”€ Bundle creation from selection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const selectedIndividualLines = computed(() => selectedLines.value.filter(l => l.type !== "bundle" && l.type !== "package"))
 const selectionOriginalTotal  = computed(() => selectedIndividualLines.value.reduce((s, l) => s + Number(l.price ?? 0) * Number(l.quantity ?? 1), 0))
 
@@ -2803,14 +2579,14 @@ const canCreateBundleFromSelection = computed(() =>
   !findExistingBundleFromSelection.value
 )
 
-// ── Form ──────────────────────────────────────────────────────────────────────
+// â”€â”€ Form â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const form = ref<{
   patient_id?: number; appointment_id?: number; billing_type: BillingType; service_type: ServiceType
   service_name?: string; amount_paid: number; amount_tendered?: number; payment_type?: string
   senior_pwd_id_presented?: boolean; senior_pwd_id_reference?: string; loa_number?: string; loa_date?: string
 }>({billing_type: "SELF_PAY_SINGLE", service_type: "SINGLE", amount_paid: 0, amount_tendered: 0, senior_pwd_id_presented: false})
 
-// ── Currency & date helpers ───────────────────────────────────────────────────
+// â”€â”€ Currency & date helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const asCurrency       = (value: number) => Number(value ?? 0).toLocaleString("en-PH", {style: "currency", currency: "PHP"})
 const formatFilterDate = (value?: Date): string|undefined => value ? new Date(value).toISOString().slice(0, 10) : undefined
 const formatType       = (type: string): string => ({
@@ -2818,7 +2594,7 @@ const formatType       = (type: string): string => ({
   "add-on-machine": "Add-ons", "add-on-technique": "Add-ons", "add-on-home-service": "Add-on (Home Service)"
 }[type] || type)
 
-// ── Line mutation helpers ─────────────────────────────────────────────────────
+// â”€â”€ Line mutation helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const removeLine          = (key: string) => { selectedLines.value = selectedLines.value.filter(i => i.key !== key) }
 const setLineQuantity     = (key: string, value: number|null|undefined) => {
   const qty = Math.max(1, Number(value ?? 1))
@@ -2847,7 +2623,7 @@ const addSelectedPackageOffer = (): void => {
   selectedPackageOfferId.value = undefined
 }
 
-// ── Price resolution ──────────────────────────────────────────────────────────
+// â”€â”€ Price resolution â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const resolveNaturalLinePrice = (line: SelectedLine): number => {
   if (form.value.billing_type !== "HMO_BILLING") return Number(line.price ?? 0)
   const itemId = Number(line.id); if (!Number.isFinite(itemId) || itemId <= 0) return Number(line.price ?? 0)
@@ -2861,16 +2637,30 @@ const resolveNaturalLinePrice = (line: SelectedLine): number => {
 const resolveEffectiveBillingLinePrice = (line: SelectedLine): number =>
   line.priceOverride != null ? Number(line.priceOverride) : resolveNaturalLinePrice(line)
 const resolveBillingLineOriginalPrice  = (line: SelectedLine): number => Number(line.originalPrice ?? line.price ?? 0)
+const billingLineHasCustomPriceBasis = (line: SelectedLine): boolean =>
+  Math.abs(resolveBillingLineOriginalPrice(line) - resolveEffectiveBillingLinePrice(line)) > 0.004
 
-// ── HMO rate sync ─────────────────────────────────────────────────────────────
+// â”€â”€ HMO rate sync â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const buildHmoRateMap = (items: ServiceCatalogItem[]): {map: Map<number, number>; ids: Set<number>} => {
+  const map = new Map<number, number>()
+  const ids = new Set<number>()
+  for (const item of items) {
+    const id = Number(item.id)
+    const price = Number(item.hmo_rate)
+    if (Number.isFinite(id) && id > 0 && Number.isFinite(price) && price >= 0) {
+      map.set(id, price)
+      ids.add(id)
+    }
+  }
+  return {map, ids}
+}
+
 const syncBillingPatientHmoRates = async (): Promise<void> => {
   // Reset all HMO state
   billingPatientHmoId.value = null; billingPatientHmoInfo.value = null
   billingPatientMachineRateMap.value = new Map(); billingPatientTechniqueRateMap.value = new Map()
   billingPatientEvaluationRateMap.value = new Map(); billingPatientAddOnMachineRateMap.value = new Map()
   billingPatientAddOnTechniqueRateMap.value = new Map(); billingPatientAddOnHomeServiceRateMap.value = new Map()
-  billingHmoMachineIds.value = null; billingHmoTechniqueIds.value = null; billingHmoEvaluationIds.value = null
-  billingHmoAddOnMachineIds.value = null; billingHmoAddOnTechniqueIds.value = null; billingHmoAddOnHomeServiceIds.value = null
 
   if (form.value.billing_type !== "HMO_BILLING") return
   const patientId = Number(form.value.patient_id)
@@ -2878,52 +2668,32 @@ const syncBillingPatientHmoRates = async (): Promise<void> => {
 
   syncingBillingHmoRates.value = true
   try {
-    const sponsorEntries = await patientHMOInformationService.getByPatientId(patientId)
+    const patientContext = await patientTanstackService.fetchContext(queryClient, patientId)
+    const sponsorEntries = patientContext?.sponsor_information ?? []
     const hmoInfo = sponsorEntries.find(entry => entry.sponsor_context === 'HMO' && Number(entry.hmo_id) > 0) ?? null
     billingPatientHmoInfo.value = hmoInfo
     const hmoId = Number(hmoInfo?.hmo_id)
     if (!Number.isFinite(hmoId) || hmoId <= 0) return
     billingPatientHmoId.value = hmoId
 
-    const [machineRates, techniqueRates, evaluationRates, addOnRates] = await Promise.all([
-      hmoMachineRateService.getAll(hmoId),
-      hmoTechniqueRateService.getAll(hmoId),
-      hmoEvaluationRateService.getAll(hmoId),
-      hmoAddOnRateService.getAll(hmoId),
-    ])
+    const catalogContext = await loadCatalogContext("HMO", hmoId)
+    const machines   = buildHmoRateMap(catalogContext?.services.machines ?? [])
+    const techniques = buildHmoRateMap(catalogContext?.services.techniques ?? [])
+    const evals      = buildHmoRateMap(catalogContext?.services.evaluations ?? [])
+    const addOnMachines = buildHmoRateMap(catalogContext?.services.add_on_machines ?? [])
+    const addOnTechniques = buildHmoRateMap(catalogContext?.services.add_on_techniques ?? [])
+    const addOnHomeServices = buildHmoRateMap(catalogContext?.services.add_on_home_services ?? [])
 
-    const buildMap = (rates: Array<{id_field: number; rate: number}>, idField: string): {map: Map<number,number>; ids: Set<number>} => {
-      const map = new Map<number,number>(); const ids = new Set<number>()
-      for (const r of rates ?? []) {
-        const id = Number((r as Record<string,unknown>)[idField]); const price = Number(r.rate)
-        if (Number.isFinite(id) && id > 0 && Number.isFinite(price) && price >= 0) { map.set(id, price); ids.add(id) }
-      }
-      return {map, ids}
-    }
-
-    const machines   = buildMap(machineRates   as never, "machine_id")
-    const techniques = buildMap(techniqueRates  as never, "technique_id")
-    const evals      = buildMap(evaluationRates as never, "evaluation_id")
-    billingPatientMachineRateMap.value    = machines.map;   billingHmoMachineIds.value    = machines.ids
-    billingPatientTechniqueRateMap.value  = techniques.map; billingHmoTechniqueIds.value  = techniques.ids
-    billingPatientEvaluationRateMap.value = evals.map;      billingHmoEvaluationIds.value = evals.ids
-
-    const addOnMachineMap = new Map<number,number>(); const addOnMachineIds = new Set<number>()
-    const addOnTechniqueMap = new Map<number,number>(); const addOnTechniqueIds = new Set<number>()
-    const addOnHomeServiceMap = new Map<number,number>(); const addOnHomeServiceIds = new Set<number>()
-    for (const r of addOnRates ?? []) {
-      const price = Number(r.rate); if (!Number.isFinite(price) || price < 0) continue
-      if (r.add_on_type === "ADD_ON_MACHINE"       && r.add_on_machine_id != null)      { const id = Number(r.add_on_machine_id);      if (id > 0) { addOnMachineMap.set(id, price);      addOnMachineIds.add(id) } }
-      else if (r.add_on_type === "ADD_ON_TECHNIQUE" && r.add_on_technique_id != null)   { const id = Number(r.add_on_technique_id);    if (id > 0) { addOnTechniqueMap.set(id, price);    addOnTechniqueIds.add(id) } }
-      else if (r.add_on_type === "ADD_ON_HOME_SERVICE" && r.add_on_home_service_id != null) { const id = Number(r.add_on_home_service_id); if (id > 0) { addOnHomeServiceMap.set(id, price); addOnHomeServiceIds.add(id) } }
-    }
-    billingPatientAddOnMachineRateMap.value       = addOnMachineMap;      billingHmoAddOnMachineIds.value       = addOnMachineIds
-    billingPatientAddOnTechniqueRateMap.value      = addOnTechniqueMap;    billingHmoAddOnTechniqueIds.value      = addOnTechniqueIds
-    billingPatientAddOnHomeServiceRateMap.value    = addOnHomeServiceMap;  billingHmoAddOnHomeServiceIds.value    = addOnHomeServiceIds
+    billingPatientMachineRateMap.value = machines.map
+    billingPatientTechniqueRateMap.value = techniques.map
+    billingPatientEvaluationRateMap.value = evals.map
+    billingPatientAddOnMachineRateMap.value = addOnMachines.map
+    billingPatientAddOnTechniqueRateMap.value = addOnTechniques.map
+    billingPatientAddOnHomeServiceRateMap.value = addOnHomeServices.map
   } finally { syncingBillingHmoRates.value = false }
 }
 
-// ── Line items payload ────────────────────────────────────────────────────────
+// â”€â”€ Line items payload â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const lineItemsAsPayload = computed((): BillingLineItem[] =>
   selectedLines.value.map(item => {
     const effectivePrice = resolveEffectiveBillingLinePrice(item)
@@ -2948,7 +2718,7 @@ const subtotalFromLines = computed(() =>
   lineItemsAsPayload.value.reduce((s, l) => s + l.price * l.quantity, 0)
 )
 
-// ── Senior/PWD discount logic ─────────────────────────────────────────────────
+// â”€â”€ Senior/PWD discount logic â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const seniorDiscountIsAutoAssigned = computed((): boolean => {
   const bt = form.value.billing_type
   if (bt === "SELF_PAY_PACKAGE") return !!selectedLines.value.find(l => l.type === "package")
@@ -2963,10 +2733,10 @@ const seniorDiscountEffectiveTargetKey = computed((): string|null => {
   return seniorDiscountTargetKey.value
 })
 const seniorDiscountSelectableLines = computed(() =>
-  selectedLines.value.map(l => ({key: l.key, label: `${l.name} — ${asCurrency(resolveEffectiveBillingLinePrice(l) * Number(l.quantity ?? 1))}`}))
+  selectedLines.value.map(l => ({key: l.key, label: `${l.name} â€” ${asCurrency(resolveEffectiveBillingLinePrice(l) * Number(l.quantity ?? 1))}`}))
 )
 
-// ── POS summary ───────────────────────────────────────────────────────────────
+// â”€â”€ POS summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const posSummary = computed(() => {
   const originalSubtotal = Number(originalSubtotalFromLines.value)
   const subtotal         = Number(subtotalFromLines.value)
@@ -2991,7 +2761,7 @@ const posSummary = computed(() => {
   return {originalSubtotal, subtotal, discountAmount, vatableAmount, vatAmount, totalDue, changeAmount, seniorDiscountAmount, customDiscountAmount, amountPaid}
 })
 
-// ── LGU budget helpers ────────────────────────────────────────────────────────
+// â”€â”€ LGU budget helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const editingLguReservedAmount = computed(() => {
   if (!editingBillingId.value || form.value.billing_type !== "LGU_BILLING") return 0
   const source = selectedBillingDetail.value?.id === editingBillingId.value
@@ -3006,30 +2776,27 @@ const lguAvailableBeforeSave = computed(() =>
 const lguProjectedRemainingAfterSave = computed(() =>
   lguAvailableBeforeSave.value != null ? Number((lguAvailableBeforeSave.value - posSummary.value.totalDue).toFixed(2)) : null
 )
-// ── Service lookup fetchers ───────────────────────────────────────────────────
-const fetchLookup = async (path: string): Promise<BillingPickerLookup[]> => {
-  const {data} = await pamsAPI.get<Pageable<OfferLookupDTO>>(path, {params: {page: 1, size: 500, status: Status.ACTIVE}})
-  return (data?.content ?? []).map(i => ({id: i.id, name: i.name, price: Number(i.price ?? 0)}))
-}
+// â”€â”€ Service lookup fetchers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const fetchSessionLookup = async (): Promise<BillingPickerLookup[]> => {
   const {data} = await pamsAPI.get<Pageable<BillingPickerLookup>>("/sessions/lookup", {params: {page: 1, size: 500, status: Status.ACTIVE}})
   return data?.content ?? []
 }
-const getSharedEvaluationLookups = (): BillingPickerLookup[] =>
-  readActivePromosServiceCatalog().filter(i => i.type === "evaluation").map(i => ({id: i.id, name: i.name, price: Number(i.price ?? 0), type: "evaluation"}))
 
 const loadLookups = async (): Promise<void> => {
-  const [machinesRes, techniquesRes, addOnMachinesRes, addOnTechniquesRes, addOnHomeRes, sessionsRes] = await Promise.all([
-    fetchLookup("/machines/lookup"), fetchLookup("/techniques/lookup"),
-    fetchLookup("/add-on-machines/lookup"), fetchLookup("/add-on-techniques/lookup"),
-    fetchLookup("/add-on-home-services/lookup"), fetchSessionLookup()
+  loadLocalData()
+  const [catalogContext, sessionsRes] = await Promise.all([
+    loadCatalogContext("GLOBAL"),
+    fetchSessionLookup()
   ])
   await loadPatientOptions()
-  machines.value = machinesRes; techniques.value = techniquesRes; evaluations.value = getSharedEvaluationLookups()
-  addOnMachines.value = addOnMachinesRes; addOnTechniques.value = addOnTechniquesRes
-  addOnHomeServices.value = addOnHomeRes; sessionServices.value = sessionsRes
-  loadLocalData()
+  if (catalogContext) applyServiceCatalogContext(catalogContext)
+  sessionServices.value = sessionsRes
   await loadDbPackageOffers()
+}
+
+const ensureLookupsLoaded = async (): Promise<void> => {
+  if (patientOptions.value.length && machines.value.length && techniques.value.length && evaluations.value.length) return
+  await loadLookups()
 }
 
 const fetchBillings = async (): Promise<void> => {
@@ -3059,7 +2826,7 @@ const refreshLguBudgetSummary = async (): Promise<void> => {
   finally { loadingLguBudgetSummary.value = false }
 }
 
-// ── Form reset ────────────────────────────────────────────────────────────────
+// â”€â”€ Form reset â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const resetBillingForm = (): void => {
   posExpanded.value = false
   editingBillingId.value = undefined; editingBillingStatus.value = undefined; selectedLines.value = []
@@ -3073,7 +2840,24 @@ const resetBillingForm = (): void => {
   form.value = {billing_type: "SELF_PAY_SINGLE", service_type: "SINGLE", amount_paid: 0, amount_tendered: 0, payment_type: undefined, senior_pwd_id_presented: false}
 }
 
-// ── Copy from last session ────────────────────────────────────────────────────
+const openNewBillingForm = async (): Promise<void> => {
+  resetBillingForm()
+  await ensureLookupsLoaded()
+  posExpanded.value = true
+  await nextTick()
+  posSection.value?.scrollIntoView({behavior: "smooth", block: "start"})
+}
+
+const toggleBillingForm = async (): Promise<void> => {
+  if (posExpanded.value) {
+    posExpanded.value = false
+    return
+  }
+  await ensureLookupsLoaded()
+  posExpanded.value = true
+}
+
+// â”€â”€ Copy from last session â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const copyFromLastSession = async (): Promise<void> => {
   if (!form.value.patient_id) return
   copyingFromLastSession.value = true
@@ -3087,7 +2871,7 @@ const copyFromLastSession = async (): Promise<void> => {
       billingId = apiResult?.content?.[0]?.id
     }
     if (!billingId) { errorToast(toast, "No previous billing found for this patient"); return }
-    const detail = await billingPhase1Service.getById(billingId)
+    const detail = (await fetchBillingContextDetail(billingId)).detail
     if (!detail) { errorToast(toast, "Previous billing found but details could not be loaded"); return }
     let lines = parseBillingLines(detail.line_items_json)
     if (form.value.billing_type === "HMO_BILLING") lines = lines.filter(l => l.type !== "bundle" && l.type !== "package")
@@ -3098,7 +2882,7 @@ const copyFromLastSession = async (): Promise<void> => {
   finally { copyingFromLastSession.value = false }
 }
 
-// ── Bundle creation ───────────────────────────────────────────────────────────
+// â”€â”€ Bundle creation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const openCreateBundleFromSelection = (): void => {
   createBundleName.value = form.value.service_name?.trim() || `Custom Bundle ${new Date().toLocaleDateString("en-PH")}`
   createBundleDiscountedPrice.value = selectionOriginalTotal.value
@@ -3121,7 +2905,7 @@ const saveBundleFromSelection = (): void => {
   successToast(toast, "Bundle created and applied to this billing")
 }
 
-// ── Create / Update billing ───────────────────────────────────────────────────
+// â”€â”€ Create / Update billing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const createBilling = async (): Promise<void> => {
   if (!form.value.patient_id)        { errorToast(toast, "Patient is required"); return }
   if (!selectedLines.value.length)   { errorToast(toast, "Add at least one service"); return }
@@ -3170,13 +2954,14 @@ const createBilling = async (): Promise<void> => {
       return
     }
     if (editedBillingId) {
-      const currentDetail = await billingPhase1Service.getById(editedBillingId)
+      const currentDetail = (await fetchBillingContextDetail(editedBillingId)).detail
       if (!currentDetail) { errorToast(toast, "Billing record could not be reloaded for security check"); return }
       if (isBillingStatusPaid(currentDetail.billing_status)) {
         errorToast(toast, "Paid billings are locked and can no longer be edited")
         return
       }
       await billingPhase1Service.update(editedBillingId, payload)
+      await invalidateBillingContext(editedBillingId)
       successToast(toast, "Billing updated")
     } else {
       await billingPhase1Service.save(payload)
@@ -3184,7 +2969,7 @@ const createBilling = async (): Promise<void> => {
     }
     await fetchBillings()
     if (editedBillingId && billingEditDrawerVisible.value) {
-      const refreshed = await billingPhase1Service.getById(editedBillingId)
+      const refreshed = (await fetchBillingContextDetail(editedBillingId)).detail
       if (refreshed) { selectedBillingDetail.value = refreshed; billingDetailPaymentType.value = getDefaultBillingPaymentType(refreshed); billingTenderAmount.value = 0 }
       billingEditDrawerVisible.value = false
     }
@@ -3193,16 +2978,13 @@ const createBilling = async (): Promise<void> => {
   } catch (e) { errorToast(toast, extractApiErrorMessage(e, "Failed to save billing")) }
 }
 
-// ── Load for edit ─────────────────────────────────────────────────────────────
+// â”€â”€ Load for edit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const loadBillingForEdit = async (billingId: number): Promise<void> => {
-  const [detail, log] = await Promise.all([
-    billingPhase1Service.getById(billingId),
-    billingPhase1Service.getPaymentLog(billingId).catch(() => [] as BillingPaymentLogEntry[])
-  ])
+  const {detail, paymentLog} = await fetchBillingContextDetail(billingId)
   if (!detail) return
   editingBillingId.value = detail.id
   editingBillingStatus.value = detail.billing_status
-  editBillingPaymentLog.value = log
+  editBillingPaymentLog.value = paymentLog
   form.value = {
     patient_id: detail.patient_id, appointment_id: detail.appointment_id,
     billing_type: normalizeBillingType(detail.billing_type), service_type: normalizeServiceType(detail.service_type),
@@ -3239,333 +3021,61 @@ const buildBillingUpdatePayload = (detail: BillingListItem, overrides?: Partial<
   ...overrides
 })
 
-const getReceiptDisplayNumber = (detail: BillingListItem): string => detail.receipt_number?.trim() || detail.public_id || `BILL-${detail.id}`
+const getBillingPrintDate = (detail: BillingListItem): string =>
+  String(detail.hmo_loa_date || detail.loa_date || detail.created_at || new Date().toISOString()).slice(0, 10)
 
-// ── Open billing details ──────────────────────────────────────────────────────
+const openBillingPrintableRoute = (detail: BillingListItem): void => {
+  const normalizedBillingType = normalizeBillingTypeValue(detail.billing_type)
+  const printDate = getBillingPrintDate(detail)
+  const commonQuery = {
+    billing_id: String(detail.id),
+    patient_id: String(detail.patient_id),
+    autoprint: "1"
+  }
+
+  const routeLocation = normalizedBillingType === "HMO_BILLING"
+    ? router.resolve({
+        name: "hmo-patient-billing-summary-print",
+        query: {
+          ...commonQuery,
+          hmo_name: detail.hmo_name,
+          from: printDate,
+          to: printDate
+        }
+      })
+    : normalizedBillingType === "LGU_BILLING"
+      ? router.resolve({
+          name: "lgu-patient-billing-summary-print",
+          query: {
+            ...commonQuery,
+            transaction_from: printDate,
+            transaction_to: printDate
+          }
+        })
+      : router.resolve({
+          name: "self-pay-patient-billing-summary-print",
+          query: commonQuery
+        })
+
+  window.open(routeLocation.href, "_blank", "noopener,noreferrer")
+}
+
+// â”€â”€ Open billing details â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const openBillingDetails = async (billingId: number): Promise<void> => {
-  const [detail, log] = await Promise.all([
-    billingPhase1Service.getById(billingId),
-    billingPhase1Service.getPaymentLog(billingId).catch(() => [] as BillingPaymentLogEntry[])
-  ])
+  const {detail, paymentLog} = await fetchBillingContextDetail(billingId)
   if (!detail) { errorToast(toast, "Billing details could not be loaded. Refresh and try again."); return }
   selectedBillingDetail.value = detail
-  selectedBillingPaymentLog.value = log
+  selectedBillingPaymentLog.value = paymentLog
   billingDetailPaymentType.value = getDefaultBillingPaymentType(detail)
   billingTenderReferenceNo.value = ""; billingTenderAmount.value = 0
   billingDetailsVisible.value = true
 }
 
-// ── Print receipt ─────────────────────────────────────────────────────────────
+// â”€â”€ Print receipt â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const printSelectedBillingReceipt = async (): Promise<void> => {
   if (!selectedBillingDetail.value) return
-  const detail = selectedBillingDetail.value
-  const normalizedBillingType = normalizeBillingTypeValue(detail.billing_type)
-  const popup = openBillingReceiptWindow(getReceiptDisplayNumber(detail))
-
-  try {
-    if (normalizedBillingType === "SELF_PAY_SINGLE") {
-      renderSingleServiceInvoiceWindow(popup, {
-        billingDate: detail.created_at, referenceNumber: getReceiptDisplayNumber(detail),
-        patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
-        patientAddress: detail.patient_address, patientAge: detail.patient_age, patientGender: detail.patient_gender,
-        physicalTherapist: detail.physical_therapist, doctor: detail.doctor,
-        diagnosis: detail.diagnosis,
-        paymentMethod: derivePaymentType(detail) || "Cash/Card/Online Transfer",
-        paymentReferenceNo: detail.payment_reference || detail.receipt_number,
-        subtotal: Number(detail.subtotal_amount ?? detail.amount_due ?? detail.total_amount ?? 0),
-        discount: Number(detail.discount_amount ?? 0), grandTotal: selectedBillingTotalDue.value,
-        ...invoiceApprovalSignature.value,
-        lines: selectedBillingReceiptLines.value.map(l => ({name: l.name, quantity: l.quantity, unitPrice: l.unitPrice, lineTotal: l.lineTotal}))
-      }, {title: "Single Service Invoice", fileName: getReceiptDisplayNumber(detail)}); return
-    }
-
-    if (normalizedBillingType === "SELF_PAY_PACKAGE") {
-      await loadLookups()
-      const lockedTicketsPkg = (detail.encounter_tickets ?? [])
-        .filter(t => t.record_locked)
-        .sort((left, right) => {
-          const leftDate = String(left.billing_snapshot?.starts_at ?? left.attended_at ?? "")
-          const rightDate = String(right.billing_snapshot?.starts_at ?? right.attended_at ?? "")
-          return leftDate.localeCompare(rightDate)
-        })
-      const inferPackageTotalSessionsPkg = (name?: string, fallback = lockedTicketsPkg.length): number => {
-        const match = String(name ?? "").match(/\((\d+)\)\s*Sessions?/i)
-        return match ? Math.max(1, Number(match[1])) : Math.max(1, fallback)
-      }
-      renderPackageServiceInvoiceWindow(popup, {
-        billingDate: detail.created_at, referenceNumber: getReceiptDisplayNumber(detail),
-        patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
-        patientAddress: detail.patient_address, patientAge: detail.patient_age, patientGender: detail.patient_gender,
-        physicalTherapist: detail.physical_therapist, doctor: detail.doctor,
-        diagnosis: detail.diagnosis,
-        paymentMethod: derivePaymentType(detail) || "Cash/Card/Online Transfer",
-        paymentReferenceNo: detail.payment_reference || detail.receipt_number,
-        subtotal: Number(detail.subtotal_amount ?? detail.amount_due ?? detail.total_amount ?? 0),
-        discount: Number(detail.discount_amount ?? 0), grandTotal: selectedBillingTotalDue.value,
-        ...invoiceApprovalSignature.value,
-        lines: selectedBillingReceiptLines.value.flatMap(l => {
-          const nestedSubItems = l.type === "package"
-            ? getPackageInvoiceSubItems(l.id, l.name, l.quantity)
-            : []
-          const subItems = nestedSubItems.length
-            ? nestedSubItems
-            : (l.breakdownGroups ?? []).flatMap(g => g.items.map(i => ({name: i.name, quantity: i.quantity})))
-          if (l.type === "package" && lockedTicketsPkg.length > 1) {
-            const totalSessions = inferPackageTotalSessionsPkg(l.name)
-            const sourceTotal = Number(l.lineTotal ?? l.unitPrice ?? 0)
-            const unitPrice = lockedTicketsPkg.length > 0 ? sourceTotal / lockedTicketsPkg.length : sourceTotal
-            return lockedTicketsPkg.map((ticket, index) => ({
-              name: l.name,
-              quantity: 1,
-              unitPrice,
-              lineTotal: unitPrice,
-              treatmentDate: ticket.billing_snapshot?.starts_at || ticket.attended_at || detail.created_at,
-              sessionSequence: `Session ${index + 1} of ${totalSessions}`,
-              subItems
-            }))
-          }
-          const totalSessions = inferPackageTotalSessionsPkg(l.name, 1)
-          return {name: l.name, quantity: l.quantity, unitPrice: l.unitPrice, lineTotal: l.lineTotal,
-            treatmentDate: detail.created_at, sessionSequence: l.type === "package" ? `Session 1 of ${totalSessions}` : undefined, subItems}
-        })
-      }, {title: "Package Service Invoice", fileName: getReceiptDisplayNumber(detail)}); return
-    }
-
-    if (normalizedBillingType === "HMO_BILLING") {
-      const rawLines = (() => { try { return JSON.parse(detail.line_items_json || "[]") as Array<Record<string,unknown>> } catch { return [] } })()
-      renderHmoInvoiceWindow(popup, {
-        billingDate: detail.hmo_loa_date || detail.created_at, referenceNumber: getReceiptDisplayNumber(detail),
-        patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
-        patientAddress: detail.patient_address, patientAge: detail.patient_age, patientGender: detail.patient_gender,
-        physicalTherapist: detail.physical_therapist, doctor: detail.doctor,
-        diagnosis: detail.diagnosis,
-        hmoName: detail.hmo_name, hmoTypeName: detail.hmo_type_name, hmoCompanyName: detail.hmo_company_name,
-        hmoApprovalCode: detail.hmo_loa_number || detail.hmo_approval_code, hmoApprovalDate: detail.hmo_loa_date,
-        hmoValidityStart: detail.hmo_validity_start, hmoValidityEnd: detail.hmo_validity_end,
-        subtotal: Number(detail.subtotal_amount ?? detail.amount_due ?? detail.total_amount ?? 0),
-        discount: Number(detail.discount_amount ?? 0), grandTotal: selectedBillingTotalDue.value,
-        ...invoiceApprovalSignature.value,
-        lines: selectedBillingReceiptLines.value.map((l, idx) => ({
-          name: l.name, quantity: l.quantity, unitPrice: l.unitPrice, lineTotal: l.lineTotal,
-          treatmentDate: detail.created_at, laterality: String(rawLines[idx]?.laterality ?? ""), bodyArea: String(rawLines[idx]?.body_area ?? "")
-        }))
-      }, {title: "HMO Invoice", fileName: getReceiptDisplayNumber(detail)}); return
-    }
-
-    if (normalizedBillingType === "LGU_BILLING") {
-      await loadLookups()
-      const lockedTickets = (detail.encounter_tickets ?? []).filter(t => t.record_locked)
-      const sessionSeqLabel = lockedTickets[0]?.billing_snapshot?.session_sequence_label ?? undefined
-      const isDropoutClaim = String(detail.pricing_source ?? "").toUpperCase().includes("DROPOUT")
-      const rawLines = (() => {
-        try {
-          type RawLguSubItem = {name?: string; quantity?: number; price?: number; unitPrice?: number; unit_price?: number; children?: RawLguSubItem[]}
-          return JSON.parse(detail.line_items_json || "[]") as Array<{
-            type?: string
-            name?: string
-            quantity?: number
-            price?: number
-            treatmentDate?: string
-            sessionSequenceLabel?: string
-            sessionSequence?: string | number
-            totalSessions?: string | number
-            claimStatus?: string
-            subItems?: RawLguSubItem[]
-          }>
-        } catch {
-          return []
-        }
-      })()
-      type PrintableLguSubItem = {name: string; quantity: number; unitPrice?: number; dropoutUnitPrice?: number; children?: PrintableLguSubItem[]}
-      const normalizeLguSubItems = (items?: Array<{
-        name?: string
-        quantity?: number
-        unitPrice?: number
-        unit_price?: number
-        price?: number
-        dropoutUnitPrice?: number
-        dropout_unit_price?: number
-        dropoutPrice?: number
-        dropout_price?: number
-        children?: any[]
-      }>): PrintableLguSubItem[] =>
-        (items ?? []).map(item => {
-          const rawUnitPrice = item.unitPrice ?? item.unit_price ?? item.price
-          const explicitUnitPrice = rawUnitPrice === undefined || rawUnitPrice === null || String(rawUnitPrice).trim() === ""
-            ? undefined
-            : Number(rawUnitPrice)
-          const rawDropoutUnitPrice = item.dropoutUnitPrice ?? item.dropout_unit_price ?? item.dropoutPrice ?? item.dropout_price
-          const explicitDropoutUnitPrice = rawDropoutUnitPrice === undefined || rawDropoutUnitPrice === null || String(rawDropoutUnitPrice).trim() === ""
-            ? undefined
-            : Number(rawDropoutUnitPrice)
-          const serviceFallbackPrice = isDropoutClaim
-            ? findLocalServiceByName(String(item.name ?? "Service"))?.price
-            : undefined
-          const effectiveUnitPrice = isDropoutClaim
-            ? explicitDropoutUnitPrice ?? explicitUnitPrice
-            : explicitUnitPrice
-          return {
-            name: String(item.name ?? "Service"),
-            quantity: Math.max(1, Number(item.quantity ?? 1)),
-            unitPrice: effectiveUnitPrice !== undefined && Number.isFinite(effectiveUnitPrice) && effectiveUnitPrice >= 0
-              ? effectiveUnitPrice
-              : serviceFallbackPrice,
-            dropoutUnitPrice: explicitDropoutUnitPrice !== undefined && Number.isFinite(explicitDropoutUnitPrice) && explicitDropoutUnitPrice >= 0
-              ? explicitDropoutUnitPrice
-              : undefined,
-            children: normalizeLguSubItems(item.children)
-          }
-        })
-      const completedSessionTickets = [...lockedTickets].sort((left, right) => {
-        const leftDate = String(left.billing_snapshot?.starts_at ?? left.attended_at ?? "")
-        const rightDate = String(right.billing_snapshot?.starts_at ?? right.attended_at ?? "")
-        return leftDate.localeCompare(rightDate)
-      })
-      const inferPackageTotalSessions = (name?: string): number => {
-        const match = String(name ?? "").match(/\((\d+)\)\s*Sessions?/i)
-        return match ? Math.max(1, Number(match[1])) : Math.max(1, completedSessionTickets.length)
-      }
-      const dropoutPackageName = detail.package_name || detail.service_name || selectedBillingReceiptLines.value.find(line => line.type === "package")?.name
-      const dropoutPackageSubItems = isDropoutClaim && dropoutPackageName
-        ? getPackageInvoiceSubItems(undefined, dropoutPackageName, 1, true, "dropout")
-        : []
-      const shouldRenderDropoutPackageTree = isDropoutClaim
-        && dropoutPackageSubItems.length > 0
-        && rawLines.length > 1
-        && rawLines.every(line => String(line.type ?? "").toLowerCase() !== "package")
-      const shouldExpandSinglePackageLine = isDropoutClaim
-        && rawLines.length === 1
-        && completedSessionTickets.length > 1
-        && String(rawLines[0]?.type ?? selectedBillingReceiptLines.value[0]?.type ?? "").toLowerCase() === "package"
-      const lguInvoiceLines = shouldRenderDropoutPackageTree
-        ? [{
-            name: dropoutPackageName ?? "LGU Package",
-            quantity: 1,
-            unitPrice: 0,
-            lineTotal: 0,
-            treatmentDate: completedSessionTickets[0]?.billing_snapshot?.starts_at || completedSessionTickets[0]?.attended_at || detail.created_at,
-            sessionSequence: sessionSeqLabel,
-            subItems: dropoutPackageSubItems
-          }]
-        : shouldExpandSinglePackageLine
-        ? (() => {
-            const rawLine = rawLines[0]
-            const sourceLine = selectedBillingReceiptLines.value[0]
-            const sourceTotal = Number(rawLine.price ?? sourceLine?.unitPrice ?? selectedBillingTotalDue.value ?? 0)
-            const unitPrice = completedSessionTickets.length > 0 ? sourceTotal / completedSessionTickets.length : sourceTotal
-            const subItems = rawLine.subItems?.length
-              ? (
-                  isDropoutClaim && !hasNestedInvoiceSubItems(normalizeLguSubItems(rawLine.subItems)) && getPackageInvoiceSubItems(sourceLine?.id, String(rawLine.name ?? sourceLine?.name ?? ""), Number(sourceLine?.quantity ?? 1), true, "dropout").length
-                    ? getPackageInvoiceSubItems(sourceLine?.id, String(rawLine.name ?? sourceLine?.name ?? ""), Number(sourceLine?.quantity ?? 1), true, "dropout")
-                    : applyConfiguredPackageRates(
-                        findPackageOffer(sourceLine?.id, String(rawLine.name ?? sourceLine?.name ?? dropoutPackageName ?? "")),
-                        normalizeLguSubItems(rawLine.subItems),
-                        isDropoutClaim ? "dropout" : "package"
-                      ) ?? normalizeLguSubItems(rawLine.subItems)
-                )
-              : getPackageInvoiceSubItems(sourceLine?.id, String(rawLine.name ?? sourceLine?.name ?? ""), Number(sourceLine?.quantity ?? 1), isDropoutClaim, isDropoutClaim ? "dropout" : "package")
-            const totalSessions = Number(rawLine.totalSessions ?? 0) > 0
-              ? Number(rawLine.totalSessions)
-              : inferPackageTotalSessions(String(rawLine.name ?? sourceLine?.name ?? ""))
-
-            return completedSessionTickets.map((ticket, index) => ({
-              name: String(rawLine.name ?? sourceLine?.name ?? "LGU Session"),
-              quantity: 1,
-              unitPrice,
-              lineTotal: unitPrice,
-              treatmentDate: ticket.billing_snapshot?.starts_at || ticket.attended_at || detail.created_at,
-              sessionSequence: `Session ${index + 1} of ${totalSessions}`,
-              subItems: isDropoutClaim ? enrichPackageInvoiceSubItemPrices(subItems, "dropout") : subItems
-            }))
-          })()
-        : rawLines.length
-        ? rawLines.map((rawLine, index) => {
-            const quantity = Math.max(1, Number(rawLine.quantity ?? 1))
-            const unitPrice = Number(rawLine.price ?? 0)
-            const sequence = isDropoutClaim
-              ? (rawLine.sessionSequenceLabel
-                || (
-                  rawLine.sessionSequence && rawLine.totalSessions
-                    ? `Session ${rawLine.sessionSequence} of ${rawLine.totalSessions}`
-                    : sessionSeqLabel
-                ))
-              : undefined
-            const normalizedSubItems = normalizeLguSubItems(rawLine.subItems)
-            const configuredSubItems = applyConfiguredPackageRates(
-              findPackageOffer(
-                rawLine.type === "package" ? selectedBillingReceiptLines.value[index]?.id : undefined,
-                String(rawLine.name ?? selectedBillingReceiptLines.value[index]?.name ?? dropoutPackageName ?? detail.package_name ?? detail.service_name ?? "")
-              ),
-              normalizedSubItems,
-              isDropoutClaim ? "dropout" : "package"
-            ) ?? normalizedSubItems
-            return {
-              name: String(rawLine.name ?? selectedBillingReceiptLines.value[index]?.name ?? "LGU Session"),
-              quantity,
-              unitPrice: isDropoutClaim ? 0 : unitPrice,
-              lineTotal: isDropoutClaim ? 0 : quantity * unitPrice,
-              treatmentDate: rawLine.treatmentDate || detail.created_at,
-              sessionSequence: sequence,
-              subItems: isDropoutClaim
-                ? (
-                    hasNestedInvoiceSubItems(configuredSubItems)
-                      ? enrichPackageInvoiceSubItemPrices(configuredSubItems, "dropout")
-                      : getPackageInvoiceSubItems(rawLine.type === "package" ? selectedBillingReceiptLines.value[index]?.id : undefined, String(rawLine.name ?? selectedBillingReceiptLines.value[index]?.name ?? ""), quantity, true, "dropout").length
-                      ? getPackageInvoiceSubItems(rawLine.type === "package" ? selectedBillingReceiptLines.value[index]?.id : undefined, String(rawLine.name ?? selectedBillingReceiptLines.value[index]?.name ?? ""), quantity, true, "dropout")
-                      : enrichPackageInvoiceSubItemPrices(configuredSubItems, "dropout")
-                  )
-                : rawLine.subItems?.length
-                  ? configuredSubItems
-                  : selectedBillingReceiptLines.value[index]?.type === "package"
-                    ? getPackageInvoiceSubItems(
-                        selectedBillingReceiptLines.value[index]?.id,
-                        selectedBillingReceiptLines.value[index]?.name,
-                        selectedBillingReceiptLines.value[index]?.quantity
-                      )
-                    : []
-            }
-          })
-        : selectedBillingReceiptLines.value.map(l => ({
-            name: l.name,
-            quantity: l.quantity,
-            unitPrice: isDropoutClaim ? 0 : l.unitPrice,
-            lineTotal: isDropoutClaim ? 0 : l.lineTotal,
-            treatmentDate: detail.created_at,
-            sessionSequence: isDropoutClaim ? sessionSeqLabel : undefined,
-            subItems: l.type === "package"
-              ? getPackageInvoiceSubItems(l.id, l.name, l.quantity, isDropoutClaim, isDropoutClaim ? "dropout" : "package")
-              : (l.breakdownGroups ?? []).flatMap(g => g.items.map(i => ({name: i.name, quantity: i.quantity})))
-          }))
-      renderLguInvoiceWindow(popup, {
-        billingDate: detail.created_at, referenceNumber: getReceiptDisplayNumber(detail),
-        patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
-        patientAddress: detail.patient_address, patientAge: detail.patient_age, patientGender: detail.patient_gender,
-        physicalTherapist: detail.physical_therapist, doctor: detail.doctor,
-        diagnosis: detail.diagnosis,
-        lguProgramName: detail.lgu_program_name, lguReferenceLabel: detail.lgu_patient_referral_form_no || detail.lgu_reference_label, lguDateIssued: detail.lgu_date_issued,
-        lguStatus: String(detail.lgu_patient_program_status ?? rawLines.find(line => line.claimStatus)?.claimStatus ?? detail.billing_status ?? "N/A").replace(/_/g, " "),
-        subtotal: Number(detail.subtotal_amount ?? detail.amount_due ?? detail.total_amount ?? 0),
-        discount: Number(detail.discount_amount ?? 0), grandTotal: selectedBillingTotalDue.value,
-        ...invoiceApprovalSignature.value,
-        lines: lguInvoiceLines
-      }, {title: isDropoutClaim ? "LGU Dropout Invoice" : "LGU Invoice", fileName: getReceiptDisplayNumber(detail)}); return
-    }
-
-    // Fallback generic receipt
-    renderBillingReceiptWindow(popup, {
-      receiptNumber: getReceiptDisplayNumber(detail), billingId: detail.public_id || detail.id,
-      patientRecordId: detail.patient_public_id, patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
-      appointmentId: detail.appointment_public_id || detail.appointment_id, createdAt: detail.created_at,
-      billingType: displayBillingType(detail.billing_type), paymentType: derivePaymentType(detail) || detail.payment_reference,
-      serviceLabel: detail.service_name, receiptMode: "standard",
-      subtotal: Number(detail.subtotal_amount ?? detail.amount_due ?? detail.total_amount ?? 0),
-      discount: Number(detail.discount_amount ?? 0), totalDue: selectedBillingTotalDue.value,
-      amountPaid: selectedBillingAmountPaid.value, outstanding: selectedBillingOutstanding.value,
-      changeAmount: Number(detail.change_amount ?? 0), lines: selectedBillingReceiptLines.value
-    }, {title: "Billing Receipt Copy", fileName: getReceiptDisplayNumber(detail)})
-  } catch (e) { popup.close(); errorToast(toast, extractApiErrorMessage(e, "Failed to print receipt")) }
+  openBillingPrintableRoute(selectedBillingDetail.value)
 }
-
 const canPrintPatientInvoiceCopy = computed<boolean>(() => {
   if (!selectedBillingDetail.value) return false
   const normalizedBillingType = normalizeBillingTypeValue(selectedBillingDetail.value.billing_type)
@@ -3574,81 +3084,8 @@ const canPrintPatientInvoiceCopy = computed<boolean>(() => {
 
 const printSelectedPatientInvoiceCopy = (): void => {
   if (!selectedBillingDetail.value) return
-
-  const detail = selectedBillingDetail.value
-  const normalizedBillingType = normalizeBillingTypeValue(detail.billing_type)
-  if (normalizedBillingType !== "HMO_BILLING" && normalizedBillingType !== "LGU_BILLING") {
-    errorToast(toast, "Patient statement without prices is available for LGU and HMO billings only")
-    return
-  }
-
-  const popup = openBillingReceiptWindow(`${getReceiptDisplayNumber(detail)}-PATIENT-COPY`)
-
-  try {
-    const rawLines = (() => {
-      try { return JSON.parse(detail.line_items_json || "[]") as Array<Record<string, unknown>> }
-      catch { return [] }
-    })()
-
-    const lockedTickets = (detail.encounter_tickets ?? []).filter(ticket => ticket.record_locked)
-    const sessionSeqLabel = lockedTickets[0]?.billing_snapshot?.session_sequence_label ?? undefined
-    const sponsorName = normalizedBillingType === "HMO_BILLING" ? detail.hmo_name : detail.lgu_program_name
-    const sponsorReference = normalizedBillingType === "HMO_BILLING"
-      ? detail.hmo_loa_number || detail.hmo_approval_code
-      : detail.lgu_patient_referral_form_no || detail.lgu_reference_label
-    type PatientStatementSubItem = {name: string; quantity: number; subItems?: PatientStatementSubItem[]}
-    const normalizePatientStatementSubItems = (items?: Array<{name?: unknown; quantity?: unknown; children?: any[]}>): PatientStatementSubItem[] =>
-      (items ?? []).map(item => ({
-        name: String(item.name ?? "Service"),
-        quantity: Math.max(1, Number(item.quantity ?? 1)),
-        subItems: normalizePatientStatementSubItems(item.children)
-      }))
-    const statementLines = normalizedBillingType === "LGU_BILLING" && rawLines.length
-      ? rawLines.map(line => ({
-          name: String(line.name ?? "LGU Session"),
-          quantity: Math.max(1, Number(line.quantity ?? 1)),
-          treatmentDate: String(line.treatmentDate ?? detail.created_at),
-          sessionSequence: String(line.sessionSequenceLabel ?? (
-            line.sessionSequence && line.totalSessions ? `Session ${line.sessionSequence} of ${line.totalSessions}` : sessionSeqLabel ?? ""
-          )),
-          laterality: "",
-          bodyArea: "",
-          subItems: normalizePatientStatementSubItems(line.subItems as Array<{name?: unknown; quantity?: unknown; children?: any[]}> | undefined)
-        }))
-      : selectedBillingReceiptLines.value.map((line, index) => ({
-          name: line.name,
-          quantity: line.quantity,
-          treatmentDate: detail.created_at,
-          sessionSequence: normalizedBillingType === "LGU_BILLING" ? sessionSeqLabel : undefined,
-          laterality: String(rawLines[index]?.laterality ?? ""),
-          bodyArea: String(rawLines[index]?.body_area ?? "")
-        }))
-
-    renderPatientCopyInvoiceWindow(popup, {
-      billingDate: detail.created_at,
-      referenceNumber: getReceiptDisplayNumber(detail),
-      patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
-      patientAddress: detail.patient_address,
-      patientAge: detail.patient_age,
-      patientGender: detail.patient_gender,
-      physicalTherapist: detail.physical_therapist,
-      doctor: detail.doctor,
-      diagnosis: detail.diagnosis,
-      billingTypeLabel: normalizedBillingType === "HMO_BILLING" ? "HMO Billing" : "LGU Billing",
-      sponsorName,
-      sponsorReference,
-      ...invoiceApprovalSignature.value,
-      lines: statementLines
-    }, {
-      title: "Patient Statement of Services",
-      fileName: `${getReceiptDisplayNumber(detail)}-PATIENT-COPY`
-    })
-  } catch (e) {
-    popup.close()
-    errorToast(toast, extractApiErrorMessage(e, "Failed to print patient statement"))
-  }
+  openBillingPrintableRoute(selectedBillingDetail.value)
 }
-
 const openReceiptEditor = async (): Promise<void> => {
   if (!selectedBillingDetail.value || !canEditReceipt.value) return
   if (!machines.value.length && !techniques.value.length && !evaluations.value.length) {
@@ -3659,7 +3096,7 @@ const openReceiptEditor = async (): Promise<void> => {
   billingEditDrawerVisible.value = true
 }
 
-// ── Save tender ────────────────────────────────────────────────────────────────
+// â”€â”€ Save tender â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const saveBillingTender = async (): Promise<void> => {
   if (!selectedBillingDetail.value || !canSaveBillingTender.value) return
   const detail = selectedBillingDetail.value
@@ -3670,10 +3107,8 @@ const saveBillingTender = async (): Promise<void> => {
       paymentType: billingDetailPaymentType.value.trim(),
       referenceNo: billingTenderReferenceNo.value.trim() || undefined
     })
-    const [refreshed, refreshedLog] = await Promise.all([
-      billingPhase1Service.getById(detail.id),
-      billingPhase1Service.getPaymentLog(detail.id).catch(() => [] as BillingPaymentLogEntry[])
-    ])
+    await invalidateBillingContext(detail.id)
+    const {detail: refreshed, paymentLog: refreshedLog} = await fetchBillingContextDetail(detail.id)
     if (!refreshed) { errorToast(toast, "Payment saved, but detail could not be reloaded"); return }
     selectedBillingDetail.value = refreshed; selectedBillingPaymentLog.value = refreshedLog
     billingDetailPaymentType.value = getDefaultBillingPaymentType(refreshed)
@@ -3684,7 +3119,7 @@ const saveBillingTender = async (): Promise<void> => {
   finally { savingBillingTender.value = false }
 }
 
-// ── Mark as billed ────────────────────────────────────────────────────────────
+// â”€â”€ Mark as billed â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const startMarkBillingAsBilled = (): void => {
   if (!selectedBillingDetail.value || !canMarkSelectedBillingAsBilled.value) return
   if (isSelectedBillingHmo.value) {
@@ -3712,7 +3147,8 @@ const markSelectedBillingAsBilled = async (loaNumber?: string, loaDate?: string)
         loa_number: loaNumber,
         loa_date: loaDate
       })
-      const refreshed = await billingPhase1Service.getById(selectedBillingDetail.value.id)
+      await invalidateBillingContext(selectedBillingDetail.value.id)
+      const refreshed = (await fetchBillingContextDetail(selectedBillingDetail.value.id)).detail
       const nextDetail = refreshed ?? selectedBillingDetail.value
       selectedBillingDetail.value = {...nextDetail, billing_status: result?.billing_status ?? "BILLED"}
       billingDetailPaymentType.value = getDefaultBillingPaymentType(selectedBillingDetail.value)
@@ -3730,7 +3166,8 @@ const markSelectedBillingAsBilled = async (loaNumber?: string, loaDate?: string)
       loa_number: loaNumber,
       loa_date: loaDate
     }))
-    const refreshed = await billingPhase1Service.getById(selectedBillingDetail.value.id)
+    await invalidateBillingContext(selectedBillingDetail.value.id)
+    const refreshed = (await fetchBillingContextDetail(selectedBillingDetail.value.id)).detail
     if (!refreshed) { errorToast(toast, "Marked as billed but detail could not be reloaded"); return }
     selectedBillingDetail.value = refreshed; billingDetailPaymentType.value = getDefaultBillingPaymentType(refreshed); billingTenderAmount.value = 0
     markBilledLoaDialogVisible.value = false
@@ -3742,7 +3179,7 @@ const markSelectedBillingAsBilled = async (loaNumber?: string, loaDate?: string)
   finally { markingBillingAsBilled.value = false }
 }
 
-// ── Route context ─────────────────────────────────────────────────────────────
+// â”€â”€ Route context â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const applyRouteBillingContext = async (): Promise<void> => {
   const patientId    = parseRouteQueryId(route.query.patientId)
   const appointmentId= parseRouteQueryId(route.query.appointmentId)
@@ -3779,7 +3216,7 @@ const applyRouteBillingContext = async (): Promise<void> => {
   }
 }
 
-// ── Type normalisation ────────────────────────────────────────────────────────
+// â”€â”€ Type normalisation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const normalizeBillingType  = (value: string): BillingType  => normalizeBillingTypeValue(value) ?? "SELF_PAY_SINGLE"
 const normalizeServiceType  = (value: string): ServiceType  => {
   const n = value.trim().toLowerCase()
@@ -3792,14 +3229,14 @@ const parseBillingLines = (raw?: string): SelectedLine[] => {
     const parsed = JSON.parse(raw) as Array<{id?:string|number;type?:string;name?:string;price?:number;quantity?:number;originalPrice?:number;body_area?:string}>
     if (!Array.isArray(parsed)) return []
     return parsed.map(l => ({
-      key: crypto.randomUUID(), id: l.id ?? "", type: l.type ?? "service", name: l.name ?? "—",
+      key: crypto.randomUUID(), id: l.id ?? "", type: l.type ?? "service", name: l.name ?? "â€”",
       price: Number(l.price ?? 0), quantity: Math.max(1, Number(l.quantity ?? 1)),
       originalPrice: l.originalPrice ? Number(l.originalPrice) : undefined, body_area: l.body_area || undefined
     }))
   } catch { return [] }
 }
 
-// ── Watchers ──────────────────────────────────────────────────────────────────
+// â”€â”€ Watchers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 watch(() => form.value.billing_type, (value) => {
   const serviceTypeMap: Record<BillingType, ServiceType> = {
     SELF_PAY_SINGLE: "SINGLE", SELF_PAY_PACKAGE: "PACKAGE", HMO_BILLING: "HMO", LGU_BILLING: "LGU",
@@ -3846,9 +3283,8 @@ watch(editingBillingId, (v) => {
   }
 })
 
-// ── Mount ─────────────────────────────────────────────────────────────────────
+// â”€â”€ Mount â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 onMounted(async () => {
-  syncRoleFromStorage()
   await loadCurrentUser()
 
   // Initialize billing type filter from route query if present
@@ -3858,6 +3294,7 @@ onMounted(async () => {
   }
 
   await fetchBillings()
+  await ensureLookupsLoaded()
   await applyRouteBillingContext()
 })
 
@@ -3884,3 +3321,5 @@ watch(selectedClinicId, () => { void fetchBillings() })
   opacity: 0;
 }
 </style>
+
+

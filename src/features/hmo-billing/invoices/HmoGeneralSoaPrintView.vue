@@ -65,9 +65,9 @@
               <tr v-if="row.kind === 'service'">
                 <td class="text-center">{{ row.itemNo }}</td>
                 <td class="text-center">{{ row.patientName }}</td>
-                <td class="text-center">{{ formatDate(row.treatmentDate) }}</td>
+                <td class="text-center">{{ row.referenceNo }}</td>
                 <td class="text-center">{{ row.loaApprovalNo }}</td>
-                <td class="text-center">{{ formatDate(row.treatmentDate) }}</td>
+                <td class="text-center">{{ formatDate(row.loaDateIssued) }}</td>
                 <td>{{ row.serviceName }}</td>
                 <td class="text-center">{{ formatPrice(row.unitPrice) }}</td>
 
@@ -124,8 +124,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue"
 import { useRoute } from "vue-router"
+import { useQueryClient } from "@tanstack/vue-query"
 import Button from "primevue/button"
 import { billingPhase1Service, type BillingListItem, type HmoRecentHistoryItem } from "@/features/billing/api/billing-phase1.service"
+import { billingContextTanstackService } from "@/features/billing/queries/billing-context.tanstack.service"
 import HmoInvoiceLayout from "./HmoInvoiceLayout.vue"
 import { formatHmoStatus, useHmoInvoicePrintActions } from "./hmo-invoice.shared"
 
@@ -136,6 +138,7 @@ type ServiceHmoSoaRow = {
   patientName: string
   referenceNo: string
   loaApprovalNo: string
+  loaDateIssued: string | null
   billingStatus: string
   treatmentDate: string | null
   serviceName: string
@@ -167,11 +170,12 @@ type HmoSoaLineItem = {
   bodyArea?: string
 }
 
-type HmoSoaHistoryItem = HmoRecentHistoryItem & Pick<BillingListItem, "line_items_json" | "diagnosis" | "hmo_loa_number" | "hmo_approval_code">
+type HmoSoaHistoryItem = HmoRecentHistoryItem & Pick<BillingListItem, "public_id" | "line_items_json" | "diagnosis" | "hmo_loa_number" | "hmo_loa_date" | "loa_date" | "hmo_approval_code">
 
 type HmoSoaSourceItem = HmoSoaHistoryItem
 
 const route = useRoute()
+const queryClient = useQueryClient()
 const { printPage, goBack } = useHmoInvoicePrintActions()
 
 const rows = ref<SoaDisplayRow[]>([])
@@ -221,14 +225,29 @@ const formatPrice = (value?: number | null): string => {
   return Number(value) > 0 ? asCurrency(value) : "FREE"
 }
 
+const firstNonBlank = (...values: unknown[]): string => {
+  for (const value of values) {
+    const text = String(value ?? "").trim()
+    if (text) return text
+  }
+
+  return ""
+}
+
+const getBillingRecordId = (billing: Pick<HmoSoaSourceItem, "id" | "public_id">): string =>
+  firstNonBlank(billing.public_id, `BILLING-${billing.id}`)
+
 const getLoaApprovalNo = (billing: HmoSoaSourceItem): string => {
   return String(
     billing.hmo_approval_code ??
     billing.hmo_loa_number ??
     billing.receipt_number ??
-    `BILLING-${billing.id}`
+    getBillingRecordId(billing)
   ).trim() || "N/A"
 }
+
+const getLoaDateIssued = (billing: HmoSoaSourceItem): string | null =>
+  firstNonBlank(billing.hmo_loa_date, billing.loa_date) || null
 
 const parseLineItems = (billing: HmoSoaSourceItem): HmoSoaLineItem[] => {
   try {
@@ -309,13 +328,17 @@ const resolveBodyArea = (lineItem: HmoSoaLineItem, billing: HmoSoaSourceItem): s
 const enrichHmoSoaItems = async (items: HmoRecentHistoryItem[]): Promise<HmoSoaHistoryItem[]> => {
   const detailedItems = await Promise.all(items.map(async item => {
     try {
-      const detail = item.id > 0 ? await billingPhase1Service.getById(item.id) : undefined
+      const context = item.id > 0 ? await billingContextTanstackService.fetchContext(queryClient, item.id) : undefined
+      const detail = context?.billing
       return detail
         ? {
             ...item,
+            public_id: detail.public_id,
             line_items_json: detail.line_items_json,
             diagnosis: detail.diagnosis,
             hmo_loa_number: detail.hmo_loa_number,
+            hmo_loa_date: detail.hmo_loa_date,
+            loa_date: detail.loa_date,
             hmo_approval_code: detail.hmo_approval_code
           }
         : item
@@ -355,7 +378,7 @@ const buildRows = (items: HmoSoaSourceItem[]): SoaDisplayRow[] => {
 
       sortedItems.forEach((item, index) => {
         const lineItems = parseLineItems(item)
-        const referenceNo = item.receipt_number || `BILLING-${item.id}`
+        const referenceNo = getBillingRecordId(item)
         const billingStatus = formatHmoStatus(item.billing_status)
 
         if (!lineItems.length) {
@@ -370,6 +393,7 @@ const buildRows = (items: HmoSoaSourceItem[]): SoaDisplayRow[] => {
             patientName: item.patient_name || "Unknown Patient",
             referenceNo,
             loaApprovalNo,
+            loaDateIssued: getLoaDateIssued(item),
             billingStatus,
             treatmentDate: item.created_at,
             serviceName: item.service_name || "HMO Service",
@@ -400,6 +424,7 @@ const buildRows = (items: HmoSoaSourceItem[]): SoaDisplayRow[] => {
             patientName: item.patient_name || "Unknown Patient",
             referenceNo,
             loaApprovalNo,
+            loaDateIssued: getLoaDateIssued(item),
             billingStatus,
             treatmentDate: item.created_at,
             serviceName: String(lineItem.name ?? item.service_name ?? "HMO Service"),

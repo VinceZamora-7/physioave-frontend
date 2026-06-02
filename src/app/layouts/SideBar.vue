@@ -138,22 +138,6 @@
               </button>
             </li>
 
-            <li>
-              <button
-                type="button"
-                class="group relative w-full"
-                @click="goToAndClose('pt-schedule')"
-                :class="itemClass('pt-schedule')"
-                aria-label="My Schedule"
-                title="My Schedule"
-              >
-                <span :class="iconWrapClass('pt-schedule')">
-                  <i class="pi pi-directions text-[16px]" />
-                </span>
-                <span v-if="!collapsed" class="truncate">My Schedule</span>
-              </button>
-            </li>
-
             <li v-if="canAccessRoute('patients')">
               <button
                 type="button"
@@ -617,9 +601,12 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
+import { storeToRefs } from "pinia"
 import { useConfirm } from "primevue/useconfirm"
 import { useLogout } from "@/services/logout-tanstack.service"
 import { clinicStore } from "@/stores/clinic.store"
+import { useAuthSessionStore } from "@/stores/auth-session.store"
+import { ROUTE_ACCESS_RULES } from "@/shared/permissions"
 
 const props = defineProps<{
   collapsed?: boolean
@@ -634,9 +621,10 @@ const route = useRoute()
 const confirm = useConfirm()
 const { mutate, isPending } = useLogout()
 const globalClinicStore = clinicStore()
+const authSession = useAuthSessionStore()
+const { currentUser, permissionSet } = storeToRefs(authSession)
 
 const mobileOpen = ref(false)
-const userSnapshot = ref<Record<string, unknown> | null>(null)
 const operationsOpen = ref(true)
 const patientCareOpen = ref(true)
 const billingOpen = ref(true)
@@ -673,154 +661,43 @@ const toggleTheme = () => {
 
 onMounted(syncIsDark)
 
-const extractUserFromStorage = (): Record<string, unknown> | null => {
-  const candidateKeys = [
-    "auth_user",
-    "currentUser",
-    "user",
-    "profile",
-    "loggedInUser",
-    "google_user",
-  ]
-
-  const parseEntry = (raw: string | null): Record<string, unknown> | null => {
-    if (!raw) return null
-    try {
-      const parsed = JSON.parse(raw) as unknown
-      return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null
-    } catch {
-      return null
-    }
-  }
-
-  const decodeJwtPayload = (token: string): Record<string, unknown> | null => {
-    const segments = token.split(".")
-    if (segments.length < 2) return null
-
-    try {
-      const base64 = segments[1].replace(/-/g, "+").replace(/_/g, "/")
-      const normalized = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=")
-      const json = atob(normalized)
-      const payload = JSON.parse(json) as unknown
-      return payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null
-    } catch {
-      return null
-    }
-  }
-
-  for (const key of candidateKeys) {
-    const localValue = parseEntry(localStorage.getItem(key))
-    if (localValue) return localValue
-
-    const sessionValue = parseEntry(sessionStorage.getItem(key))
-    if (sessionValue) return sessionValue
-  }
-
-  const tokenKeys = ["id_token", "access_token", "token", "auth_token"]
-  for (const key of tokenKeys) {
-    const localToken = localStorage.getItem(key)
-    if (localToken) {
-      const payload = decodeJwtPayload(localToken)
-      if (payload) return payload
-    }
-
-    const sessionToken = sessionStorage.getItem(key)
-    if (sessionToken) {
-      const payload = decodeJwtPayload(sessionToken)
-      if (payload) return payload
-    }
-  }
-
-  return null
-}
-
-const syncUserSnapshot = () => {
-  userSnapshot.value = extractUserFromStorage()
-}
-
-const fetchCurrentUser = async () => {
-  try {
-    const {authMeService} = await import("@/services/auth-me.service")
-    const me = await authMeService.get()
-    if (me) {
-      userSnapshot.value = me as unknown as Record<string, unknown>
-      localStorage.setItem("auth_user", JSON.stringify(me))
-      return
-    }
-  } catch {
-    // Ignore request errors and fallback to local/session storage.
-  }
-
-  syncUserSnapshot()
-}
-
 const toStringValue = (value: unknown): string => (typeof value === "string" ? value.trim() : "")
 
 const displayName = computed(() => {
-  const user = userSnapshot.value
+  const user = currentUser.value
   if (!user) return "Logged In User"
 
   const fromName = toStringValue(user.name)
   if (fromName) return fromName
 
-  const fromFullName = toStringValue(user.fullName)
-  if (fromFullName) return fromFullName
-
-  const fromDisplayName = toStringValue(user.displayName)
-  if (fromDisplayName) return fromDisplayName
-
-  const fromGivenAndFamilyName = `${toStringValue(user.given_name)} ${toStringValue(user.family_name)}`.trim()
-  if (fromGivenAndFamilyName) return fromGivenAndFamilyName
-
-  const firstName = toStringValue(user.firstName)
-  const lastName = toStringValue(user.lastName)
-  const joined = `${firstName} ${lastName}`.trim()
-  if (joined) return joined
-
-  const fromUsername = toStringValue(user.username)
-  if (fromUsername) return fromUsername
-
   const fromEmail = toStringValue(user.email)
   if (fromEmail) return fromEmail
-
-  const fromEmailClaim = toStringValue(user.email_address)
-  if (fromEmailClaim) return fromEmailClaim
 
   return "Logged In User"
 })
 
 const displayRole = computed(() => {
-  const user = userSnapshot.value
+  const user = currentUser.value
   if (!user) return "User"
 
-  const roleFields = [user.role, user.role_name, user.userRole, user.primaryRole]
+  const roleFields = [user.role_name, user.secondary_role_name]
   for (const roleField of roleFields) {
     const roleValue = toStringValue(roleField)
     if (roleValue) return roleValue
-  }
-
-  if (Array.isArray(user.roles) && user.roles.length > 0) {
-    const firstRole = user.roles[0]
-    if (typeof firstRole === "string" && firstRole.trim()) return firstRole.trim()
-    if (firstRole && typeof firstRole === "object") {
-      const roleObj = firstRole as Record<string, unknown>
-      const roleName = toStringValue(roleObj.name) || toStringValue(roleObj.role)
-      if (roleName) return roleName
-    }
-  }
-
-  if (Array.isArray(user.authorities) && user.authorities.length > 0) {
-    const firstAuthority = user.authorities[0]
-    if (typeof firstAuthority === "string" && firstAuthority.trim()) return firstAuthority.trim()
   }
 
   return "User"
 })
 
 const normalizedUserProviderType = computed(() => {
-  const providerType = toStringValue(userSnapshot.value?.appointment_provider_type).toUpperCase()
+  const providerType = toStringValue(currentUser.value?.appointment_provider_type).toUpperCase()
   if (providerType === "PHYSICAL_THERAPIST" || providerType === "DOCTOR_CONSULTANT") {
     return providerType
+  }
+
+  const secondaryProviderType = toStringValue(currentUser.value?.secondary_appointment_provider_type).toUpperCase()
+  if (secondaryProviderType === "PHYSICAL_THERAPIST" || secondaryProviderType === "DOCTOR_CONSULTANT") {
+    return secondaryProviderType
   }
 
   const normalizedRole = displayRole.value.trim().toLowerCase()
@@ -829,22 +706,7 @@ const normalizedUserProviderType = computed(() => {
   return "NONE"
 })
 
-import { ROUTE_ACCESS_RULES } from "@/shared/permissions"
-
-const userPermissionSet = computed(() => {
-  const permissions = userSnapshot.value?.permissions
-  if (!Array.isArray(permissions)) return new Set<string>()
-
-  const normalized = permissions
-    .map(permission => (typeof permission === "string" ? permission.trim() : ""))
-    .filter(Boolean)
-
-  return new Set<string>(normalized)
-})
-
-const hasPermissionData = computed(() => userPermissionSet.value.size > 0)
-
-const hasAnyPermission = (...permissions: string[]) => permissions.some(permission => userPermissionSet.value.has(permission))
+const hasPermissionData = computed(() => permissionSet.value.size > 0)
 
 const ADMIN_NAV_ROUTE_NAMES = [
   "dashboard",
@@ -867,7 +729,7 @@ const ADMIN_NAV_ROUTE_NAMES = [
 const hasAdminNavigationAccess = computed(() =>
   ADMIN_NAV_ROUTE_NAMES.some(routeName => {
     const rule = ROUTE_ACCESS_RULES[routeName]
-    return rule ? hasAnyPermission(...rule.anyOf) : false
+    return rule ? authSession.canAccessRoute(routeName) : false
   })
 )
 
@@ -877,14 +739,11 @@ const isPhysicalTherapistUser = computed(() =>
 )
 
 const canAccessRoute = (routeName: string): boolean => {
-  const rule = ROUTE_ACCESS_RULES[routeName]
-  if (!rule) return true
-
   if (!hasPermissionData.value) {
     return false
   }
 
-  return hasAnyPermission(...rule.anyOf)
+  return authSession.canAccessRoute(routeName)
 }
 
 const userInitials = computed(() => {
@@ -914,16 +773,18 @@ defineExpose({
   toggleCollapsed,
 })
 
+const handleAuthUserUpdated = () => {
+  void authSession.refresh().catch(() => authSession.clear())
+}
+
 onMounted(() => {
-  void fetchCurrentUser()
-  void globalClinicStore.loadClinics()
-  window.addEventListener("storage", syncUserSnapshot)
-  window.addEventListener("auth-user-updated", fetchCurrentUser)
+  void authSession.ensureLoaded().catch(() => authSession.clear())
+  void globalClinicStore.initializeFromAuthSession().catch(() => globalClinicStore.loadClinics())
+  window.addEventListener("auth-user-updated", handleAuthUserUpdated)
 })
 
 onUnmounted(() => {
-  window.removeEventListener("storage", syncUserSnapshot)
-  window.removeEventListener("auth-user-updated", fetchCurrentUser)
+  window.removeEventListener("auth-user-updated", handleAuthUserUpdated)
 })
 
 const asideClass = computed(() => [

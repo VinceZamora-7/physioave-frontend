@@ -346,6 +346,8 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue"
+import { storeToRefs } from "pinia"
+import { useQueryClient } from "@tanstack/vue-query"
 import Button from "primevue/button"
 import Dialog from "primevue/dialog"
 import IftaLabel from "primevue/iftalabel"
@@ -363,7 +365,9 @@ import { pamsAPI } from "@/utils/axios-interceptor"
 import { getApiErrorMessage } from "@/utils/actionable-error.util"
 import { errorToast, successToast } from "@/utils/toast.util"
 import { Status } from "@/utils/global.type"
-import { readStoredAuthSnapshot } from "@/utils/auth-user.util"
+import { useAuthSessionStore } from "@/stores/auth-session.store"
+import { accessMatrixService } from "@/features/staff/api/access-matrix.service"
+import { accessMatrixTanstackService } from "@/features/staff/queries/access-matrix.tanstack.service"
 
 type ProviderScope = "ALL" | "ADMIN" | "PT"
 
@@ -409,6 +413,9 @@ const props = withDefaults(defineProps<{
 
 	const toast = useToast()
 	const confirm = useConfirm()
+const queryClient = useQueryClient()
+const authSession = useAuthSessionStore()
+const { roleName, isOwnerEquivalent } = storeToRefs(authSession)
 
 const visible = ref(false)
 const roles = ref<Role[]>([])
@@ -425,7 +432,6 @@ const isPermissionLoading = ref(false)
 const isSavingRole = ref(false)
 const isPermissionSaving = ref(false)
 const createAsOwnerEquivalent = ref(false)
-const authSnapshot = ref(readStoredAuthSnapshot())
 
 const roleForm = ref<RoleFormState>({
   name: "",
@@ -465,85 +471,6 @@ const permissionLevelOptions: Array<{ label: string; value: PermissionLevel }> =
   { label: "Read Only", value: "read" },
   { label: "Can Edit", value: "edit" }
 ]
-
-const OWNER_EQUIVALENT_REQUIRED_AUTHORITIES = [
-  "Dashboard::READ",
-  "AccessMatrix::READ",
-  "AccessMatrix::CREATE",
-  "AccessMatrix::UPDATE",
-  "AccessMatrix::DELETE",
-  "Reference::LOOKUP",
-  "Reference::READ",
-  "Reference::CREATE",
-  "Reference::UPDATE",
-  "Reference::DELETE",
-  "Clinic::LOOKUP",
-  "Clinic::READ",
-  "Clinic::CREATE",
-  "Clinic::UPDATE",
-  "Clinic::DELETE",
-  "Clinic::MANAGE_STAFFS",
-  "Clinic::MANAGE_PATIENTS",
-  "Staff::LOOKUP",
-  "Staff::READ",
-  "Staff::CREATE",
-  "Staff::UPDATE",
-  "Staff::DELETE",
-  "Staff::MANAGE_APPOINTMENTS",
-  "Staff::MANAGE_STATUS",
-  "Patient::LOOKUP",
-  "Patient::READ",
-  "Patient::CREATE",
-  "Patient::UPDATE",
-  "Patient::DELETE",
-  "Patient::MANAGE_BILLS",
-  "Patient::MANAGE_APPOINTMENTS",
-  "Patient::MANAGE_ATTACHMENTS",
-  "Patient::MANAGE_MEDICAL_INFORMATION",
-  "Appointment::LOOKUP",
-  "Appointment::READ",
-  "Appointment::CREATE",
-  "Appointment::UPDATE",
-  "Appointment::DELETE",
-  "Appointment::MANAGE_BILL",
-  "Appointment::MANAGE_STATUS",
-  "Appointment::OVERRIDE_RESCHEDULE_LIMIT",
-  "Service::LOOKUP",
-  "Service::READ",
-  "Service::CREATE",
-  "Service::UPDATE",
-  "Service::DELETE",
-  "HMO::LOOKUP",
-  "HMO::READ",
-  "HMO::CREATE",
-  "HMO::UPDATE",
-  "HMO::DELETE",
-  "HMO::MANAGE_EVALUATIONS",
-  "HMO::MANAGE_MACHINES",
-  "HMO::MANAGE_TECHNIQUES",
-  "CashBill::LOOKUP",
-  "CashBill::READ",
-  "CashBill::CREATE",
-  "CashBill::UPDATE",
-  "CashBill::DELETE",
-  "CashBill::MANAGE_STATUS",
-  "CashBill::APPLY_DISCOUNT",
-  "CashBill::MANAGE_CONFORMED_DETAILS",
-  "CashBill::MANAGE_PAYMENT_DETAILS",
-  "CashBill::MANAGE_SERVICE_ITEMS",
-  "CashBill::MANAGE_ADD_ON_ITEMS",
-  "HMOBill::LOOKUP",
-  "HMOBill::READ",
-  "HMOBill::CREATE",
-  "HMOBill::UPDATE",
-  "HMOBill::DELETE",
-  "HMOBill::MANAGE_STATUS",
-  "HMOBill::APPLY_DISCOUNT",
-  "HMOBill::MANAGE_CONFORMED_DETAILS",
-  "HMOBill::MANAGE_PAYMENT_DETAILS",
-  "HMOBill::MANAGE_LOA_DETAILS",
-  "HMOBill::MANAGE_SERVICE_ITEMS"
-] as const
 
 const startsWithAny = (permissionName: string, prefixes: string[]): boolean =>
   prefixes.some(prefix => permissionName.startsWith(prefix))
@@ -627,7 +554,7 @@ const sidebarAccessOptions: SidebarAccessOption[] = [
   }
 ]
 
-const PT_SIDEBAR_KEYS = new Set<SidebarAccessKey>(["dashboard", "patients", "appointments", "patient-daily-log"])
+const PT_SIDEBAR_KEYS = new Set<SidebarAccessKey>(["patients", "appointments", "patient-daily-log"])
 
 const visibleSidebarAccessOptions = computed<SidebarAccessOption[]>(() => {
   if (props.providerScope !== "PT") return sidebarAccessOptions
@@ -637,8 +564,7 @@ const visibleSidebarAccessOptions = computed<SidebarAccessOption[]>(() => {
 const selectedRole = computed(() => roles.value.find(role => role.id === selectedRoleId.value))
 const isCreateMode = computed(() => selectedRoleId.value == null)
 const canGrantOwnerEquivalentAccess = computed(() =>
-  authSnapshot.value.roleName === "Owner" ||
-  OWNER_EQUIVALENT_REQUIRED_AUTHORITIES.every(permission => authSnapshot.value.permissions.has(permission))
+  roleName.value === "Owner" || isOwnerEquivalent.value
 )
 const canCreateOwnerEquivalent = computed(() => props.providerScope === "ADMIN" && canGrantOwnerEquivalentAccess.value)
 const isSelectedRoleLocked = computed(() => selectedRole.value?.name === "Owner")
@@ -1032,14 +958,13 @@ async function fetchPermissions(roleId: number): Promise<void> {
   permissionLevelByTab.value = {}
 
   try {
-    const params = { role_id: roleId, page: 1, size: 500, status: "ACTIVE" }
-    const [{ data: assigned }, { data: unassigned }] = await Promise.all([
-      pamsAPI.get<Pageable<Permission>>("/references/permissions/assigned", { params }),
-      pamsAPI.get<Pageable<Permission>>("/references/permissions/unassigned", { params })
+    const [assigned, unassigned] = await Promise.all([
+      accessMatrixTanstackService.fetchAssignedPermissions(queryClient, roleId),
+      accessMatrixTanstackService.fetchUnassignedPermissions(queryClient, roleId)
     ])
 
-    assignedPermissions.value = assigned?.content ?? []
-    availablePermissions.value = unassigned?.content ?? []
+    assignedPermissions.value = assigned.content ?? []
+    availablePermissions.value = unassigned.content ?? []
     syncAdvancedRulesSelection()
     syncPermissionLevelsSelection()
     syncSidebarAccessSelection()
@@ -1052,10 +977,7 @@ async function fetchPermissions(roleId: number): Promise<void> {
 
 async function refreshCurrentAuthSnapshot(): Promise<void> {
   try {
-    await pamsAPI.post("/refresh-tokens")
-    const { data } = await pamsAPI.get("/auth/me")
-    localStorage.setItem("auth_user", JSON.stringify(data))
-    authSnapshot.value = readStoredAuthSnapshot()
+    await authSession.refresh()
     window.dispatchEvent(new CustomEvent("auth-user-updated"))
   } catch {
     // Ignore refresh errors; access changes were already saved.
@@ -1063,9 +985,8 @@ async function refreshCurrentAuthSnapshot(): Promise<void> {
 }
 
 async function grantOwnerEquivalentPermissionsToRole(targetRoleId: number): Promise<void> {
-  await pamsAPI.post("/access-matrix/owner-equivalent", null, {
-    params: { role_id: targetRoleId }
-  })
+  await accessMatrixService.grantOwnerEquivalent(targetRoleId)
+  await accessMatrixTanstackService.invalidateRole(queryClient, targetRoleId)
 }
 
 async function selectRole(role: Role): Promise<void> {
@@ -1241,18 +1162,11 @@ async function saveSidebarAccess(): Promise<void> {
 
   isPermissionSaving.value = true
   try {
-    await Promise.all([
-      ...toGrant.map(permissionId =>
-        pamsAPI.post("/access-matrix", null, {
-          params: { role_id: selectedRoleId.value, permission_id: permissionId }
-        })
-      ),
-      ...toRevoke.map(permissionId =>
-        pamsAPI.delete("/access-matrix", {
-          params: { role_id: selectedRoleId.value, permission_id: permissionId }
-        })
-      )
-    ])
+    await accessMatrixService.applyPermissionChanges(selectedRoleId.value, {
+      grant_permission_ids: toGrant,
+      revoke_permission_ids: toRevoke,
+    })
+    await accessMatrixTanstackService.invalidateRole(queryClient, selectedRoleId.value)
 
     await refreshCurrentAuthSnapshot()
 
@@ -1267,7 +1181,7 @@ async function saveSidebarAccess(): Promise<void> {
 
 async function open(): Promise<void> {
   visible.value = true
-  authSnapshot.value = readStoredAuthSnapshot()
+  await authSession.ensureLoaded()
   await fetchRoles(selectedRoleId.value)
 }
 

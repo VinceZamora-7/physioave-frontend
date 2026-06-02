@@ -59,7 +59,7 @@
     filter
     placeholder="Select branch"
     :loading="isLoadingClinics"
-    :disabled="isLoadingClinics || !clinicOptions.length"
+    :disabled="isLoadingClinics || isBranchLocked || !clinicOptions.length"
     class="rounded-lg w-full"
   />
 </div>
@@ -107,13 +107,19 @@ const sidebarCollapsed = ref(true)
 
 // ── Clinic branch store ───────────────────────────────────────────────────
 const globalClinicStore = clinicStore()
-const { clinicOptions, isLoadingClinics, selectedClinicId } = storeToRefs(globalClinicStore)
-const { setSelectedClinicId, loadClinics } = globalClinicStore
+const {
+  clinicOptions,
+  isLoadingClinics,
+  selectedClinicId,
+  isBranchLocked,
+  canSelectAllBranches
+} = storeToRefs(globalClinicStore)
+const { setSelectedClinicId, initializeFromAuthSession, loadClinics } = globalClinicStore
 
-const clinicSelectOptions = computed(() => ([
-  { id: 0, name: "All Branches" },
+const clinicSelectOptions = computed(() => [
+  ...(canSelectAllBranches.value ? [{ id: 0, name: "All Branches" }] : []),
   ...(clinicOptions.value ?? [])
-]))
+])
 
 const selectedClinicIdProxy = computed<number>({
   get: () => selectedClinicId.value ?? 0,
@@ -132,7 +138,7 @@ const touchPresence = async (): Promise<void> => {
 }
 
 onMounted(() => {
-  void loadClinics()
+  void initializeFromAuthSession().catch(() => loadClinics())
   void touchPresence()
   presenceTimer = window.setInterval(() => {
     void touchPresence()

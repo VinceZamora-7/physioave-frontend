@@ -127,6 +127,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue"
 import { useRoute } from "vue-router"
+import { useQueryClient } from "@tanstack/vue-query"
 import Button from "primevue/button"
 import {
   billingPhase1Service,
@@ -146,7 +147,7 @@ import {
   useLguInvoicePrintActions
 } from "./lgu-invoice.shared"
 import { getApiErrorMessage } from "@/utils/actionable-error.util"
-import { patientHMOInformationService } from "@/services/patient-hmo-information.service"
+import { patientTanstackService } from "@/features/patients/queries/patient.tanstack.service"
 
 type Payer = "hmo" | "lgu"
 
@@ -368,6 +369,7 @@ const LINE_TOTAL_KEYS = [
 ]
 
 const route = useRoute()
+const queryClient = useQueryClient()
 
 const rows = ref<SoaDisplayRow[]>([])
 const error = ref("")
@@ -1115,14 +1117,14 @@ const buildPatientSoaContextMap = async (
 
   const entries = await Promise.all(patientIds.map(async patientId => {
     const [sponsorResult, detailResult] = await Promise.allSettled([
-      patientHMOInformationService.getByPatientId(patientId),
+      patientTanstackService.fetchContext(queryClient, patientId),
       payer.value === "lgu"
         ? lguBillingService.getPatientCreditDetail(patientId)
         : Promise.resolve(null)
     ])
 
     const lguSponsor = sponsorResult.status === "fulfilled"
-      ? (sponsorResult.value ?? []).find(item => item.sponsor_context === "LGU")
+      ? (sponsorResult.value?.sponsor_information ?? []).find(item => item.sponsor_context === "LGU")
       : null
     const detail = detailResult.status === "fulfilled"
       ? detailResult.value ?? null

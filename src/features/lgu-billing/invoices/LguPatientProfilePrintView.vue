@@ -194,9 +194,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue"
 import { useRoute } from "vue-router"
+import { useQueryClient } from "@tanstack/vue-query"
 import Button from "primevue/button"
 import { lguBillingService, type LguPatientAppointmentStatus, type LguPatientCreditDetail } from "@/features/lgu-billing/api/lgu-billing.service"
-import { billingPhase1Service, type BillingListItem } from "@/features/billing/api/billing-phase1.service"
+import type { BillingListItem } from "@/features/billing/api/billing-phase1.service"
+import { billingContextTanstackService } from "@/features/billing/queries/billing-context.tanstack.service"
 import LguInvoiceLayout from "./LguInvoiceLayout.vue"
 import {
   formatLguPatientProgramStatus,
@@ -204,11 +206,12 @@ import {
   resolveLguPatientProgramStatus,
   useLguInvoicePrintActions
 } from "./lgu-invoice.shared"
-import { patientHMOInformationService } from "@/services/patient-hmo-information.service"
+import { patientTanstackService } from "@/features/patients/queries/patient.tanstack.service"
 import type { PatientHMOInformation } from "@/models/hmo-information"
 
 const dateSigned = computed(() => formatDate(new Date()))
 const route = useRoute()
+const queryClient = useQueryClient()
 const { printPage, goBack } = useLguInvoicePrintActions()
 
 const detail = ref<LguPatientCreditDetail | null>(null)
@@ -1253,19 +1256,19 @@ const load = async (): Promise<void> => {
 
     const [detailResult, sponsorResult] = await Promise.all([
       lguBillingService.getPatientCreditDetail(patientId.value, periodYear, periodMonth),
-      patientHMOInformationService.getByPatientId(patientId.value)
+      patientTanstackService.fetchContext(queryClient, patientId.value)
     ])
 
     detail.value = detailResult ?? null
 
     sponsorInfo.value =
-      (sponsorResult ?? []).find(item => item.sponsor_context === "LGU") ?? null
+      (sponsorResult?.sponsor_information ?? []).find(item => item.sponsor_context === "LGU") ?? null
 
     const latestBilling = detail.value?.billings?.[0]
 
     if (latestBilling?.id) {
       billingDetail.value =
-        await billingPhase1Service.getById(latestBilling.id) ?? null
+        (await billingContextTanstackService.fetchContext(queryClient, latestBilling.id))?.billing ?? null
     }
   } catch (err: unknown) {
     error.value =

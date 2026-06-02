@@ -1,6 +1,7 @@
 import type {PageableRequest, PageRequestWithNameAndStatus} from "@/models/paging.ts";
 import type {UUID} from "@/utils/global.type.ts";
 import type {ReferralChannel} from "@/models/reference.ts";
+import type {PatientHMOInformation} from "@/models/hmo-information";
 
 export interface BasePatient {
   first_name: string
@@ -65,8 +66,12 @@ export interface Patient extends BasePatient {
   full_name: string
 }
 
-export interface PatientRequestBody extends BasePatient {
+export interface PatientContext {
+  patient: Patient
+  sponsor_information: PatientHMOInformation[]
 }
+
+export type PatientRequestBody = BasePatient
 
 export interface PatientEditRequestPayload extends PatientRequestBody {
   id: number

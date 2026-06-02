@@ -280,8 +280,8 @@ import type { Staff } from "@/features/staff/types/staff"
 import { pamsAPI } from "@/utils/axios-interceptor"
 import type { Pageable } from "@/models/paging"
 import { ptInputText, ptOutlinedBtn, ptSelect } from "@/features/shared/table-header.styles"
-import { hasAnyStoredPermission, readStoredAuthSnapshot } from "@/utils/auth-user.util"
 import { clinicStore } from "@/stores/clinic.store"
+import { useAuthSessionStore } from "@/stores/auth-session.store"
 
 const props = defineProps<{
   calendarDate: Date
@@ -297,11 +297,11 @@ const emit = defineEmits<{
 const toast = useToast()
 const globalClinicStore = clinicStore()
 const { selectedClinicId } = storeToRefs(globalClinicStore)
+const authSession = useAuthSessionStore()
 
 // Permissions
-const permissionSet = ref<Set<string>>(new Set())
 const canDeleteAppointments = computed(() =>
-  hasAnyStoredPermission(permissionSet.value, "Appointment::DELETE")
+  authSession.hasAnyPermission("Appointment::DELETE")
 )
 
 // Table state
@@ -610,8 +610,7 @@ watch(selectedClinicId, async () => {
 })
 
 onMounted(async () => {
-  const snapshot = readStoredAuthSnapshot()
-  permissionSet.value = snapshot.permissions
+  await authSession.ensureLoaded()
   // Initial data fetch is triggered by parent's onMounted calling refresh() after clinics are loaded
   await loadPtFilterOptions()
 })

@@ -195,17 +195,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue"
+import { ref } from "vue"
 import Button from "primevue/button"
 import Column from "primevue/column"
 import DataTable from "primevue/datatable"
 import Dialog from "primevue/dialog"
 import Message from "primevue/message"
 import Tag from "primevue/tag"
-import DropdownButton from "primevue/splitbutton"
 import type { Patient } from "@/features/patients/types/patient"
 import type { LguDashboardHistoryItem } from "@/features/lgu-billing/api/lgu-billing.service"
-import { readStoredAuthSnapshot } from '@/utils/auth-user.util'
 
 defineProps<{
   lguTransactionHistory: LguDashboardHistoryItem[]
@@ -226,8 +224,6 @@ defineProps<{
 }>()
 
 const transactionsVisible = ref(false)
-
-const isOwner = computed(() => readStoredAuthSnapshot().roleName?.toLowerCase() === 'owner')
 
 const formatLguPatientStatus = (value?: Patient["lgu_patient_status"]): string => {
   if (value === "CROSS_MONTH_DROPPED_OUT") return "Cross Month Dropped Out"

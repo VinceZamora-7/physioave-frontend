@@ -565,12 +565,10 @@ import {
 } from "@/utils/keys/tanstack-key.ts";
 import {IndexedDBKey} from "@/utils/keys/indexeddb-key.ts";
 import {patientTanstackService} from "@/features/patients/queries/patient.tanstack.service";
-import {fileServerTanstackService} from "@/services/file-server.tanstack.service.ts";
 import {hmoService} from "@/features/hmos/api/hmo.service";
 import {staffService} from "@/features/staff/api/staff.service";
 import {pamsAPI} from "@/utils/axios-interceptor.ts";
 import {lguBillingService} from "@/features/lgu-billing/api/lgu-billing.service";
-import {patientHMOInformationService} from "@/services/patient-hmo-information.service.ts";
 import type {PatientHMOInformation} from "@/models/hmo-information.ts";
 
 type ToggleDialogExpose = {
@@ -670,7 +668,8 @@ const openViewSponsorInfo = async (patient: Patient): Promise<void> => {
   viewSponsorInfoLoading.value = true
   viewSponsorInfoVisible.value = true
   try {
-    viewSponsorInfoData.value = await patientHMOInformationService.getByPatientId(patient.id)
+    const patientContext = await patientTanstackService.fetchContext(queryClient, patient.id)
+    viewSponsorInfoData.value = patientContext?.sponsor_information ?? []
   } finally {
     viewSponsorInfoLoading.value = false
   }
@@ -1336,7 +1335,10 @@ const initializeDropdowns = async (): Promise<void> => {
 }
 
 const resetQueries = async (): Promise<void> => {
-  await queryClient.invalidateQueries({queryKey: [PatientTanstackKey.PATIENTS]})
+  await Promise.all([
+    queryClient.invalidateQueries({queryKey: [PatientTanstackKey.PATIENTS]}),
+    queryClient.invalidateQueries({queryKey: [PatientTanstackKey.PATIENT_CONTEXT]})
+  ])
 }
 
 const dropdownsReady = ref(false)

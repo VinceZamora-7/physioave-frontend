@@ -183,9 +183,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue"
 import { useRoute } from "vue-router"
+import { useQueryClient } from "@tanstack/vue-query"
 import Button from "primevue/button"
 import { lguBillingService, type LguPatientCreditDetail } from "@/features/lgu-billing/api/lgu-billing.service"
-import { billingPhase1Service, type BillingListItem } from "@/features/billing/api/billing-phase1.service"
+import type { BillingListItem } from "@/features/billing/api/billing-phase1.service"
+import { billingContextTanstackService } from "@/features/billing/queries/billing-context.tanstack.service"
 import LguInvoiceLayout from "./LguInvoiceLayout.vue"
 import {
   formatLguPatientProgramStatus,
@@ -193,10 +195,11 @@ import {
   resolveLguPatientProgramStatus,
   useLguInvoicePrintActions
 } from "./lgu-invoice.shared"
-import { patientHMOInformationService } from "@/services/patient-hmo-information.service"
+import { patientTanstackService } from "@/features/patients/queries/patient.tanstack.service"
 import type { PatientHMOInformation } from "@/models/hmo-information"
 
 const route = useRoute()
+const queryClient = useQueryClient()
 const { printPage, goBack } = useLguInvoicePrintActions()
 
 const detail = ref<LguPatientCreditDetail | null>(null)
@@ -210,6 +213,11 @@ const dateSigned = computed(() => formatDate(new Date()))
 
 const patientId = computed(() => {
   const raw = String(route.query.patient_id ?? "").trim()
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+})
+const billingId = computed(() => {
+  const raw = String(route.query.billing_id ?? route.query.id ?? "").trim()
   const parsed = Number(raw)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 })
@@ -239,7 +247,13 @@ const transactionPeriodEndDate = computed(() =>
 )
 
 const patientName = computed(() => detail.value?.patient_name || "Patient")
-const patientIdLabel = computed(() => patientId.value > 0 ? String(patientId.value) : NOT_AVAILABLE_LABEL)
+const patientIdLabel = computed(() =>
+  patientId.value > 0
+    ? String(patientId.value)
+    : billingDetail.value?.patient_id
+      ? String(billingDetail.value.patient_id)
+      : NOT_AVAILABLE_LABEL
+)
 const lguSponsor = computed(() => sponsorInfo.value)
 const lguProgramLabel = computed(() => lguSponsor.value?.lgu_program_name || lguSponsor.value?.company_name || "LGU")
 const patientAddress = computed(() => billingDetail.value?.patient_address || NOT_AVAILABLE_LABEL)
@@ -581,27 +595,39 @@ const load = async (): Promise<void> => {
   sponsorInfo.value = null
   billingDetail.value = null
 
-  if (!patientId.value) {
+  if (!patientId.value && !billingId.value) {
     error.value = "Patient ID is required."
     return
   }
 
   try {
+    let selectedBilling: BillingListItem | null = null
+    let selectedPatientId = patientId.value
+    if (billingId.value) {
+      selectedBilling = (await billingContextTanstackService.fetchContext(queryClient, billingId.value))?.billing ?? null
+      if (!selectedBilling) {
+        error.value = "Billing record was not found."
+        return
+      }
+      selectedPatientId = Number(selectedBilling.patient_id)
+      billingDetail.value = selectedBilling
+    }
+
     const periodYear = transactionPeriodEndDate.value?.getFullYear()
     const periodMonth = transactionPeriodEndDate.value
       ? transactionPeriodEndDate.value.getMonth() + 1
       : undefined
 
     const [detailResult, sponsorResult] = await Promise.all([
-      lguBillingService.getPatientCreditDetail(patientId.value, periodYear, periodMonth),
-      patientHMOInformationService.getByPatientId(patientId.value)
+      lguBillingService.getPatientCreditDetail(selectedPatientId, periodYear, periodMonth),
+      patientTanstackService.fetchContext(queryClient, selectedPatientId)
     ])
     detail.value = detailResult ?? null
-    sponsorInfo.value = (sponsorResult ?? []).find(item => item.sponsor_context === "LGU") ?? null
+    sponsorInfo.value = (sponsorResult?.sponsor_information ?? []).find(item => item.sponsor_context === "LGU") ?? null
 
-    const latestBilling = detail.value?.billings?.[0]
-    if (latestBilling?.id) {
-      billingDetail.value = await billingPhase1Service.getById(latestBilling.id) ?? null
+    const latestBilling = selectedBilling ?? detail.value?.billings?.[0]
+    if (!billingDetail.value && latestBilling?.id) {
+      billingDetail.value = (await billingContextTanstackService.fetchContext(queryClient, latestBilling.id))?.billing ?? null
     }
   } catch (err: unknown) {
     error.value = err instanceof Error ? err.message : "Failed to load patient LGU profile."

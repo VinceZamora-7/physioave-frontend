@@ -10,6 +10,7 @@ import {patientService} from "@/features/patients/api/patient.service";
 import {computed, type Ref} from "vue";
 import type {
   Patient,
+  PatientContext,
   PatientEditRequestPayload,
   PatientExportRequestParams,
   PatientRequestBody,
@@ -91,6 +92,18 @@ export const patientTanstackService = {
       refetchOnWindowFocus: false,
       staleTime: 1000 * 60 * 5, // 5 minutes
       enabled: false
+    })
+  },
+
+  fetchContext(
+    queryClient: QueryClient,
+    patientId: number,
+    key: PatientTanstackKey = PatientTanstackKey.PATIENT_CONTEXT
+  ) {
+    return queryClient.fetchQuery<PatientContext | undefined>({
+      queryKey: [key, patientId],
+      queryFn: () => patientService.getContext(patientId),
+      staleTime: 1000 * 60 * 5,
     })
   },
 

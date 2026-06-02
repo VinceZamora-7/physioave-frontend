@@ -208,33 +208,35 @@ import {
 import type { Staff, StaffExportRequestParams, StaffRequestParams } from "@/features/staff/types/staff"
 import type { Role, SpecialtyTag } from "@/models/reference"
 import type { Lookup } from "@/models/global.model"
-import { pamsAPI } from "@/utils/axios-interceptor"
 
 import { createReferenceQueryService } from "@/services/reference.tanstack.service"
 import { clinicStore } from "@/stores/clinic.store"
+import { useAuthSessionStore } from "@/stores/auth-session.store"
 import { ptOutlinedBtn, ptPrimaryBtn } from "@/features/shared/table-header.styles"
 import { ClinicTanstackKey, ReferenceTanstackKey, StaffTanstackKey } from "@/utils/keys/tanstack-key"
-import { hasAnyStoredPermission, readStoredAuthSnapshot } from "@/utils/auth-user.util"
+import { accessMatrixTanstackService } from "@/features/staff/queries/access-matrix.tanstack.service"
 
 const toast = useToast()
 const confirm = useConfirm()
 const queryClient = useQueryClient()
 const useClinicStore = clinicStore()
 const { selectedClinicId } = storeToRefs(useClinicStore)
+const authSession = useAuthSessionStore()
+const { roleName, isOwnerEquivalent } = storeToRefs(authSession)
 
 const editor = ref<InstanceType<typeof StaffEditorDialog> | null>(null)
 const specialtyManager = ref<InstanceType<typeof SpecialtyManagerDialog> | null>(null)
 const roleManager = ref<InstanceType<typeof RoleAccessManagerDialog> | null>(null)
-const roleName = ref<string>("")
-const permissionSet = ref<Set<string>>(new Set())
-const canCreateStaff = computed(() => hasAnyStoredPermission(permissionSet.value, "Staff::CREATE"))
+const canCreateStaff = computed(() => authSession.hasAnyPermission("Staff::CREATE"))
 const canManageRoles = computed(() =>
-  hasAnyStoredPermission(permissionSet.value, "Reference::CREATE", "Reference::UPDATE", "AccessMatrix::CREATE", "AccessMatrix::DELETE")
+  authSession.hasAnyPermission("Reference::CREATE", "Reference::UPDATE", "AccessMatrix::CREATE", "AccessMatrix::DELETE")
 )
 const canManageSpecialties = computed(() => false)
-const canUpdateStaff = computed(() => hasAnyStoredPermission(permissionSet.value, "Staff::UPDATE"))
-const canDeleteStaff = computed(() => hasAnyStoredPermission(permissionSet.value, "Staff::DELETE"))
-const canManageHighestRole = computed(() => canManageRoles.value)
+const canUpdateStaff = computed(() => authSession.hasAnyPermission("Staff::UPDATE"))
+const canDeleteStaff = computed(() => authSession.hasAnyPermission("Staff::DELETE"))
+const canManageHighestRole = computed(() =>
+  roleName.value === "Owner" || isOwnerEquivalent.value
+)
 
 const activePtRoles = computed(() =>
   roles.value.filter((role) =>
@@ -261,8 +263,6 @@ const roles = ref<Role[]>([])
 const clinics = ref<Lookup[]>([])
 const specialties = ref<SpecialtyTag[]>([])
 const highestRoleIds = ref<number[]>([])
-const rolePermissionSetCache = ref<Map<number, Set<number>>>(new Map())
-const rolePermissionRequestCache = ref<Map<number, Promise<Set<number>>>>(new Map())
 
 const adminRoles = computed(() =>
   roles.value.filter((role) =>
@@ -364,8 +364,9 @@ const confirmToggleStatus = (staff: Staff) => {
           await resetQueries()
         },
         async onError(err: APIError) {
-          const status = (err as any)?.status ?? (err as any)?.response?.status
-          const message = `${(err as any)?.message ?? ""}`.toLowerCase()
+          const errorLike = err as APIError & { status?: number; response?: { status?: number } }
+          const status = errorLike.status ?? errorLike.response?.status
+          const message = `${errorLike.message ?? ""}`.toLowerCase()
           const isPermissionDenied =
             status === 403 ||
             message.includes("forbidden") ||
@@ -445,39 +446,8 @@ const areSameNumberSets = (left: Set<number>, right: Set<number>): boolean => {
   return true
 }
 
-const clearRolePermissionSetCache = (): void => {
-  rolePermissionSetCache.value = new Map()
-  rolePermissionRequestCache.value = new Map()
-}
-
 const fetchAssignedPermissionIdSet = async (roleId: number): Promise<Set<number>> => {
-  const cached = rolePermissionSetCache.value.get(roleId)
-  if (cached) {
-    return cached
-  }
-
-  const inFlight = rolePermissionRequestCache.value.get(roleId)
-  if (inFlight) {
-    return inFlight
-  }
-
-  const request = (async () => {
-    const { data } = await pamsAPI.get<Pageable<{ id: number }>>("/references/permissions/assigned", {
-      params: { role_id: roleId, page: 1, size: 500, status: "ACTIVE" }
-    })
-
-    const permissionSet = new Set((data?.content ?? []).map(permission => permission.id))
-    rolePermissionSetCache.value.set(roleId, permissionSet)
-    return permissionSet
-  })()
-
-  rolePermissionRequestCache.value.set(roleId, request)
-
-  try {
-    return await request
-  } finally {
-    rolePermissionRequestCache.value.delete(roleId)
-  }
+  return accessMatrixTanstackService.fetchAssignedPermissionIds(queryClient, roleId)
 }
 
 const refreshHighestRoleIds = async (availableRoles: Role[]): Promise<void> => {
@@ -532,7 +502,6 @@ const initializeDropdowns = async () => {
 }
 
 const handleRolesUpdated = async () => {
-  clearRolePermissionSetCache()
   await initializeDropdowns()
 }
 
@@ -540,14 +509,8 @@ const handleSpecialtiesUpdated = async () => {
   await initializeDropdowns()
 }
 
-const syncRoleFromStorage = () => {
-  const snapshot = readStoredAuthSnapshot()
-  roleName.value = snapshot.roleName
-  permissionSet.value = snapshot.permissions
-}
-
 onMounted(async () => {
-  syncRoleFromStorage()
+  await authSession.ensureLoaded()
   await initializeDropdowns()
   presenceRefreshTimer = window.setInterval(() => {
     void refetch()

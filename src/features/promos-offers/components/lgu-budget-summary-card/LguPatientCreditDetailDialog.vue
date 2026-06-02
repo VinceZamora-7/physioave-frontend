@@ -202,6 +202,7 @@ const visibleModel = defineModel<boolean>("visible", { required: true })
 const emit = defineEmits<{
   "print-attendance-record": []
   "export-patient-lgu-details": []
+  "export-patient-billing-summary": []
   "create-claims": []
   "download-claim-pdf": [billingId: number]
 }>()

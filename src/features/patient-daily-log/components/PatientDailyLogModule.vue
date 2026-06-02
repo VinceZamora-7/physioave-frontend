@@ -418,7 +418,6 @@ import {
   type AppointmentLocationContext,
   type AppointmentPhase
 } from "@/features/appointments/api/appointment-phase1.service"
-import {authMeService} from "@/services/auth-me.service"
 import {ptInputText, ptOutlinedBtn, ptPrimaryBtn, ptSelect} from "@/features/shared/table-header.styles"
 import {staffService} from "@/features/staff/api/staff.service"
 import type {Staff} from "@/features/staff/types/staff"
@@ -647,8 +646,8 @@ const signatureStateSeverity = (state: AppointmentDailyLogSignatureState): "succ
 }
 
 const loadLookups = async (): Promise<void> => {
-  const [, staffResponse, me] = await Promise.all([
-    useClinicStore.loadClinics(),
+  const [, staffResponse] = await Promise.all([
+    useClinicStore.initializeFromAuthSession(),
     staffService.getAll({
       clinic_id: undefined,
       pageable_request: {
@@ -657,17 +656,12 @@ const loadLookups = async (): Promise<void> => {
         status: Status.ACTIVE,
         name: undefined
       }
-    }),
-    authMeService.get()
+    })
   ])
 
   clinicalProviders.value = (staffResponse?.content ?? []).filter((staff) =>
     staff.appointment_provider_type === "PHYSICAL_THERAPIST" || staff.appointment_provider_type === "DOCTOR_CONSULTANT"
   )
-
-  if (selectedClinicId.value == null && me?.clinic_id != null) {
-    useClinicStore.setSelectedClinicId(me.clinic_id)
-  }
 }
 
 const refreshDailyLog = async (): Promise<void> => {
@@ -737,7 +731,7 @@ const submitPtCompletion = async (): Promise<void> => {
   }
 }
 
-watch(selectedClinicId, (clinicId) => {
+watch(selectedClinicId, () => {
   const providerExists = doctorFilterOptions.value.some((option) => option.value === selectedDoctorId.value)
   if (!providerExists) {
     selectedDoctorId.value = null

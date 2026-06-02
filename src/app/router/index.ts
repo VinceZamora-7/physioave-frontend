@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from "vue-router"
 import { ROUTE_ACCESS_RULES } from "@/shared/permissions"
 import { getSetupStatus } from "@/app/setup-status"
+import { useAuthSessionStore } from "@/stores/auth-session.store"
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -33,6 +34,12 @@ const router = createRouter({
       path: "/hmo/invoices/soa",
       name: "hmo-soa-print",
       component: () => import("@/features/hmo-billing/invoices/HmoGeneralSoaPrintView.vue"),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: "/self-pay/invoices/patient-billing-summary",
+      name: "self-pay-patient-billing-summary-print",
+      component: () => import("@/features/billing/invoices/SelfPayPatientBillingSummaryPrintView.vue"),
       meta: { requiresAuth: true }
     },
     {
@@ -180,7 +187,7 @@ const router = createRouter({
         {
           path: "my-schedule",
           name: "pt-schedule",
-          component: () => import("@/features/pt-schedule/pages/PtScheduleView.vue"),
+          redirect: { name: "patient-daily-log" },
           meta: { requiresAuth: true }
         },
         {
@@ -206,41 +213,31 @@ const router = createRouter({
   ]
 })
 
-let userPermissions: string[] = []
+const resolveFallbackRouteName = (
+  blockedRouteName: string,
+  hasAnyPermission: (...permissions: string[]) => boolean
+): string => {
+  const fallbackRouteNames = [
+    "dashboard",
+    "patients",
+    "appointments",
+    "patient-daily-log",
+    "billing",
+    "reports",
+    "promos-offers-single-service",
+    "promos-offers-package-service",
+    "promos-offers-hmo",
+    "promos-offers-lgu",
+    "general-settings",
+    "admin-setup",
+    "pt-team-setup",
+    "clinics",
+  ]
 
-const loadUserPermissions = async (): Promise<boolean> => {
-  try {
-    const { authMeService } = await import("@/services/auth-me.service")
-    const user = await authMeService.get()
-
-    if (!user) {
-      userPermissions = []
-      return false
-    }
-
-    userPermissions = user.permissions ?? []
-    return true
-  } catch {
-    userPermissions = []
-    return false
-  }
-}
-
-const hasAnyPermission = (permissions: string[]): boolean => {
-  return permissions.some((permission) => userPermissions.includes(permission))
-}
-
-const resolveFallbackRouteName = (blockedRouteName: string): string => {
-  if (hasAnyPermission(ROUTE_ACCESS_RULES.dashboard?.anyOf ?? [])) {
-    return "dashboard"
-  }
-
-  const allowedEntry = Object.entries(ROUTE_ACCESS_RULES).find(
-    ([routeName, rule]) =>
-      routeName !== blockedRouteName && hasAnyPermission(rule.anyOf)
-  )
-
-  return allowedEntry?.[0] ?? "pt-schedule"
+  return fallbackRouteNames.find((routeName) => {
+    const rule = ROUTE_ACCESS_RULES[routeName]
+    return routeName !== blockedRouteName && rule && hasAnyPermission(...rule.anyOf)
+  }) ?? "error"
 }
 
 router.beforeEach(async (to) => {
@@ -271,17 +268,21 @@ router.beforeEach(async (to) => {
     return true
   }
 
-  const hasAuthContext = await loadUserPermissions()
+  const authSession = useAuthSessionStore()
 
-  if (!hasAuthContext) {
+  try {
+    await authSession.ensureLoaded()
+  } catch {
     return { name: "login" }
   }
 
   const routeName = String(to.name ?? "")
-  const rule = ROUTE_ACCESS_RULES[routeName]
 
-  if (rule && !hasAnyPermission(rule.anyOf)) {
-    return { name: resolveFallbackRouteName(routeName) }
+  if (!authSession.canAccessRoute(routeName)) {
+    const fallbackRouteName = resolveFallbackRouteName(routeName, authSession.hasAnyPermission)
+    return fallbackRouteName === "error"
+      ? { name: "error", query: { error: "forbidden" } }
+      : { name: fallbackRouteName }
   }
 
   return true
