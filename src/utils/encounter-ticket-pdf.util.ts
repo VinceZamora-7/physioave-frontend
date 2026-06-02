@@ -314,8 +314,8 @@ export function renderEncounterTicketPdfWindow(
         <title>${escapeHtml(fileName)}</title>
         <style>
           @page {
-            size: A4;
-            margin: 12mm;
+            size: A5 portrait;
+            margin: 5mm;
           }
 
           * {
@@ -337,7 +337,7 @@ export function renderEncounterTicketPdfWindow(
           .print-page {
             page-break-after: always;
             break-after: page;
-            min-height: calc(297mm - 24mm);
+            min-height: calc(210mm - 10mm);
           }
 
           .print-page:last-child {
@@ -667,7 +667,7 @@ export function renderAttendanceRecordPdfWindow(
         <meta charset="utf-8" />
         <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Canva+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
         <style>
-          @page { size: A4 landscape; margin: 10mm; }
+          @page { size: A5 landscape; margin: 5mm; }
           * {
             box-sizing: border-box;
             -webkit-print-color-adjust: exact;
@@ -684,8 +684,8 @@ export function renderAttendanceRecordPdfWindow(
           .invoice-sheet {
             background: #ffffff;
             width: 100%;
-            max-width: 297mm;
-            min-height: 210mm;
+            max-width: 210mm;
+            min-height: 148mm;
             margin: 0 auto;
             border: 1px solid #d1d5db;
             padding: 12px 16px 10px;
@@ -1101,14 +1101,14 @@ export function renderEncounterTicketBulkPdfWindow(
         <meta charset="utf-8" />
         <title>${escapeHtml(fileName)}</title>
         <style>
-          @page { size: A4; margin: 10mm; }
+          @page { size: A5 portrait; margin: 5mm; }
           * { box-sizing: border-box; }
           html, body { margin: 0; padding: 0; font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; color: #0f172a; background: #f8fafc; }
 
           .print-page {
             page-break-after: always;
             break-after: page;
-            min-height: calc(297mm - 20mm);
+            min-height: calc(210mm - 10mm);
             display: flex;
             flex-direction: column;
             justify-content: space-between;

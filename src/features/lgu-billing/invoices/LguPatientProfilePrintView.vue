@@ -96,11 +96,11 @@
         <table class="summary-table">
           <thead>
             <tr>
-              <th class="w-[80px] text-center">ITEM No.</th>
-              <th class="w-[220px] text-center">TREATMENT DATE</th>
+              <th class="w-[65px] text-center">ITEM No.</th>
+              <th class="w-[150px] text-center">TREATMENT DATE</th>
               <th class="text-left">PACKAGE NAME</th>
-              <th class="w-[150px] text-center">Completed SESSION </th>
-              <th class="w-[180px] text-right">OVERALL PRICE</th>
+              <th class="w-[110px] text-center">Completed SESSION </th>
+              <th class="w-[110px] text-right">OVERALL PRICE</th>
             </tr>
           </thead>
 
@@ -1412,5 +1412,89 @@ onMounted(() => {
 
 .table-wrap {
   overflow-x: auto;
+}
+
+@media print {
+  .profile-details {
+    gap: 6px;
+    font-size: 9px;
+  }
+
+  .profile-status-banner {
+    padding: 6px 8px;
+    font-size: 9px;
+    border-radius: 4px;
+  }
+
+  .profile-card {
+    padding: 8px;
+    border-radius: 4px;
+  }
+
+  .profile-grid {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .profile-group {
+    gap: 4px;
+  }
+
+  .profile-row {
+    grid-template-columns: 80px 1fr;
+    gap: 4px;
+  }
+
+  .profile-row--wide-label,
+  .profile-row--list {
+    grid-template-columns: 95px 1fr;
+  }
+
+  .profile-label,
+  .profile-value {
+    font-size: 9px;
+  }
+
+  .profile-section-title {
+    margin-bottom: 4px;
+    padding-bottom: 3px;
+    font-size: 9px;
+  }
+
+  .summary-table {
+    table-layout: fixed;
+  }
+
+  .summary-table th,
+  .summary-table td {
+    padding: 3px 4px;
+    font-size: 8px;
+  }
+
+  .summary-table thead th {
+    font-size: 7px;
+    letter-spacing: 0.04em;
+  }
+
+  .summary-table th:nth-child(1) {
+    width: 35px !important;
+  }
+
+  .summary-table th:nth-child(2) {
+    width: 70px !important;
+  }
+
+  .summary-table th:nth-child(4) {
+    width: 55px !important;
+  }
+
+  .summary-table th:nth-child(5) {
+    width: 70px !important;
+  }
+
+  .summary-table tfoot td {
+    font-size: 9px;
+    padding-top: 6px !important;
+  }
 }
 </style>

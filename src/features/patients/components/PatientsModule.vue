@@ -233,7 +233,6 @@
             :medical-category-options="medicalCategoryOptions"
             :medical-diagnosis-options="medicalDiagnosisOptions"
             :pt-case-impression-options="ptCaseImpressionOptions"
-            :pt-case-impression-options="ptCaseImpressionOptions"
           />
 
           <div class="app-detail-card app-detail-card-primary">
@@ -540,7 +539,6 @@ import type {
   MedicalHistory,
   MedicalImaging,
   ModeOfReferral,
-  PTCaseImpression,
   ReferralChannel,
   Religion
 } from "@/models/reference.ts";
@@ -921,10 +919,6 @@ const medicalCategoryOptions = computed<string[]>(() => {
 
 const medicalDiagnosisOptions = computed<string[]>(() => {
   return Array.from(new Set((medicalDiagnoses.value ?? []).map((item) => item.name).filter(Boolean))).sort((a, b) => a.localeCompare(b))
-})
-
-const ptCaseImpressionOptions = computed<string[]>(() => {
-  return Array.from(new Set((ptCaseImpressions.value ?? []).map((item) => item.name).filter(Boolean))).sort((a, b) => a.localeCompare(b))
 })
 
 const ptCaseImpressionOptions = computed<string[]>(() => {

@@ -1,53 +1,39 @@
 <template>
-  <main class="min-h-screen bg-white text-black">
-    <section class="mx-auto max-w-[1180px] px-6 py-6 space-y-4 print:px-0 print:py-0">
-      <header class="space-y-2 border-b border-black pb-3">
-        <div class="flex items-start justify-between gap-4">
-          <div class="space-y-1">
-            <h1 class="text-2xl font-bold tracking-tight">PHYSIOAVE</h1>
-            <p class="text-xs uppercase tracking-[0.22em]">Attendance &amp; Treatment Record</p>
-          </div>
-          <div class="flex gap-2 print:hidden">
-            <Button label="Print" icon="pi pi-print" @click="printPage" />
-            <Button label="Close" icon="pi pi-times" severity="secondary" outlined @click="router.back()" />
-          </div>
-        </div>
+  <LguInvoiceLayout
+    title="ATTENDANCE & TREATMENT RECORD"
+    :subtitle="`Attendance record for ${patientName}`"
+    :has-error="!!error"
+  >
+    <template #meta>
+      <strong>Patient:</strong><span>{{ patientName }}</span>
+      <strong>Patient ID:</strong><span>{{ patientIdLabel }}</span>
+      <strong>LGU Program:</strong><span>{{ lguProgramLabel }}</span>
+    </template>
 
-        <div class="grid grid-cols-1 gap-3 md:grid-cols-3 text-sm">
-          <div>
-            <div class="font-semibold">Patient</div>
-            <div>{{ patientName }}</div>
-          </div>
-          <div>
-            <div class="font-semibold">Patient ID</div>
-            <div>{{ patientIdLabel }}</div>
-          </div>
-          <div>
-            <div class="font-semibold">LGU Program</div>
-            <div>{{ lguProgramLabel }}</div>
-          </div>
-        </div>
-      </header>
+    <template #toolbar>
+      <Button label="Print" icon="pi pi-print" @click="printPage" />
+      <Button label="Close" icon="pi pi-times" severity="secondary" outlined @click="goBack" />
+    </template>
 
-      <section v-if="error" class="border border-black p-3 text-sm">
+    <template v-if="error" #error>
         {{ error }}
-      </section>
+    </template>
 
-      <template v-else>
-        <section class="grid grid-cols-1 gap-3 md:grid-cols-4 text-sm">
-          <article class="rounded-xl border border-black p-3">
+    <template v-if="!error">
+        <section class="attendance-summary-grid">
+          <article class="attendance-summary-card">
             <div class="font-semibold uppercase tracking-wide text-xs">Attended Sessions</div>
             <div class="mt-1 text-lg font-bold">{{ attendedCount }}</div>
           </article>
-          <article class="rounded-xl border border-black p-3">
+          <article class="attendance-summary-card">
             <div class="font-semibold uppercase tracking-wide text-xs">Completed Sessions</div>
             <div class="mt-1 text-lg font-bold">{{ completedCount }}</div>
           </article>
-          <article class="rounded-xl border border-black p-3">
+          <article class="attendance-summary-card">
             <div class="font-semibold uppercase tracking-wide text-xs">Dropped Out Sessions</div>
             <div class="mt-1 text-lg font-bold">{{ droppedOutCount }}</div>
           </article>
-          <article class="rounded-xl border border-black p-3">
+          <article class="attendance-summary-card">
             <div class="font-semibold uppercase tracking-wide text-xs">Billing Records</div>
             <div class="mt-1 text-lg font-bold">{{ billingCount }}</div>
           </article>
@@ -55,24 +41,24 @@
 
         <section class="space-y-2">
           <h2 class="text-sm font-bold uppercase tracking-[0.18em]">Attendance Log</h2>
-          <div class="overflow-x-auto border border-black">
-            <table class="w-full border-collapse text-sm">
+          <div class="table-wrap">
+            <table class="attendance-table">
               <thead>
-                <tr class="border-b border-black">
-                  <th class="border-r border-black p-2 text-left w-[90px]">Session</th>
-                  <th class="border-r border-black p-2 text-left w-[170px]">Date</th>
-                  <th class="border-r border-black p-2 text-left">Package</th>
-                  <th class="border-r border-black p-2 text-left">Services</th>
-                  <th class="p-2 text-left w-[150px]">Status</th>
+                <tr>
+                  <th class="w-[70px]">Session</th>
+                  <th class="w-[120px]">Date</th>
+                  <th>Package</th>
+                  <th>Services</th>
+                  <th class="w-[110px]">Status</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(appointment, index) in appointments" :key="appointment.appointment_id" class="border-b border-black">
-                  <td class="border-r border-black p-2">{{ index + 1 }}</td>
-                  <td class="border-r border-black p-2">{{ formatDateTime(appointment.appointment_date) }}</td>
-                  <td class="border-r border-black p-2">{{ appointment.package_name || '-' }}</td>
-                  <td class="border-r border-black p-2">{{ appointment.availed_services?.length ? appointment.availed_services.join(', ') : '-' }}</td>
-                  <td class="p-2">{{ formatStatus(appointment.status) }}</td>
+                <tr v-for="(appointment, index) in appointments" :key="appointment.appointment_id">
+                  <td>{{ index + 1 }}</td>
+                  <td>{{ formatDateTime(appointment.appointment_date) }}</td>
+                  <td>{{ appointment.package_name || '-' }}</td>
+                  <td>{{ appointment.availed_services?.length ? appointment.availed_services.join(', ') : '-' }}</td>
+                  <td>{{ formatStatus(appointment.status) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -81,48 +67,48 @@
 
         <section class="space-y-2">
           <h2 class="text-sm font-bold uppercase tracking-[0.18em]">Treatment / Billing Record</h2>
-          <div class="overflow-x-auto border border-black">
-            <table class="w-full border-collapse text-sm">
+          <div class="table-wrap">
+            <table class="attendance-table">
               <thead>
-                <tr class="border-b border-black">
-                  <th class="border-r border-black p-2 text-left w-[160px]">Reference</th>
-                  <th class="border-r border-black p-2 text-left">Package / Service</th>
-                  <th class="border-r border-black p-2 text-left w-[170px]">Program Status</th>
-                  <th class="border-r border-black p-2 text-right w-[140px]">Amount</th>
-                  <th class="p-2 text-left w-[160px]">Date</th>
+                <tr>
+                  <th class="w-[120px]">Reference</th>
+                  <th>Package / Service</th>
+                  <th class="w-[120px]">Program Status</th>
+                  <th class="w-[90px] text-right">Amount</th>
+                  <th class="w-[110px]">Date</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="billing in billings" :key="billing.id" class="border-b border-black">
-                  <td class="border-r border-black p-2">{{ billing.public_id || `BILL-${billing.id}` }}</td>
-                  <td class="border-r border-black p-2">{{ billing.package_name || billing.service_name || '-' }}</td>
-                  <td class="border-r border-black p-2">{{ billing.billing_status }}</td>
-                  <td class="border-r border-black p-2 text-right">{{ asCurrency(billing.amount_due) }}</td>
-                  <td class="p-2">{{ formatDateTime(billing.created_at) }}</td>
+                <tr v-for="billing in billings" :key="billing.id">
+                  <td>{{ billing.public_id || `BILL-${billing.id}` }}</td>
+                  <td>{{ billing.package_name || billing.service_name || '-' }}</td>
+                  <td>{{ billing.billing_status }}</td>
+                  <td class="text-right">{{ asCurrency(billing.amount_due) }}</td>
+                  <td>{{ formatDateTime(billing.created_at) }}</td>
                 </tr>
               </tbody>
             </table>
           </div>
         </section>
-      </template>
-    </section>
-  </main>
+    </template>
+  </LguInvoiceLayout>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue"
-import { useRoute, useRouter } from "vue-router"
+import { useRoute } from "vue-router"
 import { useQueryClient } from "@tanstack/vue-query"
 import Button from "primevue/button"
 import { lguBillingService, type LguPatientCreditDetail } from "@/features/lgu-billing/api/lgu-billing.service"
 import { patientTanstackService } from "@/features/patients/queries/patient.tanstack.service"
 import type { PatientHMOInformation } from "@/models/hmo-information"
+import LguInvoiceLayout from "./LguInvoiceLayout.vue"
+import { useLguInvoicePrintActions } from "./lgu-invoice.shared"
 
 
 const route = useRoute()
-const router = useRouter()
 const queryClient = useQueryClient()
-const printPage = (): void => window.print()
+const { printPage, goBack } = useLguInvoicePrintActions()
 
 const detail = ref<LguPatientCreditDetail | null>(null)
 const sponsorInfo = ref<PatientHMOInformation | null>(null)
@@ -198,3 +184,60 @@ onMounted(() => {
 })
 </script>
 
+<style scoped>
+.attendance-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.attendance-summary-card {
+  border: 1px solid #111827;
+  border-radius: 6px;
+  padding: 8px;
+  background: #ffffff;
+}
+
+.attendance-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 10px;
+}
+
+.attendance-table th,
+.attendance-table td {
+  border: 1px solid #111827;
+  padding: 4px 5px;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.attendance-table th {
+  font-weight: 800;
+  background: #f3f4f6;
+}
+
+@media print {
+  .attendance-summary-grid {
+    gap: 5px;
+    margin-bottom: 6px;
+  }
+
+  .attendance-summary-card {
+    padding: 5px;
+    border-radius: 3px;
+  }
+
+  .attendance-table {
+    font-size: 8px;
+  }
+
+  .attendance-table th,
+  .attendance-table td {
+    padding: 2px;
+  }
+}
+</style>

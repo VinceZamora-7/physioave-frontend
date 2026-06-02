@@ -300,9 +300,11 @@ import Message from "primevue/message"
 import Tag from "primevue/tag"
 
 import { ptOutlinedBtn, ptPrimaryBtn } from "@/features/shared/table-header.styles"
+import { useAuthSessionStore } from "@/stores/auth-session.store"
 import ModeOfReferralManagerDialog from "@/features/general-settings/components/ModeOfReferralManagerDialog.vue"
 import ExpenseItemManagerDialog from "@/features/general-settings/components/ExpenseItemManagerDialog.vue"
 import MedicalReferenceManagerDialog from "@/features/general-settings/components/MedicalReferenceManagerDialog.vue"
+import EvaluationDropdownManagerDialog from "@/features/general-settings/components/EvaluationDropdownManagerDialog.vue"
 
 const authSession = useAuthSessionStore()
 const { currentUser } = storeToRefs(authSession)
@@ -313,6 +315,7 @@ const expenseItemManager = ref<InstanceType<typeof ExpenseItemManagerDialog> | n
 const medicalCategoryManager = ref<InstanceType<typeof MedicalReferenceManagerDialog> | null>(null)
 const medicalDiagnosisManager = ref<InstanceType<typeof MedicalReferenceManagerDialog> | null>(null)
 const ptCaseImpressionManager = ref<InstanceType<typeof MedicalReferenceManagerDialog> | null>(null)
+const evaluationDropdownManager = ref<InstanceType<typeof EvaluationDropdownManagerDialog> | null>(null)
 
 const formatProviderType = (type?: string): string => {
   if (!type) return "—"

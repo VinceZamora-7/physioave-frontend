@@ -76,6 +76,7 @@ export interface LguPatientBilling {
 
 export interface LguPatientAuthorization {
   authorization_id: number
+  phase1_billing_id?: number | null
   package_name: string
   authorization_status: string
   total_sessions: number
@@ -147,7 +148,6 @@ export interface LguDashboardHistoryItem {
   balance_after?: number | null
   reference_label?: string | null
   notes?: string | null
-  line_items_json?: string | null
 }
 
 export interface LguMonthlyClaimResult {

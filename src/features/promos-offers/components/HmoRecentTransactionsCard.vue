@@ -279,6 +279,7 @@
 import { computed, onMounted, ref, watch } from "vue"
 import { storeToRefs } from "pinia"
 import { useRouter } from "vue-router"
+import { useQueryClient } from "@tanstack/vue-query"
 import { useToast } from "primevue/usetoast"
 import Button from "primevue/button"
 import Column from "primevue/column"
@@ -294,17 +295,27 @@ import type { Patient } from "@/features/patients/types/patient"
 import type { Lookup } from "@/models/global.model"
 import { billingPhase1Service, type BillingListItem, type HmoRecentHistoryItem } from "@/features/billing/api/billing-phase1.service"
 import {
+  asCurrency as invoiceCurrency,
   escapeHtml,
-  renderStandardInvoiceWindow
+  renderStandardInvoiceWindow,
+  type InvoiceDetailRow
 } from "@/features/billing/invoices/invoice-layout.util"
+import { renderHmoInvoiceWindow, type HmoInvoiceLine } from "@/features/billing/invoices/hmo-invoice.util"
+import {
+  openEncounterTicketPdfWindow,
+  renderEncounterTicketBulkPdfWindow,
+  type EncounterTicketPdfCard
+} from "@/utils/encounter-ticket-pdf.util"
 import { pamsAPI } from "@/utils/axios-interceptor"
 import { getApiErrorMessage } from "@/utils/actionable-error.util"
 import { errorToast, successToast } from "@/utils/toast.util"
 import { useAuthSessionStore } from "@/stores/auth-session.store"
+import { billingContextTanstackService } from "@/features/billing/queries/billing-context.tanstack.service"
 
 const toast = useToast()
 const router = useRouter()
 const authSession = useAuthSessionStore()
+const queryClient = useQueryClient()
 const { roleName } = storeToRefs(authSession)
 const hmoOptions = ref<Lookup[]>([])
 const selectedHmoId = ref<number | null>(null)
@@ -366,6 +377,87 @@ const formatDateTime = (value: string | null): string => {
   if (Number.isNaN(dt.getTime())) return "N/A"
   return dt.toLocaleString("en-PH", { year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })
 }
+
+type HmoRawLineItem = {
+  name?: string
+  quantity?: number | string
+  price?: number | string
+  unitPrice?: number | string
+  unit_price?: number | string
+  lineTotal?: number | string
+  line_total?: number | string
+  treatmentDate?: string
+  treatment_date?: string
+  laterality?: string
+  bodyArea?: string
+  body_area?: string
+}
+
+const getBillingDetail = async (billing: BillingListItem): Promise<BillingListItem> =>
+  (await billingContextTanstackService.fetchContext(queryClient, billing.id))?.billing ?? billing
+
+const loadSelectedPatientBillingDetails = async (): Promise<BillingListItem[]> => {
+  const details = await Promise.all(selectedPatientBillings.value.map(getBillingDetail))
+  return details.filter((billing): billing is BillingListItem => !!billing)
+}
+
+const parseBillingLineItems = (billing: BillingListItem): HmoInvoiceLine[] => {
+  let parsed: unknown = []
+  try {
+    parsed = JSON.parse(billing.line_items_json || "[]")
+  } catch {
+    parsed = []
+  }
+
+  const rawLines = Array.isArray(parsed) ? parsed as HmoRawLineItem[] : []
+  if (!rawLines.length) {
+    const unitPrice = Number(billing.total_amount ?? billing.amount_due ?? 0)
+    return [{
+      name: billing.service_name || billing.package_name || "HMO Service",
+      quantity: 1,
+      unitPrice,
+      lineTotal: unitPrice,
+      treatmentDate: billing.hmo_loa_date || billing.created_at
+    }]
+  }
+
+  return rawLines.map(line => {
+    const quantity = Math.max(1, Number(line.quantity ?? 1))
+    const unitPrice = Number(line.price ?? line.unitPrice ?? line.unit_price ?? 0)
+    const lineTotal = Number(line.lineTotal ?? line.line_total ?? quantity * unitPrice)
+    return {
+      name: String(line.name ?? billing.service_name ?? billing.package_name ?? "HMO Service"),
+      quantity,
+      unitPrice,
+      lineTotal,
+      treatmentDate: line.treatmentDate ?? line.treatment_date ?? billing.hmo_loa_date ?? billing.created_at,
+      laterality: line.laterality,
+      bodyArea: line.bodyArea ?? line.body_area
+    }
+  })
+}
+
+const renderHmoPrintableRows = (lines: HmoInvoiceLine[]): string =>
+  lines.map((line, index) => `
+    <tr>
+      <td class="text-center">${index + 1}</td>
+      <td class="text-center">${escapeHtml(formatDateOnly(line.treatmentDate))}</td>
+      <td>${escapeHtml(line.name)}</td>
+      <td class="text-center">${line.quantity}</td>
+      <td class="text-center">${escapeHtml(line.laterality || "N/A")}</td>
+      <td class="text-center">${escapeHtml(line.bodyArea || "N/A")}</td>
+      <td class="text-right">${escapeHtml(invoiceCurrency(line.unitPrice))}</td>
+      <td class="text-right">${escapeHtml(invoiceCurrency(line.lineTotal))}</td>
+    </tr>
+  `).join("")
+
+const getHmoDetailRows = (billing?: BillingListItem): InvoiceDetailRow[] => [
+  { label: "Billing To", value: billing?.hmo_name || selectedHmoName.value || "HMO" },
+  { label: "HMO Type", value: billing?.hmo_type_name || "N/A" },
+  { label: "Company Name", value: billing?.hmo_company_name || "N/A" },
+  { label: "LOA Approval No.", value: billing?.hmo_loa_number || billing?.hmo_approval_code || "N/A" },
+  { label: "LOA Approval date", value: formatDateOnly(billing?.hmo_loa_date) }
+]
 
 const statusSeverity = (value: string | null): "success" | "danger" | "warn" | "secondary" | "info" => {
   const normalized = String(value ?? "").trim().toLowerCase()
@@ -639,69 +731,23 @@ const formatYmd = (value: Date): string => {
 const generateSoa = async (): Promise<void> => {
   if (!hasValidRange.value) return
   const [from, to] = soaRange.value as Date[]
-  const fromStr = formatYmd(from)
-  const toStr = formatYmd(to)
-  const hmoName = selectedHmoName.value || "HMO"
-  const popup = openPrintWindow("HMO statement of account")
-  if (!popup) {
-    error.value = patientBillingError.value
+  const popup = window.open(router.resolve({
+    name: "hmo-soa-print",
+    query: {
+      hmo_id: selectedHmoId.value ? String(selectedHmoId.value) : undefined,
+      hmo_name: selectedHmoName.value || undefined,
+      from: formatYmd(from),
+      to: formatYmd(to),
+      autoprint: "1"
+    }
+  }).href, "_blank", "noopener,noreferrer")
+
+  if (popup && !popup.closed) {
+    soaVisible.value = false
     return
   }
 
-  try {
-    const rows = await billingPhase1Service.getHmoSoa({
-      from: fromStr,
-      to: toStr,
-      limit: 5000,
-      hmo_id: selectedHmoId.value ?? undefined
-    }) ?? []
-    const grandTotal = rows.reduce((sum, row) => sum + Number(row.total_amount ?? 0), 0)
-
-    renderStandardInvoiceWindow(popup, {
-      title: "Statement of the Account",
-      headerTitle: "STATEMENT OF THE ACCOUNT",
-      fileName: `hmo-soa-${fromStr}-${toStr}`,
-      billingDate: to.toISOString(),
-      referenceNumber: `HMO-SOA-${fromStr}-${toStr}`,
-      topMetaRows: [
-        { label: "Partner Institution", value: hmoName },
-        { label: "Billing Date", value: formatDateOnly(to.toISOString()) },
-        { label: "Transaction Period", value: `${formatDateOnly(from.toISOString())} - ${formatDateOnly(to.toISOString())}` }
-      ],
-      patientName: hmoName,
-      hidePatientDoctorHeader: true,
-      columns: [
-        { label: "ITEM No.", width: "58px", align: "center" },
-        { label: "PATIENT NAME", width: "150px" },
-        { label: "REFERENCE NO.", width: "120px" },
-        { label: "BILLING STATUS", width: "110px" },
-        { label: "PHYSICAL THERAPIST", width: "130px" },
-        { label: "DOCTOR", width: "120px" },
-        { label: "DIAGNOSIS", width: "150px" },
-        { label: "TREATMENT DATE", width: "100px", align: "center" },
-        { label: "PT SERVICE RENDERED" },
-        { label: "INVOICE BILLING TOTAL", width: "130px", align: "right" }
-      ],
-      tableRowsHtml: renderBulkHmoSoaRows(rows),
-      emptyStateColspan: 10,
-      discount: 0,
-      grandTotal,
-      detailBoxTitle: "HMO DETAILS",
-      detailRows: [
-        { label: "Billing To", value: hmoName },
-        { label: "Date Issued", value: new Date().toLocaleDateString("en-PH") },
-        { label: "Record Count", value: String(rows.length) }
-      ],
-      renderErrorMessage: "The HMO statement of account could not be rendered. Please try again.",
-      autoPrint: true,
-      pageSize: "A4 landscape",
-      maxWidthPx: 1320
-    })
-    soaVisible.value = false
-  } catch (err: unknown) {
-    popup.close()
-    error.value = getApiErrorMessage(err, { baseMessage: "Failed to generate HMO SOA" })
-  }
+  error.value = "Unable to open the HMO SOA print view. Allow pop-ups for this site, then try again."
 }
 
 const printPatientIndividualBilling = async (): Promise<void> => {
@@ -710,92 +756,15 @@ const printPatientIndividualBilling = async (): Promise<void> => {
 
 const printPatientHmoInvoice = async (): Promise<void> => {
   if (!selectedPatient.value || !selectedPatientBillings.value.length) return
-  const popup = openPrintWindow("HMO invoice")
-  if (!popup) return
-  try {
-    const details = await loadSelectedPatientBillingDetails()
-    const representative = details[0]
-    const lines = details.flatMap(billing => parseBillingLineItems(billing))
-    renderHmoInvoiceWindow(popup, {
-      billingDate: representative?.hmo_loa_date || representative?.created_at || new Date().toISOString(),
-      referenceNumber: `HMO-INVOICE-${selectedPatient.value.id}`,
-      patientName: representative?.patient_name || selectedPatientName.value,
-      patientAddress: representative?.patient_address,
-      patientAge: representative?.patient_age,
-      patientGender: representative?.patient_gender,
-      physicalTherapist: representative?.physical_therapist,
-      doctor: representative?.doctor,
-      diagnosis: representative?.diagnosis,
-      hmoName: representative?.hmo_name || selectedHmoName.value,
-      hmoTypeName: representative?.hmo_type_name,
-      hmoCompanyName: representative?.hmo_company_name,
-      hmoApprovalCode: representative?.hmo_loa_number || representative?.hmo_approval_code,
-      hmoApprovalDate: representative?.hmo_loa_date,
-      hmoValidityStart: representative?.hmo_validity_start,
-      hmoValidityEnd: representative?.hmo_validity_end,
-      subtotal: Number(details.reduce((sum, billing) => sum + Number(billing.subtotal_amount ?? billing.amount_due ?? billing.total_amount ?? 0), 0).toFixed(2)),
-      discount: Number(details.reduce((sum, billing) => sum + Number(billing.discount_amount ?? 0), 0).toFixed(2)),
-      grandTotal: Number(details.reduce((sum, billing) => sum + Number(billing.total_amount ?? billing.amount_due ?? 0), 0).toFixed(2)),
-      lines
-    }, { title: "HMO Invoice", fileName: `HMO-INVOICE-${selectedPatient.value.id}-${formatYmd(new Date())}` })
-  } catch (err: unknown) {
-    popup.close()
-    patientBillingError.value = getApiErrorMessage(err, { baseMessage: "Failed to print HMO invoice" })
+  if (!openHmoPrintRoute("hmo-patient-billing-summary-print")) {
+    patientBillingError.value = "Unable to open HMO billing summary. Allow pop-ups for this site, then try again."
   }
 }
 
 const printPatientSoa = async (): Promise<void> => {
   if (!selectedPatient.value) return
-  const popup = openPrintWindow("HMO patient SOA")
-  if (!popup) return
-  const { from, to } = getSelectedMonthRange()
-  try {
-    const billings = await loadPatientBillings(selectedPatient.value.id, { from, to })
-    const details = await Promise.all(billings.map(getBillingDetail))
-    const representative = details[0]
-    const lines = details.flatMap(billing => parseBillingLineItems(billing))
-    const grandTotal = Number(lines.reduce((sum, line) => sum + line.lineTotal, 0).toFixed(2))
-    renderStandardInvoiceWindow(popup, {
-      title: "Patient Billing Summary",
-      headerTitle: "PATIENT BILLING SUMMARY",
-      fileName: `HMO-SOA-${selectedPatient.value.id}-${formatYmd(from)}-${formatYmd(to)}`,
-      billingDate: to.toISOString(),
-      referenceNumber: `HMO-SOA-${selectedPatient.value.id}`,
-      topMetaRows: [
-        { label: "Partner Institution", value: representative?.hmo_name || selectedHmoName.value || "HMO" },
-        { label: "Billing Date", value: formatDateOnly(to.toISOString()) },
-        { label: "Transaction Period", value: `${formatDateOnly(from.toISOString())} - ${formatDateOnly(to.toISOString())}` }
-      ],
-      patientName: representative?.patient_name || selectedPatientName.value,
-      patientAddress: representative?.patient_address,
-      patientAge: representative?.patient_age,
-      patientGender: representative?.patient_gender,
-      physicalTherapist: representative?.physical_therapist,
-      doctor: representative?.doctor,
-      diagnosis: representative?.diagnosis,
-      columns: [
-        { label: "ITEM No.", width: "60px", align: "center" },
-        { label: "TREATMENT DATE", width: "110px", align: "center" },
-        { label: "PT SERVICE RENDERED" },
-        { label: "QTY", width: "50px", align: "center" },
-        { label: "LATERALITY", width: "100px", align: "center" },
-        { label: "BODY AREA", width: "110px", align: "center" },
-        { label: "UNIT PRICE", width: "110px", align: "right" },
-        { label: "UNIT TOTAL", width: "110px", align: "right" }
-      ],
-      tableRowsHtml: renderHmoPrintableRows(lines),
-      emptyStateColspan: 8,
-      discount: 0,
-      grandTotal,
-      detailBoxTitle: "HMO DETAILS",
-      detailRows: getHmoDetailRows(representative),
-      renderErrorMessage: "The HMO patient SOA could not be rendered. Please try again.",
-      pageSize: "A4 landscape",
-      maxWidthPx: 1200
-    })
-  } catch (err: unknown) {
-    popup.close()
-    patientBillingError.value = getApiErrorMessage(err, { baseMessage: "Failed to print HMO patient SOA" })
+  if (!openHmoPrintRoute("hmo-patient-billing-summary-print")) {
+    patientBillingError.value = "Unable to open HMO billing summary. Allow pop-ups for this site, then try again."
   }
 }
 

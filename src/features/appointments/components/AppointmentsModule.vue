@@ -1123,6 +1123,7 @@
       :overlay-only="true"
       :initial-view="billingOverlayMode"
       @close-overlay="onBillingOverlayClose"
+      @billing-updated="onBillingUpdated"
     />
 
   </main>
@@ -1174,7 +1175,7 @@ import type {Pageable} from "@/models/paging";
 import type {PatientHMOInformation} from "@/models/hmo-information";
 import {patientTanstackService} from "@/features/patients/queries/patient.tanstack.service";
 import {createReferenceService} from "@/services/reference.service";
-import {AppointmentTanstackKey, ReferenceTanstackKey} from "@/utils/keys/tanstack-key";
+import {AppointmentTanstackKey, ReferenceTanstackKey, ServiceCatalogTanstackKey} from "@/utils/keys/tanstack-key";
 import type {AppointmentProviderType, SpecialtyTag, TreatmentArea} from "@/models/reference";
 import { ptInputText, ptModalPrimaryBtn, ptOutlinedBtn, ptPrimaryBtn, ptSelect } from "@/features/shared/table-header.styles";
 import {clinicStore} from "@/stores/clinic.store"
@@ -1720,6 +1721,41 @@ const normalizePackageStatus = (raw: Record<string, unknown>): string => {
     return raw.is_active > 0 ? "Active" : "Inactive"
   }
   return "Active"
+}
+
+const normalizeSingleService = (value: unknown): SingleService | null => {
+  if (!value || typeof value !== "object") return null
+
+  const raw = value as Record<string, unknown>
+  const id = toOptionalStringId(raw.id)
+  const name = typeof raw.name === "string" ? raw.name.trim() : ""
+  const type = String(raw.type ?? "").trim() as SingleService["type"]
+
+  if (
+    !id ||
+    !name ||
+    !["machine", "technique", "evaluation", "add-on-machine", "add-on-technique", "add-on-home-service"].includes(type)
+  ) {
+    return null
+  }
+
+  return {
+    id,
+    type,
+    name,
+    price: normalizeNonNegativeNumber(raw.price ?? raw.effective_price ?? raw.base_price),
+    status: normalizePackageStatus(raw)
+  }
+}
+
+const parseStoredCatalogArray = (key: string): unknown[] => {
+  try {
+    const stored = localStorage.getItem(key)
+    const parsed = stored ? JSON.parse(stored) : []
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
 }
 
 const normalizePackageServiceOffer = (value: unknown): PackageServiceOffer | null => {
@@ -2601,34 +2637,37 @@ const loadTreatmentAreaOptions = async (): Promise<void> => {
 }
 
 const loadCachedServiceCatalogFallback = (): void => {
-  try {
-    const stored = localStorage.getItem("singlePayServices")
-    allSinglePayServices.value = stored ? JSON.parse(stored) : []
-  } catch {
-    allSinglePayServices.value = []
-  }
-  try {
-    const stored = localStorage.getItem("bundledServices")
-    const parsed = stored ? JSON.parse(stored) : []
-    allBundledServices.value = Array.isArray(parsed)
-      ? parsed
-          .map(normalizeBundledService)
-          .filter((item): item is BundledService => item !== null)
-      : []
-  } catch {
-    allBundledServices.value = []
-  }
-  try {
-    const stored = localStorage.getItem("packageServiceOffers")
-    const parsed = stored ? JSON.parse(stored) : []
-    allPackageServiceOffers.value = Array.isArray(parsed)
-      ? parsed
-          .map(normalizePackageServiceOffer)
-          .filter((item): item is PackageServiceOffer => item !== null)
-      : []
-  } catch {
-    allPackageServiceOffers.value = []
-  }
+  const storedGlobalServices = parseStoredCatalogArray("singlePayServices")
+    .map(normalizeSingleService)
+    .filter((item): item is SingleService => item !== null)
+  const storedLguServices = parseStoredCatalogArray("lguSinglePayServices")
+    .map(normalizeSingleService)
+    .filter((item): item is SingleService => item !== null)
+  const storedBundles = parseStoredCatalogArray("bundledServices")
+    .map(normalizeBundledService)
+    .filter((item): item is BundledService => item !== null)
+  const storedLguBundles = parseStoredCatalogArray("lguBundledServices")
+    .map(normalizeBundledService)
+    .filter((item): item is BundledService => item !== null)
+  const storedPackageOffers = parseStoredCatalogArray("packageServiceOffers")
+    .map(normalizePackageServiceOffer)
+    .filter((item): item is PackageServiceOffer => item !== null)
+  const storedLguPackageOffers = parseStoredCatalogArray("lguPackageServiceOffers")
+    .map(normalizePackageServiceOffer)
+    .filter((item): item is PackageServiceOffer => item !== null)
+
+  allSinglePayServices.value = storedGlobalServices
+  lguSinglePayServices.value = storedLguServices
+  allBundledServices.value = storedBundles.filter(item => !item.id.startsWith("lgu-"))
+  lguBundledServices.value = [
+    ...storedLguBundles,
+    ...storedBundles.filter(item => item.id.startsWith("lgu-")),
+  ]
+  allPackageServiceOffers.value = storedPackageOffers.filter(item => item.offerScope !== "LGU" && !item.id.startsWith("lgu-"))
+  lguPackageServiceOffers.value = [
+    ...storedLguPackageOffers,
+    ...storedPackageOffers.filter(item => item.offerScope === "LGU" || item.id.startsWith("lgu-")),
+  ]
 }
 
 const applyCatalogContext = (context?: ServiceCatalogContext): void => {
@@ -2651,15 +2690,16 @@ const applyCatalogContext = (context?: ServiceCatalogContext): void => {
 
 const loadSinglePayServices = async (): Promise<void> => {
   loadCachedServiceCatalogFallback()
-  try {
-    const [globalContext, lguContext] = await Promise.all([
-      serviceCatalogContextTanstackService.fetchContext(queryClient, {scope: "GLOBAL"}),
-      serviceCatalogContextTanstackService.fetchContext(queryClient, {scope: "LGU"}),
-    ])
-    applyCatalogContext(globalContext)
-    applyCatalogContext(lguContext)
-  } catch {
-    // Keep local cache fallback for offline/stale deployments.
+  await queryClient.invalidateQueries({queryKey: [ServiceCatalogTanstackKey.SERVICE_CATALOG_CONTEXT]})
+  const catalogResults = await Promise.allSettled([
+    serviceCatalogContextTanstackService.fetchContext(queryClient, {scope: "GLOBAL"}),
+    serviceCatalogContextTanstackService.fetchContext(queryClient, {scope: "LGU"}),
+  ])
+
+  for (const result of catalogResults) {
+    if (result.status === "fulfilled") {
+      applyCatalogContext(result.value)
+    }
   }
 }
 const removeHomeServiceAddOn = (): void => {
@@ -3616,6 +3656,17 @@ const onBillingOverlayClose = (): void => {
   void router.replace({query: {}})
 }
 
+const onBillingUpdated = async (payload: { billingId?: number; appointmentId?: number; billingStatus?: string }): Promise<void> => {
+  await refreshAll()
+  await calendarSectionRef.value?.refreshDots()
+
+  const appointmentId = payload.appointmentId ?? selectedDetail.value?.id
+  if (!appointmentId) return
+
+  await invalidateAppointmentContext(appointmentId)
+  selectedDetail.value = await fetchAppointmentDetail(appointmentId)
+}
+
 watch(createStart, (value) => {
   const normalized = snapToSlotBoundary(new Date(value))
   if (normalized.getTime() !== value.getTime()) {
@@ -3788,5 +3839,3 @@ onMounted(async () => {
   await tableSectionRef.value?.refresh()
 })
 </script>
-
-

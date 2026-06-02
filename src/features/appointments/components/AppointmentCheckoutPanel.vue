@@ -458,7 +458,7 @@
             </div>
 
             <Button
-              v-if="selectedDetail.lgu_credit_summary.consumed_sessions > 0 && selectedDetail.lgu_credit_summary.authorization_status === 'ACTIVE'"
+              v-if="selectedDetail.lgu_credit_summary.consumed_sessions > selectedDetail.lgu_credit_summary.billed_sessions && ['ACTIVE', 'COMPLETED'].includes(selectedDetail.lgu_credit_summary.authorization_status)"
               label="Create Month-End Claim"
               icon="pi pi-file"
               size="small"
@@ -579,6 +579,7 @@ interface LguCreditSummary {
   package_name: string
   total_sessions: number
   consumed_sessions: number
+  billed_sessions: number
   authorization_status: string
   items: LguCreditLedgerItem[]
 }

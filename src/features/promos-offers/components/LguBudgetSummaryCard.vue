@@ -119,7 +119,6 @@
       :loading-patient-detail="loadingPatientDetail"
       :patient-detail-error="patientDetailError"
       :first-dropped-out-appointment-id="firstDroppedOutAppointmentId"
-      :is-creating-claims="isCreatingClaims"
       :printing-claim-billing-id="printingClaimBillingId"
       :format-date-time="formatDateTime"
       :format-lgu-status="formatLguStatus"
@@ -129,28 +128,9 @@
       @print-attendance-record="exportPatientAttendanceRecord"
       @export-patient-lgu-details="exportPatientLguDetails"
       @export-patient-billing-summary="exportPatientProfileBillingSummary"
-      @create-claims="createClaimsForEligibleAppointments"
       @download-claim-pdf="downloadClaimPdf"
     />
 
-    <LguPatientSoaDialog
-      v-model:visible="patientSoaPickerVisible"
-      v-model:patient-soa-range="patientSoaRange"
-      v-model:patient-soa-mode="patientSoaMode"
-      v-model:selected-patient-soa-session-key="selectedPatientSoaSessionKey"
-      :has-valid-patient-soa-range="hasValidPatientSoaRange"
-      :invoice-session-options="invoiceSessionOptions"
-      :format-date-time="formatDateTime"
-      @export-patient-soa="exportPatientSoa"
-    />
-
-    <LguInvoiceSessionDialog
-      v-model:visible="invoiceSessionPickerVisible"
-      :invoice-session-options="invoiceSessionOptions"
-      :printing-claim-billing-id="printingClaimBillingId"
-      :format-date-time="formatDateTime"
-      @print-session-invoice="printSessionInvoice"
-    />
   </section>
 </template>
 
@@ -194,6 +174,10 @@ import {
   renderEncounterTicketBulkPdfWindow,
   type EncounterTicketPdfCard
 } from "@/utils/encounter-ticket-pdf.util"
+import {
+  renderStandardInvoiceWindow,
+  type InvoiceDetailRow
+} from "@/features/billing/invoices/invoice-layout.util"
 import { LGU_BILLING_TYPE, isLguBillingType } from "@/features/promos-offers/lgu/lgu-billing-type.module"
 import type { Patient } from "@/features/patients/types/patient"
 import type { PatientHMOInformation } from "@/models/hmo-information"
@@ -244,9 +228,10 @@ const showPatientDetailDialog = ref(false)
 const selectedPatientDetail = ref<LguPatientCreditDetail | null>(null)
 const loadingPatientDetail = ref(false)
 const patientDetailError = ref("")
-const isCreatingClaims = ref(false)
 const printingClaimBillingId = ref<number | null>(null)
 const exportsModalVisible = ref(false)
+const patientSoaPickerVisible = ref(false)
+const invoiceSessionPickerVisible = ref(false)
 const showPatientProfilePrintDialog = ref(false)
 const patientProfilePrintTarget = ref<"profile" | "billing_summary">("profile")
 const patientProfileTransactionRange = ref<Date[] | null>(null)
@@ -353,6 +338,11 @@ const hasValidSoaRange = computed(() => {
   return Array.isArray(r) && r.length === 2 && r[0] instanceof Date && r[1] instanceof Date
 })
 
+const hasValidPatientSoaRange = computed(() => {
+  const r = patientSoaRange.value
+  return Array.isArray(r) && r.length === 2 && r[0] instanceof Date && r[1] instanceof Date
+})
+
 const hasValidBulkTicketRange = computed(() => {
   const r = bulkTicketRange.value
   return Array.isArray(r) && r.length === 2 && r[0] instanceof Date && r[1] instanceof Date
@@ -392,6 +382,60 @@ const getMonthEndDate = (value: Date): Date =>
 
 const getClaimReferenceNumber = (detail: BillingListItem): string =>
   detail.receipt_number?.trim() || detail.public_id || `BILL-${detail.id}`
+
+const patientExportFileName = (suffix: string): string => {
+  const patient = selectedPatientDetail.value
+  const patientLabel = String(patient?.patient_id ?? "patient").trim()
+  return `lgu-${patientLabel}-${suffix}`
+}
+
+const openPrintableRouteWindow = (
+  routeLocation: Parameters<typeof router.resolve>[0],
+  fallbackMessage: string
+): Window | null => {
+  const popup = window.open(router.resolve(routeLocation).href, "_blank")
+  if (!popup || popup.closed) {
+    errorToast(toast, fallbackMessage)
+    return null
+  }
+  return popup
+}
+
+const getSelectedPatientPrintRange = (): { from: Date; to: Date } => {
+  const fallbackFrom = new Date(selectedBudgetMonthDate.value.getFullYear(), selectedBudgetMonthDate.value.getMonth(), 1)
+  const fallbackTo = getMonthEndDate(selectedBudgetMonthDate.value)
+  const [from, to] = hasValidPatientSoaRange.value
+    ? patientSoaRange.value as Date[]
+    : [fallbackFrom, fallbackTo]
+  return { from, to }
+}
+
+const openLguPatientPrintRoute = (
+  routeName: "lgu-patient-profile-print" | "lgu-patient-billing-summary-print",
+  patientId: number,
+  options: { billingId?: number | null; from?: Date; to?: Date } = {}
+): Window | null => {
+  const range = options.from && options.to ? { from: options.from, to: options.to } : getSelectedPatientPrintRange()
+  return openPrintableRouteWindow(
+    {
+      name: routeName,
+      query: {
+        patient_id: String(patientId),
+        ...(options.billingId ? { billing_id: String(options.billingId) } : {}),
+        transaction_from: formatYmd(range.from),
+        transaction_to: formatYmd(range.to),
+        autoprint: "1"
+      }
+    },
+    "Unable to open LGU print view. Allow pop-ups for this site, then try again."
+  )
+}
+
+const inferLguPackageTotalSessions = (name?: string | null, fallback = 1): number => {
+  const match = String(name ?? "").match(/(\d+)\s*(?:session|sessions|sesh)/i)
+  const parsed = Number(match?.[1] ?? fallback)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : Math.max(1, fallback)
+}
 
 const parseMaybeJsonArray = (value: unknown): unknown[] => {
   if (Array.isArray(value)) return value
@@ -1941,183 +1985,40 @@ const renderLguProfileBodyHtml = (context: PatientLguDetailsExportContext): stri
   ${renderProfileIncludedServicesHtml()}
 `
 
-const exportPatientLguDetails = async (): Promise<void> => {
-  const patient = selectedPatientDetail.value
-  if (!patient) return
-  patientProfilePrintTarget.value = "profile"
-  const today = new Date()
-  patientProfileTransactionRange.value = [new Date(today.getFullYear(), today.getMonth(), 1), today]
-  showPatientProfilePrintDialog.value = true
-}
-
 const exportPatientProfileBillingSummary = async (): Promise<void> => {
   const patient = selectedPatientDetail.value
   if (!patient) return
-  const isSingleSession = patientSoaMode.value === "session"
-  const selectedSession = isSingleSession
-    ? invoiceSessionOptions.value.find(option => option.key === selectedPatientSoaSessionKey.value) ?? null
-    : null
+  openLguPatientPrintRoute("lgu-patient-billing-summary-print", patient.patient_id)
+  patientSoaPickerVisible.value = false
+}
 
-  if (!isSingleSession && !hasValidPatientSoaRange.value) {
-    errorToast(toast, "Select the SOA transaction period before printing.")
-    return
-  }
-  if (isSingleSession && !selectedSession) {
+const exportPatientSoa = async (): Promise<void> => {
+  patientSoaMode.value = patientSoaMode.value || "range"
+  await exportPatientProfileBillingSummary()
+}
+
+const printSessionInvoice = async (option?: LguInvoiceSessionOption): Promise<void> => {
+  const selectedOption = option ?? invoiceSessionOptions.value.find(item => item.key === selectedPatientSoaSessionKey.value)
+  if (!selectedOption) {
     errorToast(toast, "Select one session before printing.")
     return
   }
-
-  await loadLguInvoiceCatalog()
-  const [rangeFromDate, rangeToDate] = hasValidPatientSoaRange.value
-    ? patientSoaRange.value as Date[]
-    : [new Date(), new Date()]
-  const sessionDate = selectedSession?.appointmentDate ? new Date(selectedSession.appointmentDate) : null
-  const fromDate = isSingleSession && sessionDate ? sessionDate : rangeFromDate
-  const toDate = isSingleSession && sessionDate ? sessionDate : rangeToDate
-  const from = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate())
-  const to = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate(), 23, 59, 59, 999)
-  const sessions = isSingleSession && selectedSession
-    ? [selectedSession]
-    : invoiceSessionOptions.value.filter(option => {
-        const appointmentDate = new Date(option.appointmentDate)
-        return !Number.isNaN(appointmentDate.getTime()) && appointmentDate >= from && appointmentDate <= to
-      })
-  const billingDetails = await loadBillingDetailsForSessions(sessions)
-  const headerBilling = latestBillingDetail(billingDetails)
-  const rows = getStatementOfAccountRows(sessions)
-  const transactionPeriod = isSingleSession && selectedSession
-    ? `${selectedSession.label} - ${formatDateOnly(fromDate)}`
-    : `${formatDateOnly(fromDate)} - ${formatDateOnly(toDate)}`
-  const billingDate = formatDateOnly(headerBilling?.lgu_date_issued ? new Date(headerBilling.lgu_date_issued) : getMonthEndDate(toDate))
-  const lguName = headerBilling?.lgu_program_name || selectedProgramName.value || "LGU"
-  const lguReference = headerBilling?.lgu_patient_referral_form_no || headerBilling?.lgu_reference_label || selectedBillingMonth.value
-  const patientName = headerBilling?.patient_name || patient.patient_name
-  const lguStatus = formatLguStatus(headerBilling?.lgu_patient_program_status || selectedPatientStatusLabel())
-  const referenceNumber = isSingleSession && selectedSession
-    ? `LGU-SOA-${patient.patient_id}-SESSION-${selectedSession.sessionSequence}-${formatYmd(fromDate)}`
-    : `LGU-SOA-${patient.patient_id}-${formatYmd(fromDate)}-${formatYmd(toDate)}`
-  const grandTotal = Number(rows.reduce((sum, row) => sum + (row.isChildRow ? 0 : Number(row.unitTotal ?? 0)), 0).toFixed(2))
-  let popup: Window
-  try {
-    popup = openClaimPrintWindow(referenceNumber)
-  } catch {
-    errorToast(toast, "Unable to open statement of account. Allow pop-ups for this site, then try again.")
-    return
-  }
-
-  const detailRows: InvoiceDetailRow[] = [
-    { label: "Billing To", value: lguName },
-    { label: "Referral Form No.", value: lguReference },
-    { label: "Date Issued", value: billingDate },
-    { label: "Patient Program Status", value: lguStatus }
-  ]
-
-  renderStandardInvoiceWindow(popup, {
-    title: "Patient Billing Summary",
-    headerTitle: "PATIENT BILLING SUMMARY",
-    fileName: patientExportFileName(isSingleSession ? `soa-session-${selectedSession?.sessionSequence ?? "single"}` : "soa"),
-    billingDate: toDate.toISOString(),
-    referenceNumber,
-    topMetaRows: [
-      { label: "Partner Institution", value: lguName },
-      { label: "Billing Date", value: billingDate },
-      { label: "Transaction Period", value: transactionPeriod }
-    ],
-    patientName,
-    patientAddress: headerBilling?.patient_address,
-    patientAge: headerBilling?.patient_age,
-    patientGender: headerBilling?.patient_gender,
-    physicalTherapist: headerBilling?.physical_therapist,
-    doctor: headerBilling?.doctor,
-    diagnosis: headerBilling?.diagnosis,
-    columns: [
-      { label: "ITEM No.", width: "68px", align: "center" },
-      { label: "TREATMENT DATE", width: "110px", align: "center" },
-      { label: "PT SERVICE RENDERED" },
-      { label: "SESSION SEQUENCE", width: "120px", align: "center" },
-      { label: "UNIT PRICE", width: "126px", align: "right" }
-    ],
-    tableRowsHtml: renderStatementOfAccountRows(rows),
-    emptyStateColspan: 5,
-    discount: 0,
-    grandTotal,
-    detailBoxTitle: "LGU DETAILS",
-    detailRows,
-    renderErrorMessage: "The statement of the account could not be rendered. Please try again.",
-    pageSize: "A4 landscape",
-    maxWidthPx: 1320
+  patientSoaMode.value = "session"
+  selectedPatientSoaSessionKey.value = selectedOption.key
+  const sessionDate = new Date(selectedOption.appointmentDate)
+  patientSoaRange.value = Number.isNaN(sessionDate.getTime()) ? null : [sessionDate, sessionDate]
+  openLguPatientPrintRoute("lgu-patient-billing-summary-print", selectedPatientDetail.value?.patient_id ?? 0, {
+    billingId: selectedOption.billingId,
+    from: sessionDate,
+    to: sessionDate
   })
-  patientSoaPickerVisible.value = false
+  invoiceSessionPickerVisible.value = false
 }
 
 const exportPatientLguDetails = async (): Promise<void> => {
   const patient = selectedPatientDetail.value
   if (!patient) return
-  await loadLguInvoiceCatalog()
-
-  let popup: Window
-  try {
-    popup = openClaimPrintWindow("LGU Patient Details")
-  } catch {
-    errorToast(toast, "Unable to open LGU details. Allow pop-ups for this site, then try again.")
-    return
-  }
-
-  let context: PatientLguDetailsExportContext
-  try {
-    context = await loadPatientLguDetailsExportContext(patient.patient_id)
-  } catch (error: unknown) {
-    popup.close()
-    errorToast(toast, extractApiErrorMessage(error, "Failed to prepare LGU patient details"))
-    return
-  }
-
-  const details = context.patientDetails
-  const lguInfo = context.lguInformation
-  const totalBillings = patient.billings.reduce((sum, billing) => sum + Number(billing.amount_due ?? 0), 0)
-  const lguName = lguInfo?.lgu_program_name || lguInfo?.company_name || selectedProgramName.value || "LGU"
-
-  renderStandardInvoiceWindow(popup, {
-    title: "LGU Patient Details",
-    headerTitle: "LGU PATIENT DETAILS",
-    fileName: patientExportFileName("lgu-details"),
-    billingDate: new Date().toISOString(),
-    referenceNumber: `LGU-DETAILS-${patient.patient_id}-${selectedBillingMonth.value}`,
-    topMetaRows: [
-      { label: "TRANSACTION PERIOD", value: selectedBillingMonth.value },
-      { label: "BILLING DATE", value: new Date().toLocaleDateString("en-PH") }
-    ],
-    patientName: details?.full_name || patient.patient_name,
-    patientAddress: formatPatientAddress(details),
-    patientAge: details?.age == null ? "N/A" : String(details.age),
-    patientGender: details?.gender_name || "N/A",
-    hidePatientDoctorHeader: true,
-    columns: [
-      { label: "SECTION", width: "120px" },
-      { label: "RECORD", width: "170px" },
-      { label: "DETAILS" },
-      { label: "STATUS", width: "130px" },
-      { label: "AMOUNT / BALANCE", width: "150px", align: "right" }
-    ],
-    tableRowsHtml: "",
-    customBodyHtml: renderLguProfileBodyHtml(context),
-    emptyStateColspan: 5,
-    discount: 0,
-    grandTotal: totalBillings,
-    detailBoxTitle: "LGU DETAILS",
-    detailRows: [
-      { label: "LGU Name", value: lguName },
-      { label: "Referral Form No.", value: lguInfo?.referral_form_no || lguInfo?.approval_code || "N/A" },
-      { label: "Date of Referral Issued", value: lguInfo?.referral_issued_date || lguInfo?.validity_start_date || "N/A" },
-      { label: "Billing Month", value: selectedBillingMonth.value },
-      { label: "Patient Program Status", value: selectedPatientStatusLabel() },
-      { label: "Total Claim Billings", value: asCurrency(totalBillings) }
-    ],
-    hideFinancialSummary: true,
-    renderErrorMessage: "The LGU patient details could not be rendered. Please try again.",
-    pageSize: "A4 landscape",
-    maxWidthPx: 1320
-  })
+  openLguPatientPrintRoute("lgu-patient-profile-print", patient.patient_id)
 }
 
 const formatDashboardSoaSessionSequence = (row: LguDashboardHistoryItem): string => {
@@ -2150,13 +2051,6 @@ const getDashboardSoaRowAmount = (row: LguDashboardHistoryItem): number => {
   const subItems = getDashboardSoaPackageSubItems(row)
   const subItemTotal = sumSubItemTreeAmounts(subItems)
   return subItems.length ? subItemTotal : Number(row.amount_out ?? 0)
-}
-
-const formatDashboardSoaSessionSequence = (row: LguDashboardHistoryItem): string => {
-  const sequence = Number(row.session_sequence ?? 0)
-  if (!Number.isFinite(sequence) || sequence <= 0) return "N/A"
-  const totalSessions = Number(row.total_sessions ?? 0)
-  return totalSessions > 0 ? `Session ${sequence} of ${totalSessions}` : `Session ${sequence}`
 }
 
 const renderDashboardStatementOfAccountRows = (rows: LguDashboardHistoryItem[]): string => {
@@ -2219,71 +2113,23 @@ const renderDashboardStatementOfAccountRows = (rows: LguDashboardHistoryItem[]):
 const generateSoa = async (): Promise<void> => {
   if (!hasValidSoaRange.value) return
   const [from, to] = soaRange.value as Date[]
-  const lguName = selectedProgramName.value || "LGU"
-  const transactionPeriod = `${formatDateOnly(from)} - ${formatDateOnly(to)}`
-  const billingDate = formatDateOnly(getMonthEndDate(to))
-  const referenceNumber = `LGU-SOA-${formatYmd(from)}-${formatYmd(to)}`
-  let popup: Window
-  try {
-    popup = openClaimPrintWindow(referenceNumber)
-  } catch {
-    errorToast(toast, "Unable to open statement of account. Allow pop-ups for this site, then try again.")
-    return
-  }
+  const popup = openPrintableRouteWindow(
+    {
+      name: "soa-print",
+      params: { payer: "lgu" },
+      query: {
+        from: formatYmd(from),
+        to: formatYmd(to),
+        program_id: selectedProgramId.value ? String(selectedProgramId.value) : undefined,
+        program_name: selectedProgramName.value || undefined,
+        autoprint: "1"
+      }
+    },
+    "Unable to open LGU SOA print view. Allow pop-ups for this site, then try again."
+  )
 
-  try {
-    const rows = (await lguBillingService.getSoa({
-      from: formatYmd(from),
-      to: formatYmd(to),
-      limit: 5000,
-      program_id: selectedProgramId.value ?? undefined
-    }) ?? []).filter(row => Number(row.amount_out ?? 0) > 0 || !!row.patient_id || !!row.phase1_billing_id)
-    const grandTotal = rows.reduce((sum, row) => sum + getDashboardSoaRowAmount(row), 0)
-    const detailRows: InvoiceDetailRow[] = [
-      { label: "Billing To", value: lguName },
-      { label: "Date Issued", value: new Date().toLocaleDateString("en-PH") },
-      { label: "Record Count", value: String(rows.length) }
-    ]
-
-    renderStandardInvoiceWindow(popup, {
-      title: "Statement of the Account",
-      headerTitle: "STATEMENT OF THE ACCOUNT",
-      fileName: `soa-${formatYmd(from)}-${formatYmd(to)}`,
-      billingDate: to.toISOString(),
-      referenceNumber,
-      topMetaRows: [
-        { label: "Partner Institution", value: lguName },
-        { label: "Billing Date", value: billingDate },
-        { label: "Transaction Period", value: transactionPeriod }
-      ],
-      patientName: lguName,
-      hidePatientDoctorHeader: true,
-      columns: [
-        { label: "ITEM No.", width: "58px", align: "center" },
-        { label: "PATIENT NAME", width: "150px" },
-        { label: "REFERRAL FORM NO.", width: "130px" },
-        { label: "REFERENCE NO.", width: "120px" },
-        { label: "PROGRAM STATUS", width: "110px" },
-        { label: "TREATMENT DATE", width: "100px", align: "center" },
-        { label: "PT SERVICE RENDERED" },
-        { label: "SESSION SEQUENCE", width: "120px", align: "center" },
-        { label: "INVOICE BILLING TOTAL", width: "130px", align: "right" }
-      ],
-      tableRowsHtml: renderDashboardStatementOfAccountRows(rows),
-      emptyStateColspan: 9,
-      discount: 0,
-      grandTotal,
-      detailBoxTitle: "LGU DETAILS",
-      detailRows,
-      renderErrorMessage: "The statement of the account could not be rendered. Please try again.",
-      autoPrint: true,
-      pageSize: "A4 landscape",
-      maxWidthPx: 1320
-    })
+  if (popup) {
     exportsModalVisible.value = false
-  } catch (error: unknown) {
-    if (!popup.closed) popup.close()
-    errorToast(toast, extractApiErrorMessage(error, "Failed to generate SOA"))
   }
 }
 
@@ -2308,7 +2154,7 @@ const renderLguPatientCopyHtml = (patients: Patient[]): string => {
         <meta charset="utf-8" />
         <title>${escapeHtml(lguName)} Patient Copy</title>
         <style>
-          @page { size: A4 landscape; margin: 10mm; }
+          @page { size: A5 landscape; margin: 5mm; }
           * { box-sizing: border-box; }
           body { margin: 0; font-family: Arial, sans-serif; color: #111827; }
           .sheet { padding: 18px; }
@@ -2893,196 +2739,22 @@ const loadDashboardBudget = async (): Promise<void> => {
   const downloadClaimPdf = async (billingId: number, sessionOption?: LguInvoiceSessionOption): Promise<void> => {
     if (!billingId || printingClaimBillingId.value) return
     printingClaimBillingId.value = billingId
-    let popup: Window | null = null
     try {
       const detail = await fetchBillingDetail(billingId)
       if (!detail) {
         errorToast(toast, "LGU claim billing could not be loaded")
         return
       }
-
-      await loadLguInvoiceCatalog()
-      const referenceNumber = getClaimReferenceNumber(detail)
-      popup = openClaimPrintWindow(referenceNumber)
-      const lines = parseClaimLineItems(detail.line_items_json)
-      const total = Number(detail.total_amount ?? detail.amount_due ?? 0)
-      const shouldUseDropoutRates = String(detail.pricing_source ?? "").toUpperCase().includes("DROPOUT")
-        || normalizeLguStatus(detail.lgu_patient_program_status) === "DROPPED_OUT"
-      const shouldPrintSessionSequence = true
-      const allLockedTickets = (detail.encounter_tickets ?? [])
-        .filter(ticket => ticket.record_locked)
-        .sort((left, right) => {
-          const leftDate = String(left.billing_snapshot?.starts_at ?? left.attended_at ?? "")
-          const rightDate = String(right.billing_snapshot?.starts_at ?? right.attended_at ?? "")
-          return leftDate.localeCompare(rightDate)
-        })
-      const scopedLockedTickets = sessionOption
-        ? allLockedTickets.filter(ticket =>
-            ticket.appointment_id === sessionOption.appointmentId
-            || ticket.billing_snapshot?.appointment_id === sessionOption.appointmentId
-          )
-        : allLockedTickets
-      const lockedTickets = scopedLockedTickets.length ? scopedLockedTickets : allLockedTickets
-      const matchesSessionLine = (line: (typeof lines)[number]): boolean => {
-        if (!sessionOption) return true
-        const sequenceText = String(line.sessionSequence ?? "").trim()
-        const sequenceNumber = Number(sequenceText.match(/\d+/)?.[0] ?? sequenceText)
-        if (Number.isFinite(sequenceNumber) && sequenceNumber === sessionOption.sessionSequence) return true
-        const lineDate = line.treatmentDate ? formatYmd(new Date(line.treatmentDate)) : ""
-        const sessionDate = sessionOption.appointmentDate ? formatYmd(new Date(sessionOption.appointmentDate)) : ""
-        return !!lineDate && lineDate === sessionDate
-      }
-      const scopedLines = sessionOption && lines.length > 1 ? lines.filter(matchesSessionLine) : lines
-      const shouldRenderSingleSelectedPackageSession = !!sessionOption
-        && lines.length === 1
-        && String(lines[0]?.type ?? "").toLowerCase() === "package"
-      const shouldExpandSinglePackageLine = !sessionOption
-        && lines.length === 1
-        && lockedTickets.length > 1
-        && String(lines[0]?.type ?? "").toLowerCase() === "package"
-      const dropoutPackageName = sessionOption?.packageName
-        || selectedPatientDetail.value?.package_availments[0]?.package_name
-        || detail.package_name
-        || detail.service_name
-      const packageSourceLine = lines.find(line => String(line.type ?? "").toLowerCase() === "package") ?? lines[0]
-      const shouldRenderDropoutPackageTree = shouldUseDropoutRates && !!dropoutPackageName && !!packageSourceLine
-      const invoiceLines = shouldRenderDropoutPackageTree && sessionOption
-        ? (() => {
-            const subItems = getPackageLineSubItems(packageSourceLine, true, sessionOption.sessionSequence, dropoutPackageName)
-            if (!subItems?.length) return []
-            const lineTotal = sumSubItemTreeAmounts(subItems)
-            return [{
-              name: dropoutPackageName,
-              quantity: 1,
-              unitPrice: lineTotal,
-              lineTotal,
-              treatmentDate: sessionOption.appointmentDate,
-              sessionSequence: shouldPrintSessionSequence ? sessionOption.label : "",
-              subItems
-            }]
-          })()
-        : shouldRenderDropoutPackageTree && lockedTickets.length
-        ? lockedTickets.map((ticket, index) => {
-            const sessionLabel = ticket.billing_snapshot?.session_sequence_label
-            const sessionSequence = Number(String(sessionLabel ?? "").match(/\d+/)?.[0] ?? index + 1)
-            const subItems = getPackageLineSubItems(packageSourceLine, true, sessionSequence, dropoutPackageName) ?? []
-            const lineTotal = sumSubItemTreeAmounts(subItems)
-            return {
-              name: dropoutPackageName,
-              quantity: 1,
-              unitPrice: lineTotal,
-              lineTotal,
-              treatmentDate: ticket.billing_snapshot?.starts_at || ticket.attended_at || detail.created_at,
-              sessionSequence: shouldPrintSessionSequence
-                ? sessionLabel || `Session ${sessionSequence}`
-                : "",
-              subItems
-            }
-          }).filter(line => line.subItems.length)
-        : shouldRenderSingleSelectedPackageSession
-        ? (() => {
-            const line = lines[0]
-            const totalSessions = line.totalSessions ?? sessionOption.totalSessions ?? inferLguPackageTotalSessions(line.name, lockedTickets.length)
-            const sourceTotal = Number(line.unitPrice || line.lineTotal || total || 0)
-            const unitPrice = shouldUseDropoutRates ? 0 : (totalSessions > 0 ? sourceTotal / totalSessions : sourceTotal)
-            return [{
-              name: line.name,
-              quantity: 1,
-              unitPrice,
-              lineTotal: unitPrice,
-              treatmentDate: sessionOption.appointmentDate,
-              sessionSequence: shouldPrintSessionSequence ? sessionOption.label : "",
-              subItems: getPackageLineSubItems(line, shouldUseDropoutRates, sessionOption.sessionSequence, sessionOption.packageName || detail.service_name)
-            }]
-          })()
-        : shouldExpandSinglePackageLine
-        ? (() => {
-            const line = lines[0]
-            const sourceTotal = Number(line.unitPrice || line.lineTotal || total || 0)
-            const unitPrice = shouldUseDropoutRates ? 0 : (lockedTickets.length > 0 ? sourceTotal / lockedTickets.length : sourceTotal)
-            const totalSessions = line.totalSessions ?? inferLguPackageTotalSessions(line.name, lockedTickets.length)
-
-            return lockedTickets.map((ticket, index) => ({
-              name: line.name,
-              quantity: 1,
-              unitPrice,
-              lineTotal: unitPrice,
-              treatmentDate: ticket.billing_snapshot?.starts_at || ticket.attended_at || detail.created_at,
-              sessionSequence: shouldPrintSessionSequence ? `Session ${index + 1} of ${totalSessions}` : "",
-              subItems: getPackageLineSubItems(line, shouldUseDropoutRates, index + 1, detail.service_name)
-            }))
-          })()
-        : scopedLines.map((line, index) => ({
-            name: line.name,
-            quantity: line.quantity,
-            unitPrice: shouldUseDropoutRates ? 0 : line.unitPrice,
-            lineTotal: shouldUseDropoutRates ? 0 : line.lineTotal,
-            treatmentDate: sessionOption?.appointmentDate || line.treatmentDate || lockedTickets[index]?.billing_snapshot?.starts_at || lockedTickets[index]?.attended_at || detail.created_at,
-            sessionSequence: shouldPrintSessionSequence
-              ? sessionOption?.label || line.sessionSequence || lockedTickets[index]?.billing_snapshot?.session_sequence_label || String(index + 1)
-              : "",
-            subItems: getPackageLineSubItems(
-              line,
-              shouldUseDropoutRates,
-              sessionOption?.sessionSequence ?? Number(String(line.sessionSequence ?? "").match(/\d+/)?.[0] ?? index + 1),
-              sessionOption?.packageName || detail.service_name
-            )
-          }))
-      const calculatedInvoiceTotal = invoiceLines.reduce((sum, line) => sum + getLguInvoiceLineTotal(line), 0)
-      const invoiceTotal = sessionOption ? calculatedInvoiceTotal : total > 0 ? total : calculatedInvoiceTotal
-      const lguStatus = detail.lgu_patient_program_status
-        || selectedPatientDetail.value?.package_availments[0]?.status
-        || lines.find(line => line.claimStatus)?.claimStatus
-        || detail.billing_status
-      renderLguInvoiceWindow(popup, {
-        billingDate: detail.created_at,
-        referenceNumber: sessionOption ? `${referenceNumber} - ${sessionOption.label}` : referenceNumber,
-        patientName: detail.patient_name || `Patient ${detail.patient_public_id || detail.patient_id}`,
-        patientAddress: detail.patient_address,
-        patientAge: detail.patient_age,
-        patientGender: detail.patient_gender,
-        physicalTherapist: detail.physical_therapist,
-        doctor: detail.doctor,
-        diagnosis: detail.diagnosis,
-        lguProgramName: detail.lgu_program_name || selectedProgramName.value,
-        lguReferenceLabel: detail.lgu_patient_referral_form_no || detail.lgu_reference_label || detail.service_name || selectedBillingMonth.value,
-        lguDateIssued: detail.lgu_date_issued || detail.created_at,
-        lguStatus: formatLguStatus(lguStatus),
-        subtotal: invoiceTotal,
-        discount: Number(detail.discount_amount ?? 0),
-        grandTotal: invoiceTotal,
-        lines: invoiceLines
-      }, { title: sessionOption ? "LGU Session Invoice" : "LGU Claim PDF", fileName: sessionOption ? `${referenceNumber}-${sessionOption.label.replace(/\s+/g, "-").toLowerCase()}` : referenceNumber })
+      const sessionDate = sessionOption?.appointmentDate ? new Date(sessionOption.appointmentDate) : null
+      openLguPatientPrintRoute("lgu-patient-billing-summary-print", detail.patient_id, {
+        billingId: detail.id,
+        from: sessionDate && !Number.isNaN(sessionDate.getTime()) ? sessionDate : new Date(detail.created_at),
+        to: sessionDate && !Number.isNaN(sessionDate.getTime()) ? sessionDate : new Date(detail.created_at)
+      })
     } catch (error: unknown) {
-      if (popup && !popup.closed) popup.close()
       errorToast(toast, extractApiErrorMessage(error, "Failed to download LGU claim PDF"))
     } finally {
       printingClaimBillingId.value = null
-    }
-  }
-
-  const createClaimsForEligibleAppointments = async (): Promise<void> => {
-    if (isCreatingClaims.value || !selectedPatientDetail.value) return
-    isCreatingClaims.value = true
-    try {
-      const result = await lguBillingService.createPatientClaim({
-        patient_id: selectedPatientDetail.value.patient_id,
-        billing_month: selectedBillingMonth.value
-      })
-      successToast(
-        toast,
-        result?.consumed_count
-          ? `${result.consumed_count} session${result.consumed_count > 1 ? "s" : ""} claimed (${result.billing_public_id ?? ""}) for ${selectedBillingMonth.value}.`
-          : `Claim created for ${selectedBillingMonth.value}.`
-      )
-      await Promise.all([loadTransactionHistory(), refreshSelectedPatientDetail()])
-      if (result?.billing_id) {
-        await downloadClaimPdf(result.billing_id)
-      }
-    } catch (error: unknown) {
-      errorToast(toast, extractApiErrorMessage(error, "Failed to create LGU claim"))
-    } finally {
-      isCreatingClaims.value = false
     }
   }
 

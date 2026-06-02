@@ -320,6 +320,18 @@ const CHILD_SERVICE_JSON_KEYS = [
 ]
 
 const CONTRACT_PRICE_KEYS = [
+  "standard_unit_price_snapshot",
+  "standardUnitPriceSnapshot",
+  "package_unit_price_snapshot",
+  "packageUnitPriceSnapshot",
+  "dropout_unit_price_snapshot",
+  "dropoutUnitPriceSnapshot",
+  "unit_price_snapshot",
+  "unitPriceSnapshot",
+  "amount_out",
+  "amountOut",
+  "billing_amount_due",
+  "billingAmountDue",
   "lgu_contract_price",
   "lguContractPrice",
   "lgu_price",
@@ -328,6 +340,8 @@ const CONTRACT_PRICE_KEYS = [
   "contractPrice",
   "contract_unit_price",
   "contractUnitPrice",
+  "contract_unit_price_snapshot",
+  "contractUnitPriceSnapshot",
   "package_unit_price",
   "packageUnitPrice",
   "standard_unit_price",
@@ -345,6 +359,12 @@ const DROPOUT_PRICE_KEYS = [
 ]
 
 const UNIT_PRICE_KEYS = [
+  "unit_price_snapshot",
+  "unitPriceSnapshot",
+  "amount_out",
+  "amountOut",
+  "billing_amount_due",
+  "billingAmountDue",
   "unit_price",
   "unitPrice",
   "price",
@@ -713,7 +733,16 @@ const getSessionSequence = (
     getText(lineItem, ["session_sequence", "sessionSequence"]) ||
     getText(parentItem, ["session_sequence", "sessionSequence"])
 
+  const totalSessions =
+    getAmount(lineItem, ["total_sessions", "totalSessions"]) ??
+    getAmount(parentItem, ["total_sessions", "totalSessions", "quantity", "qty"])
+
   if (explicit) {
+    // When explicit is a bare number and total_sessions is available, format as "X of Y"
+    const seqNum = Number(explicit)
+    if (Number.isFinite(seqNum) && seqNum > 0 && !/[\/]|\bof\b/i.test(explicit) && totalSessions && totalSessions > 0) {
+      return `${Math.floor(seqNum)} of ${Math.floor(totalSessions)}`
+    }
     return normalizeSessionSequence(explicit)
   }
 
@@ -723,10 +752,6 @@ const getSessionSequence = (
     "session_number",
     "sessionNumber"
   ])
-
-  const totalSessions =
-    getAmount(lineItem, ["total_sessions", "totalSessions"]) ??
-    getAmount(parentItem, ["total_sessions", "totalSessions", "quantity", "qty"])
 
   if (sessionNo && totalSessions) {
     return `${Math.floor(sessionNo)} of ${Math.floor(totalSessions)}`
@@ -940,12 +965,13 @@ const isSameAsParentPackage = (
 
 const getRenderableServiceLines = (item: InvoiceLineItem): InvoiceLineItem[] => {
   const children = getChildren(item)
+  const renderedChildren = children.flatMap(child => getRenderableServiceLines(child))
 
-  if (children.length) {
-    return children.filter(child => hasRenderableServiceLine(child))
+  if (hasRenderableServiceLine(item) || isPackageLine(item)) {
+    return [item, ...renderedChildren]
   }
 
-  return hasRenderableServiceLine(item) ? [item] : []
+  return renderedChildren
 }
 
 const dedupeServiceLines = (
@@ -989,13 +1015,18 @@ const shouldUseDirectSoaServiceRow = (item: unknown): boolean => {
     "parentServiceName"
   ])
 
+  if (!directServiceName || isPackageLine(item as InvoiceLineItem)) {
+    return false
+  }
+
   /*
-    Avoid displaying the package or parent service as the fallback.
-    Only use a direct SOA row when it does not look like a package container.
+    Allow rendering when the service_name differs from the package_name.
+    LGU SOA rows carry both fields as separate DB columns — service_name comes
+    from service_name_snapshot while package_name comes from package_name_snapshot.
+    Only skip the row when the service name is identical to the package name
+    (which would just duplicate the package header).
   */
-  return !!directServiceName &&
-    !packageName &&
-    !isPackageLine(item as InvoiceLineItem)
+  return !packageName || normalizeKey(directServiceName) !== normalizeKey(packageName)
 }
 
 const extractIncludedServiceLines = (item: unknown): InvoiceLineItem[] => {
@@ -1470,11 +1501,6 @@ onMounted(() => {
 }
 
 @media print {
-  :global(body) {
-    background: #ffffff;
-    padding: 0;
-  }
-
   .table-wrap {
     overflow: visible;
   }

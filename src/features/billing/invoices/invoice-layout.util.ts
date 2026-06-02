@@ -127,8 +127,8 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
         <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Canva+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
         <style>
           @page {
-            size: A4 portrait;
-            margin: 10mm;
+            size: A5 landscape;
+            margin: 5mm;
           }
           * {
             box-sizing: border-box;
@@ -148,8 +148,8 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
           .invoice-sheet {
             background: #ffffff;
             width: 100%;
-            max-width: 210mm;
-            height: 297mm;
+            max-width: 148mm;
+            height: 210mm;
             margin: 0 auto;
             border: 1px solid #d1d5db;
             padding: 12px 16px 10px;

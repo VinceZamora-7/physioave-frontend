@@ -11,7 +11,7 @@
               <Tag :value="formatLguStatus(selectedPatientStatus)" :severity="lguStatusSeverity(selectedPatientStatus)" />
               <span class="text-xs text-[rgb(var(--app-fg))]/60">Patient ID: {{ selectedPatientDetail.patient_id }}</span>
             </div>
-            <p class="m-0 text-sm text-[rgb(var(--app-fg))]/60">Export patient documents or review LGU appointment, package, and claim records.</p>
+            <p class="m-0 text-sm text-[rgb(var(--app-fg))]/60">Export patient documents or review LGU appointment, package, and billing records.</p>
           </div>
         </div>
 
@@ -56,7 +56,6 @@
             <h4 class="m-0 text-sm font-bold text-[rgb(var(--app-fg))]">Appointments</h4>
             <p class="m-0 mt-1 text-xs text-[rgb(var(--app-fg))]/60">Sessions linked to this patient's LGU credit.</p>
           </div>
-          <Button label="Create Claim" icon="pi pi-file" size="small" :loading="isCreatingClaims" :disabled="isCreatingClaims" @click="$emit('create-claims')" />
         </div>
 
         <div class="overflow-x-auto rounded-2xl border border-[rgb(var(--app-border))]">
@@ -188,7 +187,6 @@ const props = defineProps<{
   loadingPatientDetail: boolean
   patientDetailError: string
   firstDroppedOutAppointmentId: number | null
-  isCreatingClaims: boolean
   printingClaimBillingId: number | null
   formatDateTime: (value?: string) => string
   formatLguStatus: (value?: string | null) => string
@@ -203,7 +201,6 @@ const emit = defineEmits<{
   "print-attendance-record": []
   "export-patient-lgu-details": []
   "export-patient-billing-summary": []
-  "create-claims": []
   "download-claim-pdf": [billingId: number]
 }>()
 
@@ -223,12 +220,12 @@ const lguPrintables = [
     icon: "pi pi-file",
     event: "export-patient-billing-summary" as LguPrintableEvent
   },
-  {
-    title: "Patient Billing Summary",
-    buttonLabel: "Print Patient Billing Summary",
-    icon: "pi pi-file-pdf",
-    event: "open-patient-soa-picker" as LguPrintableEvent
-  }
+  // {
+  //   title: "Patient Billing Summary",
+  //   buttonLabel: "Print Patient Billing Summary",
+  //   icon: "pi pi-file-pdf",
+  //   event: "open-patient-soa-picker" as LguPrintableEvent
+  // }
 ]
 
 const printPrintable = (event: LguPrintableEvent): void => {
@@ -243,10 +240,28 @@ const printPrintable = (event: LguPrintableEvent): void => {
   emit("export-patient-lgu-details")
 }
 
+const getNormalizedStatus = (value?: string | null): string => String(value ?? "").trim().toUpperCase()
+
+const appointmentStatusSummary = computed(() => {
+  const statuses = (props.selectedPatientDetail?.appointments ?? [])
+    .map(appointment => getNormalizedStatus(appointment.status))
+    .filter(Boolean)
+
+  const dropoutStatus = statuses.find(status => status === "DROPPED_OUT" || status === "CROSS_MONTH_DROPPED_OUT")
+  if (dropoutStatus) return dropoutStatus
+
+  if (statuses.includes("COMPLETED")) return "COMPLETED"
+
+  return ""
+})
+
 const selectedPatientStatus = computed(() =>
-  props.selectedPatientDetail?.package_availments[0]?.status
-  ?? props.selectedPatientDetail?.dropout_status
-  ?? props.selectedPatientDetail?.authorizations[0]?.authorization_status
+  appointmentStatusSummary.value
+  || getNormalizedStatus(props.selectedPatientDetail?.dropout_status)
+  || getNormalizedStatus(props.selectedPatientDetail?.authorizations[0]?.authorization_status)
+  || (completedAppointmentCount.value > 0 && completedAppointmentCount.value === (props.selectedPatientDetail?.appointments.length ?? 0)
+    ? "COMPLETED"
+    : getNormalizedStatus(props.selectedPatientDetail?.package_availments[0]?.status))
 )
 
 const completedAppointmentCount = computed(() =>

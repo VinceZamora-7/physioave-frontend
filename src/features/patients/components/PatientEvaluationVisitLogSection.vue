@@ -313,7 +313,6 @@ const props = defineProps<{
   medicalCategoryOptions?: string[]
   medicalDiagnosisOptions?: string[]
   ptCaseImpressionOptions?: string[]
-  ptCaseImpressionOptions?: string[]
 }>()
 
 const toast = useToast()

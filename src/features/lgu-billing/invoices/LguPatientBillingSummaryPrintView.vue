@@ -73,15 +73,20 @@
         <table class="summary-table">
           <thead>
             <tr>
-              <th class="w-[80px] text-center">ITEM No.</th>
-              <th class="w-[120px] text-right">TREATMENT DATE</th>
-              <th class="w-[180px] text-left">PT SERVICE RENDERED</th>
-              <th class="w-[150px] text-center">SESSION SEQUENCE</th>
+              <th class="w-[60px] text-center">ITEM No.</th>
+              <th class="w-[110px] text-right">TREATMENT DATE</th>
+              <th class="w-[150px] text-left">PT SERVICE RENDERED</th>
+              <th class="w-[100px] text-center">SESSION SEQUENCE</th>
               <th class="w-[150px] text-right">UNIT TOTAL</th>
             </tr>
           </thead>
 
           <tbody>
+            <tr v-if="!invoiceRows.length">
+              <td colspan="5" class="text-center">
+                No completed LGU billing summary records found for the selected period.
+              </td>
+            </tr>
             <tr
               v-for="row in invoiceRows"
               :key="row.key"
@@ -208,6 +213,102 @@ const billingDetail = ref<BillingListItem | null>(null)
 const error = ref("")
 
 const NOT_AVAILABLE_LABEL = "N/A"
+const PRICE_KEYS = [
+  "standard_unit_price_snapshot",
+  "standardUnitPriceSnapshot",
+  "package_unit_price_snapshot",
+  "packageUnitPriceSnapshot",
+  "dropout_unit_price_snapshot",
+  "dropoutUnitPriceSnapshot",
+  "unit_price_snapshot",
+  "unitPriceSnapshot",
+  "lgu_contract_price",
+  "lguContractPrice",
+  "lgu_price",
+  "lguPrice",
+  "contract_price",
+  "contractPrice",
+  "contract_unit_price",
+  "contractUnitPrice",
+  "contract_unit_price_snapshot",
+  "contractUnitPriceSnapshot",
+  "unit_price",
+  "unitPrice",
+  "price",
+  "service_price",
+  "servicePrice",
+  "originalPrice"
+]
+const LINE_TOTAL_KEYS = [
+  "line_total",
+  "lineTotal",
+  "total",
+  "subtotal",
+  "amount",
+  "amount_due",
+  "amountDue",
+  "amount_out",
+  "amountOut",
+  "total_amount",
+  "totalAmount"
+]
+const CHILD_SERVICE_KEYS = [
+  "children",
+  "subItems",
+  "sub_items",
+  "items",
+  "services",
+  "line_items",
+  "lineItems",
+  "included_services",
+  "includedServices",
+  "package_services",
+  "packageServices",
+  "child_services",
+  "childServices",
+  "service_inclusions",
+  "serviceInclusions",
+  "package_inclusions",
+  "packageInclusions",
+  "availed_services",
+  "availedServices",
+  "bundleItems",
+  "bundle_items",
+  "machineItems",
+  "machine_items",
+  "techniqueItems",
+  "technique_items",
+  "evaluationItems",
+  "evaluation_items",
+  "addOnItems",
+  "add_on_items"
+]
+const CHILD_SERVICE_JSON_KEYS = [
+  "line_items_json",
+  "lineItemsJson",
+  "included_services_json",
+  "includedServicesJson",
+  "package_services_json",
+  "packageServicesJson",
+  "child_services_json",
+  "childServicesJson",
+  "service_inclusions_json",
+  "serviceInclusionsJson",
+  "package_inclusions_json",
+  "packageInclusionsJson",
+  "availed_services_json",
+  "availedServicesJson",
+  "bundle_items_json",
+  "bundleItemsJson",
+  "machine_items_json",
+  "machineItemsJson",
+  "technique_items_json",
+  "techniqueItemsJson",
+  "evaluation_items_json",
+  "evaluationItemsJson",
+  "add_on_items_json",
+  "addOnItemsJson"
+]
 
 const dateSigned = computed(() => formatDate(new Date()))
 
@@ -292,18 +393,52 @@ const billing = computed(() => {
 })
 
 type InvoiceLineNode = {
+  [key: string]: unknown
   id?: number | string
   type?: string
   name?: string
+  service_name?: string
+  serviceName?: string
+  pt_service_rendered?: string
+  ptServiceRendered?: string
+  description?: string
   quantity?: number
   price?: number
   unitPrice?: number
   unit_price?: number
+  lgu_contract_price?: number | string
+  lguContractPrice?: number | string
+  lgu_price?: number | string
+  lguPrice?: number | string
+  contract_price?: number | string
+  contractPrice?: number | string
+  contract_unit_price?: number | string
+  contractUnitPrice?: number | string
+  standard_unit_price_snapshot?: number | string
+  standardUnitPriceSnapshot?: number | string
+  package_unit_price_snapshot?: number | string
+  packageUnitPriceSnapshot?: number | string
+  dropout_unit_price_snapshot?: number | string
+  dropoutUnitPriceSnapshot?: number | string
+  unit_price_snapshot?: number | string
+  unitPriceSnapshot?: number | string
   dropoutUnitPrice?: number
   dropout_unit_price?: number
   dropoutPrice?: number
   dropout_price?: number
+  contract_unit_price_snapshot?: number | string
+  contractUnitPriceSnapshot?: number | string
   lineTotal?: number
+  line_total?: number | string
+  total?: number | string
+  subtotal?: number | string
+  amount?: number | string
+  amount_due?: number | string
+  amountDue?: number | string
+  amount_out?: number | string
+  amountOut?: number | string
+  total_amount?: number | string
+  totalAmount?: number | string
   treatmentDate?: string
   sessionSequence?: string
   session_sequence?: string | number
@@ -315,6 +450,23 @@ type InvoiceLineNode = {
   allocatedTotalSessions?: number
   subItems?: InvoiceLineNode[]
   children?: InvoiceLineNode[]
+  sub_items?: InvoiceLineNode[]
+  items?: InvoiceLineNode[]
+  services?: InvoiceLineNode[]
+  line_items?: InvoiceLineNode[]
+  lineItems?: InvoiceLineNode[]
+  included_services?: InvoiceLineNode[]
+  includedServices?: InvoiceLineNode[]
+  package_services?: InvoiceLineNode[]
+  packageServices?: InvoiceLineNode[]
+  child_services?: InvoiceLineNode[]
+  childServices?: InvoiceLineNode[]
+  service_inclusions?: InvoiceLineNode[]
+  serviceInclusions?: InvoiceLineNode[]
+  package_inclusions?: InvoiceLineNode[]
+  packageInclusions?: InvoiceLineNode[]
+  availed_services?: Array<InvoiceLineNode | string>
+  availedServices?: Array<InvoiceLineNode | string>
 }
 
 type TableRow = {
@@ -341,10 +493,83 @@ const parseInvoiceLineItems = (value?: string | null): InvoiceLineNode[] => {
   }
 }
 
-const getDirectChildren = (item: InvoiceLineNode): InvoiceLineNode[] => [
-  ...(item.children ?? []),
-  ...(item.subItems ?? [])
+const getRecordValue = (record: unknown, key: string): unknown => {
+  if (!record || typeof record !== "object") return undefined
+  return (record as Record<string, unknown>)[key]
+}
+
+const parseAmount = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === "") return null
+
+  const normalized = typeof value === "string"
+    ? value.replace(/[^\d.-]/g, "")
+    : value
+
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+const getAmount = (record: unknown, keys: string[]): number | null => {
+  for (const key of keys) {
+    const parsed = parseAmount(getRecordValue(record, key))
+
+    if (parsed !== null) {
+      return parsed
+    }
+  }
+
+  return null
+}
+
+const normalizeChildEntry = (entry: unknown): InvoiceLineNode[] => {
+  if (typeof entry === "string") {
+    const name = entry.trim()
+    return name ? [{ name }] : []
+  }
+
+  return entry && typeof entry === "object" ? [entry as InvoiceLineNode] : []
+}
+
+const parseJsonChildren = (value: unknown): InvoiceLineNode[] => {
+  if (Array.isArray(value)) {
+    return value.flatMap(normalizeChildEntry)
+  }
+
+  if (typeof value !== "string" || !value.trim()) {
+    return []
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return Array.isArray(parsed) ? parsed.flatMap(normalizeChildEntry) : []
+  } catch {
+    return []
+  }
+}
+
+const getDirectChildren = (item: InvoiceLineNode): InvoiceLineNode[] =>
+  CHILD_SERVICE_KEYS.flatMap(key => parseJsonChildren(getRecordValue(item, key)))
+
+const getJsonChildren = (item: InvoiceLineNode): InvoiceLineNode[] =>
+  CHILD_SERVICE_JSON_KEYS.flatMap(key => parseJsonChildren(getRecordValue(item, key)))
+
+const getChildren = (item: InvoiceLineNode): InvoiceLineNode[] => [
+  ...getDirectChildren(item),
+  ...getJsonChildren(item)
 ]
+
+const hasNestedInvoiceLineItems = (value?: string | null): boolean =>
+  parseInvoiceLineItems(value).some(item => getChildren(item).length > 0)
+
+const clearChildCollections = (item: InvoiceLineNode): InvoiceLineNode => {
+  const next = { ...item }
+
+  for (const key of [...CHILD_SERVICE_KEYS, ...CHILD_SERVICE_JSON_KEYS]) {
+    delete next[key]
+  }
+
+  return next
+}
 
 const getQuantity = (item: InvoiceLineNode): number => {
   const quantity = Math.floor(Number(item.quantity ?? 1))
@@ -360,26 +585,77 @@ const getTreatmentDate = (
   billingDetail.value?.created_at ||
   ""
 
-const getSessionUnitTotal = (item: InvoiceLineNode, quantity: number): number => {
-  const lineTotal = Number(item.lineTotal)
+const getServiceName = (item: InvoiceLineNode): string =>
+  String(
+    item.service_name ??
+    item.serviceName ??
+    item.pt_service_rendered ??
+    item.ptServiceRendered ??
+    item.description ??
+    item.name ??
+    ""
+  ).trim() || "—"
 
-  if (item.lineTotal !== undefined && item.lineTotal !== null && Number.isFinite(lineTotal)) {
+const getSessionUnitTotal = (item: InvoiceLineNode, quantity: number): number => {
+  const lineTotal = getAmount(item, LINE_TOTAL_KEYS)
+
+  if (lineTotal !== null) {
     return lineTotal / quantity
   }
 
-  const unitTotal = Number(
-    isDropoutPatient.value
-      ? item.dropoutUnitPrice ??
-        item.dropout_unit_price ??
-        item.dropoutPrice ??
-        item.dropout_price ??
-        item.unitPrice ??
-        item.unit_price ??
-        item.price ??
-        0
-      : item.unitPrice ?? item.unit_price ?? item.price ?? 0
+  const unitTotal = getAmount(item, isDropoutPatient.value
+    ? [
+        ...PRICE_KEYS,
+        "dropoutUnitPrice",
+        "dropout_unit_price",
+        "dropoutPrice",
+        "dropout_price"
+      ]
+    : PRICE_KEYS
   )
-  return Number.isFinite(unitTotal) ? unitTotal : 0
+  return unitTotal ?? 0
+}
+
+const pluralizeUnit = (quantity: number, singular: string): string =>
+  `${quantity} ${singular}${quantity === 1 ? "" : "s"}`
+
+const getMaxChildQuantity = (items: InvoiceLineNode[]): number => {
+  const quantities = items.flatMap(item => {
+    const ownQuantity = getQuantity(item)
+    const childQuantity = getMaxChildQuantity(getChildren(item))
+    return [ownQuantity, childQuantity]
+  })
+
+  return Math.max(0, ...quantities.filter(quantity => Number.isFinite(quantity)))
+}
+
+const getParentSessionCount = (parent: InvoiceLineNode, children: InvoiceLineNode[]): number => {
+  const parentQuantity = getQuantity(parent)
+  if (parentQuantity > 1) return parentQuantity
+
+  const childQuantity = getMaxChildQuantity(children)
+  if (childQuantity > 1) return childQuantity
+
+  const completedCount = completedSessionSequences.value.length
+  if (completedCount > 1) return completedCount
+
+  const availedCount = Math.max(
+    0,
+    ...(detail.value?.package_availments ?? []).map(pkg => Number(pkg.availed_count ?? 0))
+  )
+  return availedCount > 1 ? availedCount : parentQuantity
+}
+
+const formatParentServiceName = (parent: InvoiceLineNode, children: InvoiceLineNode[]): string => {
+  const sessionCount = getParentSessionCount(parent, children)
+  const suffix = sessionCount > 0 ? ` (${pluralizeUnit(sessionCount, "session")})` : ""
+  return `${getServiceName(parent)}${suffix}`
+}
+
+const formatChildServiceName = (item: InvoiceLineNode): string => {
+  const quantity = getQuantity(item)
+  const suffix = quantity > 1 ? ` (${pluralizeUnit(quantity, "quantity")})` : ""
+  return `${getServiceName(item)}${suffix}`
 }
 
 const getLineStartSession = (item: InvoiceLineNode): number => {
@@ -409,20 +685,19 @@ const filterChildrenForSession = (
     const isAllocatedToSession =
       sessionSequence >= startSession &&
       sessionSequence < startSession + occurrences
-    const children = getDirectChildren(item)
+    const children = getChildren(item)
 
     if (children.length) {
       const allocatedChildren = filterChildrenForSession(children, sessionSequence, occurrences)
 
       return allocatedChildren.length
         ? [{
-          ...item,
+          ...clearChildCollections(item),
           quantity: 1,
           allocatedSessionSequence,
           allocatedTotalSessions: quantity,
           lineTotal: undefined,
-          children: allocatedChildren,
-          subItems: undefined
+          children: allocatedChildren
           }]
         : []
     }
@@ -439,17 +714,18 @@ const filterChildrenForSession = (
   })
 
 const hasOwnRate = (item: InvoiceLineNode): boolean => {
-  const value = isDropoutPatient.value
-    ? item.dropoutUnitPrice ??
-      item.dropout_unit_price ??
-      item.dropoutPrice ??
-      item.dropout_price ??
-      item.unitPrice ??
-      item.unit_price ??
-      item.price
-    : item.unitPrice ?? item.unit_price ?? item.price
+  const value = getAmount(item, isDropoutPatient.value
+    ? [
+        ...PRICE_KEYS,
+        "dropoutUnitPrice",
+        "dropout_unit_price",
+        "dropoutPrice",
+        "dropout_price"
+      ]
+    : PRICE_KEYS
+  )
 
-  return value !== undefined && value !== null && Number.isFinite(Number(value))
+  return value !== null
 }
 
 const appointmentStatusById = computed(() => {
@@ -480,6 +756,44 @@ const completedSessionSequences = computed(() => {
   return Array.from({ length: completedCount }, (_, index) => index + 1)
 })
 
+const completedAppointments = computed(() =>
+  (detail.value?.appointments ?? [])
+    .filter(appointment => String(appointment.status ?? "").trim().toUpperCase() === "COMPLETED")
+    .sort((left, right) => {
+      const leftDate = parseDate(left.appointment_date)?.getTime() ?? 0
+      const rightDate = parseDate(right.appointment_date)?.getTime() ?? 0
+      return leftDate - rightDate
+    })
+)
+
+const serviceNameByAppointmentId = computed(() => {
+  const lookup = new Map<number, string>()
+
+  for (const authorization of detail.value?.authorizations ?? []) {
+    for (const session of authorization.sessions ?? []) {
+      const appointmentId = Number(session.appointment_id ?? 0)
+      const serviceName = String(session.service_name ?? "").trim()
+
+      if (appointmentId > 0 && serviceName && !lookup.has(appointmentId)) {
+        lookup.set(appointmentId, serviceName)
+      }
+    }
+  }
+
+  return lookup
+})
+
+const fallbackServiceName = (appointment: NonNullable<LguPatientCreditDetail["appointments"]>[number]): string => {
+  const services = appointment.availed_services ?? []
+  const serviceLabel = services.map(service => String(service).trim()).filter(Boolean).join(", ")
+  if (serviceLabel) return serviceLabel
+
+  const sessionServiceName = serviceNameByAppointmentId.value.get(Number(appointment.appointment_id ?? 0))
+  if (sessionServiceName) return sessionServiceName
+
+  return appointment.package_name || "LGU completed session"
+}
+
 const appendServiceRows = (
   items: InvoiceLineNode[],
   inherited: { treatmentDate?: string },
@@ -487,43 +801,31 @@ const appendServiceRows = (
   nextItemNoRef: { value: number },
   level = 1
 ): void => {
-  items.forEach(item => {
-    const quantity = getQuantity(item)
-    const itemName = String(item.name ?? "").trim() || "â€”"
+  for (const item of items) {
+    const itemName = formatChildServiceName(item)
     const itemTreatmentDate = getTreatmentDate(item, inherited)
+    const quantity = getQuantity(item)
     const unitTotal = getSessionUnitTotal(item, quantity)
-    const children = getDirectChildren(item)
+    const children = getChildren(item)
 
-    if (children.length && !hasOwnRate(item)) {
+    rows.push({
+      key: `${String(item.id ?? item.name ?? "item")}-${level}-${nextItemNoRef.value}`,
+      itemNo: nextItemNoRef.value++,
+      treatmentDate: itemTreatmentDate,
+      serviceName: itemName,
+      sessionSequence: "",
+      unitTotal: hasOwnRate(item) ? unitTotal : null,
+      level,
+      isParent: false
+    })
+
+    if (children.length > 0) {
       appendServiceRows(children, {
         treatmentDate: itemTreatmentDate
       }, rows, nextItemNoRef, level + 1)
-      return
+      continue
     }
-
-    Array.from({ length: quantity }).forEach((_, sessionIndex) => {
-      const itemNo = nextItemNoRef.value++
-      const sessionNumber = isDropoutPatient.value
-        ? Math.max(1, Number(item.allocatedSessionSequence ?? getLineStartSession(item)))
-        : sessionIndex + 1
-      const sessionTotal = isDropoutPatient.value
-        ? Math.max(1, Number(item.allocatedTotalSessions ?? quantity))
-        : quantity
-
-      rows.push({
-        key: `${itemNo}-${String(item.id ?? item.name ?? "item")}-${sessionIndex + 1}`,
-        itemNo,
-        treatmentDate: itemTreatmentDate,
-        serviceName: itemName,
-        sessionSequence: isDropoutPatient.value
-          ? `${sessionNumber} / ${sessionTotal}`
-          : `${sessionIndex + 1} / ${sessionTotal}`,
-        unitTotal,
-        level,
-        isParent: false
-      })
-    })
-  })
+  }
 }
 
 const flattenInvoiceLineItems = (
@@ -535,9 +837,8 @@ const flattenInvoiceLineItems = (
   items.forEach(parent => {
     const parentNo = 0
     const parentTreatmentDate = getTreatmentDate(parent, inherited)
-    const parentName = String(parent.name ?? "").trim() || "—"
 
-    const sourceChildren = getDirectChildren(parent)
+    const sourceChildren = getChildren(parent)
     const children = isDropoutPatient.value
       ? completedSessionSequences.value.flatMap(sessionSequence => (
           filterChildrenForSession(sourceChildren, sessionSequence)
@@ -548,7 +849,7 @@ const flattenInvoiceLineItems = (
       key: `${parentNo}-${String(parent.id ?? parent.name ?? "parent")}`,
       itemNo: parentNo,
       treatmentDate: "",
-      serviceName: parentName,
+      serviceName: formatParentServiceName(parent, children),
       sessionSequence: "",
       unitTotal: null,
       level: 0,
@@ -566,7 +867,113 @@ const flattenInvoiceLineItems = (
 const invoiceRows = computed<TableRow[]>(() => {
   const lineItems = parseInvoiceLineItems(billingDetail.value?.line_items_json)
   if (lineItems.length) {
-    return flattenInvoiceLineItems(lineItems)
+    const flattenedRows = flattenInvoiceLineItems(lineItems)
+    if (flattenedRows.some(row => !row.isParent)) {
+      return flattenedRows
+    }
+  }
+
+  // Session-based fallback: use authorization sessions tied to this specific billing.
+  // Each consumption row becomes its own display row, correctly showing all service types.
+  // Works both before claim creation (phase1_billing_id match) and after (monthly/dropout_billing_id match).
+  const currentBillingId = Number(billingDetail.value?.id ?? billingId.value ?? 0)
+  if (currentBillingId > 0 && detail.value?.authorizations?.length) {
+    const totalCompleted = completedSessionSequences.value.length
+
+    const sessionsForBilling = (detail.value.authorizations)
+      .filter(auth =>
+        Number(auth.phase1_billing_id ?? 0) === currentBillingId ||
+        (auth.sessions ?? []).some(s =>
+          Number(s.monthly_billing_id ?? 0) === currentBillingId ||
+          Number(s.dropout_billing_id ?? 0) === currentBillingId
+        )
+      )
+      .flatMap(auth => {
+        const authTotal = totalCompleted || Number(auth.total_sessions ?? 0)
+        return (auth.sessions ?? []).map(s => ({ ...s, authTotal }))
+      })
+      .filter(s => appointmentStatusById.value.get(s.appointment_id) === "COMPLETED")
+      .sort((a, b) => Number(a.session_sequence ?? 0) - Number(b.session_sequence ?? 0))
+
+    if (sessionsForBilling.length > 0) {
+      // Also include completed appointments that have no consumption record yet,
+      // scoped to the transaction date range if available.
+      const coveredAppointmentIds = new Set(sessionsForBilling.map(s => Number(s.appointment_id)))
+      const rangeFrom = transactionFromDate.value
+      const rangeTo = transactionToDate.value
+      const uncoveredAppointments = completedAppointments.value.filter(appt => {
+        if (coveredAppointmentIds.has(Number(appt.appointment_id))) return false
+        if (rangeFrom || rangeTo) {
+          const apptDate = parseDate(appt.appointment_date)
+          if (!apptDate) return false
+          const apptTime = apptDate.getTime()
+          if (rangeFrom && apptTime < rangeFrom.getTime()) return false
+          if (rangeTo) {
+            const rangeToEnd = new Date(rangeTo)
+            rangeToEnd.setHours(23, 59, 59, 999)
+            if (apptTime > rangeToEnd.getTime()) return false
+          }
+        }
+        return true
+      })
+
+      type SessionRow = typeof sessionsForBilling[number]
+      type AppointmentRow = typeof uncoveredAppointments[number]
+      type CombinedRow = { type: 'session'; data: SessionRow } | { type: 'appointment'; data: AppointmentRow }
+
+      const combined: CombinedRow[] = [
+        ...sessionsForBilling.map(s => ({ type: 'session' as const, data: s })),
+        ...uncoveredAppointments.map(a => ({ type: 'appointment' as const, data: a }))
+      ]
+      combined.sort((a, b) => {
+        const dateA = parseDate(a.type === 'session' ? String(a.data.appointment_date ?? '') : (a.data as AppointmentRow).appointment_date)?.getTime() ?? 0
+        const dateB = parseDate(b.type === 'session' ? String(b.data.appointment_date ?? '') : (b.data as AppointmentRow).appointment_date)?.getTime() ?? 0
+        return dateA - dateB
+      })
+
+      const billingAmount = Number(billingDetail.value?.amount_due ?? billing.value.grand_total ?? 0)
+      const unitTotal = combined.length > 0 ? billingAmount / combined.length : 0
+
+      return combined.map((row, index) => {
+        if (row.type === 'session') {
+          const session = row.data
+          return {
+            key: `session-${session.id ?? index}`,
+            itemNo: index + 1,
+            treatmentDate: String(session.appointment_date ?? ''),
+            serviceName: String(session.service_name ?? '').trim() || '—',
+            sessionSequence: `${Number(session.session_sequence ?? index + 1)} / ${session.authTotal}`,
+            unitTotal
+          }
+        } else {
+          const appointment = row.data
+          return {
+            key: `uncovered-${appointment.appointment_id}`,
+            itemNo: index + 1,
+            treatmentDate: appointment.appointment_date,
+            serviceName: fallbackServiceName(appointment),
+            sessionSequence: `${index + 1} / ${combined.length}`,
+            unitTotal
+          }
+        }
+      })
+    }
+  }
+
+  if (completedAppointments.value.length) {
+    const billingAmount = Number(billingDetail.value?.amount_due ?? billing.value.grand_total ?? 0)
+    const fallbackUnitTotal = completedAppointments.value.length > 0
+      ? billingAmount / completedAppointments.value.length
+      : 0
+
+    return completedAppointments.value.map((appointment, index) => ({
+      key: `completed-${appointment.appointment_id}`,
+      itemNo: index + 1,
+      treatmentDate: appointment.appointment_date,
+      serviceName: fallbackServiceName(appointment),
+      sessionSequence: `${index + 1} / ${completedAppointments.value.length}`,
+      unitTotal: fallbackUnitTotal
+    }))
   }
 
   return (detail.value?.package_availments ?? []).map((pkg, index) => ({
@@ -575,7 +982,7 @@ const invoiceRows = computed<TableRow[]>(() => {
     treatmentDate: billingDetail.value?.created_at || "",
     serviceName: pkg.package_name || "—",
     sessionSequence: `${pkg.used_count} / ${pkg.availed_count}`,
-    unitTotal: 0
+      unitTotal: Number(billingDetail.value?.amount_due ?? billing.value.grand_total ?? 0)
   }))
 })
 
@@ -587,6 +994,28 @@ const formatCurrency = (value?: number | null): string =>
 const formatDate = (value?: string | Date | null): string => {
   const date = parseDate(value)
   return date ? date.toLocaleDateString("en-PH") : NOT_AVAILABLE_LABEL
+}
+
+const mergeClaimBillingJson = (
+  billing: BillingListItem | null,
+  claimBilling?: LguPatientCreditDetail["billings"][number] | null
+): BillingListItem | null => {
+  if (!billing || !claimBilling?.line_items_json) return billing
+
+  const contextHasChildren = hasNestedInvoiceLineItems(billing.line_items_json)
+  const claimHasChildren = hasNestedInvoiceLineItems(claimBilling.line_items_json)
+  const shouldUseClaimJson = claimHasChildren && !contextHasChildren
+
+  if (!shouldUseClaimJson) return billing
+
+  return {
+    ...billing,
+    service_name: claimBilling.service_name ?? billing.service_name,
+    package_name: claimBilling.package_name ?? billing.package_name,
+    line_items_json: claimBilling.line_items_json,
+    amount_due: Number(claimBilling.amount_due ?? billing.amount_due),
+    pricing_source: claimBilling.pricing_source ?? billing.pricing_source
+  }
 }
 
 const load = async (): Promise<void> => {
@@ -629,6 +1058,10 @@ const load = async (): Promise<void> => {
     if (!billingDetail.value && latestBilling?.id) {
       billingDetail.value = (await billingContextTanstackService.fetchContext(queryClient, latestBilling.id))?.billing ?? null
     }
+    const claimBilling = detail.value?.billings?.find(item =>
+      Number(item.id) === Number(billingDetail.value?.id ?? latestBilling?.id ?? 0)
+    ) ?? latestBilling ?? null
+    billingDetail.value = mergeClaimBillingJson(billingDetail.value, claimBilling)
   } catch (err: unknown) {
     error.value = err instanceof Error ? err.message : "Failed to load patient LGU profile."
   }
@@ -680,7 +1113,6 @@ onMounted(() => {
 
 .profile-card {
   width: 100%;
-  padding: 14px 16px;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   background: #ffffff;
@@ -696,12 +1128,12 @@ onMounted(() => {
 .profile-group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 1px;
 }
 
 .profile-row {
   display: grid;
-  grid-template-columns: 110px minmax(0, 1fr);
+  grid-template-columns: 80px minmax(0, 1fr);
   gap: 8px;
   align-items: start;
 }
@@ -711,7 +1143,7 @@ onMounted(() => {
 }
 
 .profile-row--list {
-  grid-template-columns: 150px minmax(0, 1fr);
+  grid-template-columns: 10px minmax(0, 1fr);
   margin-bottom: 8px;
 }
 
