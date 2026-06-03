@@ -46,11 +46,11 @@
     </template>
 
     <template v-if="!error">
-      <div class="table-wrap">
-        <table class="soa-table">
+      <div class="table-wrap hmo-soa-table-wrap">
+        <table class="soa-table hmo-soa-table">
           <thead>
             <tr>
-              <th class="col-item text-center w-12">ITEM No.</th>
+              <th class="col-item text-center">ITEM No.</th>
               <th class="col-patient text-center">PATIENT NAME</th>
               <th class="col-reference text-center">REFERENCE NO.</th>
               <th class="col-status text-center">LOA Approval No.</th>
@@ -70,14 +70,11 @@
                 <td class="text-center">{{ formatDate(row.loaDateIssued) }}</td>
                 <td>{{ row.serviceName }}</td>
                 <td class="text-center">{{ formatPrice(row.unitPrice) }}</td>
-
               </tr>
 
-              <tr v-else class="patient-total-row border-b-3 border-red-600">
+              <tr v-else class="patient-total-row">
                 <td colspan="7" class="text-right">
-                  Patient Billing Total:
-
-                  {{ asCurrency(row.total) }}
+                  Patient Billing Total: {{ asCurrency(row.total) }}
                 </td>
               </tr>
             </template>
@@ -86,9 +83,7 @@
           <tfoot>
             <tr class="grand-total-row">
               <td colspan="7" class="text-right">
-                GRAND TOTAL:
-
-                {{ asCurrency(grandTotal) }}
+                GRAND TOTAL: {{ asCurrency(grandTotal) }}
               </td>
             </tr>
           </tfoot>
@@ -97,23 +92,31 @@
     </template>
 
     <template #bottom>
-      <div class="flex justify-between w-full">
+      <div class="approval-wrap hmo-soa-bottom">
         <section class="payment-box">
           <h3>HMO DETAILS</h3>
           <div><strong>Partner Institution:</strong> {{ partnerLabel }}</div>
           <div><strong>Billing Date:</strong> {{ billingDateLabel }}</div>
           <div><strong>Transaction Period:</strong> {{ periodLabel }}</div>
         </section>
-        <section class="approval">
-          <div><strong>Approved By:</strong></div>
-          <div class="name">
+
+        <section class="approval-card">
+          <div class="approval-label">
+            Approved by:
+          </div>
+
+          <div class="approval-name">
             RENALOU B. CORDOVA, PTRP, UK-PT
           </div>
-          <div class="title">
+
+          <div class="approval-line"></div>
+
+          <div class="approval-title">
             Chief Operations Officer
           </div>
-          <div class="signed">
-            <strong>Date Signed:</strong> {{ dateSigned }}
+
+          <div class="approval-signed">
+            Date Signed: {{ dateSigned }}
           </div>
         </section>
       </div>
@@ -126,7 +129,11 @@ import { computed, onMounted, ref } from "vue"
 import { useRoute } from "vue-router"
 import { useQueryClient } from "@tanstack/vue-query"
 import Button from "primevue/button"
-import { billingPhase1Service, type BillingListItem, type HmoRecentHistoryItem } from "@/features/billing/api/billing-phase1.service"
+import {
+  billingPhase1Service,
+  type BillingListItem,
+  type HmoRecentHistoryItem
+} from "@/features/billing/api/billing-phase1.service"
 import { billingContextTanstackService } from "@/features/billing/queries/billing-context.tanstack.service"
 import HmoInvoiceLayout from "./HmoInvoiceLayout.vue"
 import { formatHmoStatus, useHmoInvoicePrintActions } from "./hmo-invoice.shared"
@@ -134,7 +141,7 @@ import { formatHmoStatus, useHmoInvoicePrintActions } from "./hmo-invoice.shared
 type ServiceHmoSoaRow = {
   kind: "service"
   key: string
-  itemNo: number
+  itemNo: number | null
   patientName: string
   referenceNo: string
   loaApprovalNo: string
@@ -170,7 +177,19 @@ type HmoSoaLineItem = {
   bodyArea?: string
 }
 
-type HmoSoaHistoryItem = HmoRecentHistoryItem & Pick<BillingListItem, "public_id" | "line_items_json" | "diagnosis" | "hmo_loa_number" | "hmo_loa_date" | "loa_date" | "hmo_approval_code">
+type HmoSoaHistoryItem = HmoRecentHistoryItem &
+  Pick<
+    BillingListItem,
+    | "public_id"
+    | "line_items_json"
+    | "diagnosis"
+    | "hmo_loa_number"
+    | "hmo_loa_date"
+    | "loa_date"
+    | "hmo_approval_code"
+  > & {
+    receipt_number?: string | null
+  }
 
 type HmoSoaSourceItem = HmoSoaHistoryItem
 
@@ -185,6 +204,7 @@ const dateSigned = computed(() => new Date().toLocaleDateString("en-PH"))
 const dateFrom = computed(() => String(route.query.from ?? "").trim())
 const dateTo = computed(() => String(route.query.to ?? "").trim())
 const hmoName = computed(() => String(route.query.hmo_name ?? "").trim())
+
 const hmoId = computed(() => {
   const parsed = Number(String(route.query.hmo_id ?? "").trim())
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
@@ -194,31 +214,45 @@ const partnerLabel = computed(() => hmoName.value || "HMO")
 
 const billingDateLabel = computed(() => {
   const endDate = dateTo.value ? new Date(dateTo.value) : null
-  if (!endDate || Number.isNaN(endDate.getTime())) return new Date().toLocaleDateString("en-PH")
+  if (!endDate || Number.isNaN(endDate.getTime())) {
+    return new Date().toLocaleDateString("en-PH")
+  }
+
   return endDate.toLocaleDateString("en-PH")
 })
 
 const periodLabel = computed(() => {
   if (!dateFrom.value && !dateTo.value) return "-"
+
   if (dateFrom.value && dateTo.value) {
     return `${formatDate(dateFrom.value)} to ${formatDate(dateTo.value)}`
   }
+
   return formatDate(dateFrom.value || dateTo.value)
 })
 
-const patientCount = computed(() => rows.value.filter(row => row.kind === "patientTotal").length)
-const grandTotal = computed(() => rows.value.reduce((sum, row) => {
-  return sum + (row.kind === "service" ? Number(row.unitTotal ?? 0) : 0)
-}, 0))
+const patientCount = computed(() =>
+  rows.value.filter(row => row.kind === "patientTotal").length
+)
+
+const grandTotal = computed(() =>
+  rows.value.reduce((sum, row) => {
+    return sum + (row.kind === "service" ? Number(row.unitTotal ?? 0) : 0)
+  }, 0)
+)
 
 const formatDate = (value?: string | null): string => {
   if (!value) return "-"
+
   const parsed = new Date(value)
   return Number.isNaN(parsed.getTime()) ? "-" : parsed.toLocaleDateString("en-PH")
 }
 
 const asCurrency = (value?: number | null): string =>
-  Number(value ?? 0).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
+  Number(value ?? 0).toLocaleString("en-PH", {
+    style: "currency",
+    currency: "PHP"
+  })
 
 const formatPrice = (value?: number | null): string => {
   if (value === null || value === undefined) return "-"
@@ -252,7 +286,10 @@ const getLoaDateIssued = (billing: HmoSoaSourceItem): string | null =>
 const parseLineItems = (billing: HmoSoaSourceItem): HmoSoaLineItem[] => {
   try {
     const parsed = JSON.parse(billing.line_items_json || "[]") as unknown
-    return Array.isArray(parsed) ? parsed.filter(item => item && typeof item === "object") as HmoSoaLineItem[] : []
+
+    return Array.isArray(parsed)
+      ? parsed.filter(item => item && typeof item === "object") as HmoSoaLineItem[]
+      : []
   } catch {
     return []
   }
@@ -260,33 +297,45 @@ const parseLineItems = (billing: HmoSoaSourceItem): HmoSoaLineItem[] => {
 
 const parseSummaryMarker = (value?: string | null): { laterality: string; bodyArea: string } => {
   const text = String(value ?? "").trim()
+
   if (!text) {
-    return { laterality: "N/A", bodyArea: "N/A" }
+    return {
+      laterality: "N/A",
+      bodyArea: "N/A"
+    }
   }
 
   const markerMatch = text.match(/^\(?\s*(L|R|B|LEFT|RIGHT|BOTH|BILATERAL)\s*\)?[\s,:-]*(.*)$/i)
+
   if (markerMatch) {
     const marker = markerMatch[1].toUpperCase()
+
     return {
-      laterality: marker === "L" || marker === "LEFT"
-        ? "Left"
-        : marker === "R" || marker === "RIGHT"
-          ? "Right"
-          : "Both",
+      laterality:
+        marker === "L" || marker === "LEFT"
+          ? "Left"
+          : marker === "R" || marker === "RIGHT"
+            ? "Right"
+            : "Both",
       bodyArea: markerMatch[2]?.trim() || "N/A"
     }
   }
 
   const wordMatch = text.match(/^(LEFT|RIGHT|BOTH|BILATERAL)\b[\s,;:-]*(.*)$/i)
+
   if (wordMatch) {
     const marker = wordMatch[1].toUpperCase()
+
     return {
       laterality: marker === "LEFT" ? "Left" : marker === "RIGHT" ? "Right" : "Both",
       bodyArea: wordMatch[2]?.trim() || "N/A"
     }
   }
 
-  return { laterality: "N/A", bodyArea: text }
+  return {
+    laterality: "N/A",
+    bodyArea: text
+  }
 }
 
 const normalizeBodyArea = (value?: string | null): string => {
@@ -297,12 +346,14 @@ const normalizeBodyArea = (value?: string | null): string => {
   if (withoutParentheses) return withoutParentheses
 
   const suffixMatch = text.match(/^(.*?)[\s,:-]*\(?\s*(L|R|B|LEFT|RIGHT|BOTH|BILATERAL)\s*\)?$/i)
+
   if (suffixMatch) {
     const bodyArea = suffixMatch[1]?.trim()
     if (bodyArea) return bodyArea
   }
 
   const prefixMatch = text.match(/^\(?\s*(L|R|B|LEFT|RIGHT|BOTH|BILATERAL)\s*\)?[\s,:-]*(.*)$/i)
+
   if (prefixMatch) {
     const bodyArea = prefixMatch[2]?.trim()
     if (bodyArea) return bodyArea
@@ -326,26 +377,33 @@ const resolveBodyArea = (lineItem: HmoSoaLineItem, billing: HmoSoaSourceItem): s
 }
 
 const enrichHmoSoaItems = async (items: HmoRecentHistoryItem[]): Promise<HmoSoaHistoryItem[]> => {
-  const detailedItems = await Promise.all(items.map(async item => {
-    try {
-      const context = item.id > 0 ? await billingContextTanstackService.fetchContext(queryClient, item.id) : undefined
-      const detail = context?.billing
-      return detail
-        ? {
-            ...item,
-            public_id: detail.public_id,
-            line_items_json: detail.line_items_json,
-            diagnosis: detail.diagnosis,
-            hmo_loa_number: detail.hmo_loa_number,
-            hmo_loa_date: detail.hmo_loa_date,
-            loa_date: detail.loa_date,
-            hmo_approval_code: detail.hmo_approval_code
-          }
-        : item
-    } catch {
-      return item
-    }
-  }))
+  const detailedItems = await Promise.all(
+    items.map(async item => {
+      try {
+        const context = item.id > 0
+          ? await billingContextTanstackService.fetchContext(queryClient, item.id)
+          : undefined
+
+        const detail = context?.billing
+
+        return detail
+          ? {
+              ...item,
+              public_id: detail.public_id,
+              line_items_json: detail.line_items_json,
+              diagnosis: detail.diagnosis,
+              hmo_loa_number: detail.hmo_loa_number,
+              hmo_loa_date: detail.hmo_loa_date,
+              loa_date: detail.loa_date,
+              hmo_approval_code: detail.hmo_approval_code,
+              receipt_number: detail.receipt_number
+            }
+          : item
+      } catch {
+        return item
+      }
+    })
+  )
 
   return detailedItems as HmoSoaHistoryItem[]
 }
@@ -361,6 +419,7 @@ const buildRows = (items: HmoSoaSourceItem[]): SoaDisplayRow[] => {
   items.forEach(item => {
     const key = String(item.patient_id ?? item.patient_name ?? "unknown").trim()
     const current = patientGroups.get(key) ?? []
+
     current.push(item)
     patientGroups.set(key, current)
   })
@@ -370,29 +429,78 @@ const buildRows = (items: HmoSoaSourceItem[]): SoaDisplayRow[] => {
 
   Array.from(patientGroups.entries())
     .sort(([, leftItems], [, rightItems]) => {
-      return String(leftItems[0]?.patient_name ?? "").localeCompare(String(rightItems[0]?.patient_name ?? ""))
+      return String(leftItems[0]?.patient_name ?? "").localeCompare(
+        String(rightItems[0]?.patient_name ?? "")
+      )
     })
     .forEach(([patientKey, patientItems]) => {
-      const sortedItems = [...patientItems].sort((left, right) => getTimestamp(left) - getTimestamp(right))
+      const sortedItems = [...patientItems].sort((left, right) => {
+        return getTimestamp(left) - getTimestamp(right)
+      })
+
       let patientTotal = 0
+      let lastPrintedGroupKey = ""
+
+      const resolveDisplayFields = (
+        item: HmoSoaSourceItem,
+        referenceNo: string,
+        loaApprovalNo: string
+      ): {
+        itemNo: number | null
+        patientName: string
+        referenceNo: string
+        loaApprovalNo: string
+      } => {
+        const patientName = item.patient_name || "Unknown Patient"
+
+        const currentGroupKey = [
+          patientName,
+          referenceNo,
+          loaApprovalNo
+        ].join("|")
+
+        if (currentGroupKey === lastPrintedGroupKey) {
+          return {
+            itemNo: null,
+            patientName: "",
+            referenceNo: "",
+            loaApprovalNo: ""
+          }
+        }
+
+        lastPrintedGroupKey = currentGroupKey
+
+        const displayFields = {
+          itemNo,
+          patientName,
+          referenceNo,
+          loaApprovalNo
+        }
+
+        itemNo += 1
+
+        return displayFields
+      }
 
       sortedItems.forEach((item, index) => {
         const lineItems = parseLineItems(item)
         const referenceNo = getBillingRecordId(item)
         const billingStatus = formatHmoStatus(item.billing_status)
+        const loaApprovalNo = getLoaApprovalNo(item)
 
         if (!lineItems.length) {
           const unitPrice = Number(item.total_amount ?? 0)
           patientTotal += unitPrice
-          const loaApprovalNo = getLoaApprovalNo(item)
+
+          const displayFields = resolveDisplayFields(item, referenceNo, loaApprovalNo)
 
           outputRows.push({
             kind: "service",
             key: `service-${patientKey}-${index}`,
-            itemNo,
-            patientName: item.patient_name || "Unknown Patient",
-            referenceNo,
-            loaApprovalNo,
+            itemNo: displayFields.itemNo,
+            patientName: displayFields.patientName,
+            referenceNo: displayFields.referenceNo,
+            loaApprovalNo: displayFields.loaApprovalNo,
             loaDateIssued: getLoaDateIssued(item),
             billingStatus,
             treatmentDate: item.created_at,
@@ -404,7 +512,6 @@ const buildRows = (items: HmoSoaSourceItem[]): SoaDisplayRow[] => {
             unitTotal: unitPrice
           })
 
-          itemNo += 1
           return
         }
 
@@ -412,18 +519,20 @@ const buildRows = (items: HmoSoaSourceItem[]): SoaDisplayRow[] => {
           const quantity = Math.max(1, Number(lineItem.quantity ?? 1))
           const unitPrice = Number(lineItem.price ?? lineItem.unitPrice ?? lineItem.unit_price ?? 0)
           const unitTotal = quantity * unitPrice
+
           patientTotal += unitTotal
+
           const laterality = resolveLaterality(lineItem, item)
           const bodyArea = resolveBodyArea(lineItem, item)
-          const loaApprovalNo = getLoaApprovalNo(item)
+          const displayFields = resolveDisplayFields(item, referenceNo, loaApprovalNo)
 
           outputRows.push({
             kind: "service",
             key: `service-${patientKey}-${index}-${lineIndex}`,
-            itemNo,
-            patientName: item.patient_name || "Unknown Patient",
-            referenceNo,
-            loaApprovalNo,
+            itemNo: displayFields.itemNo,
+            patientName: displayFields.patientName,
+            referenceNo: displayFields.referenceNo,
+            loaApprovalNo: displayFields.loaApprovalNo,
             loaDateIssued: getLoaDateIssued(item),
             billingStatus,
             treatmentDate: item.created_at,
@@ -434,8 +543,6 @@ const buildRows = (items: HmoSoaSourceItem[]): SoaDisplayRow[] => {
             unitPrice,
             unitTotal
           })
-
-          itemNo += 1
         })
       })
 
@@ -481,3 +588,109 @@ onMounted(() => {
   })
 })
 </script>
+
+<style scoped>
+@media screen {
+  .hmo-soa-table {
+    min-width: 980px;
+  }
+}
+
+.hmo-soa-table .col-item {
+  width: 7%;
+}
+
+.hmo-soa-table .col-patient {
+  width: 17%;
+}
+
+.hmo-soa-table .col-reference {
+  width: 15%;
+}
+
+.hmo-soa-table .col-status {
+  width: 16%;
+}
+
+.hmo-soa-table .col-date {
+  width: 14%;
+}
+
+.hmo-soa-table .col-service {
+  width: 20%;
+}
+
+.hmo-soa-table .col-qty {
+  width: 11%;
+}
+
+.hmo-soa-bottom {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+@media print {
+  .hmo-soa-table-wrap {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+    overflow: visible !important;
+    margin-top: 2px !important;
+  }
+
+  .hmo-soa-table {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+    margin-top: 2px !important;
+  }
+
+  .hmo-soa-table thead {
+    display: table-header-group !important;
+  }
+
+  .hmo-soa-table tfoot {
+    display: table-footer-group !important;
+  }
+
+  .hmo-soa-table tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  :global(.hmo-invoice-details),
+  :global(.lgu-invoice-details) {
+    margin-bottom: 2px !important;
+  }
+
+  .details-grid {
+    margin-bottom: 2px !important;
+  }
+
+  .hmo-soa-table .col-item {
+    width: 6%;
+  }
+
+  .hmo-soa-table .col-patient {
+    width: 17%;
+  }
+
+  .hmo-soa-table .col-reference {
+    width: 15%;
+  }
+
+  .hmo-soa-table .col-status {
+    width: 16%;
+  }
+
+  .hmo-soa-table .col-date {
+    width: 14%;
+  }
+
+  .hmo-soa-table .col-service {
+    width: 21%;
+  }
+
+  .hmo-soa-table .col-qty {
+    width: 11%;
+  }
+}
+</style>

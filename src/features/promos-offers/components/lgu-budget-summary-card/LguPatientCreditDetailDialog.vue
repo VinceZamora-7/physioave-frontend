@@ -217,12 +217,12 @@ const lguPrintables = [
     icon: "pi pi-id-card",
     event: "export-patient-lgu-details" as LguPrintableEvent
   },
-  {
-    title: "Patient Billing Summary",
-    buttonLabel: "Print Patient Billing Summary",
-    icon: "pi pi-file",
-    event: "export-patient-billing-summary" as LguPrintableEvent
-  },
+  // {
+  //   title: "Patient Billing Summary",
+  //   buttonLabel: "Print Patient Billing Summary",
+  //   icon: "pi pi-file",
+  //   event: "export-patient-billing-summary" as LguPrintableEvent
+  // },
   // {
   //   title: "Attendance & Treatment Record",
   //   buttonLabel: "Print Attendance Record",
