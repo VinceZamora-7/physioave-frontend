@@ -61,6 +61,8 @@ export const formatLguPatientProgramStatus = (
   dropoutStatus?: string | null
 ): string =>
   formatLguStatus(resolveLguPatientProgramStatus(billingProgramStatus, dropoutStatus))
+): string =>
+  formatLguStatus(resolveLguPatientProgramStatus(billingProgramStatus, dropoutStatus))
 
 const getTableColumnCount = (table: HTMLTableElement): number => {
   const row = table.tHead?.rows?.[0] ?? table.rows?.[0]
@@ -163,7 +165,49 @@ const buildPrintStyles = (orientation: LguPrintOrientation): string => `
     [data-print-hidden="true"] {
       display: none !important;
     }
+  @media print {
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box !important;
+    }
 
+    html,
+    body,
+    #app {
+      width: auto !important;
+      min-width: 0 !important;
+      max-width: none !important;
+      height: auto !important;
+      min-height: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: visible !important;
+      background: #ffffff !important;
+    }
+
+    body {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    .no-print,
+    .print-hidden,
+    button,
+    [data-print-hidden="true"] {
+      display: none !important;
+    }
+
+    .lgu-invoice-page {
+      width: auto !important;
+      min-width: 0 !important;
+      max-width: none !important;
+      min-height: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: visible !important;
+      background: #ffffff !important;
+    }
     .lgu-invoice-page {
       width: auto !important;
       min-width: 0 !important;
@@ -198,6 +242,11 @@ const buildPrintStyles = (orientation: LguPrintOrientation): string => `
       page-break-after: auto !important;
     }
 
+    .table-wrap {
+      width: 100% !important;
+      max-width: 100% !important;
+      overflow: visible !important;
+    }
     .table-wrap {
       width: 100% !important;
       max-width: 100% !important;

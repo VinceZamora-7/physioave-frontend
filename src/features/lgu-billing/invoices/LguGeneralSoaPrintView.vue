@@ -6,6 +6,7 @@
   >
     <template #toolbar>
       <Button label="Print" icon="pi pi-print" @click="printPage()" />
+      <Button label="Print" icon="pi pi-print" @click="printPage()" />
       <Button label="Close" icon="pi pi-times" severity="secondary" outlined @click="goBack" />
     </template>
 
@@ -19,10 +20,12 @@
           <div class="line">
             <span class="label">Partner Institution:</span>
             <span>{{ partnerLabel || " " }}</span>
+            <span>{{ partnerLabel || " " }}</span>
           </div>
 
           <div class="line">
             <span class="label">Billing Date:</span>
+            <span>{{ billingDateLabel || " " }}</span>
             <span>{{ billingDateLabel || " " }}</span>
           </div>
         </div>
@@ -30,6 +33,7 @@
         <div class="details-group">
           <div class="line">
             <span class="label">Transaction Period:</span>
+            <span>{{ periodLabel || " " }}</span>
             <span>{{ periodLabel || " " }}</span>
           </div>
 
@@ -67,10 +71,25 @@
               <th class="text-left">PT SERVICE RENDERED</th>
               <th class="text-center">SESSION SEQUENCE</th>
               <th class="text-right">INVOICE BILLING TOTAL</th>
+              <th class="text-center">ITEM No.</th>
+              <th class="text-left">PATIENT NAME</th>
+              <th class="text-left">REFERRAL FORM No.</th>
+              <th class="text-left">REFERENCE NO.</th>
+              <th class="text-left">PROGRAM STATUS</th>
+              <th class="text-center">TREATMENT DATE</th>
+              <th class="text-left">PT SERVICE RENDERED</th>
+              <th class="text-center">SESSION SEQUENCE</th>
+              <th class="text-right">INVOICE BILLING TOTAL</th>
             </tr>
           </thead>
 
           <tbody>
+            <tr v-if="!rows.length">
+              <td colspan="9" class="empty-row">
+                No statement of account items found.
+              </td>
+            </tr>
+
             <tr v-if="!rows.length">
               <td colspan="9" class="empty-row">
                 No statement of account items found.
@@ -114,12 +133,48 @@
                 <td class="text-right">
                   {{ formatPrice(row.price) }}
                 </td>
+                <td class="text-center">
+                  {{ row.itemNo ?? "" }}
+                </td>
+
+                <td>
+                  {{ row.patientName || " " }}
+                </td>
+
+                <td>
+                  {{ row.referralFormNo || " " }}
+                </td>
+
+                <td>
+                  {{ row.referenceNo || " " }}
+                </td>
+
+                <td>
+                  {{ row.programStatus || " " }}
+                </td>
+
+                <td class="text-center">
+                  {{ row.treatmentDate ? formatDate(row.treatmentDate) : " " }}
+                </td>
+
+                <td class="service-name-cell">
+                  {{ row.serviceName || " " }}
+                </td>
+
+                <td class="text-center">
+                  {{ row.sessionSequence || " " }}
+                </td>
+
+                <td class="text-right">
+                  {{ formatPrice(row.price) }}
+                </td>
               </tr>
 
               <tr v-else class="patient-total-row">
                 <td colspan="8" class="text-right">
                   Patient Billing Summary Total:
                 </td>
+
 
                 <td class="text-right">
                   {{ asCurrency(row.total) }}
@@ -134,6 +189,7 @@
                 GRAND TOTAL:
               </td>
 
+
               <td class="text-right">
                 {{ asCurrency(grandTotal) }}
               </td>
@@ -143,6 +199,29 @@
       </div>
     </template>
 
+<template #bottom>
+  <div class="approval-wrap">
+    <div class="approval-card">
+      <div class="approval-label">
+        Approved by:
+      </div>
+
+      <div class="approval-name">
+        RENALOU B. CORDOVA, PTRP, UK-PT
+      </div>
+
+      <div class="approval-line"></div>
+
+      <div class="approval-title">
+        Chief Operations Officer
+      </div>
+
+      <div class="approval-signed">
+        Date Signed: {{ dateSigned }}
+      </div>
+    </div>
+  </div>
+</template>
 <template #bottom>
   <div class="approval-wrap">
     <div class="approval-card">
@@ -365,6 +444,18 @@ const CHILD_SERVICE_JSON_KEYS = [
 ]
 
 const CONTRACT_PRICE_KEYS = [
+  "standard_unit_price_snapshot",
+  "standardUnitPriceSnapshot",
+  "package_unit_price_snapshot",
+  "packageUnitPriceSnapshot",
+  "dropout_unit_price_snapshot",
+  "dropoutUnitPriceSnapshot",
+  "unit_price_snapshot",
+  "unitPriceSnapshot",
+  "amount_out",
+  "amountOut",
+  "billing_amount_due",
+  "billingAmountDue",
   "lgu_contract_price",
   "lguContractPrice",
   "lgu_price",
@@ -373,6 +464,8 @@ const CONTRACT_PRICE_KEYS = [
   "contractPrice",
   "contract_unit_price",
   "contractUnitPrice",
+  "contract_unit_price_snapshot",
+  "contractUnitPriceSnapshot",
   "package_unit_price",
   "packageUnitPrice",
   "standard_unit_price",
@@ -390,6 +483,12 @@ const DROPOUT_PRICE_KEYS = [
 ]
 
 const UNIT_PRICE_KEYS = [
+  "unit_price_snapshot",
+  "unitPriceSnapshot",
+  "amount_out",
+  "amountOut",
+  "billing_amount_due",
+  "billingAmountDue",
   "unit_price",
   "unitPrice",
   "price",
@@ -758,7 +857,16 @@ const getSessionSequence = (
     getText(lineItem, ["session_sequence", "sessionSequence"]) ||
     getText(parentItem, ["session_sequence", "sessionSequence"])
 
+  const totalSessions =
+    getAmount(lineItem, ["total_sessions", "totalSessions"]) ??
+    getAmount(parentItem, ["total_sessions", "totalSessions", "quantity", "qty"])
+
   if (explicit) {
+    // When explicit is a bare number and total_sessions is available, format as "X of Y"
+    const seqNum = Number(explicit)
+    if (Number.isFinite(seqNum) && seqNum > 0 && !/[\/]|\bof\b/i.test(explicit) && totalSessions && totalSessions > 0) {
+      return `${Math.floor(seqNum)} of ${Math.floor(totalSessions)}`
+    }
     return normalizeSessionSequence(explicit)
   }
 
@@ -768,10 +876,6 @@ const getSessionSequence = (
     "session_number",
     "sessionNumber"
   ])
-
-  const totalSessions =
-    getAmount(lineItem, ["total_sessions", "totalSessions"]) ??
-    getAmount(parentItem, ["total_sessions", "totalSessions", "quantity", "qty"])
 
   if (sessionNo && totalSessions) {
     return `${Math.floor(sessionNo)} of ${Math.floor(totalSessions)}`
@@ -985,12 +1089,13 @@ const isSameAsParentPackage = (
 
 const getRenderableServiceLines = (item: InvoiceLineItem): InvoiceLineItem[] => {
   const children = getChildren(item)
+  const renderedChildren = children.flatMap(child => getRenderableServiceLines(child))
 
-  if (children.length) {
-    return children.filter(child => hasRenderableServiceLine(child))
+  if (hasRenderableServiceLine(item) || isPackageLine(item)) {
+    return [item, ...renderedChildren]
   }
 
-  return hasRenderableServiceLine(item) ? [item] : []
+  return renderedChildren
 }
 
 const dedupeServiceLines = (
@@ -1034,13 +1139,18 @@ const shouldUseDirectSoaServiceRow = (item: unknown): boolean => {
     "parentServiceName"
   ])
 
+  if (!directServiceName || isPackageLine(item as InvoiceLineItem)) {
+    return false
+  }
+
   /*
-    Avoid displaying the package or parent service as the fallback.
-    Only use a direct SOA row when it does not look like a package container.
+    Allow rendering when the service_name differs from the package_name.
+    LGU SOA rows carry both fields as separate DB columns — service_name comes
+    from service_name_snapshot while package_name comes from package_name_snapshot.
+    Only skip the row when the service name is identical to the package name
+    (which would just duplicate the package header).
   */
-  return !!directServiceName &&
-    !packageName &&
-    !isPackageLine(item as InvoiceLineItem)
+  return !packageName || normalizeKey(directServiceName) !== normalizeKey(packageName)
 }
 
 const extractIncludedServiceLines = (item: unknown): InvoiceLineItem[] => {
@@ -1373,24 +1483,50 @@ onMounted(() => {
 
 .general-soa-table .col-item {
   width: 6%;
+@media screen {
+  .general-soa-table {
+    min-width: 1120px;
+  }
 }
 
+.general-soa-table .col-item {
+  width: 6%;
+}
+
+.general-soa-table .col-patient {
+  width: 12%;
 .general-soa-table .col-patient {
   width: 12%;
 }
 
 .general-soa-table .col-referral {
   width: 12%;
+.general-soa-table .col-referral {
+  width: 12%;
 }
 
+.general-soa-table .col-reference {
+  width: 12%;
 .general-soa-table .col-reference {
   width: 12%;
 }
 
 .general-soa-table .col-status {
   width: 10%;
+.general-soa-table .col-status {
+  width: 10%;
 }
 
+.general-soa-table .col-date {
+  width: 10%;
+}
+
+.general-soa-table .col-service {
+  width: 20%;
+}
+
+.general-soa-table .col-session {
+  width: 10%;
 .general-soa-table .col-date {
   width: 10%;
 }
@@ -1409,8 +1545,16 @@ onMounted(() => {
 
 .service-name-cell {
   font-weight: 600;
+.general-soa-table .col-total {
+  width: 8%;
 }
 
+.service-name-cell {
+  font-weight: 600;
+}
+
+.empty-row {
+  padding: 14px 10px;
 .empty-row {
   padding: 14px 10px;
   text-align: center;
@@ -1511,12 +1655,26 @@ onMounted(() => {
 
   :global(html.lgu-print-landscape) .general-soa-table .col-status {
     width: 10%;
+  :global(html.lgu-print-landscape) .general-soa-table .col-status {
+    width: 10%;
   }
 
   :global(html.lgu-print-landscape) .general-soa-table .col-date {
     width: 10%;
+  :global(html.lgu-print-landscape) .general-soa-table .col-date {
+    width: 10%;
   }
 
+  :global(html.lgu-print-landscape) .general-soa-table .col-service {
+    width: 22%;
+  }
+
+  :global(html.lgu-print-landscape) .general-soa-table .col-session {
+    width: 9%;
+  }
+
+  :global(html.lgu-print-landscape) .general-soa-table .col-total {
+    width: 8%;
   :global(html.lgu-print-landscape) .general-soa-table .col-service {
     width: 22%;
   }

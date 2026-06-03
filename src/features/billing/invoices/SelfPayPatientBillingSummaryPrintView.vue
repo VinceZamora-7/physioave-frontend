@@ -1,6 +1,6 @@
 <template>
   <HmoInvoiceLayout
-    title="PATIENT BILLING SUMMARY"
+    title="Invoice Billing"
     :subtitle="`Self Pay printable record for ${patientName}`"
     :has-error="!!error"
   >
@@ -27,10 +27,12 @@
                 <span class="profile-label">Patient Name:</span>
                 <span class="profile-value">{{ patientName }}</span>
               </div>
+
               <div class="profile-row">
                 <span class="profile-label">Address:</span>
                 <span class="profile-value">{{ patientAddress }}</span>
               </div>
+
               <div class="profile-row">
                 <span class="profile-label">Age:</span>
                 <span class="profile-value">{{ patientAge }}</span>
@@ -42,10 +44,12 @@
                 <span class="profile-label">Physical Therapist:</span>
                 <span class="profile-value">{{ physicalTherapist }}</span>
               </div>
+
               <div class="profile-row profile-row--wide-label">
                 <span class="profile-label">Doctor:</span>
                 <span class="profile-value">{{ doctor }}</span>
               </div>
+
               <div class="profile-row profile-row--wide-label">
                 <span class="profile-label">Diagnosis:</span>
                 <span class="profile-value">{{ diagnosis }}</span>
@@ -58,37 +62,72 @@
 
     <template v-if="!error">
       <div class="table-wrap">
-        <table class="summary-table">
+        <table class="summary-table self-pay-summary-table">
+          <colgroup>
+            <col class="col-item-no" />
+            <col class="col-service-rendered" />
+            <col class="col-quantity" />
+            <col class="col-unit-price" />
+            <col class="col-unit-total" />
+          </colgroup>
+
           <thead>
             <tr>
-              <th class="w-[50px] text-center">ITEM No.</th>
-              <th class="w-[90px] text-center">BILLING DATE</th>
-              <th class="w-[150px] text-center">PT SERVICE RENDERED</th>
-              <th class="w-[40px] text-center">QTY.</th>
-              <th class="w-[80px] text-center">BODY AREA</th>
-              <th class="w-[70px] text-center">UNIT PRICE</th>
-              <th class="w-[70px] text-center">UNIT TOTAL</th>
+              <th class="text-center  ">ITEM No.</th>
+              <th class="text-center">PT SERVICE RENDERED</th>
+              <th class="text-center">QTY.</th>
+              <th class="text-center">UNIT PRICE</th>
+              <th class="text-center-bottom">UNIT TOTAL</th>
             </tr>
           </thead>
 
           <tbody>
-            <tr v-for="row in rows" :key="row.key">
-              <td class="text-center">{{ row.itemNo }}</td>
-              <td class="text-center">{{ row.billingDate }}</td>
-              <td class="text-center">{{ row.serviceName }}</td>
-              <td class="text-center">{{ row.quantity }}</td>
-              <td class="text-center">{{ row.bodyArea }}</td>
-              <td class="text-center">{{ formatCurrency(row.unitPrice) }}</td>
-              <td class="text-center">{{ formatCurrency(row.unitTotal) }}</td>
+            <tr v-if="!rows.length">
+              <td colspan="5" class="empty-row">
+                No self pay billing items found.
+              </td>
+            </tr>
+
+            <tr
+              v-for="row in rows"
+              :key="row.key"
+              :class="{
+                'item-group-start': row.isPackageParent,
+                'line-item-child': row.level > 0,
+                'bundle-parent-row': row.isBundleParent
+              }"
+            >
+              <td class="text-center">
+                {{ row.itemNo ?? "" }}
+              </td>
+
+              <td
+                class="text-left service-name-cell"
+                :style="{ paddingLeft: row.level > 0 ? `${row.level * 18}px` : undefined }"
+              >
+                {{ row.serviceName }}
+              </td>
+
+              <td class="text-center">
+                {{ row.quantity }}
+              </td>
+
+              <td class="text-center">
+                {{ row.isIncluded ? "Included" : formatCurrency(row.unitPrice) }}
+              </td>
+
+              <td class="text-center">
+                {{ row.isIncluded ? "Included" : formatCurrency(row.unitTotal) }}
+              </td>
             </tr>
           </tbody>
 
           <tfoot>
-            <tr>
-              <td colspan="6" class="text-right font-bold" style="padding-top: 12px; border-top: 1px solid #e5e7eb;">
+            <tr class="grand-total-row">
+              <td colspan="4" class="text-right">
                 Grand Total:
               </td>
-              <td class="text-center font-bold" style="padding-top: 12px; border-top: 1px solid #e5e7eb;">
+              <td class="text-center">
                 {{ formatCurrency(grandTotal) }}
               </td>
             </tr>
@@ -98,57 +137,32 @@
     </template>
 
     <template #bottom>
-      <div
-        style="
-          width: 100%;
-          display: flex;
-          flex-direction: row;
-          justify-content: space-between;
-          align-items: center;
-          gap: 16px;
-          margin-top: 24px;
-          font-size: 13px;
-          color: #111827;
-        "
-      >
-        <div class="payment-box">
-          <h3>PAYMENT DETAILS</h3>
-          <div><strong>Billing Type:</strong> {{ billingTypeLabel }}</div>
-          <div><strong>Payment Method:</strong> {{ paymentMethodLabel }}</div>
-          <div><strong>Payment Reference:</strong> {{ paymentReferenceLabel }}</div>
-          <div><strong>Amount Paid:</strong> {{ formatCurrency(amountPaid) }}</div>
-        </div>
+      <div class=" self-pay-bottom">
+        <section class="payment-box">
+          <span class="self-pay-bottom-text-header">PAYMENT DETAILS</span>
+          <div><span class="self-pay-bottom-text">Billing Type:</span> {{ billingTypeLabel }}</div>
+          <div><span class="self-pay-bottom-text">Payment Method:</span> {{ paymentMethodLabel }}</div>
+          <div><span class="self-pay-bottom-text">Payment Reference:</span> {{ paymentReferenceLabel }}</div>
+          <div><span class="self-pay-bottom-text">Amount Paid:</span> {{ formatCurrency(amountPaid) }}</div>
+        </section>
 
-        <div
-          style="
-            padding: 14px 16px;
-            border: 1px solid #e5e7eb;
-            border-radius: 10px;
-            background: #ffffff;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            width: 320px;
-          "
-        >
-          <div style="margin-bottom: 8px; font-size: 12px; font-weight: 600; color: #374151;">
+        <section class="approval-card">
+          <div class="approval-label">
             Approved by:
           </div>
 
-          <div style="font-weight: 700; color: #111827;">
+          <div class="approval-name">
             RENALOU B. CORDOVA, PTRP, UK-PT
           </div>
 
-          <div style="width: 260px; margin-bottom: 1px; border-bottom: 1px solid #111827;"></div>
-
-          <div style="margin-bottom: 2px; color: #4b5563;">
+          <div class="approval-title">
             Chief Operations Officer
           </div>
 
-          <div style="margin-bottom: 18px; font-size: 12px; font-weight: 600; color: #374151;">
-            Date Signed: {{ dateSigned }}
+          <div class="approval-signed">
+            <strong>Date Signed:</strong> {{ dateSigned }}
           </div>
-        </div>
+        </section>
       </div>
     </template>
   </HmoInvoiceLayout>
@@ -166,24 +180,64 @@ import { useHmoInvoicePrintActions } from "@/features/hmo-billing/invoices/hmo-i
 
 type SelfPaySummaryRow = {
   key: string
-  itemNo: number
+  itemNo: number | null
   billingDate: string
   serviceName: string
   quantity: number
   bodyArea: string
   unitPrice: number
   unitTotal: number
+  level: number
+  isIncluded: boolean
+  isPackageParent: boolean
+  isBundleParent: boolean
 }
 
 type SelfPayLineItem = {
   id?: number | string
   name?: string
+  service_name?: string
+  serviceName?: string
+  package_name?: string
+  packageName?: string
+  bundle_name?: string
+  bundleName?: string
+  display_name?: string
+  label?: string
+  type?: string
   quantity?: number | string
+  qty?: number | string
   price?: number | string
   unitPrice?: number | string
   unit_price?: number | string
+  lineTotal?: number | string
+  line_total?: number | string
+  total?: number | string
+  amount?: number | string
   body_area?: string
   bodyArea?: string
+
+  children?: SelfPayLineItem[]
+  subItems?: SelfPayLineItem[]
+  sub_items?: SelfPayLineItem[]
+  includedServices?: SelfPayLineItem[]
+  included_services?: SelfPayLineItem[]
+  packageServices?: SelfPayLineItem[]
+  package_services?: SelfPayLineItem[]
+  packageItems?: SelfPayLineItem[]
+  package_items?: SelfPayLineItem[]
+  serviceItems?: SelfPayLineItem[]
+  service_items?: SelfPayLineItem[]
+  bundleServices?: SelfPayLineItem[]
+  bundle_services?: SelfPayLineItem[]
+  childServices?: SelfPayLineItem[]
+  child_services?: SelfPayLineItem[]
+  inclusions?: SelfPayLineItem[]
+  included?: SelfPayLineItem[]
+  services?: SelfPayLineItem[]
+  items?: SelfPayLineItem[]
+
+  [key: string]: unknown
 }
 
 const route = useRoute()
@@ -193,6 +247,73 @@ const { printPage, goBack } = useHmoInvoicePrintActions()
 const billingDetail = ref<BillingListItem | null>(null)
 const rows = ref<SelfPaySummaryRow[]>([])
 const error = ref("")
+
+const CHILD_SERVICE_KEYS = [
+  "children",
+  "subItems",
+  "sub_items",
+  "items",
+  "services",
+  "line_items",
+  "lineItems",
+  "included_services",
+  "includedServices",
+  "package_services",
+  "packageServices",
+  "child_services",
+  "childServices",
+  "service_inclusions",
+  "serviceInclusions",
+  "package_inclusions",
+  "packageInclusions",
+  "availed_services",
+  "availedServices",
+  "bundleItems",
+  "bundle_items",
+  "machineItems",
+  "machine_items",
+  "techniqueItems",
+  "technique_items",
+  "evaluationItems",
+  "evaluation_items",
+  "addOnItems",
+  "add_on_items",
+  "packageItems",
+  "package_items",
+  "serviceItems",
+  "service_items",
+  "bundleServices",
+  "bundle_services",
+  "inclusions",
+  "included"
+]
+
+const CHILD_SERVICE_JSON_KEYS = [
+  "line_items_json",
+  "lineItemsJson",
+  "included_services_json",
+  "includedServicesJson",
+  "package_services_json",
+  "packageServicesJson",
+  "child_services_json",
+  "childServicesJson",
+  "service_inclusions_json",
+  "serviceInclusionsJson",
+  "package_inclusions_json",
+  "packageInclusionsJson",
+  "availed_services_json",
+  "availedServicesJson",
+  "bundle_items_json",
+  "bundleItemsJson",
+  "machine_items_json",
+  "machineItemsJson",
+  "technique_items_json",
+  "techniqueItemsJson",
+  "evaluation_items_json",
+  "evaluationItemsJson",
+  "add_on_items_json",
+  "addOnItemsJson"
+]
 
 const billingId = computed(() => {
   const parsed = Number(String(route.query.billing_id ?? route.query.id ?? "").trim())
@@ -210,17 +331,103 @@ const firstNonBlank = (...values: unknown[]): string => {
 
 const formatDate = (value?: string | null): string => {
   if (!value) return "-"
+
   const parsed = new Date(value)
   return Number.isNaN(parsed.getTime()) ? "-" : parsed.toLocaleDateString("en-PH")
 }
 
 const formatCurrency = (value?: number | null): string =>
-  Number(value ?? 0).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
+  Number(value ?? 0).toLocaleString("en-PH", {
+    style: "currency",
+    currency: "PHP"
+  })
+
+const getRecordValue = (record: unknown, key: string): unknown => {
+  if (!record || typeof record !== "object") return undefined
+  return (record as Record<string, unknown>)[key]
+}
+
+const normalizeChildEntry = (entry: unknown): SelfPayLineItem[] => {
+  if (typeof entry === "string") {
+    const name = entry.trim()
+    return name ? [{ name }] : []
+  }
+
+  return entry && typeof entry === "object" ? [entry as SelfPayLineItem] : []
+}
+
+const toLineItemArray = (value: unknown): SelfPayLineItem[] => {
+  if (Array.isArray(value)) {
+    return value.flatMap(normalizeChildEntry)
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    try {
+      const parsed = JSON.parse(value) as unknown
+      return toLineItemArray(parsed)
+    } catch {
+      return []
+    }
+  }
+
+  return []
+}
+
+const parseJsonChildren = (value: unknown): SelfPayLineItem[] => {
+  if (Array.isArray(value)) {
+    return value.flatMap(normalizeChildEntry)
+  }
+
+  if (typeof value !== "string" || !value.trim()) {
+    return []
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return Array.isArray(parsed) ? parsed.flatMap(normalizeChildEntry) : []
+  } catch {
+    return []
+  }
+}
+
+const getDirectChildren = (line: SelfPayLineItem): SelfPayLineItem[] => [
+  ...CHILD_SERVICE_KEYS.flatMap(key => parseJsonChildren(getRecordValue(line, key))),
+  ...CHILD_SERVICE_JSON_KEYS.flatMap(key => parseJsonChildren(getRecordValue(line, key)))
+]
 
 const parseLineItems = (billing: BillingListItem): SelfPayLineItem[] => {
+  const raw = String(billing.line_items_json ?? "").trim()
+  if (!raw) return []
+
   try {
-    const parsed = JSON.parse(billing.line_items_json || "[]") as unknown
-    return Array.isArray(parsed) ? parsed.filter(item => item && typeof item === "object") as SelfPayLineItem[] : []
+    const parsed = JSON.parse(raw) as unknown
+
+    if (Array.isArray(parsed)) {
+      return toLineItemArray(parsed)
+    }
+
+    if (parsed && typeof parsed === "object") {
+      const record = parsed as Record<string, unknown>
+
+      return [
+        ...toLineItemArray(record.lineItems),
+        ...toLineItemArray(record.line_items),
+        ...toLineItemArray(record.items),
+        ...toLineItemArray(record.services),
+        ...toLineItemArray(record.packageItems),
+        ...toLineItemArray(record.package_items),
+        ...toLineItemArray(record.includedServices),
+        ...toLineItemArray(record.included_services),
+        ...toLineItemArray(record.packageServices),
+        ...toLineItemArray(record.package_services),
+        ...toLineItemArray(record.bundleItems),
+        ...toLineItemArray(record.bundle_items),
+        ...toLineItemArray(record.bundleServices),
+        ...toLineItemArray(record.bundle_services)
+      ]
+    }
+
+    return []
   } catch {
     return []
   }
@@ -230,38 +437,188 @@ const getBillingRecordId = (billing?: BillingListItem | null): string =>
   billing ? firstNonBlank(billing.public_id, `BILLING-${billing.id}`) : "N/A"
 
 const patientName = computed(() =>
-  firstNonBlank(billingDetail.value?.patient_name, billingDetail.value?.patient_public_id, billingDetail.value?.patient_id, "Patient")
+  firstNonBlank(
+    billingDetail.value?.patient_name,
+    billingDetail.value?.patient_public_id,
+    billingDetail.value?.patient_id,
+    "Patient"
+  )
 )
-const patientAddress = computed(() => firstNonBlank(billingDetail.value?.patient_address, "N/A"))
-const patientAge = computed(() => firstNonBlank(billingDetail.value?.patient_age, "N/A"))
-const physicalTherapist = computed(() => firstNonBlank(billingDetail.value?.physical_therapist, "N/A"))
-const doctor = computed(() => firstNonBlank(billingDetail.value?.doctor, "N/A"))
-const diagnosis = computed(() => firstNonBlank(billingDetail.value?.diagnosis, "N/A"))
-const billingDateLabel = computed(() => formatDate(billingDetail.value?.created_at))
-const referenceNoLabel = computed(() => getBillingRecordId(billingDetail.value))
+
+const patientAddress = computed(() =>
+  firstNonBlank(billingDetail.value?.patient_address, "N/A")
+)
+
+const patientAge = computed(() =>
+  firstNonBlank(billingDetail.value?.patient_age, "N/A")
+)
+
+const physicalTherapist = computed(() =>
+  firstNonBlank(billingDetail.value?.physical_therapist, "N/A")
+)
+
+const doctor = computed(() =>
+  firstNonBlank(billingDetail.value?.doctor, "N/A")
+)
+
+const diagnosis = computed(() =>
+  firstNonBlank(billingDetail.value?.diagnosis, "N/A")
+)
+
+const billingDateLabel = computed(() =>
+  formatDate(billingDetail.value?.created_at)
+)
+
+const referenceNoLabel = computed(() =>
+  getBillingRecordId(billingDetail.value)
+)
+
 const billingTypeLabel = computed(() =>
   String(billingDetail.value?.billing_type ?? "Self Pay").replace(/_/g, " ")
 )
+
 const paymentMethodLabel = computed(() =>
-  firstNonBlank(billingDetail.value?.payment_method_name, billingDetail.value?.payment_reference, "Self Pay")
+  firstNonBlank(
+    billingDetail.value?.payment_method_name,
+    billingDetail.value?.payment_reference,
+    "Self Pay"
+  )
 )
+
 const paymentReferenceLabel = computed(() =>
-  firstNonBlank(billingDetail.value?.receipt_number, billingDetail.value?.payment_reference, "N/A")
+  firstNonBlank(
+    billingDetail.value?.receipt_number,
+    billingDetail.value?.payment_reference,
+    "N/A"
+  )
 )
-const amountPaid = computed(() => Number(billingDetail.value?.amount_paid ?? 0))
+
+const amountPaid = computed(() =>
+  Number(billingDetail.value?.amount_paid ?? 0)
+)
+
 const dateSigned = computed(() =>
-  new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })
+  new Date().toLocaleDateString("en-PH", {
+    year: "numeric",
+    month: "long",
+    day: "numeric"
+  })
 )
-const grandTotal = computed(() =>
-  rows.value.reduce((sum, row) => sum + Number(row.unitTotal ?? 0), 0)
-)
+
+const grandTotal = computed(() => {
+  const billingTotal = Number(
+    billingDetail.value?.total_amount ??
+    billingDetail.value?.amount_due ??
+    0
+  )
+
+  if (Number.isFinite(billingTotal) && billingTotal > 0) {
+    return billingTotal
+  }
+
+  return rows.value.reduce((sum, row) => {
+    return sum + (row.isIncluded ? 0 : Number(row.unitTotal ?? 0))
+  }, 0)
+})
+
+const getServiceName = (
+  line: SelfPayLineItem,
+  fallback = "Self Pay Service"
+): string =>
+  firstNonBlank(
+    line.name,
+    line.service_name,
+    line.serviceName,
+    line.package_name,
+    line.packageName,
+    line.bundle_name,
+    line.bundleName,
+    line.display_name,
+    line.label,
+    fallback
+  )
+
+const getQuantity = (line: SelfPayLineItem): number => {
+  const quantity = Math.max(1, Math.floor(Number(line.quantity ?? line.qty ?? 1)))
+  return Number.isFinite(quantity) ? quantity : 1
+}
+
+const getUnitPrice = (line: SelfPayLineItem): number => {
+  const price = Number(line.price ?? line.unitPrice ?? line.unit_price ?? 0)
+  return Number.isFinite(price) ? price : 0
+}
+
+const getUnitTotal = (line: SelfPayLineItem, quantity: number): number => {
+  const lineTotal = Number(
+    line.lineTotal ??
+    line.line_total ??
+    line.total ??
+    line.amount
+  )
+
+  if (Number.isFinite(lineTotal) && lineTotal > 0) {
+    return lineTotal
+  }
+
+  return quantity * getUnitPrice(line)
+}
+
+const getBodyArea = (line: SelfPayLineItem): string =>
+  firstNonBlank(line.body_area, line.bodyArea, "N/A")
+
+const appendIncludedServiceRows = (
+  children: SelfPayLineItem[],
+  billingIdValue: number | string,
+  parentIndex: number,
+  billingDate: string,
+  output: SelfPaySummaryRow[],
+  level = 1,
+  path = "included"
+): void => {
+  children.forEach((child, childIndex) => {
+    const childChildren = getDirectChildren(child)
+    const childQuantity = getQuantity(child)
+    const childName = getServiceName(child, "Included Service")
+    const childPath = `${path}-${childIndex}`
+
+    output.push({
+      key: `${billingIdValue}-${parentIndex}-${childPath}`,
+      itemNo: null,
+      billingDate,
+      serviceName: childName,
+      quantity: childQuantity,
+      bodyArea: getBodyArea(child),
+      unitPrice: 0,
+      unitTotal: 0,
+      level,
+      isIncluded: true,
+      isPackageParent: false,
+      isBundleParent: childChildren.length > 0
+    })
+
+    if (childChildren.length > 0) {
+      appendIncludedServiceRows(
+        childChildren,
+        billingIdValue,
+        parentIndex,
+        billingDate,
+        output,
+        level + 1,
+        childPath
+      )
+    }
+  })
+}
 
 const buildRows = (billing: BillingListItem): SelfPaySummaryRow[] => {
   const lineItems = parseLineItems(billing)
   const billingDate = formatDate(billing.created_at)
+  const output: SelfPaySummaryRow[] = []
+  let itemNo = 1
 
   if (!lineItems.length) {
     const unitPrice = Number(billing.total_amount ?? billing.amount_due ?? 0)
+
     return [{
       key: `${billing.id}-1`,
       itemNo: 1,
@@ -270,24 +627,43 @@ const buildRows = (billing: BillingListItem): SelfPaySummaryRow[] => {
       quantity: 1,
       bodyArea: "N/A",
       unitPrice,
-      unitTotal: unitPrice
+      unitTotal: unitPrice,
+      level: 0,
+      isIncluded: false,
+      isPackageParent: false,
+      isBundleParent: false
     }]
   }
 
-  return lineItems.map((line, index) => {
-    const quantity = Math.max(1, Number(line.quantity ?? 1))
-    const unitPrice = Number(line.price ?? line.unitPrice ?? line.unit_price ?? 0)
-    return {
-      key: `${billing.id}-${index}`,
-      itemNo: index + 1,
+  lineItems.forEach((line, index) => {
+    const children = getDirectChildren(line)
+    const quantity = getQuantity(line)
+    const unitPrice = getUnitPrice(line)
+    const unitTotal = getUnitTotal(line, quantity)
+    const serviceName = getServiceName(line, billing.service_name || "Self Pay Service")
+    const hasIncludedServices = children.length > 0
+
+    output.push({
+      key: `${billing.id}-${index}-parent`,
+      itemNo,
       billingDate,
-      serviceName: String(line.name ?? billing.service_name ?? "Self Pay Service"),
+      serviceName,
       quantity,
-      bodyArea: firstNonBlank(line.body_area, line.bodyArea, "N/A"),
+      bodyArea: getBodyArea(line),
       unitPrice,
-      unitTotal: quantity * unitPrice
-    }
+      unitTotal,
+      level: 0,
+      isIncluded: false,
+      isPackageParent: hasIncludedServices,
+      isBundleParent: false
+    })
+
+    itemNo += 1
+
+    appendIncludedServiceRows(children, billing.id, index, billingDate, output)
   })
+
+  return output
 }
 
 const load = async (): Promise<void> => {
@@ -302,14 +678,19 @@ const load = async (): Promise<void> => {
 
   try {
     const context = await billingContextTanstackService.fetchContext(queryClient, billingId.value)
+
     billingDetail.value = context?.billing ?? null
+
     if (!billingDetail.value) {
       error.value = "Billing record was not found."
       return
     }
+
     rows.value = buildRows(billingDetail.value)
   } catch (err: unknown) {
-    error.value = err instanceof Error ? err.message : "Failed to load self pay billing summary."
+    error.value = err instanceof Error
+      ? err.message
+      : "Failed to load self pay billing summary."
   }
 }
 
@@ -321,3 +702,138 @@ onMounted(() => {
   })
 })
 </script>
+
+<style scoped>
+@media screen {
+  .self-pay-summary-table {
+    min-width: 720px;
+  }
+}
+
+.self-pay-summary-table .col-item-no {
+  width: 12%;
+}
+
+.self-pay-summary-table .col-service-rendered {
+  width: 42%;
+}
+
+.self-pay-summary-table .col-quantity {
+  width: 12%;
+}
+
+.self-pay-summary-table .col-unit-price {
+  width: 17%;
+}
+
+.self-pay-summary-table .col-unit-total {
+  width: 17%;
+}
+
+.service-name-cell {
+  font-weight: 600;
+}
+
+.bundle-parent-row .service-name-cell {
+  font-weight: 800;
+}
+
+.line-item-child .service-name-cell {
+  color: #374151;
+}
+
+.empty-row {
+  padding: 14px 10px;
+  text-align: center;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.self-pay-bottom {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+@media print {
+
+  .self-pay-bottom {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: flex-start;
+  scroll-margin-bottom: 20px;
+}
+
+  .self-pay-summary-table .col-item-no {
+    width: 10%;
+  }
+
+  .self-pay-summary-table .col-service-rendered {
+    width: 46%;
+  }
+
+  .self-pay-summary-table .col-quantity {
+    width: 10%;
+  }
+
+  .self-pay-summary-table .col-unit-price {
+    width: 17%;
+  }
+
+  .self-pay-summary-table .col-unit-total {
+    width: 17%;
+  }
+
+  :global(html.lgu-print-portrait) .self-pay-summary-table .col-item-no {
+    width: 10%;
+  }
+
+  :global(html.lgu-print-portrait) .self-pay-summary-table .col-service-rendered {
+    width: 44%;
+  }
+
+  :global(html.lgu-print-portrait) .self-pay-summary-table .col-quantity {
+    width: 10%;
+  }
+
+  :global(html.lgu-print-portrait) .self-pay-summary-table .col-unit-price {
+    width: 18%;
+  }
+
+  :global(html.lgu-print-portrait) .self-pay-summary-table .col-unit-total {
+    width: 18%;
+  }
+
+  :global(html.lgu-print-landscape) .self-pay-summary-table .col-item-no {
+    width: 10%;
+  }
+
+  :global(html.lgu-print-landscape) .self-pay-summary-table .col-service-rendered {
+    width: 48%;
+  }
+
+  :global(html.lgu-print-landscape) .self-pay-summary-table .col-quantity {
+    width: 10%;
+  }
+
+  :global(html.lgu-print-landscape) .self-pay-summary-table .col-unit-price {
+    width: 16%;
+  }
+
+  :global(html.lgu-print-landscape) .self-pay-summary-table .col-unit-total {
+    width: 16%;
+  }
+
+  .self-pay-bottom-text{
+    font-weight: 700;
+  }
+
+    .self-pay-bottom-text-header{
+      text-decoration: underline;
+    font-weight: 700;
+  }
+
+}
+
+
+</style>

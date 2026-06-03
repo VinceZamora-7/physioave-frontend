@@ -1020,7 +1020,7 @@
           {{ selectedPackageOfferDetail?.name || "This package" }} includes {{ packageSessionSchedules.length }} schedulable session{{ packageSessionSchedules.length === 1 ? "" : "s" }}.
         </div>
         <p class="mt-1 text-xs text-[rgb(var(--app-fg))]/60">
-          Each schedule creates its own appointment while sharing the same billing record.
+          Each schedule creates its own appointment and its own billing record. They still share the same package tracker.
         </p>
       </div>
 
@@ -1123,6 +1123,7 @@
       :overlay-only="true"
       :initial-view="billingOverlayMode"
       @close-overlay="onBillingOverlayClose"
+      @billing-updated="onBillingUpdated"
     />
 
   </main>
@@ -1174,7 +1175,7 @@ import type {Pageable} from "@/models/paging";
 import type {PatientHMOInformation} from "@/models/hmo-information";
 import {patientTanstackService} from "@/features/patients/queries/patient.tanstack.service";
 import {createReferenceService} from "@/services/reference.service";
-import {AppointmentTanstackKey, ReferenceTanstackKey} from "@/utils/keys/tanstack-key";
+import {AppointmentTanstackKey, ReferenceTanstackKey, ServiceCatalogTanstackKey} from "@/utils/keys/tanstack-key";
 import type {AppointmentProviderType, SpecialtyTag, TreatmentArea} from "@/models/reference";
 import { ptInputText, ptModalPrimaryBtn, ptOutlinedBtn, ptPrimaryBtn, ptSelect } from "@/features/shared/table-header.styles";
 import {clinicStore} from "@/stores/clinic.store"
@@ -1720,6 +1721,41 @@ const normalizePackageStatus = (raw: Record<string, unknown>): string => {
     return raw.is_active > 0 ? "Active" : "Inactive"
   }
   return "Active"
+}
+
+const normalizeSingleService = (value: unknown): SingleService | null => {
+  if (!value || typeof value !== "object") return null
+
+  const raw = value as Record<string, unknown>
+  const id = toOptionalStringId(raw.id)
+  const name = typeof raw.name === "string" ? raw.name.trim() : ""
+  const type = String(raw.type ?? "").trim() as SingleService["type"]
+
+  if (
+    !id ||
+    !name ||
+    !["machine", "technique", "evaluation", "add-on-machine", "add-on-technique", "add-on-home-service"].includes(type)
+  ) {
+    return null
+  }
+
+  return {
+    id,
+    type,
+    name,
+    price: normalizeNonNegativeNumber(raw.price ?? raw.effective_price ?? raw.base_price),
+    status: normalizePackageStatus(raw)
+  }
+}
+
+const parseStoredCatalogArray = (key: string): unknown[] => {
+  try {
+    const stored = localStorage.getItem(key)
+    const parsed = stored ? JSON.parse(stored) : []
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
 }
 
 const normalizePackageServiceOffer = (value: unknown): PackageServiceOffer | null => {
@@ -2601,34 +2637,37 @@ const loadTreatmentAreaOptions = async (): Promise<void> => {
 }
 
 const loadCachedServiceCatalogFallback = (): void => {
-  try {
-    const stored = localStorage.getItem("singlePayServices")
-    allSinglePayServices.value = stored ? JSON.parse(stored) : []
-  } catch {
-    allSinglePayServices.value = []
-  }
-  try {
-    const stored = localStorage.getItem("bundledServices")
-    const parsed = stored ? JSON.parse(stored) : []
-    allBundledServices.value = Array.isArray(parsed)
-      ? parsed
-          .map(normalizeBundledService)
-          .filter((item): item is BundledService => item !== null)
-      : []
-  } catch {
-    allBundledServices.value = []
-  }
-  try {
-    const stored = localStorage.getItem("packageServiceOffers")
-    const parsed = stored ? JSON.parse(stored) : []
-    allPackageServiceOffers.value = Array.isArray(parsed)
-      ? parsed
-          .map(normalizePackageServiceOffer)
-          .filter((item): item is PackageServiceOffer => item !== null)
-      : []
-  } catch {
-    allPackageServiceOffers.value = []
-  }
+  const storedGlobalServices = parseStoredCatalogArray("singlePayServices")
+    .map(normalizeSingleService)
+    .filter((item): item is SingleService => item !== null)
+  const storedLguServices = parseStoredCatalogArray("lguSinglePayServices")
+    .map(normalizeSingleService)
+    .filter((item): item is SingleService => item !== null)
+  const storedBundles = parseStoredCatalogArray("bundledServices")
+    .map(normalizeBundledService)
+    .filter((item): item is BundledService => item !== null)
+  const storedLguBundles = parseStoredCatalogArray("lguBundledServices")
+    .map(normalizeBundledService)
+    .filter((item): item is BundledService => item !== null)
+  const storedPackageOffers = parseStoredCatalogArray("packageServiceOffers")
+    .map(normalizePackageServiceOffer)
+    .filter((item): item is PackageServiceOffer => item !== null)
+  const storedLguPackageOffers = parseStoredCatalogArray("lguPackageServiceOffers")
+    .map(normalizePackageServiceOffer)
+    .filter((item): item is PackageServiceOffer => item !== null)
+
+  allSinglePayServices.value = storedGlobalServices
+  lguSinglePayServices.value = storedLguServices
+  allBundledServices.value = storedBundles.filter(item => !item.id.startsWith("lgu-"))
+  lguBundledServices.value = [
+    ...storedLguBundles,
+    ...storedBundles.filter(item => item.id.startsWith("lgu-")),
+  ]
+  allPackageServiceOffers.value = storedPackageOffers.filter(item => item.offerScope !== "LGU" && !item.id.startsWith("lgu-"))
+  lguPackageServiceOffers.value = [
+    ...storedLguPackageOffers,
+    ...storedPackageOffers.filter(item => item.offerScope === "LGU" || item.id.startsWith("lgu-")),
+  ]
 }
 
 const applyCatalogContext = (context?: ServiceCatalogContext): void => {
@@ -2651,15 +2690,16 @@ const applyCatalogContext = (context?: ServiceCatalogContext): void => {
 
 const loadSinglePayServices = async (): Promise<void> => {
   loadCachedServiceCatalogFallback()
-  try {
-    const [globalContext, lguContext] = await Promise.all([
-      serviceCatalogContextTanstackService.fetchContext(queryClient, {scope: "GLOBAL"}),
-      serviceCatalogContextTanstackService.fetchContext(queryClient, {scope: "LGU"}),
-    ])
-    applyCatalogContext(globalContext)
-    applyCatalogContext(lguContext)
-  } catch {
-    // Keep local cache fallback for offline/stale deployments.
+  await queryClient.invalidateQueries({queryKey: [ServiceCatalogTanstackKey.SERVICE_CATALOG_CONTEXT]})
+  const catalogResults = await Promise.allSettled([
+    serviceCatalogContextTanstackService.fetchContext(queryClient, {scope: "GLOBAL"}),
+    serviceCatalogContextTanstackService.fetchContext(queryClient, {scope: "LGU"}),
+  ])
+
+  for (const result of catalogResults) {
+    if (result.status === "fulfilled") {
+      applyCatalogContext(result.value)
+    }
   }
 }
 const removeHomeServiceAddOn = (): void => {
@@ -3254,6 +3294,101 @@ const openCreateDialog = async (): Promise<void> => {
   await loadCreateDayAppointments()
 }
 
+
+type CreateAppointmentSchedulePayload = {
+  startsAt: Date
+  endsAt: Date
+  label?: string
+  sessionId?: string
+  sessionName?: string
+  occurrence?: number
+  totalOccurrences?: number
+}
+
+const buildCreateBillingLineItemsJson = (): string =>
+  JSON.stringify(selectedServiceLines.value.map(line => ({
+    id: line.id,
+    type: line.type,
+    name: line.name,
+    quantity: 1,
+    price: getEffectiveCreateLinePrice(line),
+    originalPrice: getCreateLineOriginalPrice(line)
+  })))
+
+const getPerAppointmentBillingAmount = (scheduleCount: number): number => {
+  const total = Number(subtotalFromServiceLines.value ?? 0)
+
+  if (!selectedPackageHasSessionSchedules.value || scheduleCount <= 1) {
+    return Number.isFinite(total) ? total : 0
+  }
+
+  return Number(((Number.isFinite(total) ? total : 0) / scheduleCount).toFixed(2))
+}
+
+const buildPerAppointmentServiceName = (
+  schedule: CreateAppointmentSchedulePayload,
+  index: number,
+  total: number
+): string => {
+  const packageName = selectedPackageOfferDetail.value?.name?.trim()
+  const sessionName = schedule.sessionName?.trim()
+  const sequenceLabel = `Session ${schedule.occurrence ?? index + 1} of ${schedule.totalOccurrences ?? total}`
+
+  if (packageName && sessionName) {
+    return `${packageName} - ${sessionName} (${sequenceLabel})`
+  }
+
+  if (packageName) {
+    return `${packageName} (${sequenceLabel})`
+  }
+
+  if (sessionName) {
+    return `${sessionName} (${sequenceLabel})`
+  }
+
+  return `${createBillingType.value.replace("_", " ")} - ${selectedServiceLines.value.length} items`
+}
+
+const buildPerAppointmentBillingLineItemsJson = (
+  schedule: CreateAppointmentSchedulePayload,
+  index: number,
+  total: number
+): string => {
+  if (!selectedPackageHasSessionSchedules.value) {
+    return buildCreateBillingLineItemsJson()
+  }
+
+  const unitPrice = getPerAppointmentBillingAmount(total)
+  const sequenceLabel = `Session ${schedule.occurrence ?? index + 1} of ${schedule.totalOccurrences ?? total}`
+
+  return JSON.stringify([{
+    id: selectedPackageOfferId.value ?? schedule.sessionId ?? `package-session-${index + 1}`,
+    type: "package-session",
+    name: buildPerAppointmentServiceName(schedule, index, total),
+    quantity: 1,
+    price: unitPrice,
+    originalPrice: unitPrice,
+    package_offer_id: selectedPackageOfferId.value,
+    package_name: selectedPackageOfferDetail.value?.name,
+    session_id: schedule.sessionId,
+    session_name: schedule.sessionName,
+    session_sequence_label: sequenceLabel,
+    session_occurrence: schedule.occurrence ?? index + 1,
+    total_sessions: schedule.totalOccurrences ?? total,
+    starts_at: schedule.startsAt.toISOString(),
+    ends_at: schedule.endsAt.toISOString(),
+    included_services: selectedServiceLines.value.map(line => ({
+      id: line.id,
+      type: line.type,
+      name: line.name,
+      quantity: 1,
+      price: getEffectiveCreateLinePrice(line),
+      originalPrice: getCreateLineOriginalPrice(line)
+    }))
+  }])
+}
+
+
 const submitCreateAppointment = async (): Promise<void> => {
   if (isCreatingAppointment.value) return
   if (!createPatient.value) {
@@ -3281,11 +3416,15 @@ const submitCreateAppointment = async (): Promise<void> => {
     return
   }
 
-  const appointmentSchedules = selectedPackageHasSessionSchedules.value
+  const appointmentSchedules: CreateAppointmentSchedulePayload[] = selectedPackageHasSessionSchedules.value
     ? packageSessionSchedules.value.map(schedule => ({
         startsAt: snapToSlotBoundary(new Date(schedule.startsAt)),
         endsAt: getPackageSessionEnd(schedule.startsAt),
-        label: `${schedule.sessionName} ${schedule.occurrence}/${schedule.totalOccurrences}`
+        label: `${schedule.sessionName} ${schedule.occurrence}/${schedule.totalOccurrences}`,
+        sessionId: schedule.sessionId,
+        sessionName: schedule.sessionName,
+        occurrence: schedule.occurrence,
+        totalOccurrences: schedule.totalOccurrences
       }))
     : [{
         startsAt: createStart.value,
@@ -3313,8 +3452,29 @@ const submitCreateAppointment = async (): Promise<void> => {
   }
 
   const primarySchedule = appointmentSchedules[0]
+  const scheduleCount = appointmentSchedules.length
+  const perAppointmentAmountDue = getPerAppointmentBillingAmount(scheduleCount)
+  const sessionSchedulesPayload = selectedPackageHasSessionSchedules.value
+    ? appointmentSchedules.map((schedule, index) => ({
+        starts_at: schedule.startsAt.toISOString(),
+        ends_at: schedule.endsAt.toISOString(),
+        label: schedule.label,
+        session_id: schedule.sessionId,
+        session_name: schedule.sessionName,
+        session_occurrence: schedule.occurrence ?? index + 1,
+        total_sessions: schedule.totalOccurrences ?? scheduleCount,
+        session_sequence_label: `Session ${schedule.occurrence ?? index + 1} of ${schedule.totalOccurrences ?? scheduleCount}`,
+        create_billing: true,
+        billing_strategy: "PER_APPOINTMENT",
+        billing_type: createBillingType.value,
+        service_type: resolveCreateServiceType(createBillingType.value),
+        amount_due: perAppointmentAmountDue,
+        service_name: buildPerAppointmentServiceName(schedule, index, scheduleCount),
+        line_items_json: buildPerAppointmentBillingLineItemsJson(schedule, index, scheduleCount)
+      })) as unknown as NonNullable<Parameters<typeof appointmentPhase1Service.create>[0]["session_schedules"]>
+    : undefined
 
-  const appointmentPayload: Parameters<typeof appointmentPhase1Service.create>[0] = {
+  const appointmentPayload = {
     patient_id: createPatient.value,
     clinic_id: selectedClinicId.value,
     location_context: createLocationContext.value,
@@ -3325,28 +3485,28 @@ const submitCreateAppointment = async (): Promise<void> => {
       referring_doctor_id: createReferringDoctor.value,
       support_staff_id: createSupportStaff.value,
     ends_at: primarySchedule.endsAt.toISOString(),
-    session_schedules: selectedPackageHasSessionSchedules.value
-      ? appointmentSchedules.map(schedule => ({
-          starts_at: schedule.startsAt.toISOString(),
-          ends_at: schedule.endsAt.toISOString(),
-          label: schedule.label
-        }))
-      : undefined,
+    session_schedules: sessionSchedulesPayload,
     appointment_phase: createPhase.value,
-    amount_due: subtotalFromServiceLines.value,
-    service_name: `${createBillingType.value.replace("_", " ")} - ${selectedServiceLines.value.length} items`,
+    amount_due: selectedPackageHasSessionSchedules.value ? perAppointmentAmountDue : subtotalFromServiceLines.value,
+    total_package_amount_due: selectedPackageHasSessionSchedules.value ? subtotalFromServiceLines.value : undefined,
+    service_name: selectedPackageHasSessionSchedules.value
+      ? buildPerAppointmentServiceName(primarySchedule, 0, scheduleCount)
+      : `${createBillingType.value.replace("_", " ")} - ${selectedServiceLines.value.length} items`,
     billing_type: createBillingType.value,
     service_type: resolveCreateServiceType(createBillingType.value),
-    line_items_json: JSON.stringify(selectedServiceLines.value.map(line => ({
-      id: line.id,
-      type: line.type,
-      name: line.name,
-      quantity: 1,
-      price: getEffectiveCreateLinePrice(line),
-      originalPrice: getCreateLineOriginalPrice(line)
-    }))),
+    billing_strategy: "PER_APPOINTMENT",
+    package_billing_mode: "PER_APPOINTMENT",
+    create_billing_per_appointment: true,
+    line_items_json: selectedPackageHasSessionSchedules.value
+      ? buildPerAppointmentBillingLineItemsJson(primarySchedule, 0, scheduleCount)
+      : buildCreateBillingLineItemsJson(),
     notes: createBillingNotes.value.trim() || undefined,
     lgu_program_id: createBillingType.value === "LGU_BILLING" ? createLguProgramId.value : undefined,
+  } as Parameters<typeof appointmentPhase1Service.create>[0] & {
+    billing_strategy?: "PER_APPOINTMENT"
+    package_billing_mode?: "PER_APPOINTMENT"
+    create_billing_per_appointment?: boolean
+    total_package_amount_due?: number
   }
 
   try {
@@ -3356,7 +3516,7 @@ const submitCreateAppointment = async (): Promise<void> => {
     successToast(
       toast,
       createdCount > 1
-        ? `Package scheduled across ${createdCount} appointments with one billing`
+        ? `Package scheduled across ${createdCount} appointments with separate billing per appointment`
         : "Appointment created with services"
     )
     createVisible.value = false
@@ -3585,28 +3745,54 @@ const goToPatients = async (): Promise<void> => {
   })
 }
 
+const getSelectedAppointmentBillingId = (): number | undefined => {
+  const parsed = Number(selectedDetail.value?.billing_id ?? 0)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+}
+
+const buildSelectedAppointmentBillingQuery = (openMode?: "detail" | "edit" | "tender"): Record<string, string> => {
+  if (!selectedDetail.value) return {}
+
+  const billingId = getSelectedAppointmentBillingId()
+  const query: Record<string, string> = {
+    patientId: String(selectedDetail.value.patient_id),
+    appointmentId: String(selectedDetail.value.id),
+    appointmentBillingMode: "PER_APPOINTMENT"
+  }
+
+  if (billingId) {
+    query.billingId = String(billingId)
+  }
+
+  if (openMode) {
+    query.openMode = openMode
+  }
+
+  return query
+}
+
 const goToBilling = async (): Promise<void> => {
   if (!selectedDetail.value) return
+
   await router.push({
     name: "billing",
-    query: {
-      patientId: String(selectedDetail.value.patient_id),
-      appointmentId: String(selectedDetail.value.id),
-      ...(selectedDetail.value.billing_id ? {billingId: String(selectedDetail.value.billing_id)} : {})
-    }
+    query: buildSelectedAppointmentBillingQuery(getSelectedAppointmentBillingId() ? "detail" : "edit")
   })
 }
 
 const openTenderPaymentDrawer = async (): Promise<void> => {
-  if (!selectedDetail.value?.billing_id) return
+  if (!selectedDetail.value) return
+
+  const billingId = getSelectedAppointmentBillingId()
+  if (!billingId) {
+    errorToast(toast, "This appointment does not have its own billing record yet. Create or refresh the appointment billing first.")
+    await goToBilling()
+    return
+  }
+
   billingOverlayMode.value = 'detail'
   await router.replace({
-    query: {
-      patientId: String(selectedDetail.value.patient_id),
-      appointmentId: String(selectedDetail.value.id),
-      billingId: String(selectedDetail.value.billing_id),
-      openMode: 'tender'
-    }
+    query: buildSelectedAppointmentBillingQuery("tender")
   })
   billingOverlayVisible.value = true
 }
@@ -3614,6 +3800,17 @@ const openTenderPaymentDrawer = async (): Promise<void> => {
 const onBillingOverlayClose = (): void => {
   billingOverlayVisible.value = false
   void router.replace({query: {}})
+}
+
+const onBillingUpdated = async (payload: { billingId?: number; appointmentId?: number; billingStatus?: string }): Promise<void> => {
+  await refreshAll()
+  await calendarSectionRef.value?.refreshDots()
+
+  const appointmentId = payload.appointmentId ?? selectedDetail.value?.id
+  if (!appointmentId) return
+
+  await invalidateAppointmentContext(appointmentId)
+  selectedDetail.value = await fetchAppointmentDetail(appointmentId)
 }
 
 watch(createStart, (value) => {
@@ -3788,5 +3985,3 @@ onMounted(async () => {
   await tableSectionRef.value?.refresh()
 })
 </script>
-
-

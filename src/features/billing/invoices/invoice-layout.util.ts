@@ -93,17 +93,12 @@ export const writePrintWindowDocument = (
   }
 }
 
-const columnAlignClass = (align?: "left" | "center" | "right"): string => {
-  if (align === "center") return "text-center"
-  if (align === "right") return "text-right"
-  return ""
-}
 
 export function renderStandardInvoiceWindow(printWindow: Window, invoice: InvoiceLayoutInput): void {
   const printedDate = new Date().toISOString()
-  const tableHeaders = invoice.columns.map(column => `
-    <th class="${columnAlignClass(column.align)}"${column.width ? ` style="width: ${escapeHtml(column.width)};"` : ""}>${escapeHtml(column.label)}</th>
-  `).join("")
+const tableHeaders = invoice.columns.map(column => `
+  <th class="text-left">${escapeHtml(column.label)}</th>
+`).join("")
 
   const detailRows = invoice.detailRows.map(row =>
     `<div><strong>${escapeHtml(row.label)}:</strong> ${escapeHtml(row.value)}</div>`
@@ -866,9 +861,38 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
               <div class="line"><span class="label">Diagnosis:</span><span>${escapeHtml(invoice.diagnosis || "N/A")}</span></div>
             </div>
           </div>`}
+      ${invoice.hidePatientDoctorHeader
+        ? ""
+        : `<div class="patient-doctor-grid">
+            <div>
+              <div class="line"><span class="label">Patient's Name:</span><span>${escapeHtml(invoice.patientName)}</span></div>
+              <div class="line"><span class="label">Address:</span><span>${escapeHtml(invoice.patientAddress || "N/A")}</span></div>
+              <div class="line"><span class="label">Age:</span><span>${escapeHtml(invoice.patientAge || "N/A")}</span></div>
+              <div class="line"><span class="label">Gender:</span><span>${escapeHtml(invoice.patientGender || "N/A")}</span></div>
+            </div>
+
+            <div>
+              <div class="line"><span class="label">Physical Therapist:</span><span>${escapeHtml(invoice.physicalTherapist || "N/A")}</span></div>
+              <div class="line"><span class="label">Doctor:</span><span>${escapeHtml(invoice.doctor || "N/A")}</span></div>
+              <div class="line"><span class="label">Diagnosis:</span><span>${escapeHtml(invoice.diagnosis || "N/A")}</span></div>
+            </div>
+          </div>`}
 
       <div class="divider"></div>
+      <div class="divider"></div>
 
+      ${invoice.customBodyHtml
+        ? invoice.customBodyHtml
+        : `<table>
+            <thead>
+              <tr>
+                ${tableHeaders}
+              </tr>
+            </thead>
+            <tbody>
+              ${invoice.tableRowsHtml || `<tr><td class="text-center">1</td><td colspan="${invoice.emptyStateColspan}">No services found.</td></tr>`}
+            </tbody>
+          </table>`}
       ${invoice.customBodyHtml
         ? invoice.customBodyHtml
         : `<table>
@@ -890,9 +914,23 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
               : ""}
             <div class="totals-row grand-total"><span>Grand Total:</span><span>${escapeHtml(asCurrency(invoice.grandTotal))}</span></div>
           </div>`}
+      ${invoice.hideFinancialSummary
+        ? ""
+        : `<div class="totals">
+            ${Number(invoice.surchargeAmount ?? 0) > 0
+              ? `<div class="totals-row"><span>${escapeHtml(invoice.surchargeLabel || "Surcharge")}:</span><span>${escapeHtml(asCurrency(Number(invoice.surchargeAmount ?? 0)))}</span></div>`
+              : ""}
+            <div class="totals-row grand-total"><span>Grand Total:</span><span>${escapeHtml(asCurrency(invoice.grandTotal))}</span></div>
+          </div>`}
 
       <div class="divider"></div>
+      <div class="divider"></div>
 
+      <div class="bottom">
+        <section class="payment-box">
+          <h3>${escapeHtml(invoice.detailBoxTitle)}</h3>
+          ${detailRows}
+        </section>
       <div class="bottom">
         <section class="payment-box">
           <h3>${escapeHtml(invoice.detailBoxTitle)}</h3>
@@ -919,7 +957,35 @@ export function renderStandardInvoiceWindow(printWindow: Window, invoice: Invoic
           </div>
         </section>
       </div>
+        <section class="approval-card">
+          <div class="approval-label">
+            Approved by:
+          </div>
 
+          <div class="approval-name">
+            ${escapeHtml(invoice.approvedBy || "RENALOU B. CORDOVA, PTRP, UK-PT")}
+          </div>
+
+          <div class="approval-line"></div>
+
+          <div class="approval-title">
+            ${escapeHtml(invoice.approverTitle || "Chief Operations Officer")}
+          </div>
+
+          <div class="approval-signed">
+            Date Signed: ${escapeHtml(formatDate(invoice.dateSigned || printedDate))}
+          </div>
+        </section>
+      </div>
+
+      <footer class="footer">
+        <span>${WEBSITE_LABEL}</span>
+        <span>${PHONE_LABEL}</span>
+        <span>${EMAIL_LABEL}</span>
+      </footer>
+    </section>
+  </body>
+</html>
       <footer class="footer">
         <span>${WEBSITE_LABEL}</span>
         <span>${PHONE_LABEL}</span>

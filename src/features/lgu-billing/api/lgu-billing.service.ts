@@ -76,6 +76,7 @@ export interface LguPatientBilling {
 
 export interface LguPatientAuthorization {
   authorization_id: number
+  phase1_billing_id?: number | null
   package_name: string
   authorization_status: string
   total_sessions: number
@@ -124,6 +125,10 @@ export interface LguDashboardHistoryItem {
   patient_name?: string | null
   phase1_billing_id?: number | null
   phase1_billing_public_id?: string | null
+  referral_form_no?: string | null
+  treatment_date?: string | null
+  session_sequence?: number | null
+  total_sessions?: number | null
   billing_status?: string | null
   billing_amount_due?: number | null
   amount_paid?: number | null
@@ -133,6 +138,8 @@ export interface LguDashboardHistoryItem {
   doctor?: string | null
   diagnosis?: string | null
   service_name?: string | null
+  package_name?: string | null
+  line_items_json?: string | null
   receipt_number?: string | null
   entry_type: string
   usage_status: string
@@ -141,7 +148,6 @@ export interface LguDashboardHistoryItem {
   balance_after?: number | null
   reference_label?: string | null
   notes?: string | null
-  line_items_json?: string | null
 }
 
 export interface LguMonthlyClaimResult {

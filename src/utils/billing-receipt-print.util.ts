@@ -157,8 +157,8 @@ export function renderBillingReceiptWindow(
         <title>${escapeHtml(fileName)}</title>
         <style>
           @page {
-            size: A4;
-            margin: 12mm;
+            size: A5 portrait;
+            margin: 5mm;
           }
           * {
             box-sizing: border-box;

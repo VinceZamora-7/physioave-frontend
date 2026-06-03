@@ -1,6 +1,7 @@
 <template>
   <main class="lgu-invoice-page min-h-screen bg-[#f5f5f5] text-black">
     <section class="lgu-invoice-container">
+    <section class="lgu-invoice-container">
       <section class="lgu-invoice-sheet">
         <header class="lgu-invoice-top">
           <div class="lgu-invoice-heading">
@@ -21,6 +22,7 @@
         <div class="lgu-invoice-toolbar print:hidden">
           <slot name="toolbar">
             <Button label="Print" icon="pi pi-print" @click="printPage()" />
+            <Button label="Print" icon="pi pi-print" @click="printPage()" />
             <Button label="Close" icon="pi pi-times" severity="secondary" outlined @click="goBack" />
           </slot>
         </div>
@@ -30,6 +32,7 @@
         </div>
 
         <template v-else>
+          <div v-if="$slots.details" class="lgu-invoice-details">
           <div v-if="$slots.details" class="lgu-invoice-details">
             <slot name="details" />
           </div>
@@ -58,6 +61,7 @@
 <script setup lang="ts">
 import Button from "primevue/button"
 import { useLguInvoicePrintActions } from "./lgu-invoice.shared"
+import { useLguInvoicePrintActions } from "./lgu-invoice.shared"
 
 withDefaults(
   defineProps<{
@@ -70,7 +74,19 @@ withDefaults(
     hasError: false
   }
 )
+withDefaults(
+  defineProps<{
+    title: string
+    subtitle?: string
+    hasError?: boolean
+  }>(),
+  {
+    subtitle: "",
+    hasError: false
+  }
+)
 
+const { printPage, goBack } = useLguInvoicePrintActions()
 const { printPage, goBack } = useLguInvoicePrintActions()
 </script>
 
@@ -96,15 +112,19 @@ const { printPage, goBack } = useLguInvoicePrintActions()
   width: 100%;
   max-width: 210mm;
   min-height: auto;
+  min-height: auto;
   margin: 0 auto;
   padding: 12px 16px 10px;
   border: 1px solid #d1d5db;
   background: #ffffff;
   font-family: "Open Sans", "Segoe UI", Tahoma, Arial, sans-serif;
   color: #000000;
+  color: #000000;
 }
 
+/* HEADER */
 .lgu-invoice-top {
+  width: 100%;
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -122,7 +142,8 @@ const { printPage, goBack } = useLguInvoicePrintActions()
 }
 
 .lgu-invoice-logo {
-  max-height: 60px;
+  display: block;
+  max-height: 92px;
   width: auto;
   flex-shrink: 0;
 }
@@ -132,6 +153,7 @@ const { printPage, goBack } = useLguInvoicePrintActions()
   text-align: center;
 }
 
+/* TITLE */
 .lgu-invoice-title {
   width: 100%;
   margin: 2px 0 0;
@@ -141,12 +163,13 @@ const { printPage, goBack } = useLguInvoicePrintActions()
   letter-spacing: 0.05em;
   font-weight: 800;
   color: #111827;
-  font-family: "Bebas Neue Cyrillic", "Bebas Neue", "Open Sans", sans-serif;
+  font-family: "Bebas Neue", "Open Sans", sans-serif;
 }
 
 .lgu-invoice-title span {
   text-decoration: underline;
   text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
   text-underline-offset: 3px;
 }
 
@@ -157,9 +180,11 @@ const { printPage, goBack } = useLguInvoicePrintActions()
   line-height: 1.35;
   color: #374151;
   text-align: center;
+  text-align: center;
   text-transform: uppercase;
 }
 
+/* META */
 .lgu-invoice-meta-grid {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -174,8 +199,8 @@ const { printPage, goBack } = useLguInvoicePrintActions()
 
 .lgu-invoice-meta-grid strong {
   white-space: nowrap;
-  font-weight: 700;
-  font-family: "Bebas Neue Cyrillic", "Bebas Neue", "Open Sans", sans-serif;
+  font-weight: 800;
+  font-family: "Bebas Neue", "Open Sans", sans-serif;
   letter-spacing: 0.06em;
 }
 
@@ -207,6 +232,7 @@ const { printPage, goBack } = useLguInvoicePrintActions()
 
 .lgu-invoice-body tbody tr.item-group-start td {
   border-top: 1px solid #d31d6e;
+  border-top: 1px solid #d31d6e;
 }
 
 .lgu-invoice-body tbody tr.line-item-child td {
@@ -219,14 +245,13 @@ const { printPage, goBack } = useLguInvoicePrintActions()
   font-weight: 600;
 }
 
-.lgu-invoice-body tbody tr:first-child td {
-  border-top: none;
-}
+/* ================= BOTTOM ================= */
 
 .lgu-invoice-bottom {
   width: 100%;
+  width: 100%;
   display: flex;
-  gap: 16px;
+  gap: 10px;
   align-items: flex-start;
   margin-top: 1px;
 }
@@ -236,6 +261,7 @@ const { printPage, goBack } = useLguInvoicePrintActions()
   padding: 10px 12px;
   border-radius: 10px;
   background: #ffffff;
+  background: #ffffff;
   font-size: 12px;
 }
 
@@ -244,14 +270,16 @@ const { printPage, goBack } = useLguInvoicePrintActions()
     color: #fcfcfc;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
+  gap: 4px;
   padding: 4px 8px;
-  font-size: 11px;
-  font-family: "Open Sans", sans-serif;
-  font-weight: 600;
+  font-size: 9px;
+  line-height: 1.2;
+  font-weight: 700;
+  text-align: center;
 }
 
 .lgu-invoice-footer span {
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -289,6 +317,8 @@ const { printPage, goBack } = useLguInvoicePrintActions()
     margin: 0 !important;
   }
 
+  .print\:hidden,
+  .lgu-invoice-toolbar {
   .print\:hidden,
   .lgu-invoice-toolbar {
     display: none !important;
