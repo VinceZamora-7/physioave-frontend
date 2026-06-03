@@ -4,7 +4,7 @@
       <section class="lgu-invoice-sheet">
         <header class="lgu-invoice-top">
           <div class="lgu-invoice-heading">
-            <img class="lgu-invoice-logo" src="/app-logo.png" alt="PhysioAve" />
+            <img class="lgu-invoice-logo" src="/physioave-logo-dark-updated.png" alt="PhysioAve" />
 
             <div v-if="$slots.meta" class="lgu-invoice-meta-grid">
               <slot name="meta" />
@@ -15,6 +15,7 @@
             <h1 class="lgu-invoice-title">
               <span>{{ title }}</span>
             </h1>
+
           </div>
         </header>
 
@@ -34,11 +35,9 @@
             <slot name="details" />
           </div>
 
-
           <div class="lgu-invoice-body">
             <slot />
           </div>
-
 
           <div v-if="$slots.bottom" class="lgu-invoice-bottom">
             <slot name="bottom" />
@@ -85,6 +84,11 @@ const { printPage, goBack } = useLguInvoicePrintActions()
   print-color-adjust: exact;
 }
 
+.lgu-invoice-page {
+  width: 100%;
+  overflow-x: auto;
+}
+
 .lgu-invoice-container {
   width: 100%;
   max-width: 1100px;
@@ -97,9 +101,11 @@ const { printPage, goBack } = useLguInvoicePrintActions()
   max-width: 210mm;
   min-height: auto;
   margin: 0 auto;
-  padding: 12px 16px 10px;
+  padding: 10mm;
   border: 1px solid #d1d5db;
+  border-radius: 10px;
   background: #ffffff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
   font-family: "Open Sans", "Segoe UI", Tahoma, Arial, sans-serif;
   color: #000000;
 }
@@ -109,23 +115,25 @@ const { printPage, goBack } = useLguInvoicePrintActions()
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-bottom: 8px;
+  gap: 7px;
+  margin-bottom: 10px;
 }
 
 .lgu-invoice-heading {
   width: 100%;
   min-width: 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) minmax(260px, auto);
+  align-items: center;
+  gap: 12px;
 }
 
 .lgu-invoice-logo {
-  max-height: 50px;
+  display: block;
+  max-height: 92px;
   width: auto;
-  flex-shrink: 0;
+  max-width: 340px;
+  object-fit: contain;
 }
 
 .lgu-invoice-title-block {
@@ -136,14 +144,14 @@ const { printPage, goBack } = useLguInvoicePrintActions()
 /* TITLE */
 .lgu-invoice-title {
   width: 100%;
-  margin: 2px 0 0;
+  margin: 1px 0 0;
   text-align: center;
-  font-size: clamp(20px, 2.2vw, 24px);
-  line-height: 1.1;
+  font-size: clamp(20px, 2.2vw, 25px);
+  line-height: 1.08;
   letter-spacing: 0.05em;
   font-weight: 800;
   color: #111827;
-  font-family: "Bebas Neue Cyrillic", "Bebas Neue", "Open Sans", sans-serif;
+  font-family: "Bebas Neue", "Open Sans", sans-serif;
 }
 
 .lgu-invoice-title span {
@@ -155,8 +163,8 @@ const { printPage, goBack } = useLguInvoicePrintActions()
 .lgu-invoice-subtitle {
   margin: 4px auto 0;
   max-width: 760px;
-  font-size: 12px;
-  line-height: 1.35;
+  font-size: 11px;
+  line-height: 1.25;
   color: #374151;
   text-align: center;
   text-transform: uppercase;
@@ -165,11 +173,12 @@ const { printPage, goBack } = useLguInvoicePrintActions()
 /* META */
 .lgu-invoice-meta-grid {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: max-content minmax(0, 1fr);
   gap: 2px 8px;
-  min-width: min(320px, 100%);
-  max-width: 420px;
-  font-size: 12px;
+  min-width: 0;
+  width: min(420px, 100%);
+  margin-left: auto;
+  font-size: 11px;
   line-height: 1.25;
   font-family: "Open Sans", sans-serif;
   font-weight: 600;
@@ -177,14 +186,14 @@ const { printPage, goBack } = useLguInvoicePrintActions()
 
 .lgu-invoice-meta-grid strong {
   white-space: nowrap;
-  font-weight: 700;
-  font-family: "Bebas Neue Cyrillic", "Bebas Neue", "Open Sans", sans-serif;
+  font-weight: 800;
+  font-family: "Bebas Neue", "Open Sans", sans-serif;
   letter-spacing: 0.06em;
 }
 
 .lgu-invoice-meta-grid span {
   min-width: 0;
-  word-break: break-word;
+  word-break: normal;
   overflow-wrap: anywhere;
 }
 
@@ -196,18 +205,32 @@ const { printPage, goBack } = useLguInvoicePrintActions()
 }
 
 .lgu-invoice-details {
-  margin: 15px 0px;
   width: 100%;
+  margin: 8px 0 10px;
 }
 
 .lgu-invoice-body {
   width: 100%;
+  min-width: 0;
 }
 
 /* ================= TABLE FIX ================= */
 
+.lgu-invoice-body .table-wrap {
+  width: 100%;
+  overflow: visible;
+}
+
 .lgu-invoice-body table {
   width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.lgu-invoice-body th,
+.lgu-invoice-body td {
+  vertical-align: top;
+  overflow-wrap: anywhere;
 }
 
 .lgu-invoice-body tbody tr.item-group-start td {
@@ -231,7 +254,10 @@ const { printPage, goBack } = useLguInvoicePrintActions()
   display: flex;
   gap: 10px;
   align-items: flex-start;
-  margin-top: 1px;
+  justify-content: flex-end;
+  margin-top: 8px;
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 .lgu-invoice-notice-box {
@@ -243,17 +269,22 @@ const { printPage, goBack } = useLguInvoicePrintActions()
 }
 
 .lgu-invoice-footer {
+  width: 100%;
+  margin-top: 8px;
   background: #1ea5d7;
-    color: #fcfcfc;
+  color: #fcfcfc;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
-  padding: 4px 6px;
-  font-size: 10px;
-  font-weight: 600;
+  padding: 4px 8px;
+  font-size: 9px;
+  line-height: 1.2;
+  font-weight: 700;
+  text-align: center;
 }
 
 .lgu-invoice-footer span {
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -264,14 +295,20 @@ const { printPage, goBack } = useLguInvoicePrintActions()
     padding: 10px;
   }
 
+  .lgu-invoice-sheet {
+    padding: 14px;
+    border-radius: 8px;
+  }
+
   .lgu-invoice-heading {
-    flex-direction: column;
+    grid-template-columns: 1fr;
     gap: 8px;
   }
 
   .lgu-invoice-meta-grid {
     width: 100%;
     max-width: none;
+    margin-left: 0;
   }
 
   .lgu-invoice-footer {
@@ -287,6 +324,7 @@ const { printPage, goBack } = useLguInvoicePrintActions()
 
   html,
   body {
+    width: 100% !important;
     background: #ffffff !important;
     padding: 0 !important;
     margin: 0 !important;
@@ -298,14 +336,10 @@ const { printPage, goBack } = useLguInvoicePrintActions()
   }
 
   .lgu-invoice-page {
-    width: auto !important;
-    min-width: 0 !important;
-    max-width: none !important;
+    width: 100% !important;
     min-height: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    overflow: visible !important;
     background: #ffffff !important;
+    overflow: visible !important;
   }
 
   .lgu-invoice-container {
@@ -318,108 +352,91 @@ const { printPage, goBack } = useLguInvoicePrintActions()
   .lgu-invoice-sheet {
     width: 100% !important;
     max-width: none !important;
-    min-width: 0 !important;
     min-height: 0 !important;
-    height: auto !important;
-    margin: 0 auto !important;
+    margin: 0 !important;
     padding: 5mm !important;
     border: none !important;
-    background: #ffffff !important;
+    border-radius: 0 !important;
     box-shadow: none !important;
   }
 
+  :global(html.lgu-print-portrait) .lgu-invoice-sheet {
+    width: 210mm !important;
+    max-width: 210mm !important;
+  }
+
+  :global(html.lgu-print-landscape) .lgu-invoice-sheet {
+    width: 297mm !important;
+    max-width: 297mm !important;
+  }
+
   .lgu-invoice-top {
-    width: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
     gap: 4px !important;
     margin-bottom: 5px !important;
-    break-inside: avoid !important;
-    page-break-inside: avoid !important;
   }
 
   .lgu-invoice-heading {
-    width: 100% !important;
-    display: flex !important;
-    flex-direction: row !important;
-    justify-content: space-between !important;
-    align-items: flex-start !important;
+    grid-template-columns: 95px minmax(0, 1fr) !important;
     gap: 8px !important;
+    align-items: center;
   }
 
   .lgu-invoice-logo {
-    max-height: 42px !important;
-    width: auto !important;
-    flex-shrink: 0 !important;
-  }
-
-  .lgu-invoice-title-block {
-    width: 100% !important;
-    text-align: center !important;
+      max-height: 60px !important;
+  width: auto !important;
+  max-width: 280px !important;
   }
 
   .lgu-invoice-title {
-    margin: 1px 0 0 !important;
-    width: 100% !important;
-    text-align: center !important;
-    font-size: 20px !important;
+    margin-top: 0 !important;
+    font-size: 18px !important;
+    line-height: 1 !important;
+  }
+
+  .lgu-invoice-subtitle {
+    margin-top: 2px !important;
+    font-size: 8px !important;
     line-height: 1.1 !important;
   }
 
-
   .lgu-invoice-meta-grid {
-    gap: 1px 5px !important;
-    min-width: 180px !important;
-    max-width: 260px !important;
     width: auto !important;
-    padding-top: 0 !important;
-    font-size: 10px !important;
-    line-height: 1.15 !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    font-size: 8px !important;
+    line-height: 1.1 !important;
+    gap: 1px 5px !important;
   }
 
   .lgu-invoice-details {
-    margin-top: 5px !important;
+    margin: 5px 0 6px !important;
   }
 
-  .lgu-invoice-divider {
-    border-top: 2px solid #d31d6e !important;
-    margin-top: 5px !important;
-    margin-bottom: 3px !important;
+  .lgu-invoice-body table {
+    table-layout: fixed !important;
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  .lgu-invoice-body th,
+  .lgu-invoice-body td {
+    padding-top: 2px !important;
+    padding-bottom: 2px !important;
+    line-height: 1.15 !important;
   }
 
   .lgu-invoice-bottom {
-    break-inside: avoid !important;
-    page-break-inside: avoid !important;
-      margin-top: 1px !important;
+    margin-top: 5px !important;
+    gap: 6px !important;
   }
 
   .lgu-invoice-footer {
-    margin-top: 1px !important;
+    margin-top: 5px !important;
     padding: 3px 6px !important;
     font-size: 7.5px !important;
+    line-height: 1.1 !important;
     background: #1ea5d7 !important;
     background-color: #1ea5d7 !important;
-    break-inside: avoid !important;
-    page-break-inside: avoid !important;
-    color: #fcfcfc !important;
-  }
-
-  html.lgu-print-portrait .lgu-invoice-heading,
-  html.lgu-print-landscape .lgu-invoice-heading {
-    flex-direction: row !important;
-  }
-
-  html.lgu-print-portrait .lgu-invoice-title,
-  html.lgu-print-landscape .lgu-invoice-title {
-    text-align: center !important;
-  }
-
-  html.lgu-print-portrait .lgu-invoice-meta-grid {
-    max-width: 230px !important;
-  }
-
-  html.lgu-print-landscape .lgu-invoice-meta-grid {
-    max-width: 300px !important;
   }
 }
 </style>

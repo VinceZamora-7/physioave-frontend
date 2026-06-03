@@ -773,8 +773,14 @@
             </div>
           </div>
           <div class="mt-3 flex flex-wrap gap-2">
-            <Button label="Print Receipt" icon="pi pi-print" outlined @click="printSelectedBillingReceipt" />
-            <Button
+<Button
+  label="Print Receipt"
+  icon="pi pi-print"
+  outlined
+  :disabled="!canPrintSelectedBillingReceipt"
+  v-tooltip.top="printReceiptTooltip"
+  @click="printSelectedBillingReceipt"
+/>            <Button
               v-if="selectedBillingDetail && canPrintPatientInvoiceCopy"
               label="Print Patient Statement"
               icon="pi pi-file"
@@ -1235,7 +1241,15 @@
       </div>
 
       <template #footer>
-        <Button v-if="selectedBillingDetail" label="Print Receipt" icon="pi pi-print" outlined @click="printSelectedBillingReceipt" />
+        <Button
+          v-if="selectedBillingDetail"
+          label="Print Receipt"
+          icon="pi pi-print"
+          outlined
+          :disabled="!canPrintSelectedBillingReceipt"
+          v-tooltip.top="printReceiptTooltip"
+          @click="printSelectedBillingReceipt"
+        />
         <Button
           v-if="selectedBillingDetail && canPrintPatientInvoiceCopy"
           label="Print Patient Statement"
@@ -2120,6 +2134,27 @@ const getSelectedBillingLineBreakdownGroups = (line: {type:string;id:string|numb
   return []
 }
 
+
+const isPrintableBillingStatus = (value?: string): boolean => {
+  const status = displayBillingStatus(value)
+  return status === "BILLED" || status === "PAID"
+}
+
+const canPrintSelectedBillingReceipt = computed<boolean>(() => {
+  if (!selectedBillingDetail.value) return false
+  return isPrintableBillingStatus(selectedBillingDetail.value.billing_status)
+})
+
+const printReceiptTooltip = computed(() => {
+  if (!selectedBillingDetail.value) return "No billing selected"
+
+  if (canPrintSelectedBillingReceipt.value) {
+    return "Print the current billing invoice"
+  }
+
+  return "Mark this billing as billed first before printing"
+})
+
 const selectedBillingOriginalTotal = computed(() =>
   selectedBillingLines.value.reduce((sum, l) => sum + Number(l.originalPrice ?? l.price ?? 0) * Number(l.quantity ?? 1), 0)
 )
@@ -2401,6 +2436,53 @@ const buildEncounterTicketPdfCards = (detail?: BillingListItem): EncounterTicket
       }
     })
 }
+
+const getUnknownRecordValue = (record: unknown, key: string): unknown => {
+  if (!record || typeof record !== "object") return undefined
+  return (record as Record<string, unknown>)[key]
+}
+
+const getTicketSnapshotValue = (ticket: BillingEncounterTicket | null | undefined, key: string): unknown => {
+  return getUnknownRecordValue(getUnknownRecordValue(ticket, "billing_snapshot"), key)
+}
+
+const getTicketAppointmentId = (ticket?: BillingEncounterTicket | null): number => {
+  if (!ticket) return 0
+
+  const parsed = Number(
+    getUnknownRecordValue(ticket, "appointment_id") ??
+    getTicketSnapshotValue(ticket, "appointment_id") ??
+    0
+  )
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+
+const getBillingLinkedAppointmentId = (
+  detail?: BillingListItem | null,
+  ticket?: BillingEncounterTicket | null
+): number | undefined => {
+  const ticketAppointmentId = getTicketAppointmentId(ticket)
+
+  if (ticketAppointmentId) {
+    return ticketAppointmentId
+  }
+
+  const firstTicket = detail?.encounter_tickets?.[0]
+
+  const parsed = Number(
+    detail?.appointment_id ??
+    billingContextAppointmentId.value ??
+    getUnknownRecordValue(firstTicket, "appointment_id") ??
+    getTicketSnapshotValue(firstTicket, "appointment_id") ??
+    0
+  )
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+}
+
+
 
 const exportEncounterTicketCards = (cards: EncounterTicketPdfCard[], options: {title:string;subtitle:string;fileName:string}): void => {
   const popup = openEncounterTicketPdfWindow(options.title)
@@ -3025,60 +3107,123 @@ const buildBillingUpdatePayload = (detail: BillingListItem, overrides?: Partial<
 })
 
 const getBillingPrintDate = (detail: BillingListItem): string =>
-  String(detail.hmo_loa_date || detail.loa_date || detail.created_at || new Date().toISOString()).slice(0, 10)
+  String(
+    detail.hmo_loa_date ||
+    detail.loa_date ||
+    detail.created_at ||
+    new Date().toISOString()
+  ).slice(0, 10)
 
 const openBillingPrintableRoute = (detail: BillingListItem): void => {
   const normalizedBillingType = normalizeBillingTypeValue(detail.billing_type)
   const printDate = getBillingPrintDate(detail)
-  const commonQuery = {
+
+  const appointmentId =
+    billingContextAppointmentId.value ??
+    detail.appointment_id ??
+    undefined
+
+  const commonQuery: Record<string, string> = {
     billing_id: String(detail.id),
     patient_id: String(detail.patient_id),
     autoprint: "1"
   }
 
-  const routeLocation = normalizedBillingType === "HMO_BILLING"
-    ? router.resolve({
-        name: "hmo-patient-billing-summary-print",
-        query: {
-          ...commonQuery,
-          hmo_name: detail.hmo_name,
-          from: printDate,
-          to: printDate
-        }
-      })
-    : normalizedBillingType === "LGU_BILLING"
+  if (appointmentId) {
+    commonQuery.appointment_id = String(appointmentId)
+  }
+
+  const routeLocation =
+    normalizedBillingType === "HMO_BILLING"
       ? router.resolve({
-          name: "lgu-patient-billing-summary-print",
+          name: "hmo-patient-billing-summary-print",
           query: {
             ...commonQuery,
-            transaction_from: printDate,
-            transaction_to: printDate
+            hmo_id: detail.hmo_id ? String(detail.hmo_id) : undefined,
+            hmo_name: detail.hmo_name,
+            from: printDate,
+            to: printDate
           }
         })
-      : router.resolve({
-          name: "self-pay-patient-billing-summary-print",
-          query: commonQuery
-        })
+      : normalizedBillingType === "LGU_BILLING"
+        ? router.resolve({
+            name: "lgu-patient-billing-summary-print",
+            query: {
+              ...commonQuery,
+              transaction_from: printDate,
+              transaction_to: printDate
+            }
+          })
+        : router.resolve({
+            name: "self-pay-patient-billing-summary-print",
+            query: commonQuery
+          })
 
   window.open(routeLocation.href, "_blank", "noopener,noreferrer")
 }
 
 // â”€â”€ Open billing details â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const openBillingDetails = async (billingId: number): Promise<void> => {
-  const {detail, paymentLog} = await fetchBillingContextDetail(billingId)
-  if (!detail) { errorToast(toast, "Billing details could not be loaded. Refresh and try again."); return }
-  selectedBillingDetail.value = detail
-  selectedBillingPaymentLog.value = paymentLog
-  billingDetailPaymentType.value = getDefaultBillingPaymentType(detail)
-  billingTenderReferenceNo.value = ""; billingTenderAmount.value = 0
+  if (!billingId) {
+    errorToast(toast, "Billing ID is required.")
+    return
+  }
+
+  /*
+    Open the dialog immediately.
+    If we wait until the billing context request finishes, the modal looks broken
+    whenever the request is slow or fails.
+  */
   billingDetailsVisible.value = true
+  selectedBillingDetail.value = undefined
+  selectedBillingPaymentLog.value = []
+  billingTenderReferenceNo.value = ""
+  billingTenderAmount.value = 0
+
+  try {
+    const { detail, paymentLog } = await fetchBillingContextDetail(billingId)
+
+    if (!detail) {
+      billingDetailsVisible.value = false
+      errorToast(toast, "Billing details could not be loaded. Refresh and try again.")
+      return
+    }
+
+    selectedBillingDetail.value = detail
+    billingContextAppointmentId.value = getBillingLinkedAppointmentId(detail)
+    selectedBillingPaymentLog.value = paymentLog
+    billingDetailPaymentType.value = getDefaultBillingPaymentType(detail)
+  } catch (err: unknown) {
+    billingDetailsVisible.value = false
+    errorToast(toast, extractApiErrorMessage(err, "Billing details could not be loaded."))
+  }
 }
 
-// â”€â”€ Print receipt â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const printSelectedBillingReceipt = async (): Promise<void> => {
   if (!selectedBillingDetail.value) return
-  openBillingPrintableRoute(selectedBillingDetail.value)
+
+  const currentBillingId = selectedBillingDetail.value.id
+
+  const { detail: refreshed, paymentLog: refreshedLog } =
+    await fetchBillingContextDetail(currentBillingId)
+
+  if (!refreshed) {
+    errorToast(toast, "Billing details could not be refreshed before printing.")
+    return
+  }
+
+  selectedBillingDetail.value = refreshed
+  selectedBillingPaymentLog.value = refreshedLog
+  billingDetailPaymentType.value = getDefaultBillingPaymentType(refreshed)
+
+  if (!isPrintableBillingStatus(refreshed.billing_status)) {
+    errorToast(toast, "Mark this billing as billed first before printing.")
+    return
+  }
+
+  openBillingPrintableRoute(refreshed)
 }
+
 const canPrintPatientInvoiceCopy = computed<boolean>(() => {
   if (!selectedBillingDetail.value) return false
   const normalizedBillingType = normalizeBillingTypeValue(selectedBillingDetail.value.billing_type)
@@ -3153,13 +3298,19 @@ const markSelectedBillingAsBilled = async (loaNumber?: string, loaDate?: string)
       await invalidateBillingContext(selectedBillingDetail.value.id)
       const refreshed = (await fetchBillingContextDetail(selectedBillingDetail.value.id)).detail
       const nextDetail = refreshed ?? selectedBillingDetail.value
-      selectedBillingDetail.value = {...nextDetail, billing_status: result?.billing_status ?? "BILLED"}
+selectedBillingDetail.value = {
+  ...nextDetail,
+  billing_status: result?.billing_status ?? "BILLED",
+  appointment_id: targetAppointmentId
+}
+
       billingDetailPaymentType.value = getDefaultBillingPaymentType(selectedBillingDetail.value)
       billingTenderAmount.value = 0
       markBilledLoaDialogVisible.value = false
       markBilledLoaNumber.value = ""
       markBilledLoaDate.value = ""
       await fetchBillings()
+      billingContextAppointmentId.value = targetAppointmentId
       emit("billing-updated", {
         billingId: selectedBillingDetail.value.id,
         appointmentId: targetAppointmentId,
@@ -3309,10 +3460,12 @@ onMounted(async () => {
   await fetchBillings()
   await ensureLookupsLoaded()
   await applyRouteBillingContext()
+
 })
 
 watch(selectedClinicId, () => { void fetchBillings() })
 </script>
+
 
 <style scoped>
 .billing-mode-enter-active,

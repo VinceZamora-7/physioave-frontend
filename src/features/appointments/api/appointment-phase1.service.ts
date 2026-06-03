@@ -234,6 +234,17 @@ export interface ReschedulePayload {
   override_reason?: string
 }
 
+export type AppointmentStatus =
+  | "SCHEDULED"
+  | "COMPLETED"
+  | "CANCELLED"
+  | "NO_SHOW"
+
+export interface AppointmentStatusUpdatePayload {
+  appointment_status: AppointmentStatus
+  reason?: string
+}
+
 export interface AppointmentCreatePayload {
   patient_id: number
   clinic_id?: number
@@ -579,6 +590,23 @@ export const appointmentPhase1Service = {
     })
   },
 
+  updateStatus(
+  id: number,
+  statusOrPayload: AppointmentStatus | AppointmentStatusUpdatePayload
+): Promise<void> {
+  const payload = typeof statusOrPayload === "string"
+    ? { appointment_status: statusOrPayload }
+    : statusOrPayload
+
+  return requestVoid({
+    method: "PATCH",
+    url: `${APPOINTMENTS_PATH}/${id}/status`,
+    data: payload
+  })
+},
+
+
+
   reschedule(id: number, payload: ReschedulePayload): Promise<void> {
     return requestVoid({
       method: "POST",
@@ -586,6 +614,8 @@ export const appointmentPhase1Service = {
       data: payload
     })
   },
+
+
 
   delete(id: number): Promise<void> {
     return requestVoid({
@@ -633,4 +663,6 @@ export const appointmentPhase1Service = {
       responseType: "blob"
     })
   }
+
+
 }

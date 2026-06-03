@@ -42,8 +42,8 @@
     </template>
 
     <template v-if="!error">
-      <div class="table-wrap">
-        <table class="soa-table general-soa-table">
+   <div class="table-wrap general-soa-table-wrap">
+  <table class="soa-table general-soa-table">
           <colgroup>
             <col class="col-item" />
             <col class="col-patient" />
@@ -1449,8 +1449,52 @@ onMounted(() => {
   font-style: italic;
 }
 
-
 @media print {
+  :global(.lgu-invoice-body) {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+
+  :global(.lgu-invoice-details) {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    margin-bottom: 2px !important;
+  }
+
+  .general-soa-table-wrap {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+    overflow: visible !important;
+    margin-top: 2px !important;
+  }
+
+  .general-soa-table {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+    margin-top: 2px !important;
+  }
+
+  .general-soa-table thead {
+    display: table-header-group !important;
+  }
+
+  .general-soa-table tbody {
+    display: table-row-group !important;
+  }
+
+  .general-soa-table tfoot {
+    display: table-footer-group !important;
+  }
+
+  .general-soa-table tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .details-grid {
+    margin-bottom: 2px !important;
+  }
+
   .general-soa-table .col-item {
     width: 5%;
   }
@@ -1486,7 +1530,6 @@ onMounted(() => {
   .general-soa-table .col-total {
     width: 8%;
   }
-
 
   :global(html.lgu-print-portrait) .general-soa-table .col-item {
     width: 5%;

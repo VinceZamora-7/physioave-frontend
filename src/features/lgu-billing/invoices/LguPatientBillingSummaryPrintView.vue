@@ -1,6 +1,6 @@
 <template>
   <LguInvoiceLayout
-    title="PATIENT BILLING SUMMARY"
+    title="Invoice Billing"
     :subtitle="`BILLING SUMMARY record for ${patientName}`"
     :has-error="!!error"
   >
@@ -8,7 +8,7 @@
       <strong>Patient:</strong><span>{{ patientName }}</span>
       <strong>Patient ID:</strong><span>{{ patientIdLabel }}</span>
       <strong>LGU Program:</strong><span>{{ lguProgramLabel }}</span>
-      <strong>Validity:</strong><span>{{ validityLabel }}</span>
+      <strong>Transaction Date:</strong><span>{{ validityLabel }}</span>
     </template>
 
     <template #toolbar>
@@ -105,7 +105,7 @@
               }"
             >
               <td class="text-center">
-                {{ row.isParent ? "" : row.itemNo }}
+                {{ row.itemNo > 0 ? row.itemNo : "" }}
               </td>
 
               <td class="text-right">
@@ -311,6 +311,42 @@ const billingId = computed(() => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 })
 
+const parsePositiveNumber = (value: unknown): number => {
+  const parsed = Number(String(value ?? "").trim())
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+const getNumberFromRecord = (record: unknown, keys: string[]): number => {
+  if (!record || typeof record !== "object") return 0
+
+  for (const key of keys) {
+    const parsed = parsePositiveNumber((record as Record<string, unknown>)[key])
+    if (parsed > 0) return parsed
+  }
+
+  return 0
+}
+
+const selectedAppointmentId = computed(() => {
+  const queryAppointmentId = parsePositiveNumber(
+    route.query.appointment_id ??
+    route.query.appointmentId ??
+    route.query.appt_id ??
+    route.query.apptId
+  )
+
+  if (queryAppointmentId > 0) {
+    return queryAppointmentId
+  }
+
+  return getNumberFromRecord(billingDetail.value, [
+    "appointment_id",
+    "appointmentId",
+    "root_appointment_id",
+    "rootAppointmentId"
+  ])
+})
+
 const parseDate = (value?: string | Date | null): Date | null => {
   if (value instanceof Date) {
     return Number.isNaN(value.getTime()) ? null : value
@@ -371,6 +407,19 @@ const validityLabel = computed(() => {
 })
 
 const billing = computed(() => {
+  const selectedBillingAmount = Number(
+    billingDetail.value?.amount_due ??
+    billingDetail.value?.total_amount ??
+    0
+  )
+
+  if (Number.isFinite(selectedBillingAmount) && selectedBillingAmount > 0) {
+    return {
+      grand_total: selectedBillingAmount,
+      total_amount: selectedBillingAmount
+    }
+  }
+
   const billings = detail.value?.billings ?? []
   const grandTotal = billings.reduce((sum, item) => sum + Number(item.amount_due ?? 0), 0)
 
@@ -782,6 +831,172 @@ const fallbackServiceName = (appointment: NonNullable<LguPatientCreditDetail["ap
   return appointment.package_name || "LGU completed session"
 }
 
+const selectedAppointment = computed(() => {
+  const appointmentId = selectedAppointmentId.value
+  if (appointmentId <= 0) return null
+
+  return (detail.value?.appointments ?? []).find(appointment =>
+    Number(appointment.appointment_id ?? 0) === appointmentId
+  ) ?? null
+})
+
+const selectedAppointmentDate = computed(() =>
+  selectedAppointment.value?.appointment_date || ""
+)
+
+const normalizeServiceName = (value: unknown): string =>
+  String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+
+const selectedAppointmentServiceNames = computed(() => {
+  const names = new Set<string>()
+  const appointment = selectedAppointment.value
+
+  for (const service of appointment?.availed_services ?? []) {
+    const normalized = normalizeServiceName(service)
+    if (normalized) names.add(normalized)
+  }
+
+  const sessionServiceName = serviceNameByAppointmentId.value.get(selectedAppointmentId.value)
+  const normalizedSessionServiceName = normalizeServiceName(sessionServiceName)
+  if (normalizedSessionServiceName) names.add(normalizedSessionServiceName)
+
+  return names
+})
+
+const selectedAppointmentSessionSequences = computed(() => {
+  const appointmentId = selectedAppointmentId.value
+  if (appointmentId <= 0) return []
+
+  const sequences = (detail.value?.authorizations ?? [])
+    .flatMap(authorization => authorization.sessions ?? [])
+    .filter(session => Number(session.appointment_id ?? 0) === appointmentId)
+    .map(session => Math.max(1, Number(session.session_sequence ?? 1)))
+    .filter(sequence => Number.isFinite(sequence))
+    .sort((left, right) => left - right)
+
+  if (sequences.length) {
+    return Array.from(new Set(sequences))
+  }
+
+  const completedIndex = completedAppointments.value.findIndex(appointment =>
+    Number(appointment.appointment_id ?? 0) === appointmentId
+  )
+
+  return completedIndex >= 0 ? [completedIndex + 1] : []
+})
+
+const getLineAppointmentId = (item: InvoiceLineNode): number =>
+  getNumberFromRecord(item, [
+    "appointment_id",
+    "appointmentId",
+    "appointmentID",
+    "appt_id",
+    "apptId"
+  ])
+
+const itemMatchesSelectedAppointmentService = (item: InvoiceLineNode): boolean => {
+  const selectedNames = selectedAppointmentServiceNames.value
+  if (!selectedNames.size) return true
+
+  const ownName = normalizeServiceName(getServiceName(item))
+  if (selectedNames.has(ownName)) return true
+
+  return getChildren(item).some(child =>
+    selectedNames.has(normalizeServiceName(getServiceName(child)))
+  )
+}
+
+const filterItemsForSelectedAppointment = (items: InvoiceLineNode[]): InvoiceLineNode[] => {
+  const appointmentId = selectedAppointmentId.value
+  if (appointmentId <= 0) return items
+
+  const appointmentMatchedItems = items.filter(item => {
+    const itemAppointmentId = getLineAppointmentId(item)
+    return itemAppointmentId <= 0 || itemAppointmentId === appointmentId
+  })
+
+  const serviceMatchedItems = appointmentMatchedItems.filter(itemMatchesSelectedAppointmentService)
+  const candidateItems = serviceMatchedItems.length ? serviceMatchedItems : appointmentMatchedItems
+  const sessionSequences = selectedAppointmentSessionSequences.value
+
+  if (!sessionSequences.length) {
+    return candidateItems
+  }
+
+  const sessionMatchedItems = sessionSequences.flatMap(sessionSequence =>
+    filterChildrenForSession(candidateItems, sessionSequence)
+  )
+
+  return sessionMatchedItems.length ? sessionMatchedItems : candidateItems
+}
+
+const parsePositiveSequenceNumber = (value: unknown): number | null => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : null
+}
+
+const getSplitRowInfo = (item: InvoiceLineNode): {
+  rowCount: number
+  totalSessions: number
+  sequenceStart: number
+} => {
+  const quantity = getQuantity(item)
+  const allocatedSequence = parsePositiveSequenceNumber(item.allocatedSessionSequence)
+  const allocatedTotal = parsePositiveSequenceNumber(item.allocatedTotalSessions)
+
+  if (allocatedSequence) {
+    return {
+      rowCount: 1,
+      totalSessions: allocatedTotal ?? quantity,
+      sequenceStart: allocatedSequence
+    }
+  }
+
+  return {
+    rowCount: quantity,
+    totalSessions: quantity,
+    sequenceStart: 1
+  }
+}
+
+const formatSessionSequence = (sequence: number, total: number): string =>
+  `${sequence} / ${Math.max(1, total)}`
+
+const appendSplitServiceRows = (
+  item: InvoiceLineNode,
+  inherited: { treatmentDate?: string },
+  rows: TableRow[],
+  nextItemNoRef: { value: number },
+  options: {
+    level: number
+    numberRows: boolean
+    keyPrefix: string
+  }
+): void => {
+  const itemTreatmentDate = getTreatmentDate(item, inherited)
+  const quantity = getQuantity(item)
+  const unitTotal = getSessionUnitTotal(item, quantity)
+  const { rowCount, totalSessions, sequenceStart } = getSplitRowInfo(item)
+
+  for (let index = 0; index < rowCount; index++) {
+    const sequence = sequenceStart + index
+
+    rows.push({
+      key: `${options.keyPrefix}-${String(item.id ?? item.name ?? "item")}-${options.level}-${rows.length}-${sequence}`,
+      itemNo: options.numberRows ? nextItemNoRef.value++ : 0,
+      treatmentDate: itemTreatmentDate,
+      serviceName: getServiceName(item),
+      sessionSequence: formatSessionSequence(sequence, totalSessions),
+      unitTotal: hasOwnRate(item) ? unitTotal : null,
+      level: options.level,
+      isParent: false
+    })
+  }
+}
+
 const appendServiceRows = (
   items: InvoiceLineNode[],
   inherited: { treatmentDate?: string },
@@ -790,29 +1005,16 @@ const appendServiceRows = (
   level = 1
 ): void => {
   for (const item of items) {
-    const itemName = formatChildServiceName(item)
-    const itemTreatmentDate = getTreatmentDate(item, inherited)
-    const quantity = getQuantity(item)
-    const unitTotal = getSessionUnitTotal(item, quantity)
-    const children = getChildren(item)
-
-    rows.push({
-      key: `${String(item.id ?? item.name ?? "item")}-${level}-${nextItemNoRef.value}`,
-      itemNo: nextItemNoRef.value++,
-      treatmentDate: itemTreatmentDate,
-      serviceName: itemName,
-      sessionSequence: "",
-      unitTotal: hasOwnRate(item) ? unitTotal : null,
+    appendSplitServiceRows(item, inherited, rows, nextItemNoRef, {
       level,
-      isParent: false
+      numberRows: isDropoutPatient.value,
+      keyPrefix: "direct"
     })
 
-    if (children.length > 0) {
-      appendServiceRows(children, {
-        treatmentDate: itemTreatmentDate
-      }, rows, nextItemNoRef, level + 1)
-      continue
-    }
+    // Do not recurse here.
+    // This keeps only direct items: parent bundle service and individual services.
+    // It hides child services inside a bundle.
+    // If a direct bundle/item has quantity > 1, it is split into per-session rows.
   }
 }
 
@@ -823,15 +1025,31 @@ const flattenInvoiceLineItems = (
   nextItemNoRef: { value: number } = { value: 1 }
 ): TableRow[] => {
   items.forEach(parent => {
-    const parentNo = 0
     const parentTreatmentDate = getTreatmentDate(parent, inherited)
-
     const sourceChildren = getChildren(parent)
-    const children = isDropoutPatient.value
-      ? completedSessionSequences.value.flatMap(sessionSequence => (
-          filterChildrenForSession(sourceChildren, sessionSequence)
-        ))
-      : sourceChildren
+
+    // If this is a top-level individual service with no children, split it by quantity.
+    if (!sourceChildren.length) {
+      appendSplitServiceRows(parent, {
+        treatmentDate: parentTreatmentDate
+      }, rows, nextItemNoRef, {
+        level: 1,
+        numberRows: true,
+        keyPrefix: "single"
+      })
+
+      return
+    }
+
+    const children = selectedAppointmentId.value > 0
+      ? filterItemsForSelectedAppointment(sourceChildren)
+      : isDropoutPatient.value
+        ? completedSessionSequences.value.flatMap(sessionSequence => (
+            filterChildrenForSession(sourceChildren, sessionSequence)
+          ))
+        : sourceChildren
+
+    const parentNo = isDropoutPatient.value ? 0 : nextItemNoRef.value++
 
     rows.push({
       key: `${parentNo}-${String(parent.id ?? parent.name ?? "parent")}`,
@@ -844,10 +1062,13 @@ const flattenInvoiceLineItems = (
       isParent: true
     })
 
+    // Direct children only:
+    // Normal patients: item number stays on the parent package/service row.
+    // Dropped-out patients: item number is per direct item, including the bundle parent.
+    // Nested bundle child services are not displayed.
     appendServiceRows(children, {
       treatmentDate: parentTreatmentDate
     }, rows, nextItemNoRef)
-
   })
 
   return rows
@@ -881,6 +1102,10 @@ const invoiceRows = computed<TableRow[]>(() => {
         return (auth.sessions ?? []).map(s => ({ ...s, authTotal }))
       })
       .filter(s => appointmentStatusById.value.get(s.appointment_id) === "COMPLETED")
+      .filter(s =>
+        selectedAppointmentId.value <= 0 ||
+        Number(s.appointment_id ?? 0) === selectedAppointmentId.value
+      )
       .sort((a, b) => Number(a.session_sequence ?? 0) - Number(b.session_sequence ?? 0))
 
     if (sessionsForBilling.length > 0) {
@@ -890,6 +1115,13 @@ const invoiceRows = computed<TableRow[]>(() => {
       const rangeFrom = transactionFromDate.value
       const rangeTo = transactionToDate.value
       const uncoveredAppointments = completedAppointments.value.filter(appt => {
+        if (
+          selectedAppointmentId.value > 0 &&
+          Number(appt.appointment_id ?? 0) !== selectedAppointmentId.value
+        ) {
+          return false
+        }
+
         if (coveredAppointmentIds.has(Number(appt.appointment_id))) return false
         if (rangeFrom || rangeTo) {
           const apptDate = parseDate(appt.appointment_date)
@@ -948,18 +1180,24 @@ const invoiceRows = computed<TableRow[]>(() => {
     }
   }
 
-  if (completedAppointments.value.length) {
+  const appointmentScopedCompletedAppointments = selectedAppointmentId.value > 0
+    ? completedAppointments.value.filter(appointment =>
+        Number(appointment.appointment_id ?? 0) === selectedAppointmentId.value
+      )
+    : completedAppointments.value
+
+  if (appointmentScopedCompletedAppointments.length) {
     const billingAmount = Number(billingDetail.value?.amount_due ?? billing.value.grand_total ?? 0)
-    const fallbackUnitTotal = completedAppointments.value.length > 0
-      ? billingAmount / completedAppointments.value.length
+    const fallbackUnitTotal = appointmentScopedCompletedAppointments.length > 0
+      ? billingAmount / appointmentScopedCompletedAppointments.length
       : 0
 
-    return completedAppointments.value.map((appointment, index) => ({
+    return appointmentScopedCompletedAppointments.map((appointment, index) => ({
       key: `completed-${appointment.appointment_id}`,
       itemNo: index + 1,
       treatmentDate: appointment.appointment_date,
       serviceName: fallbackServiceName(appointment),
-      sessionSequence: `${index + 1} / ${completedAppointments.value.length}`,
+      sessionSequence: `${index + 1} / ${appointmentScopedCompletedAppointments.length}`,
       unitTotal: fallbackUnitTotal
     }))
   }

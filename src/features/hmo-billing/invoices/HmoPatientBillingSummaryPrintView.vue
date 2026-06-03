@@ -1,6 +1,6 @@
 <template>
   <HmoInvoiceLayout
-    title="PATIENT BILLING SUMMARY"
+    title="invoice billing"
     :subtitle="`Static printable record for ${patientName}`"
     :has-error="!!error"
   >
@@ -65,11 +65,11 @@
         <table class="summary-table">
           <thead>
             <tr>
-              <th class="w-[50px] text-center">ITEM No.</th>
+              <th class="w-[50px] text-center">No.</th>
               <th class="w-[80px] text-center">LOA Date Issued</th>
               <th class="w-[120px] text-center">PT SERVICE RENDERED</th>
-              <th class="w-[30px] text-center">QTY.</th>
-              <th class="w-[60px] text-center">LATERALITY</th>
+              <th class="w-[30px] text-center">QTY</th>
+              <th class="w-[60px] text-center">LAT</th>
               <th class="w-[50px] text-center">BODY AREA</th>
               <th class="w-[60px] text-center">UNIT PRICE</th>
               <th class="w-[60px] text-center">UNIT TOTAL</th>
@@ -90,17 +90,17 @@
           </tbody>
 
           <tfoot>
-            <tr>
+            <tr class="tfoot-border-bottom">
               <td
                 colspan="7"
                 class="text-right font-bold"
-                style="padding-top: 12px; border-top: 1px solid #e5e7eb;"
+                style="padding-top: 12px; border-top: 1px solid #e5e7eb; color: #B81212;"
               >
                 Grand Total:
               </td>
               <td
                 class="text-center font-bold"
-                style="padding-top: 12px; border-top: 1px solid #e5e7eb;"
+                style="padding-top: 12px; border-top: 1px solid #e5e7eb; color: #B81212;"
               >
                 {{ formatCurrency(grandTotal) }}
               </td>
@@ -110,50 +110,38 @@
       </div>
     </template>
 
-    <template #bottom>
-      <div
-        style="
-          width: 100%;
-          display: flex;
-          flex-direction: row;
-          justify-content: space-between;
-          align-items: center;
-          gap: 16px;
-          margin-top: 24px;
-          font-size: 13px;
-          color: #111827;
-        "
-      >
-        <div class="payment-box">
-          <h3>HMO DETAILS</h3>
-          <div><strong>Billing To:</strong> HMO</div>
-          <div><strong>HMO Type:</strong> {{ sponsorHmoType }}</div>
-          <div><strong>Company Name:</strong> {{ sponsorCompanyName }}</div>
-          <div><strong>LOA Approval No.:</strong> {{ sponsorApprovalNo }}</div>
-        </div>
+<template #bottom>
+  <div class="approval-wrap-hmo">
+    <section class="payment-box">
+      <span class="self-pay-bottom-text-header">HMO DETAILS</span>
+      <div><span class="self-pay-bottom-text">Billing To:</span> HMO</div>
+      <div><span class="self-pay-bottom-text">HMO Type:</span> {{ sponsorHmoType }}</div>
+      <div><span class="self-pay-bottom-text">Company Name:</span> {{ sponsorCompanyName }}</div>
+      <div><span class="self-pay-bottom-text">LOA Approval No.:</span> {{ sponsorApprovalNo }}</div>
+    </section>
 
-        <div class="approval-card">
-          <div class="approval-label">
-            Approved by:
-          </div>
-
-          <div class="approval-name">
-            RENALOU B. CORDOVA, PTRP, UK-PT
-          </div>
-
-          <div class="approval-line"></div>
-
-          <div class="approval-title">
-            Chief Operations Officer
-          </div>
-
-          <div class="approval-signed">
-            Date Signed: {{ dateSigned }}
-          </div>
-        </section>
-
+                    <section class="approval-card">
+      <div class="approval-label">
+        Approved by:
       </div>
-    </template>
+      <div>
+        &nbsp;
+      </div>
+
+      <div class="approval-name">
+        RENALOU B. CORDOVA, PTRP, UK-PT
+      </div>
+
+      <div class="approval-title">
+        Chief Operations Officer
+      </div>
+
+      <div class="approval-signed">
+        <strong>Date Signed:</strong> {{ dateSigned }}
+      </div>
+    </section>
+  </div>
+</template>
   </HmoInvoiceLayout>
 </template>
 
@@ -681,6 +669,15 @@ onMounted(() => {
   text-align: center;
 }
 
+/* Red separator between the table heading and body rows */
+.summary-table thead th {
+  border-bottom: 2px solid #b81212 !important;
+}
+
+.summary-table tbody tr:first-child td {
+  border-top: 2px solid #b81212 !important;
+}
+
 .payment-box {
   padding: 8px;
   border: 1px solid #e5e7eb;
@@ -695,22 +692,30 @@ onMounted(() => {
   .summary-table {
     width: 100% !important;
     table-layout: fixed !important;
-    font-size: 8px;
+    font-size: 6px;
   }
 
   .summary-table th,
   .summary-table td {
     padding: 2px 1px;
-    font-size: 8px;
     line-height: 1.1;
     white-space: normal;
     word-break: break-word;
     overflow-wrap: anywhere;
+    font-size: 10px;
   }
 
   .summary-table th {
-    font-size: 7px;
+    font-size: 5px;
     font-weight: 800;
+  }
+
+  .summary-table thead th {
+    border-bottom: 2px solid #b81212 !important;
+  }
+
+  .summary-table tbody tr:first-child td {
+    border-top: 2px solid #b81212 !important;
   }
 
   .summary-table th:nth-child(1),
@@ -771,5 +776,48 @@ onMounted(() => {
   tr {
     page-break-inside: avoid;
   }
+
+  .approval-wrap-hmo {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-top: 24px;
+  font-size: 13px;
+  color: #111827;
 }
+
+  .self-pay-bottom-text{
+    font-weight: 700;
+  }
+    .self-pay-bottom-text-header{
+      text-decoration: underline;
+    font-weight: 700;
+  }
+
+  .tfoot-border-bottom{
+              border-bottom : 2px solid #b81212 !important;
+
+}
+          tfoot, th {
+            border-top: 2px solid #b81212 !important;
+          }
+
+
+}
+  .approval-wrap-hmo {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-top: 24px;
+  font-size: 13px;
+  color: #111827;
+}
+
+      tfoot, th{
+            border-top: 2px solid #b81212 !important;
+          }
 </style>
