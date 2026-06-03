@@ -53,45 +53,37 @@ function buildLineRows(lines: LguInvoiceLine[]): string {
     return item.unitPrice !== undefined && Number.isFinite(unitPrice) && unitPrice >= 0
   }
 
-  const hasExplicitSubItemPricing = (items?: LguInvoiceSubItem[]): boolean =>
-    Boolean((items ?? []).some(item => {
-      return hasContractRate(item) || hasExplicitSubItemPricing(item.children)
-    }))
+const hasExplicitSubItemPricing = (items?: LguInvoiceSubItem[]): boolean =>
+  Boolean((items ?? []).some(item => hasContractRate(item)))
 
   const formatContractRate = (amount: number): string =>
     amount > 0 ? escapeHtml(asCurrency(amount)) : "FREE"
 
-  const renderSubItems = (items: LguInvoiceSubItem[], depth = 0): string =>
-    items.map(sub => `
-      <div class="sub-item sub-item-depth-${Math.min(depth, 2)}">
-        - ${Math.max(1, Number(sub.quantity ?? 1))} ${escapeHtml(sub.name)}
+const renderSubItems = (items: LguInvoiceSubItem[]): string =>
+  items.map(sub => `
+    <div class="sub-item sub-item-depth-0">
+      - ${Math.max(1, Number(sub.quantity ?? 1))} ${escapeHtml(sub.name)}
+    </div>
+  `).join("")
+
+  // const renderBlankSubItemPrices = (items: LguInvoiceSubItem[], depth = 0): string =>
+  //   items.map(sub => `
+  //     <div class="sub-item sub-item-depth-${Math.min(depth, 2)}">&nbsp;</div>
+  //     ${sub.children?.length ? renderBlankSubItemPrices(sub.children, depth + 1) : ""}
+  //   `).join("")
+
+const renderSubItemPrices = (items: LguInvoiceSubItem[]): string =>
+  items.map(sub => {
+    const hasUnitPrice = hasContractRate(sub)
+    const quantity = Math.max(1, Number(sub.quantity ?? 1))
+    const unitPrice = Number(sub.unitPrice ?? 0)
+
+    return `
+      <div class="sub-item sub-item-depth-0">
+        ${hasUnitPrice ? formatContractRate(Number((quantity * unitPrice).toFixed(2))) : "&nbsp;"}
       </div>
-      ${sub.children?.length ? renderSubItems(sub.children, depth + 1) : ""}
-    `).join("")
-
-  const renderBlankSubItemPrices = (items: LguInvoiceSubItem[], depth = 0): string =>
-    items.map(sub => `
-      <div class="sub-item sub-item-depth-${Math.min(depth, 2)}">&nbsp;</div>
-      ${sub.children?.length ? renderBlankSubItemPrices(sub.children, depth + 1) : ""}
-    `).join("")
-
-  const renderSubItemPrices = (items: LguInvoiceSubItem[], depth = 0): string =>
-    items.map(sub => {
-      const hasUnitPrice = hasContractRate(sub)
-      const quantity = Math.max(1, Number(sub.quantity ?? 1))
-      const unitPrice = Number(sub.unitPrice ?? 0)
-      const childPriceHtml = sub.children?.length
-        ? hasUnitPrice
-          ? renderBlankSubItemPrices(sub.children, depth + 1)
-          : renderSubItemPrices(sub.children, depth + 1)
-        : ""
-      return `
-        <div class="sub-item sub-item-depth-${Math.min(depth, 2)}">
-          ${hasUnitPrice ? formatContractRate(Number((quantity * unitPrice).toFixed(2))) : "&nbsp;"}
-        </div>
-        ${childPriceHtml}
-      `
-    }).join("")
+    `
+  }).join("")
 
   const sessionKey = (line: LguInvoiceLine): string =>
     `${formatDate(line.treatmentDate)}|${line.sessionSequence || "-"}`

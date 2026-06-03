@@ -1,16 +1,16 @@
 <template>
   <LguInvoiceLayout
-    title="PATIENT LGU Profile Summary"
+    title="PATIENT LGU PROFILE SUMMARY"
     :subtitle="`PATIENT LGU Profile Summary for ${patientName}`"
     :has-error="!!error"
   >
     <template #meta>
-      <strong>BILLING DATE:</strong><span>{{ dateIssued }}</span>
-      <strong>TRANSACTION PERIOD:</strong><span>{{ transactionPeriodLabel }}</span>
+      <strong>BILLING DATE:</strong><span>{{ dateIssued || "—" }}</span>
+      <strong>TRANSACTION PERIOD:</strong><span>{{ transactionPeriodLabel || "—" }}</span>
     </template>
 
     <template #toolbar>
-      <Button label="Print" icon="pi pi-print" @click="printPage" />
+      <Button label="Print" icon="pi pi-print" @click="printPage()" />
       <Button label="Close" icon="pi pi-times" severity="secondary" outlined @click="goBack" />
     </template>
 
@@ -22,7 +22,7 @@
       <div class="profile-details">
         <div class="profile-status-banner">
           <span class="profile-status-label">STATUS:</span>
-          <span class="profile-status-value">{{ profileStatusHeading }}</span>
+          <span class="profile-status-value">{{ profileStatusHeading || "—" }}</span>
         </div>
 
         <div class="profile-card">
@@ -30,34 +30,34 @@
             <div class="profile-group">
               <div class="profile-row">
                 <span class="profile-label">Patient Name:</span>
-                <span class="profile-value">{{ patientName || '—' }}</span>
+                <span class="profile-value">{{ patientName || "—" }}</span>
               </div>
 
               <div class="profile-row">
                 <span class="profile-label">Address:</span>
-                <span class="profile-value">{{ patientAddress }}</span>
+                <span class="profile-value">{{ patientAddress || "—" }}</span>
               </div>
 
               <div class="profile-row">
                 <span class="profile-label">Age:</span>
-                <span class="profile-value">{{ patientAge }}</span>
+                <span class="profile-value">{{ patientAge || "—" }}</span>
               </div>
             </div>
 
             <div class="profile-group">
               <div class="profile-row profile-row--wide-label">
-                <span class="profile-label">Physical Therapist:</span>
-                <span class="profile-value">{{ physicalTherapistName }}</span>
+                <span class="profile-label">Physical <br /> Therapist:</span>
+                <span class="profile-value">{{ physicalTherapistName || "—" }}</span>
               </div>
 
               <div class="profile-row profile-row--wide-label">
                 <span class="profile-label">Doctor:</span>
-                <span class="profile-value">{{ doctorName }}</span>
+                <span class="profile-value">{{ doctorName || "—" }}</span>
               </div>
 
               <div class="profile-row profile-row--wide-label">
                 <span class="profile-label">Diagnosis:</span>
-                <span class="profile-value">{{ diagnosis }}</span>
+                <span class="profile-value">{{ diagnosis || "—" }}</span>
               </div>
             </div>
           </div>
@@ -66,25 +66,27 @@
         <div class="profile-card">
           <div class="profile-section-title">LGU Details</div>
 
-          <div class="profile-list">
-            <div class="profile-row profile-row--list">
-              <span class="profile-label">Billing To:</span>
-              <span class="profile-value">{{ billingTo }}</span>
+          <div class="profile-grid">
+            <div class="profile-group">
+              <div class="profile-row">
+                <span class="profile-label">Billing To:</span>
+                <span class="profile-value">{{ billingTo || "—" }}</span>
+              </div>
+              <div class="profile-row">
+                <span class="profile-label">Program Status:</span>
+                <span class="profile-value">{{ patientProgramStatus || "—" }}</span>
+              </div>
             </div>
 
-            <div class="profile-row profile-row--list">
-              <span class="profile-label">Program Status:</span>
-              <span class="profile-value">{{ patientProgramStatus }}</span>
-            </div>
-
-            <div class="profile-row profile-row--list">
-              <span class="profile-label">Referral Form No:</span>
-              <span class="profile-value">{{ referralFormNo }}</span>
-            </div>
-
-            <div class="profile-row profile-row--list">
-              <span class="profile-label">Date Issued:</span>
-              <span class="profile-value">{{ dateIssued }}</span>
+            <div class="profile-group">
+              <div class="profile-row">
+                <span class="profile-label">Referral Form No:</span>
+                <span class="profile-value">{{ referralFormNo || "—" }}</span>
+              </div>
+              <div class="profile-row">
+                <span class="profile-label">Date Issued:</span>
+                <span class="profile-value">{{ dateIssued || "—" }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -93,47 +95,62 @@
 
     <template v-if="!error">
       <div class="table-wrap">
-        <table class="summary-table">
+        <table class="summary-table patient-lgu-profile-summary-table">
+          <colgroup>
+            <col class="col-item-no" />
+            <col class="col-treatment-date" />
+            <col class="col-package-name" />
+            <col class="col-completed-session" />
+            <col class="col-overall-price" />
+          </colgroup>
+
           <thead>
             <tr>
-              <th class="w-[80px] text-center">ITEM No.</th>
-              <th class="w-[220px] text-center">TREATMENT DATE</th>
+              <th class="text-center">ITEM No.</th>
+              <th class="text-center">TREATMENT DATE</th>
               <th class="text-left">PACKAGE NAME</th>
-              <th class="w-[150px] text-center">Completed SESSION </th>
-              <th class="w-[180px] text-right">OVERALL PRICE</th>
+              <th class="text-center">COMPLETED SESSION</th>
+              <th class="text-right">OVERALL PRICE</th>
             </tr>
           </thead>
 
           <tbody>
+            <tr v-if="!invoiceRows.length">
+              <td colspan="5" class="empty-row">
+                No LGU profile summary items found.
+              </td>
+            </tr>
+
             <tr v-for="row in invoiceRows" :key="row.key">
               <td class="text-center">
                 {{ row.itemNo }}
               </td>
 
               <td class="text-center">
-                {{ row.treatmentDate }}
+                {{ row.treatmentDate || "—" }}
               </td>
 
-              <td class="text-left">
-                {{ row.packageName }}
+              <td class="text-left package-name-cell">
+                {{ row.packageName || "—" }}
               </td>
 
               <td class="text-center">
-                {{ row.sessionSequence || '—' }}
+                {{ row.sessionSequence || "—" }}
               </td>
 
               <td class="text-right">
-                {{ row.overallPrice > 0 ? formatCurrency(row.overallPrice) : 'FREE' }}
+                {{ row.overallPrice > 0 ? formatCurrency(row.overallPrice) : "FREE" }}
               </td>
             </tr>
           </tbody>
 
           <tfoot>
-            <tr>
-              <td colspan="4" class="text-right font-bold" style="padding-top: 12px; border-top: 1px solid #e5e7eb;">
+            <tr class="grand-total-row">
+              <td colspan="4" class="text-right">
                 Grand Total:
               </td>
-              <td class="text-right font-bold" style="padding-top: 12px; border-top: 1px solid #e5e7eb;">
+
+              <td class="text-right">
                 {{ formatCurrency(invoiceGrandTotal) }}
               </td>
             </tr>
@@ -142,52 +159,29 @@
       </div>
     </template>
 
-    <template #bottom>
-      <div
-        style="
-          width: 100%;
-          display: flex;
-          flex-direction: row;
-          justify-content: flex-end;
-          align-items: center;
-          gap: 16px;
-          margin-top: 24px;
-          font-size: 13px;
-          color: #111827;
-        "
-      >
-        <div
-          style="
-            padding: 14px 16px;
-            border: 1px solid #e5e7eb;
-            border-radius: 10px;
-            background: #ffffff;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            width: 320px;
-          "
-        >
-          <div style="margin-bottom: 8px; font-size: 12px; font-weight: 600; color: #374151;">
-            Approved by:
-          </div>
-
-          <div style="font-weight: 700; color: #111827;">
-            RENALOU B. CORDOVA, PTRP, UK-PT
-          </div>
-
-          <div style="width: 260px; margin-bottom: 1px; border-bottom: 1px solid #111827;"></div>
-
-          <div style="margin-bottom: 2px; color: #4b5563;">
-            Chief Operations Officer
-          </div>
-
-          <div style="margin-bottom: 18px; font-size: 12px; font-weight: 600; color: #374151;">
-            Date Signed: {{ dateSigned }}
-          </div>
-        </div>
+<template #bottom>
+  <div class="approval-wrap">
+    <div class="approval-card">
+      <div class="approval-label">
+        Approved by:
       </div>
-    </template>
+
+      <div class="approval-name">
+        RENALOU B. CORDOVA, PTRP, UK-PT
+      </div>
+
+      <div class="approval-line"></div>
+
+      <div class="approval-title">
+        Chief Operations Officer
+      </div>
+
+      <div class="approval-signed">
+        Date Signed: {{ dateSigned }}
+      </div>
+    </div>
+  </div>
+</template>
   </LguInvoiceLayout>
 </template>
 
@@ -1288,129 +1282,104 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.profile-details {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  font-size: 13px;
-  color: #111827;
+@media screen {
+  .patient-lgu-profile-summary-table {
+    min-width: 760px;
+  }
 }
 
-.profile-status-banner {
-  width: 100%;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
-  background: #f8fafc;
-  font-size: 13px;
+.patient-lgu-profile-summary-table .col-item-no {
+  width: 11%;
 }
 
-.profile-status-label {
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: #475569;
+.patient-lgu-profile-summary-table .col-treatment-date {
+  width: 23%;
 }
 
-.profile-status-value {
-  font-weight: 800;
-  color: #111827;
-  text-transform: uppercase;
+.patient-lgu-profile-summary-table .col-package-name {
+  width: 34%;
 }
 
-.profile-card {
-  width: 100%;
-  padding: 14px 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  background: #ffffff;
+.patient-lgu-profile-summary-table .col-completed-session {
+  width: 17%;
 }
 
-.profile-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
-  align-items: start;
+.patient-lgu-profile-summary-table .col-overall-price {
+  width: 15%;
 }
 
-.profile-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.profile-row {
-  display: grid;
-  grid-template-columns: 110px minmax(0, 1fr);
-  gap: 8px;
-  align-items: start;
-}
-
-.profile-row--wide-label {
-  grid-template-columns: 150px minmax(0, 1fr);
-}
-
-.profile-row--list {
-  grid-template-columns: 150px minmax(0, 1fr);
-  margin-bottom: 8px;
-}
-
-.profile-label {
+.package-name-cell {
   font-weight: 600;
-  color: #374151;
-  white-space: nowrap;
 }
 
-.profile-value {
-  color: #111827;
-  word-break: break-word;
-}
-
-.profile-section-title {
-  margin-bottom: 10px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #e5e7eb;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #1f2937;
-}
-
-.profile-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.summary-table {
-  width: 100%;
-  border-collapse: collapse;
-  background: white;
-}
-
-.summary-table th,
-.summary-table td {
-  padding: 9px 12px;
-  border-bottom: 1px solid #e2e8f0;
-  text-align: left;
-  font-size: 12px;
-}
-
-.summary-table thead th {
-  background: #eff6ff;
-  color: #1d4ed8;
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+.empty-row {
+  padding: 14px 10px;
+  text-align: center;
+  color: #6b7280;
+  font-style: italic;
 }
 
 
-.table-wrap {
-  overflow-x: auto;
+@media print {
+  .patient-lgu-profile-summary-table .col-item-no {
+    width: 9%;
+  }
+
+  .patient-lgu-profile-summary-table .col-treatment-date {
+    width: 22%;
+  }
+
+  .patient-lgu-profile-summary-table .col-package-name {
+    width: 36%;
+  }
+
+  .patient-lgu-profile-summary-table .col-completed-session {
+    width: 18%;
+  }
+
+  .patient-lgu-profile-summary-table .col-overall-price {
+    width: 15%;
+  }
+
+
+  :global(html.lgu-print-portrait) .patient-lgu-profile-summary-table .col-item-no {
+    width: 9%;
+  }
+
+  :global(html.lgu-print-portrait) .patient-lgu-profile-summary-table .col-treatment-date {
+    width: 23%;
+  }
+
+  :global(html.lgu-print-portrait) .patient-lgu-profile-summary-table .col-package-name {
+    width: 34%;
+  }
+
+  :global(html.lgu-print-portrait) .patient-lgu-profile-summary-table .col-completed-session {
+    width: 19%;
+  }
+
+  :global(html.lgu-print-portrait) .patient-lgu-profile-summary-table .col-overall-price {
+    width: 15%;
+  }
+
+  :global(html.lgu-print-landscape) .patient-lgu-profile-summary-table .col-item-no {
+    width: 10%;
+  }
+
+  :global(html.lgu-print-landscape) .patient-lgu-profile-summary-table .col-treatment-date {
+    width: 22%;
+  }
+
+  :global(html.lgu-print-landscape) .patient-lgu-profile-summary-table .col-package-name {
+    width: 37%;
+  }
+
+  :global(html.lgu-print-landscape) .patient-lgu-profile-summary-table .col-completed-session {
+    width: 16%;
+  }
+
+  :global(html.lgu-print-landscape) .patient-lgu-profile-summary-table .col-overall-price {
+    width: 15%;
+  }
 }
 </style>

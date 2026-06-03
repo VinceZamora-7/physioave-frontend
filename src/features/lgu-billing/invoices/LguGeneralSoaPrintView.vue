@@ -4,10 +4,8 @@
     :subtitle="`statement for ${partnerLabel}`"
     :has-error="!!error"
   >
-
-
     <template #toolbar>
-      <Button label="Print" icon="pi pi-print" @click="printPage" />
+      <Button label="Print" icon="pi pi-print" @click="printPage()" />
       <Button label="Close" icon="pi pi-times" severity="secondary" outlined @click="goBack" />
     </template>
 
@@ -20,19 +18,19 @@
         <div class="details-group">
           <div class="line">
             <span class="label">Partner Institution:</span>
-            <span>{{ partnerLabel }}</span>
+            <span>{{ partnerLabel || " " }}</span>
           </div>
 
           <div class="line">
             <span class="label">Billing Date:</span>
-            <span>{{ billingDateLabel }}</span>
+            <span>{{ billingDateLabel || " " }}</span>
           </div>
         </div>
 
         <div class="details-group">
           <div class="line">
             <span class="label">Transaction Period:</span>
-            <span>{{ periodLabel }}</span>
+            <span>{{ periodLabel || " " }}</span>
           </div>
 
           <div class="line">
@@ -45,39 +43,84 @@
 
     <template v-if="!error">
       <div class="table-wrap">
-        <table class="soa-table">
+        <table class="soa-table general-soa-table">
+          <colgroup>
+            <col class="col-item" />
+            <col class="col-patient" />
+            <col class="col-referral" />
+            <col class="col-reference" />
+            <col class="col-status" />
+            <col class="col-date" />
+            <col class="col-service" />
+            <col class="col-session" />
+            <col class="col-total" />
+          </colgroup>
+
           <thead>
             <tr>
-              <th class="col-item text-center">ITEM No.</th>
-              <th class="col-patient">PATIENT NAME</th>
-              <th class="col-referral">Referral Form No.</th>
-              <th class="col-reference">REFERENCE NO.</th>
-              <th class="col-status">PROGRAM STATUS</th>
-              <th class="col-date text-center">TREATMENT DATE</th>
-              <th class="col-service">PT SERVICE RENDERED</th>
-              <th class="col-session text-center">SESSION SEQUENCE</th>
-              <th class="col-total text-right">INVOICE BILLING TOTAL</th>
+              <th class="text-center">ITEM No.</th>
+              <th class="text-left">PATIENT NAME</th>
+              <th class="text-left">REFERRAL FORM No.</th>
+              <th class="text-left">REFERENCE NO.</th>
+              <th class="text-left">PROGRAM STATUS</th>
+              <th class="text-center">TREATMENT DATE</th>
+              <th class="text-left">PT SERVICE RENDERED</th>
+              <th class="text-center">SESSION SEQUENCE</th>
+              <th class="text-right">INVOICE BILLING TOTAL</th>
             </tr>
           </thead>
 
           <tbody>
+            <tr v-if="!rows.length">
+              <td colspan="9" class="empty-row">
+                No statement of account items found.
+              </td>
+            </tr>
+
             <template v-for="row in rows" :key="row.key">
               <tr v-if="row.kind === 'service'">
-                <td class="text-center">{{ row.itemNo ?? "" }}</td>
-                <td>{{ row.patientName }}</td>
-                <td>{{ row.referralFormNo }}</td>
-                <td>{{ row.referenceNo }}</td>
-                <td>{{ row.programStatus }}</td>
-                <td class="text-center">{{ formatDate(row.treatmentDate) }}</td>
-                <td>{{ row.serviceName }}</td>
-                <td class="text-center">{{ row.sessionSequence }}</td>
-                <td class="text-right">{{ formatPrice(row.price) }}</td>
+                <td class="text-center">
+                  {{ row.itemNo ?? "" }}
+                </td>
+
+                <td>
+                  {{ row.patientName || " " }}
+                </td>
+
+                <td>
+                  {{ row.referralFormNo || " " }}
+                </td>
+
+                <td>
+                  {{ row.referenceNo || " " }}
+                </td>
+
+                <td>
+                  {{ row.programStatus || " " }}
+                </td>
+
+                <td class="text-center">
+                  {{ row.treatmentDate ? formatDate(row.treatmentDate) : " " }}
+                </td>
+
+                <td class="service-name-cell">
+                  {{ row.serviceName || " " }}
+                </td>
+
+                <td class="text-center">
+                  {{ row.sessionSequence || " " }}
+                </td>
+
+                <td class="text-right">
+                  {{ formatPrice(row.price) }}
+                </td>
               </tr>
 
               <tr v-else class="patient-total-row">
                 <td colspan="8" class="text-right">
                   Patient Billing Summary Total:
                 </td>
+
                 <td class="text-right">
                   {{ asCurrency(row.total) }}
                 </td>
@@ -90,6 +133,7 @@
               <td colspan="8" class="text-right">
                 GRAND TOTAL:
               </td>
+
               <td class="text-right">
                 {{ asCurrency(grandTotal) }}
               </td>
@@ -99,28 +143,29 @@
       </div>
     </template>
 
-    <template #bottom>
-      <div class="flex justify-end w-full">
-        <!-- <section class="payment-box">
-          <h3>LGU DETAILS</h3>
-          <div><strong>Partner Institution:</strong> {{ partnerLabel }}</div>
-          <div><strong>Billing Date:</strong> {{ billingDateLabel }}</div>
-          <div><strong>Transaction Period:</strong> {{ periodLabel }}</div>
-        </section> -->
-        <section class="approval">
-          <div><strong>Approved By:</strong></div>
-          <div class="name">
-            RENALOU B. CORDOVA, PTRP, UK-PT
-          </div>
-          <div class="title">
-            Chief Operations Officer
-          </div>
-          <div class="signed">
-            <strong>Date Signed:</strong> {{ dateSigned }}
-          </div>
-        </section>
+<template #bottom>
+  <div class="approval-wrap">
+    <div class="approval-card">
+      <div class="approval-label">
+        Approved by:
       </div>
-    </template>
+
+      <div class="approval-name">
+        RENALOU B. CORDOVA, PTRP, UK-PT
+      </div>
+
+      <div class="approval-line"></div>
+
+      <div class="approval-title">
+        Chief Operations Officer
+      </div>
+
+      <div class="approval-signed">
+        Date Signed: {{ dateSigned }}
+      </div>
+    </div>
+  </div>
+</template>
   </LguInvoiceLayout>
 </template>
 
@@ -1320,174 +1365,168 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.details-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid #d31d6e;
-  background: #ffffff;
-  font-size: 12px;
-  line-height: 1.4;
+@media screen {
+  .general-soa-table {
+    min-width: 1120px;
+  }
 }
 
-.details-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.general-soa-table .col-item {
+  width: 6%;
 }
 
-.line {
-  display: grid;
-  grid-template-columns: 120px minmax(0, 1fr);
-  gap: 8px;
+.general-soa-table .col-patient {
+  width: 12%;
 }
 
-.label {
-  font-family: "Montserrat", sans-serif;
-  font-weight: 700;
-  color: #000000;
-  white-space: nowrap;
+.general-soa-table .col-referral {
+  width: 12%;
 }
 
-.table-wrap {
-  width: 100%;
-  overflow-x: auto;
+.general-soa-table .col-reference {
+  width: 12%;
 }
 
-.soa-table {
-  width: 100%;
-  min-width: 1120px;
-  table-layout: fixed;
-  border-collapse: collapse;
-  margin-top: 6px;
-  background: #ffffff;
-  font-family: "Canva Sans", sans-serif;
-  font-size: 11px;
-  color: #000000;
+.general-soa-table .col-status {
+  width: 10%;
 }
 
-.soa-table th,
-.soa-table td {
-  padding: 4px 5px;
-  vertical-align: top;
-  border: 1px solid #e5e7eb;
-  word-break: break-word;
-  overflow-wrap: anywhere;
+.general-soa-table .col-date {
+  width: 10%;
 }
 
-.soa-table th {
+.general-soa-table .col-service {
+  width: 20%;
+}
+
+.general-soa-table .col-session {
+  width: 10%;
+}
+
+.general-soa-table .col-total {
+  width: 8%;
+}
+
+.service-name-cell {
+  font-weight: 600;
+}
+
+.empty-row {
+  padding: 14px 10px;
   text-align: center;
-  font-family: "Montserrat", sans-serif;
-  font-weight: 800;
-  font-size: 10px;
-  line-height: 1.1;
-  background: #ffffff;
-  border-top: 3px solid #d31d6e;
-  border-bottom: 3px solid #d31d6e;
+  color: #6b7280;
+  font-style: italic;
 }
 
-.col-item {
-  width: 48px;
-}
-
-.col-patient {
-  width: 105px;
-}
-
-.col-referral {
-  width: 120px;
-}
-
-.col-reference {
-  width: 125px;
-}
-
-.col-status {
-  width: 95px;
-}
-
-.col-date {
-  width: 95px;
-}
-
-.col-service {
-  width: 230px;
-}
-
-.col-session {
-  width: 120px;
-}
-
-.col-total {
-  width: 120px;
-}
-
-.patient-total-row td {
-  font-weight: 800;
-  border-top: 3px solid #d31d6e;
-  background: #ffffff;
-}
-
-.grand-total-row td {
-  font-size: 14px;
-  font-weight: 900;
-  color: #d31d6e;
-  border-top: 3px solid #d31d6e;
-  border-bottom: 3px solid #d31d6e;
-  background: #ffffff;
-}
-
-.payment-box,
-.approval {
-  margin-top: 10px;
-  border: 1px solid #e5e7eb;
-  padding: 10px;
-  border-radius: 10px;
-  font-size: 12px;
-}
-
-.payment-box h3 {
-  margin: 0 0 6px;
-  font-family: "Montserrat", sans-serif;
-  font-size: 13px;
-}
-
-.approval .name {
-  margin-top: 6px;
-  font-weight: 800;
-}
-
-.approval .title {
-  margin-top: 4px;
-  font-size: 10px;
-}
-
-.approval .signed {
-  margin-top: 6px;
-  font-size: 10px;
-}
 
 @media print {
-  :global(body) {
-    background: #ffffff;
-    padding: 0;
+  .general-soa-table .col-item {
+    width: 5%;
   }
 
-  .table-wrap {
-    overflow: visible;
+  .general-soa-table .col-patient {
+    width: 12%;
   }
 
-  .soa-table {
-    min-width: 0;
+  .general-soa-table .col-referral {
+    width: 12%;
   }
 
-  .patient-total-row td,
-  .grand-total-row td,
-  .soa-table th {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+  .general-soa-table .col-reference {
+    width: 12%;
+  }
+
+  .general-soa-table .col-status {
+    width: 10%;
+  }
+
+  .general-soa-table .col-date {
+    width: 10%;
+  }
+
+  .general-soa-table .col-service {
+    width: 21%;
+  }
+
+  .general-soa-table .col-session {
+    width: 10%;
+  }
+
+  .general-soa-table .col-total {
+    width: 8%;
+  }
+
+
+  :global(html.lgu-print-portrait) .general-soa-table .col-item {
+    width: 5%;
+  }
+
+  :global(html.lgu-print-portrait) .general-soa-table .col-patient {
+    width: 12%;
+  }
+
+  :global(html.lgu-print-portrait) .general-soa-table .col-referral {
+    width: 12%;
+  }
+
+  :global(html.lgu-print-portrait) .general-soa-table .col-reference {
+    width: 11%;
+  }
+
+  :global(html.lgu-print-portrait) .general-soa-table .col-status {
+    width: 10%;
+  }
+
+  :global(html.lgu-print-portrait) .general-soa-table .col-date {
+    width: 10%;
+  }
+
+  :global(html.lgu-print-portrait) .general-soa-table .col-service {
+    width: 20%;
+  }
+
+  :global(html.lgu-print-portrait) .general-soa-table .col-session {
+    width: 11%;
+  }
+
+  :global(html.lgu-print-portrait) .general-soa-table .col-total {
+    width: 9%;
+  }
+
+  :global(html.lgu-print-landscape) .general-soa-table .col-item {
+    width: 5%;
+  }
+
+  :global(html.lgu-print-landscape) .general-soa-table .col-patient {
+    width: 12%;
+  }
+
+  :global(html.lgu-print-landscape) .general-soa-table .col-referral {
+    width: 12%;
+  }
+
+  :global(html.lgu-print-landscape) .general-soa-table .col-reference {
+    width: 12%;
+  }
+
+  :global(html.lgu-print-landscape) .general-soa-table .col-status {
+    width: 10%;
+  }
+
+  :global(html.lgu-print-landscape) .general-soa-table .col-date {
+    width: 10%;
+  }
+
+  :global(html.lgu-print-landscape) .general-soa-table .col-service {
+    width: 22%;
+  }
+
+  :global(html.lgu-print-landscape) .general-soa-table .col-session {
+    width: 9%;
+  }
+
+  :global(html.lgu-print-landscape) .general-soa-table .col-total {
+    width: 8%;
   }
 }
 </style>

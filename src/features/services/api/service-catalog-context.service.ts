@@ -93,12 +93,22 @@ export type ServiceCatalogContextParams = {
 
 export const serviceCatalogContextService = {
   async getContext(params: ServiceCatalogContextParams = {}): Promise<ServiceCatalogContext | undefined> {
-    const { data } = await pamsAPI.get<ServiceCatalogContext>("/service-catalog/context", {
-      params: {
-        scope: params.scope ?? "GLOBAL",
-        hmo_id: params.hmo_id ?? undefined,
-      },
-    });
-    return data;
+    try {
+      const { data } = await pamsAPI.get<ServiceCatalogContext>("/service-catalog/context", {
+        params: {
+          scope: params.scope ?? "GLOBAL",
+          hmo_id: params.hmo_id ?? undefined,
+        },
+      });
+
+      return data;
+    } catch (error) {
+      console.error("Failed to load service catalog context:", {
+        params,
+        error,
+      });
+
+      throw error;
+    }
   },
 };

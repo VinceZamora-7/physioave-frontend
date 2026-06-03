@@ -1,6 +1,17 @@
 import { useRouter } from "vue-router"
 
-const LANDSCAPE_PRINT_STYLE_ID = "lgu-invoice-landscape-print-style"
+const LGU_INVOICE_PRINT_STYLE_ID = "lgu-invoice-auto-print-style"
+const PRINT_TABLE_SELECTOR = ".summary-table, .soa-table"
+
+export type LguPrintOrientation = "portrait" | "landscape"
+
+/*
+  browser = respect the user's print dialog orientation
+  auto = app decides and forces portrait/landscape
+  portrait = force portrait
+  landscape = force landscape
+*/
+export type LguPrintOrientationMode = LguPrintOrientation | "auto" | "browser"
 
 export const normalizeLguStatus = (value?: string | null): string =>
   String(value ?? "")
@@ -55,121 +66,257 @@ export const resolveLguPatientProgramStatus = (
 export const formatLguPatientProgramStatus = (
   billingProgramStatus?: string | null,
   dropoutStatus?: string | null
-): string => formatLguStatus(resolveLguPatientProgramStatus(billingProgramStatus, dropoutStatus))
+): string =>
+  formatLguStatus(resolveLguPatientProgramStatus(billingProgramStatus, dropoutStatus))
 
-export const useLguInvoicePrintActions = (): {
-  printPage: () => void
-  goBack: () => void
-  ensurePrintStyles: () => void
-} => {
-  const router = useRouter()
+const getTableColumnCount = (table: HTMLTableElement): number => {
+  const row = table.tHead?.rows?.[0] ?? table.rows?.[0]
+  if (!row) return 0
 
-  const ensurePrintStyles = (): void => {
-    if (typeof document === "undefined") return
+  return Array.from(row.cells).reduce((total, cell) => {
+    return total + Math.max(cell.colSpan || 1, 1)
+  }, 0)
+}
 
-    if (document.getElementById(LANDSCAPE_PRINT_STYLE_ID)) {
-      return
+const resolveAutoPrintOrientation = (): LguPrintOrientation => {
+  if (typeof document === "undefined") return "portrait"
+
+  const sheet = document.querySelector<HTMLElement>(".lgu-invoice-sheet")
+  const tables = Array.from(
+    document.querySelectorAll<HTMLTableElement>(PRINT_TABLE_SELECTOR)
+  )
+
+  const maxColumnCount = tables.reduce((max, table) => {
+    return Math.max(max, getTableColumnCount(table))
+  }, 0)
+
+  const hasOverflowingTable = tables.some((table) => {
+    const wrapper = table.closest<HTMLElement>(".table-wrap")
+    const availableWidth = wrapper?.clientWidth || table.clientWidth || 0
+
+    return table.scrollWidth > availableWidth + 8
+  })
+
+  const sheetWidth = sheet?.scrollWidth ?? 0
+  const sheetHeight = sheet?.scrollHeight ?? 0
+  const contentLooksWide =
+    sheetWidth > 0 && sheetHeight > 0 && sheetWidth > sheetHeight * 1.08
+
+  if (hasOverflowingTable || maxColumnCount >= 6 || contentLooksWide) {
+    return "landscape"
+  }
+
+  return "portrait"
+}
+
+const applyPrintOrientationClass = (orientation: LguPrintOrientation): void => {
+  if (typeof document === "undefined") return
+
+  const root = document.documentElement
+
+  root.classList.remove("lgu-print-portrait", "lgu-print-landscape")
+  root.classList.add(`lgu-print-${orientation}`)
+  root.dataset.lguPrintOrientation = orientation
+}
+
+const resetPrintOrientationClass = (): void => {
+  if (typeof document === "undefined") return
+
+  const root = document.documentElement
+
+  root.classList.remove("lgu-print-portrait", "lgu-print-landscape")
+  delete root.dataset.lguPrintOrientation
+}
+
+const resolvePageSize = (
+  orientationMode: LguPrintOrientationMode,
+  detectedOrientation: LguPrintOrientation
+): string => {
+  /*
+    browser = do not force portrait/landscape.
+    This lets the user's selected print dialog orientation win.
+  */
+  if (orientationMode === "browser") {
+    return "auto"
+  }
+
+  /*
+    auto = app forces the detected orientation.
+    Use this only when you really want automatic orientation.
+  */
+  if (orientationMode === "auto") {
+    return detectedOrientation
+  }
+
+  /*
+    portrait / landscape = app forces exact orientation.
+  */
+  return orientationMode
+}
+
+const buildPrintStyles = (
+  orientationClass: LguPrintOrientation,
+  pageSize: string
+): string => `
+  @page {
+    size: ${pageSize};
+    margin: 8mm;
+  }
+
+  @media print {
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box !important;
     }
 
-    const style = document.createElement("style")
-    style.id = LANDSCAPE_PRINT_STYLE_ID
-    style.textContent = `
-      @page {
-        size: A4 landscape;
-        margin: 8mm;
-      }
+    html,
+    body,
+    #app {
+      width: auto !important;
+      min-width: 0 !important;
+      max-width: none !important;
+      height: auto !important;
+      min-height: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: visible !important;
+      background: #ffffff !important;
+    }
 
-      @media print {
-        html,
-        body {
-          width: 297mm !important;
-          min-width: 297mm !important;
-          margin: 0 !important;
-          padding: 0 !important;
-          background: #ffffff !important;
-        }
+    body {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
 
-        .lgu-invoice-page {
-          background: #ffffff !important;
-        }
+    .no-print,
+    .print-hidden,
+    button,
+    [data-print-hidden="true"] {
+      display: none !important;
+    }
 
-        .lgu-invoice-sheet {
-          width: 297mm !important;
-          max-width: 297mm !important;
-          min-height: 210mm !important;
-          margin: 0 auto !important;
-          padding: 5mm !important;
-          border: none !important;
-          box-shadow: none !important;
-        }
+    .lgu-invoice-page {
+      width: auto !important;
+      min-width: 0 !important;
+      max-width: none !important;
+      min-height: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: visible !important;
+      background: #ffffff !important;
+    }
 
-        .table-wrap {
-          width: 100% !important;
-          overflow: visible !important;
-        }
+    .lgu-invoice-sheet {
+      width: 100% !important;
+      min-width: 0 !important;
+      max-width: none !important;
+      min-height: 0 !important;
+      height: auto !important;
+      margin: 0 auto !important;
+      padding: 5mm !important;
+      overflow: visible !important;
+      border: none !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      background: #ffffff !important;
+      transform: none !important;
+    }
 
-        .summary-table,
-        .soa-table {
-          width: 100% !important;
-          min-width: 0 !important;
-          table-layout: fixed !important;
-          border-collapse: collapse !important;
-          font-size: 8.2px !important;
-        }
+    .lgu-invoice-sheet:not(:last-child) {
+      break-after: page !important;
+      page-break-after: always !important;
+    }
 
-        .summary-table th,
-        .summary-table td,
-        .soa-table th,
-        .soa-table td {
-          padding: 2px 3px !important;
-          font-size: 8.2px !important;
-          line-height: 1.1 !important;
-          white-space: normal !important;
-          word-break: break-word !important;
-          overflow-wrap: anywhere !important;
-        }
+    .table-wrap {
+      width: 100% !important;
+      max-width: 100% !important;
+      overflow: visible !important;
+    }
 
-        .details-grid {
-          padding: 5px !important;
-          gap: 8px !important;
-          font-size: 9px !important;
-          line-height: 1.2 !important;
-          background: #ffffff !important;
-          border: 1px solid #d31d6e !important;
-        }
+    .summary-table,
+    .soa-table {
+      width: 100% !important;
+      min-width: 0 !important;
+      max-width: 100% !important;
+      table-layout: fixed !important;
+      border-collapse: collapse !important;
+    }
 
-        .line {
-          grid-template-columns: 95px minmax(0, 1fr) !important;
-          gap: 4px !important;
-        }
+    a {
+      color: inherit !important;
+      text-decoration: none !important;
+    }
+  }
+`
 
-        .profile-details,
-        .profile-card,
-        .profile-status-banner,
-        .payment-box,
-        .approval {
-          break-inside: avoid !important;
-          page-break-inside: avoid !important;
-        }
+export const ensureLguInvoicePrintStyles = (
+  orientationMode: LguPrintOrientationMode = "browser"
+): LguPrintOrientation | void => {
+  if (typeof document === "undefined") return
 
-        .patient-total-row td,
-        .grand-total-row td,
-        .summary-table th,
-        .soa-table th {
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
-        }
-      }
-    `
+  const detectedOrientation =
+    orientationMode === "auto" || orientationMode === "browser"
+      ? resolveAutoPrintOrientation()
+      : orientationMode
 
+  const pageSize = resolvePageSize(orientationMode, detectedOrientation)
+
+  applyPrintOrientationClass(detectedOrientation)
+
+  let style = document.getElementById(LGU_INVOICE_PRINT_STYLE_ID) as HTMLStyleElement | null
+
+  if (!style) {
+    style = document.createElement("style")
+    style.id = LGU_INVOICE_PRINT_STYLE_ID
     document.head.appendChild(style)
   }
 
-  const printPage = (): void => {
-    ensurePrintStyles()
+  style.textContent = buildPrintStyles(detectedOrientation, pageSize)
+
+  return detectedOrientation
+}
+
+let printListenersBound = false
+
+const bindPrintListeners = (): void => {
+  if (typeof window === "undefined") return
+  if (printListenersBound) return
+
+  window.addEventListener("beforeprint", () => {
+    ensureLguInvoicePrintStyles("browser")
+  })
+
+  window.addEventListener("afterprint", () => {
+    resetPrintOrientationClass()
+  })
+
+  printListenersBound = true
+}
+
+export const useLguInvoicePrintActions = (): {
+  printPage: (orientationMode?: LguPrintOrientationMode) => void
+  goBack: () => void
+  ensurePrintStyles: (orientationMode?: LguPrintOrientationMode) => void
+} => {
+  const router = useRouter()
+
+  const ensurePrintStyles = (
+    orientationMode: LguPrintOrientationMode = "browser"
+  ): void => {
+    bindPrintListeners()
+    ensureLguInvoicePrintStyles(orientationMode)
+  }
+
+  const printPage = (
+    orientationMode: LguPrintOrientationMode = "browser"
+  ): void => {
+    ensurePrintStyles(orientationMode)
 
     requestAnimationFrame(() => {
-      window.print()
+      requestAnimationFrame(() => {
+        window.print()
+      })
     })
   }
 

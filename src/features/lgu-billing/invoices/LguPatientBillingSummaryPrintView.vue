@@ -12,7 +12,7 @@
     </template>
 
     <template #toolbar>
-      <Button label="Print" icon="pi pi-print" @click="printPage" />
+      <Button label="Print" icon="pi pi-print" @click="printPage()" />
       <Button label="Close" icon="pi pi-times" severity="secondary" outlined @click="goBack" />
     </template>
 
@@ -27,101 +27,117 @@
             <div class="profile-group">
               <div class="profile-row">
                 <span class="profile-label">Patient Name:</span>
-                <span class="profile-value">{{ patientName || '—' }}</span>
+                <span class="profile-value">{{ patientName || "—" }}</span>
               </div>
 
               <div class="profile-row">
                 <span class="profile-label">Address:</span>
-                <span class="profile-value">{{ patientAddress }}</span>
+                <span class="profile-value">{{ patientAddress || "—" }}</span>
               </div>
 
               <div class="profile-row">
                 <span class="profile-label">Age:</span>
-                <span class="profile-value">{{ patientAge }}</span>
+                <span class="profile-value">{{ patientAge || "—" }}</span>
               </div>
 
               <div class="profile-row">
                 <span class="profile-label">Program Status:</span>
-                <span class="profile-value">{{ patientProgramStatus }}</span>
+                <span class="profile-value">{{ patientProgramStatus || "—" }}</span>
               </div>
             </div>
 
             <div class="profile-group">
               <div class="profile-row profile-row--wide-label">
                 <span class="profile-label">Physical Therapist:</span>
-                <span class="profile-value">{{ physicalTherapistName }}</span>
+                <span class="profile-value">{{ physicalTherapistName || "—" }}</span>
               </div>
 
               <div class="profile-row profile-row--wide-label">
                 <span class="profile-label">Doctor:</span>
-                <span class="profile-value">{{ doctorName }}</span>
+                <span class="profile-value">{{ doctorName || "—" }}</span>
               </div>
 
               <div class="profile-row profile-row--wide-label">
                 <span class="profile-label">Diagnosis:</span>
-                <span class="profile-value">{{ diagnosis }}</span>
+                <span class="profile-value">{{ diagnosis || "—" }}</span>
               </div>
             </div>
           </div>
         </div>
-
       </div>
     </template>
 
     <template v-if="!error">
       <div class="table-wrap">
-        <table class="summary-table">
+        <table class="summary-table patient-billing-summary-table">
+          <colgroup>
+            <col class="col-item-no" />
+            <col class="col-treatment-date" />
+            <col class="col-service-rendered" />
+            <col class="col-session-sequence" />
+            <col class="col-unit-total" />
+          </colgroup>
+
           <thead>
             <tr>
-              <th class="w-[80px] text-center">ITEM No.</th>
-              <th class="w-[120px] text-right">TREATMENT DATE</th>
-              <th class="w-[180px] text-left">PT SERVICE RENDERED</th>
-              <th class="w-[150px] text-center">SESSION SEQUENCE</th>
-              <th class="w-[150px] text-right">UNIT TOTAL</th>
+              <th class="text-center">ITEM No.</th>
+              <th class="text-right">TREATMENT DATE</th>
+              <th class="text-left">PT SERVICE RENDERED</th>
+              <th class="text-center">SESSION SEQUENCE</th>
+              <th class="text-right">UNIT TOTAL</th>
             </tr>
           </thead>
 
           <tbody>
+            <tr v-if="!invoiceRows.length">
+              <td colspan="5" class="empty-row">
+                No billing summary items found.
+              </td>
+            </tr>
+
             <tr
               v-for="row in invoiceRows"
               :key="row.key"
               :data-level="row.level ?? 0"
-              :class="row.isParent ? 'font-semibold bg-slate-50' : ''"
+              :class="{
+                'item-group-start': row.isParent,
+                'line-item-child': !row.isParent && Number(row.level ?? 0) > 0
+              }"
             >
               <td class="text-center">
-                {{ row.isParent ? '' : row.itemNo }}
+                {{ row.isParent ? "" : row.itemNo }}
               </td>
 
               <td class="text-right">
-                {{ row.isParent ? '' : row.treatmentDate ? formatDate(row.treatmentDate) : '—' }}
+                {{ row.isParent ? "" : row.treatmentDate ? formatDate(row.treatmentDate) : "—" }}
               </td>
 
-              <td :class="['text-left', row.level ? 'pl-5' : '']">
-                {{ row.serviceName }}
+              <td class="text-left service-name-cell">
+                {{ row.serviceName || "—" }}
               </td>
 
               <td class="text-center">
-                {{ row.isParent ? '' : row.sessionSequence || '—' }}
+                {{ row.isParent ? "" : row.sessionSequence || "—" }}
               </td>
 
               <td class="text-right">
                 {{
                   row.isParent || row.unitTotal === null
-                    ? ''
+                    ? ""
                     : row.unitTotal > 0
                       ? formatCurrency(row.unitTotal)
-                      : 'FREE'
+                      : "FREE"
                 }}
               </td>
             </tr>
           </tbody>
 
           <tfoot>
-            <tr>
-              <td colspan="4" class="text-right font-bold" style="padding-top: 12px; border-top: 1px solid #e5e7eb;">
+            <tr class="grand-total-row">
+              <td colspan="4" class="text-right">
                 Grand Total:
               </td>
-              <td class="text-right font-bold" style="padding-top: 12px; border-top: 1px solid #e5e7eb;">
+              <td class="text-right">
                 {{ formatCurrency(billing.grand_total ?? billing.total_amount ?? 0) }}
               </td>
             </tr>
@@ -130,52 +146,29 @@
       </div>
     </template>
 
-    <template #bottom>
-      <div
-        style="
-          width: 100%;
-          display: flex;
-          flex-direction: row;
-          justify-content: flex-end;
-          align-items: center;
-          gap: 16px;
-          margin-top: 24px;
-          font-size: 13px;
-          color: #111827;
-        "
-      >
-        <div
-          style="
-            padding: 14px 16px;
-            border: 1px solid #e5e7eb;
-            border-radius: 10px;
-            background: #ffffff;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            width: 320px;
-          "
-        >
-          <div style="margin-bottom: 8px; font-size: 12px; font-weight: 600; color: #374151;">
-            Approved by:
-          </div>
-
-          <div style="font-weight: 700; color: #111827;">
-            RENALOU B. CORDOVA, PTRP, UK-PT
-          </div>
-
-          <div style="width: 260px; margin-bottom: 1px; border-bottom: 1px solid #111827;"></div>
-
-          <div style="margin-bottom: 2px; color: #4b5563;">
-            Chief Operations Officer
-          </div>
-
-          <div style="margin-bottom: 18px; font-size: 12px; font-weight: 600; color: #374151;">
-            Date Signed: {{ dateSigned }}
-          </div>
-        </div>
+<template #bottom>
+  <div class="approval-wrap">
+    <div class="approval-card">
+      <div class="approval-label">
+        Approved by:
       </div>
-    </template>
+
+      <div class="approval-name">
+        RENALOU B. CORDOVA, PTRP, UK-PT
+      </div>
+
+      <div class="approval-line"></div>
+
+      <div class="approval-title">
+        Chief Operations Officer
+      </div>
+
+      <div class="approval-signed">
+        Date Signed: {{ dateSigned }}
+      </div>
+    </div>
+  </div>
+</template>
   </LguInvoiceLayout>
 </template>
 
@@ -644,129 +637,100 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.profile-details {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  font-size: 13px;
-  color: #111827;
+.patient-billing-summary-table .col-item-no {
+  width: 11%;
 }
 
-.profile-status-banner {
-  width: 100%;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
-  background: #f8fafc;
-  font-size: 13px;
+.patient-billing-summary-table .col-treatment-date {
+  width: 18%;
 }
 
-.profile-status-label {
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: #475569;
+.patient-billing-summary-table .col-service-rendered {
+  width: 36%;
 }
 
-.profile-status-value {
-  font-weight: 800;
-  color: #111827;
-  text-transform: uppercase;
+.patient-billing-summary-table .col-session-sequence {
+  width: 18%;
 }
 
-.profile-card {
-  width: 100%;
-  padding: 14px 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  background: #ffffff;
+.patient-billing-summary-table .col-unit-total {
+  width: 17%;
 }
 
-.profile-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
-  align-items: start;
-}
-
-.profile-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.profile-row {
-  display: grid;
-  grid-template-columns: 110px minmax(0, 1fr);
-  gap: 8px;
-  align-items: start;
-}
-
-.profile-row--wide-label {
-  grid-template-columns: 150px minmax(0, 1fr);
-}
-
-.profile-row--list {
-  grid-template-columns: 150px minmax(0, 1fr);
-  margin-bottom: 8px;
-}
-
-.profile-label {
+.service-name-cell {
   font-weight: 600;
-  color: #374151;
-  white-space: nowrap;
 }
 
-.profile-value {
-  color: #111827;
-  word-break: break-word;
+.empty-row {
+  padding: 14px 10px;
+  text-align: center;
+  color: #6b7280;
+  font-style: italic;
 }
 
-.profile-section-title {
-  margin-bottom: 10px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #e5e7eb;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #1f2937;
-}
+@media print {
+  .patient-billing-summary-table .col-item-no {
+    width: 9%;
+  }
 
-.profile-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
+  .patient-billing-summary-table .col-treatment-date {
+    width: 17%;
+  }
 
-.summary-table {
-  width: 100%;
-  border-collapse: collapse;
-  background: white;
-}
+  .patient-billing-summary-table .col-service-rendered {
+    width: 38%;
+  }
 
-.summary-table th,
-.summary-table td {
-  padding: 9px 12px;
-  border-bottom: 1px solid #e2e8f0;
-  text-align: left;
-  font-size: 12px;
-}
+  .patient-billing-summary-table .col-session-sequence {
+    width: 18%;
+  }
 
-.summary-table thead th {
-  background: #eff6ff;
-  color: #1d4ed8;
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
+  .patient-billing-summary-table .col-unit-total {
+    width: 18%;
+  }
 
+  .service-name-cell {
+    font-weight: 600;
+  }
 
-.table-wrap {
-  overflow-x: auto;
+  :global(html.lgu-print-portrait) .patient-billing-summary-table .col-item-no {
+    width: 9%;
+  }
+
+  :global(html.lgu-print-portrait) .patient-billing-summary-table .col-treatment-date {
+    width: 18%;
+  }
+
+  :global(html.lgu-print-portrait) .patient-billing-summary-table .col-service-rendered {
+    width: 35%;
+  }
+
+  :global(html.lgu-print-portrait) .patient-billing-summary-table .col-session-sequence {
+    width: 20%;
+  }
+
+  :global(html.lgu-print-portrait) .patient-billing-summary-table .col-unit-total {
+    width: 18%;
+  }
+
+  :global(html.lgu-print-landscape) .patient-billing-summary-table .col-item-no {
+    width: 10%;
+  }
+
+  :global(html.lgu-print-landscape) .patient-billing-summary-table .col-treatment-date {
+    width: 17%;
+  }
+
+  :global(html.lgu-print-landscape) .patient-billing-summary-table .col-service-rendered {
+    width: 39%;
+  }
+
+  :global(html.lgu-print-landscape) .patient-billing-summary-table .col-session-sequence {
+    width: 17%;
+  }
+
+  :global(html.lgu-print-landscape) .patient-billing-summary-table .col-unit-total {
+    width: 17%;
+  }
 }
 </style>
