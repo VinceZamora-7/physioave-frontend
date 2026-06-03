@@ -150,7 +150,8 @@
           <div class="approval-signed">
             Date Signed: {{ dateSigned }}
           </div>
-        </div>
+        </section>
+
       </div>
     </template>
   </HmoInvoiceLayout>
@@ -646,3 +647,129 @@ onMounted(() => {
   })
 })
 </script>
+
+
+<style scoped>
+.table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.summary-table {
+  width: 100%;
+  max-width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.summary-table th,
+.summary-table td {
+  border: 1px solid #e5e7eb;
+  padding: 3px 2px;
+  font-size: 10px;
+  line-height: 1.15;
+  vertical-align: top;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.summary-table th {
+  font-size: 9px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.payment-box {
+  padding: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+@media print {
+  .table-wrap {
+    overflow: hidden !important;
+  }
+
+  .summary-table {
+    width: 100% !important;
+    table-layout: fixed !important;
+    font-size: 8px;
+  }
+
+  .summary-table th,
+  .summary-table td {
+    padding: 2px 1px;
+    font-size: 8px;
+    line-height: 1.1;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  .summary-table th {
+    font-size: 7px;
+    font-weight: 800;
+  }
+
+  .summary-table th:nth-child(1),
+  .summary-table td:nth-child(1) {
+    width: 5%;
+  }
+
+  .summary-table th:nth-child(2),
+  .summary-table td:nth-child(2) {
+    width: 12%;
+  }
+
+  .summary-table th:nth-child(3),
+  .summary-table td:nth-child(3) {
+    width: 25%;
+  }
+
+  .summary-table th:nth-child(4),
+  .summary-table td:nth-child(4) {
+    width: 5%;
+  }
+
+  .summary-table th:nth-child(5),
+  .summary-table td:nth-child(5) {
+    width: 10%;
+  }
+
+  .summary-table th:nth-child(6),
+  .summary-table td:nth-child(6) {
+    width: 13%;
+  }
+
+  .summary-table th:nth-child(7),
+  .summary-table td:nth-child(7) {
+    width: 15%;
+  }
+
+  .summary-table th:nth-child(8),
+  .summary-table td:nth-child(8) {
+    width: 15%;
+  }
+
+  .profile-card,
+  .payment-box {
+    font-size: 9px;
+  }
+
+  .profile-label,
+  .profile-value {
+    font-size: 9px;
+  }
+
+  .payment-box h3 {
+    font-size: 10px;
+    margin: 0 0 4px;
+  }
+
+  tr {
+    page-break-inside: avoid;
+  }
+}
+</style>

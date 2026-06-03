@@ -104,6 +104,7 @@ const { printPage, goBack } = useLguInvoicePrintActions()
   color: #000000;
 }
 
+/* HEADER */
 .lgu-invoice-top {
   width: 100%;
   display: flex;
@@ -122,7 +123,7 @@ const { printPage, goBack } = useLguInvoicePrintActions()
 }
 
 .lgu-invoice-logo {
-  max-height: 60px;
+  max-height: 50px;
   width: auto;
   flex-shrink: 0;
 }
@@ -132,6 +133,7 @@ const { printPage, goBack } = useLguInvoicePrintActions()
   text-align: center;
 }
 
+/* TITLE */
 .lgu-invoice-title {
   width: 100%;
   margin: 2px 0 0;
@@ -160,6 +162,7 @@ const { printPage, goBack } = useLguInvoicePrintActions()
   text-transform: uppercase;
 }
 
+/* META */
 .lgu-invoice-meta-grid {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -201,6 +204,8 @@ const { printPage, goBack } = useLguInvoicePrintActions()
   width: 100%;
 }
 
+/* ================= TABLE FIX ================= */
+
 .lgu-invoice-body table {
   width: 100%;
 }
@@ -219,14 +224,12 @@ const { printPage, goBack } = useLguInvoicePrintActions()
   font-weight: 600;
 }
 
-.lgu-invoice-body tbody tr:first-child td {
-  border-top: none;
-}
+/* ================= BOTTOM ================= */
 
 .lgu-invoice-bottom {
   width: 100%;
   display: flex;
-  gap: 16px;
+  gap: 10px;
   align-items: flex-start;
   margin-top: 1px;
 }
@@ -244,10 +247,9 @@ const { printPage, goBack } = useLguInvoicePrintActions()
     color: #fcfcfc;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-  padding: 4px 8px;
-  font-size: 11px;
-  font-family: "Open Sans", sans-serif;
+  gap: 4px;
+  padding: 4px 6px;
+  font-size: 10px;
   font-weight: 600;
 }
 
@@ -283,6 +285,7 @@ const { printPage, goBack } = useLguInvoicePrintActions()
     The useLguInvoicePrintActions() utility controls auto portrait / landscape.
   */
 
+  html,
   body {
     background: #ffffff !important;
     padding: 0 !important;

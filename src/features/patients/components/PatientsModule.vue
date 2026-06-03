@@ -535,10 +535,10 @@ import type {
   HMOType,
   MedicalCategory,
   MedicalDiagnose,
+  PtCaseImpression,
   MedicalHistory,
   MedicalImaging,
   ModeOfReferral,
-  PTCaseImpression,
   ReferralChannel,
   Religion
 } from "@/models/reference.ts";
@@ -702,7 +702,7 @@ const isReligionsLoading = useIsLoading(ReferenceTanstackKey.RELIGIONS)
 const isModeOfReferralsLoading = useIsLoading(ReferenceTanstackKey.MODE_OF_REFERRALS)
 const isMedicalCategoriesLoading = useIsLoading(ReferenceTanstackKey.MEDICAL_CATEGORIES)
 const isMedicalDiagnosesLoading = useIsLoading(ReferenceTanstackKey.MEDICAL_DIAGNOSES)
-const isPTCaseImpressionsLoading = useIsLoading(ReferenceTanstackKey.PT_CASE_IMPRESSIONS)
+const isPtCaseImpressionsLoading = useIsLoading(ReferenceTanstackKey.PT_CASE_IMPRESSIONS)
 const isMedicalHistoriesLoading = useIsLoading(ReferenceTanstackKey.MEDICAL_HISTORIES)
 const isMedicalImagingsLoading = useIsLoading(ReferenceTanstackKey.MEDICAL_IMAGINGS)
 const isHMOTypesLoading = useIsLoading(ReferenceTanstackKey.HMO_TYPES)
@@ -732,7 +732,7 @@ const isLoading = computed<boolean>(() =>
   isModeOfReferralsLoading.value ||
   isMedicalCategoriesLoading.value ||
   isMedicalDiagnosesLoading.value ||
-  isPTCaseImpressionsLoading.value ||
+  isPtCaseImpressionsLoading.value ||
   isMedicalHistoriesLoading.value ||
   isMedicalImagingsLoading.value ||
   isHMOTypesLoading.value ||
@@ -909,7 +909,7 @@ const regions = ref<Region[]>([])
 
 const medicalCategories = ref<MedicalCategory[]>([])
 const medicalDiagnoses = ref<MedicalDiagnose[]>([])
-const ptCaseImpressions = ref<PTCaseImpression[]>([])
+const ptCaseImpressions = ref<PtCaseImpression[]>([])
 const medicalHistories = ref<MedicalHistory[]>([])
 const medicalImagings = ref<MedicalImaging[]>([])
 
@@ -1278,7 +1278,7 @@ const initializeDropdowns = async (): Promise<void> => {
     fetchedRegions,
     fetchedMedicalCategories,
     fetchedMedicalDiagnoses,
-    fetchedPTCaseImpressions,
+    fetchedPtCaseImpressions,
     fetchedMedicalHistories,
     fetchedMedicalImagings,
     fetchedHMOTypes
@@ -1300,7 +1300,7 @@ const initializeDropdowns = async (): Promise<void> => {
     philippineLocationTanstackService.getAllRegions(queryClient, regionRequestParams),
     createReferenceQueryService<MedicalCategory>(queryClient, ReferenceTanstackKey.MEDICAL_CATEGORIES, requestParams),
     createReferenceQueryService<MedicalDiagnose>(queryClient, ReferenceTanstackKey.MEDICAL_DIAGNOSES, requestParams),
-    createReferenceQueryService<PTCaseImpression>(queryClient, ReferenceTanstackKey.PT_CASE_IMPRESSIONS, requestParams),
+    createReferenceQueryService<PtCaseImpression>(queryClient, ReferenceTanstackKey.PT_CASE_IMPRESSIONS, requestParams),
     createReferenceQueryService<MedicalHistory>(queryClient, ReferenceTanstackKey.MEDICAL_HISTORIES, requestParams),
     createReferenceQueryService<MedicalImaging>(queryClient, ReferenceTanstackKey.MEDICAL_IMAGINGS, requestParams),
     createReferenceQueryService<HMOType>(queryClient, ReferenceTanstackKey.HMO_TYPES, requestParams)
@@ -1326,7 +1326,7 @@ const initializeDropdowns = async (): Promise<void> => {
 
   medicalCategories.value = contentOrEmpty(fetchedMedicalCategories)
   medicalDiagnoses.value = contentOrEmpty(fetchedMedicalDiagnoses)
-  ptCaseImpressions.value = contentOrEmpty(fetchedPTCaseImpressions)
+  ptCaseImpressions.value = contentOrEmpty(fetchedPtCaseImpressions)
   medicalHistories.value = contentOrEmpty(fetchedMedicalHistories)
   medicalImagings.value = contentOrEmpty(fetchedMedicalImagings)
 

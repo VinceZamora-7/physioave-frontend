@@ -292,7 +292,7 @@ const load = async (): Promise<void> => {
 onMounted(() => {
   void load().then(() => {
     if (String(route.query.autoprint ?? "1") !== "0") {
-      window.setTimeout(() => window.print(), 50)
+      window.setTimeout(() => printPage(), 50)
     }
   })
 })

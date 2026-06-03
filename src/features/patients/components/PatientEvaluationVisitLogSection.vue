@@ -149,10 +149,9 @@
                   <Select
                     v-model="form.medical_category"
                     :options="normalizedMedicalCategoryOptions"
-                    editable
                     showClear
                     fluid
-                    placeholder="Select or type medical category"
+                    placeholder="Select medical category"
                   />
                 </div>
               </div>
@@ -163,10 +162,9 @@
                   <Select
                     v-model="form.doctor_diagnosis"
                     :options="normalizedMedicalDiagnosisOptions"
-                    editable
                     showClear
                     fluid
-                    placeholder="Select or type doctor diagnosis"
+                    placeholder="Select doctor diagnosis"
                   />
                 </div>
                 <div class="space-y-2">
@@ -180,11 +178,10 @@
                   <label class="text-sm font-medium">PT Case Impression</label>
                   <Select
                     v-model="form.pt_case_impression"
-                    :options="normalizedPTCaseImpressionOptions"
-                    editable
+                    :options="normalizedPtCaseImpressionOptions"
                     showClear
                     fluid
-                    placeholder="Select or type PT case impression"
+                    placeholder="Select PT case impression"
                   />
                 </div>
                 <div class="space-y-2">
@@ -405,7 +402,7 @@ const normalizedMedicalDiagnosisOptions = computed<string[]>(() => {
   return Array.from(new Set((props.medicalDiagnosisOptions ?? []).map((item) => String(item).trim()).filter(Boolean)))
 })
 
-const normalizedPTCaseImpressionOptions = computed<string[]>(() => {
+const normalizedPtCaseImpressionOptions = computed<string[]>(() => {
   return Array.from(new Set((props.ptCaseImpressionOptions ?? []).map((item) => String(item).trim()).filter(Boolean)))
 })
 

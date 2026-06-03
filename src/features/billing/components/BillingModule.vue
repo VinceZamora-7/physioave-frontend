@@ -1555,7 +1555,10 @@ import {useQueryClient} from "@tanstack/vue-query"
 import {clinicStore} from "@/stores/clinic.store"
 
 const props = withDefaults(defineProps<{embedded?: boolean; overlayOnly?: boolean; initialView?: 'detail' | 'edit'}>(), {embedded: false, overlayOnly: false, initialView: 'edit'})
-const emit = defineEmits<{(e: "close-overlay"): void}>()
+const emit = defineEmits<{
+  (e: "close-overlay"): void
+  (e: "billing-updated", payload: { billingId?: number; appointmentId?: number; billingStatus?: string }): void
+}>()
 
 import Button from "primevue/button"
 import Column from "primevue/column"
@@ -3157,6 +3160,11 @@ const markSelectedBillingAsBilled = async (loaNumber?: string, loaDate?: string)
       markBilledLoaNumber.value = ""
       markBilledLoaDate.value = ""
       await fetchBillings()
+      emit("billing-updated", {
+        billingId: selectedBillingDetail.value.id,
+        appointmentId: targetAppointmentId,
+        billingStatus: result?.billing_status ?? "BILLED"
+      })
       successToast(toast, result?.session_scoped ? "Current appointment marked as billed" : "Transaction marked as billed")
       return
     }
@@ -3174,6 +3182,11 @@ const markSelectedBillingAsBilled = async (loaNumber?: string, loaDate?: string)
     markBilledLoaNumber.value = ""
     markBilledLoaDate.value = ""
     await fetchBillings()
+    emit("billing-updated", {
+      billingId: selectedBillingDetail.value.id,
+      appointmentId: selectedBillingDetail.value.appointment_id ?? undefined,
+      billingStatus: "BILLED"
+    })
     successToast(toast, "Transaction marked as billed")
   } catch (e) { errorToast(toast, extractApiErrorMessage(e, "Failed to mark as billed")) }
   finally { markingBillingAsBilled.value = false }
@@ -3321,5 +3334,4 @@ watch(selectedClinicId, () => { void fetchBillings() })
   opacity: 0;
 }
 </style>
-
 
