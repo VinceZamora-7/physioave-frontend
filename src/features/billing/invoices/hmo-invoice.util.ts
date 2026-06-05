@@ -135,7 +135,7 @@ export function renderHmoInvoiceWindow(
     approvedBy: invoice.approvedBy,
     approverTitle: invoice.approverTitle,
     dateSigned: invoice.dateSigned,
-    pageSize: "A4 landscape",
+    pageSize: "A4",
     maxWidthPx: 1200,
     renderErrorMessage: "The HMO invoice could not be rendered. Please try again."
   })

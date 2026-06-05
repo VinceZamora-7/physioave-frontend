@@ -264,7 +264,7 @@
                   filter
                   showClear
                   fluid
-                  placeholder="Search patientâ€¦"
+                  placeholder="Search patient"
                 />
                 <label>Patient Name</label>
               </IftaLabel>
@@ -336,7 +336,7 @@
               </Message>
             </template>
 
-            <!-- â”€â”€ Line Items â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
+            <!-- Line Items -->
             <section class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3 space-y-3">
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <h4 class="text-sm font-semibold">Line Items</h4>
@@ -2450,8 +2450,6 @@ const markBilledLoaDialogVisible = ref(false)
 const markBilledLoaNumber = ref("")
 const markBilledLoaDate = ref("")
 
-const selectedBillingAmountTendered = computed(() => Number(selectedBillingDetail.value?.amount_tendered ?? 0))
-
 const isClaimBillingType = (billingType?: string): boolean => {
   const n = String(billingType ?? "").trim().toUpperCase()
   return n === "HMO_BILLING" || n === "HMO" || n === "LGU_BILLING" || n === "LGU"
@@ -3017,7 +3015,23 @@ const billingPatientAddOnTechniqueRateMap     = ref<Map<number,number>>(new Map(
 const billingPatientAddOnHomeServiceRateMap   = ref<Map<number,number>>(new Map())
 
 // â”€â”€ Selected lines â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-type SelectedLine = {key:string;id:number|string;type:string;name:string;price:number;quantity:number;originalPrice?:number;priceOverride?:number;body_area?:string;children?: BillingLineItem[]}
+type SelectedLine = {
+  key: string
+  id: number | string
+  type: string
+  name: string
+  price: number
+  quantity: number
+  originalPrice?: number
+  priceOverride?: number
+  body_area?: string
+  packageId?: string
+  bundleTemplateId?: string
+  bundleQty?: number
+  bundleItems?: LocalPackageItem[]
+  packageConfig?: unknown
+  children?: BillingLineItem[]
+}
 const selectedLines      = ref<SelectedLine[]>([])
 const selectedLineType   = ref<SelectedLine["type"]>("machine")
 const selectedLineId     = ref<number|string>()
@@ -3145,7 +3159,30 @@ const addSelectedPackageOffer = (): void => {
   if (!selectedPackageOfferId.value) return
   const found = activePackageOffers.value.find(i => i.id === selectedPackageOfferId.value)
   if (!found) return
-  selectedLines.value.push({key: crypto.randomUUID(), id: found.id, type: "package", name: found.name, price: toWholePeso(found.packagePrice), quantity: 1})
+  selectedLines.value.push({
+    key: crypto.randomUUID(),
+    id: found.id,
+    type: "package",
+    name: found.name,
+    price: toWholePeso(found.packagePrice),
+    quantity: 1,
+    packageId: found.id,
+    bundleTemplateId: found.bundleId,
+    bundleQty: Math.max(1, Number(found.bundleQty ?? 1)),
+    bundleItems: found.bundleItems?.map(item => ({ ...item })),
+    packageConfig: {
+      package_id: found.id,
+      package_name: found.name,
+      bundle_template_id: found.bundleId,
+      bundle_qty: Math.max(1, Number(found.bundleQty ?? 1)),
+      bundle_items: found.bundleItems?.map(item => ({ ...item })) ?? [],
+      machine_items: found.machineItems?.map(item => ({ ...item })) ?? [],
+      technique_items: found.techniqueItems?.map(item => ({ ...item })) ?? [],
+      evaluation_items: found.evaluationItems?.map(item => ({ ...item })) ?? [],
+      add_on_items: found.addOnItems?.map(item => ({ ...item })) ?? [],
+      session_items: found.sessionItems?.map(item => ({ ...item })) ?? []
+    }
+  })
   selectedPackageOfferId.value = undefined
 }
 
@@ -3306,6 +3343,17 @@ const lineItemsAsPayload = computed((): BillingLineItem[] =>
       id: item.id, type: item.type as BillingLineItem["type"], name: item.name,
       price: effectivePrice, quantity: Math.max(1, toWholePeso(item.quantity)),
       originalPrice, body_area: item.body_area || undefined,
+      ...(item.type === "package" ? {
+        package_id: item.packageId ?? item.id,
+        bundle_template_id: item.bundleTemplateId,
+        bundle_id: item.bundleTemplateId,
+        bundle_qty: item.bundleQty,
+        bundle_items: item.bundleItems?.map(bundleItem => ({
+          id: bundleItem.id,
+          qty: Math.max(1, Number(bundleItem.qty ?? 1))
+        })),
+        package_config: item.packageConfig
+      } : {}),
       ...(children.length ? {children} : {})
     }
   })

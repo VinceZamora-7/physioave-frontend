@@ -25,7 +25,7 @@
           </div>
         </div>
         <p class="app-appointment-muted max-w-2xl text-sm leading-6">
-          {{ calendarView === 'weekly' ? 'PT assignments for the selected week.' : 'View valid booking days, monthly billing status, and branch schedule availability.' }}
+          {{ calendarView === 'weekly' ? 'PT assignments grouped by appointment status.' : 'View appointment availability and daily status tags for the selected branch.' }}
         </p>
         <div v-if="calendarView === 'monthly'" class="flex flex-wrap gap-2 pt-1 text-xs">
           <span class="app-appointment-chip">Selected: {{ selectedDateLabel }}</span>
@@ -49,21 +49,17 @@
 
     <!-- Legend (shared) -->
     <div class="app-appointment-muted flex flex-wrap gap-2 text-xs">
-      <span class="app-appointment-legend app-appointment-legend-danger">
-        <span class="app-appointment-legend-dot app-appointment-legend-dot-danger" />
-        Pending
-      </span>
-      <span class="app-appointment-legend app-appointment-legend-info">
-        <span class="app-appointment-legend-dot app-appointment-legend-dot-info" />
-        Partial
-      </span>
       <span class="app-appointment-legend app-appointment-legend-success">
         <span class="app-appointment-legend-dot app-appointment-legend-dot-success" />
-        Billed
+        Completed
+      </span>
+      <span class="app-appointment-legend app-appointment-legend-warning">
+        <span class="app-appointment-legend-dot app-appointment-legend-dot-warning" />
+        Pending
       </span>
       <span class="app-appointment-legend app-appointment-legend-muted">
         <span class="app-appointment-legend-dot app-appointment-legend-dot-muted" />
-        LGU Dropped Out
+        Cancelled
       </span>
     </div>
 
@@ -213,24 +209,51 @@
 
     <!-- Monthly Calendar -->
     <template v-else>
-      <DatePicker
-        v-model="localCalendarDate"
-        inline
-        fluid
-        :manualInput="false"
-        :disabledDays="calendarDisabledDays"
-        @month-change="onCalendarMonthChange"
-      >
-        <template #date="slotProps">
-          <div :class="calendarDayCellClass(slotProps.date)">
-            <span>{{ slotProps.date.day }}</span>
-            <span
-              v-if="getCalendarDayStatus(slotProps.date)"
-              :class="calendarDayDotClass(slotProps.date)"
-            />
+      <div class="overflow-hidden rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] shadow-sm">
+        <div class="flex flex-col gap-3 border-b border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div class="text-sm font-bold text-[rgb(var(--app-fg))]">
+              {{ visibleMonthLabel }}
+            </div>
+            <div class="text-xs text-[rgb(var(--app-fg))]/55">
+              Daily tags are based on appointment status.
+            </div>
           </div>
-        </template>
-      </DatePicker>
+
+          <div class="flex flex-wrap gap-2 text-xs">
+            <span class="rounded-full bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-200 dark:ring-emerald-400/25">
+              Completed: {{ monthlyStatusSummary.completed }}
+            </span>
+            <span class="rounded-full bg-amber-50 px-2.5 py-1 font-semibold text-amber-700 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-400/25">
+              Pending: {{ monthlyStatusSummary.pending }}
+            </span>
+            <span class="rounded-full bg-slate-50 px-2.5 py-1 font-semibold text-slate-600 ring-1 ring-slate-200 dark:bg-slate-700/30 dark:text-slate-300 dark:ring-slate-500/30">
+              Cancelled: {{ monthlyStatusSummary.cancelled }}
+            </span>
+          </div>
+        </div>
+
+        <div class="p-3 sm:p-4">
+          <DatePicker
+            v-model="localCalendarDate"
+            inline
+            fluid
+            :manualInput="false"
+            :disabledDays="calendarDisabledDays"
+            @month-change="onCalendarMonthChange"
+          >
+            <template #date="slotProps">
+              <div :class="calendarDayCellClass(slotProps.date)">
+                <span>{{ slotProps.date.day }}</span>
+                <span
+                  v-if="getCalendarDayStatus(slotProps.date)"
+                  :class="calendarDayDotClass(slotProps.date)"
+                />
+              </div>
+            </template>
+          </DatePicker>
+        </div>
+      </div>
     </template>
 
     <div class="flex justify-end pt-1">
@@ -281,7 +304,7 @@ const selectedClinic = computed(() => clinicOptions.value.find(c => c.id === sel
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type CalendarDayStatus = "pending" | "partial" | "billed" | "lgu-dropped-out"
+type CalendarDayStatus = "completed" | "pending" | "cancelled"
 type CalendarSlotDate = { year: number; month: number; day: number; today?: boolean; selectable?: boolean }
 
 // ── State ────────────────────────────────────────────────────────────────────
@@ -311,19 +334,27 @@ const selectedDateLabel = computed(() =>
   })
 )
 
-const toMinutesFromTime = (value: unknown): number | undefined => {
-  if (value instanceof Date) return value.getHours() * 60 + value.getMinutes()
-  if (typeof value !== "string") return undefined
-  const hhmmss = value.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/)
-  if (hhmmss) return Number(hhmmss[1]) * 60 + Number(hhmmss[2])
-  const ampm = value.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
-  if (ampm) {
-    let hour = Number(ampm[1]) % 12
-    if (ampm[3].toUpperCase() === "PM") hour += 12
-    return hour * 60 + Number(ampm[2])
+const visibleMonthLabel = computed(() =>
+  new Date(visibleYear.value, visibleMonth.value, 1).toLocaleDateString("en-PH", {
+    month: "long",
+    year: "numeric"
+  })
+)
+
+const monthlyStatusSummary = computed(() => {
+  const summary: Record<CalendarDayStatus, number> = {
+    completed: 0,
+    pending: 0,
+    cancelled: 0
   }
-  return undefined
-}
+
+  calendarDayStatusMap.value.forEach(status => {
+    summary[status] += 1
+  })
+
+  return summary
+})
+
 
 const isClinicDayAllowed = (clinicDay: number): boolean => {
   const clinic = selectedClinic.value
@@ -428,13 +459,21 @@ function getApptsByHour(dateStr: string, hour: number): AppointmentListItem[] {
   )
 }
 
-function getWeekSlotClass(appt: AppointmentListItem): string {
-  const s = (appt.appointment_status ?? '').toLowerCase()
-  if (s === 'cancelled') return 'border border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-600/30 dark:bg-slate-700/20 dark:text-slate-500 line-through'
-  if (s === 'completed') return 'border border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/25 dark:bg-emerald-500/10 dark:text-emerald-300'
-  if (s === 'no show' || s === 'no_show') return 'border border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-400/25 dark:bg-amber-500/10 dark:text-amber-300'
-  return 'border border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-400/25 dark:bg-sky-500/10 dark:text-sky-200'
+function normalizeAppointmentStatus(appt: AppointmentListItem): CalendarDayStatus {
+  const status = String(appt.appointment_status ?? "").trim().toLowerCase().replace(/_/g, " ")
+  if (status === "completed") return "completed"
+  if (status === "cancelled" || status === "canceled") return "cancelled"
+  return "pending"
 }
+
+
+function getWeekSlotClass(appt: AppointmentListItem): string {
+  const status = normalizeAppointmentStatus(appt)
+  if (status === "cancelled") return "border border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-600/30 dark:bg-slate-700/20 dark:text-slate-500 line-through"
+  if (status === "completed") return "border border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/25 dark:bg-emerald-500/10 dark:text-emerald-300"
+  return "border border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-400/25 dark:bg-amber-500/10 dark:text-amber-200"
+}
+
 
 function prevWeek(): void {
   const d = new Date(localCalendarDate.value)
@@ -450,42 +489,30 @@ function nextWeek(): void {
 
 // ── Calendar dot helpers ─────────────────────────────────────────────────────
 
-const isFullyBilledStatus = (status?: string): boolean =>
-  ["PAID", "BILLED"].includes((status?.trim() || "").toUpperCase())
-
-const isPartiallyPaidStatus = (status?: string): boolean =>
-  (status?.trim() || "").toUpperCase() === "PARTIAL"
-
-const isUnbilledStatus = (status?: string): boolean =>
-  ["UNBILLED", "PENDING"].includes((status?.trim() || "UNBILLED").toUpperCase())
-
 const classifyCalendarDayStatus = (rows: AppointmentListItem[]): CalendarDayStatus | null => {
   if (!rows.length) return null
-  const isDroppedOut = (row: AppointmentListItem) =>
-    String(row.dropout_status ?? "").toUpperCase() === "DROPPED_OUT"
-  const activeRows = rows.filter(row => !isDroppedOut(row))
-  if (activeRows.length === 0) return "lgu-dropped-out"
-  if (activeRows.some(row => isUnbilledStatus(row.billing_status))) return "pending"
-  if (activeRows.some(row => isPartiallyPaidStatus(row.billing_status))) return "partial"
-  if (activeRows.some(row => isFullyBilledStatus(row.billing_status))) return "billed"
+
+  const statuses = rows.map(row => normalizeAppointmentStatus(row))
+
+  // Prioritize actionable days first when a date has mixed appointment states.
+  if (statuses.includes("pending")) return "pending"
+  if (statuses.includes("completed")) return "completed"
+  if (statuses.includes("cancelled")) return "cancelled"
+
   return null
 }
 
 const calendarDayStatusStyles: Record<CalendarDayStatus, { cell: string; dot: string }> = {
-  pending: {
-    cell: "bg-red-100 text-red-700 ring-1 ring-red-300 dark:bg-red-500/20 dark:text-red-100 dark:ring-red-400/40",
-    dot: "absolute bottom-[3px] h-1.5 w-1.5 rounded-full bg-red-500 dark:bg-red-300"
-  },
-  partial: {
-    cell: "bg-blue-100 text-blue-800 ring-1 ring-blue-300 dark:bg-blue-500/20 dark:text-blue-100 dark:ring-blue-400/40",
-    dot: "absolute bottom-[3px] h-1.5 w-1.5 rounded-full bg-blue-500 dark:bg-blue-300"
-  },
-  billed: {
+  completed: {
     cell: "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-100 dark:ring-emerald-400/40",
     dot: "absolute bottom-[3px] h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-300"
   },
-  "lgu-dropped-out": {
-    cell: "bg-slate-100 text-slate-500 ring-1 ring-slate-300 dark:bg-slate-500/20 dark:text-slate-300 dark:ring-slate-400/40",
+  pending: {
+    cell: "bg-amber-100 text-amber-800 ring-1 ring-amber-300 dark:bg-amber-500/20 dark:text-amber-100 dark:ring-amber-400/40",
+    dot: "absolute bottom-[3px] h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-300"
+  },
+  cancelled: {
+    cell: "bg-slate-100 text-slate-500 ring-1 ring-slate-300 dark:bg-slate-500/20 dark:text-slate-300 dark:ring-slate-400/40 line-through",
     dot: "absolute bottom-[3px] h-1.5 w-1.5 rounded-full bg-slate-400 dark:bg-slate-400"
   }
 }

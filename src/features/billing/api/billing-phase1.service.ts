@@ -44,6 +44,12 @@ export interface BillingLineItem {
   quantity: number
   originalPrice?: number
   body_area?: string
+  package_id?: number | string
+  bundle_template_id?: number | string
+  bundle_id?: number | string
+  bundle_qty?: number
+  bundle_items?: Array<{ id: number | string; qty: number }>
+  package_config?: unknown
   children?: BillingLineItem[]
 }
 

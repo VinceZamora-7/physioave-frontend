@@ -1,99 +1,128 @@
 <template>
   <section :class="sectionCardClass">
-    <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
       <div class="space-y-1">
-        <h3 :class="sectionTitleClass">
-          Appointments Table
-        </h3>
+        <div class="flex flex-wrap items-center gap-2">
+          <h3 :class="sectionTitleClass">
+            Appointments
+          </h3>
+          <span class="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold  ring-1 ring-violet-100 dark:bg-violet-500/10 dark:text-violet-200 dark:ring-violet-400/20">
+            {{ selectedDateLabel }}
+          </span>
+        </div>
         <p class="app-appointment-muted max-w-2xl text-sm leading-6">
-          Filter, review, page through, and export appointment records for the selected date.
+          Search, filter, review, reschedule, cancel, and export appointment records from one table.
         </p>
       </div>
-    </div>
 
-    <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
-      <IftaLabel>
-        <InputText
-          v-model="recordFilter"
-          fluid
-          placeholder="Search patient or record ID"
-          :pt="ptInputText"
-        />
-        <label>Record Search</label>
-      </IftaLabel>
-
-      <IftaLabel>
-        <Select
-          v-model="statusFilter"
-          :options="appointmentStatusOptions"
-          showClear
-          fluid
-          placeholder="All statuses"
-          :pt="ptSelect"
-        />
-        <label>Status</label>
-      </IftaLabel>
-
-      <IftaLabel>
-        <Select
-          v-model="phaseFilter"
-          :options="appointmentPhaseOptions"
-          optionLabel="label"
-          optionValue="value"
-          showClear
-          fluid
-          placeholder="All phases"
-          :pt="ptSelect"
-        />
-        <label>Phase</label>
-      </IftaLabel>
-
-      <IftaLabel>
-        <Select
-          v-model="ptFilter"
-          :options="ptFilterOptions"
-          optionLabel="label"
-          optionValue="value"
-          showClear
-          filter
-          fluid
-          placeholder="All assigned PTs"
-          :pt="ptSelect"
-        />
-        <label>Assigned PT</label>
-      </IftaLabel>
-
-      <div class="flex flex-col gap-2 md:col-span-2 sm:flex-row sm:items-end xl:col-span-2">
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
         <Button
           label="Refresh"
           icon="pi pi-refresh"
           severity="secondary"
           outlined
-          class="w-full sm:w-auto"
+          size="small"
+          :loading="isLoading"
           :pt="ptOutlinedBtn"
           @click="refresh"
         />
-
         <Button
           label="Export CSV"
           icon="pi pi-download"
           severity="secondary"
           outlined
-          class="w-full sm:w-auto"
+          size="small"
+          :disabled="isLoading || totalElements === 0"
           :pt="ptOutlinedBtn"
           @click="onExportCsv"
         />
       </div>
-
-      <p
-        v-if="recordFilter.trim()"
-        class="app-appointment-muted text-xs leading-5 md:col-span-2 xl:col-span-6"
-      >
-        Record search checks across clinics, assigned PTs, statuses, and dates. Clear the search to return to the selected table filters.
-      </p>
     </div>
 
-    <div class="app-appointment-table-shell">
+    <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))]/60 p-3 dark:bg-white/[0.03]">
+      <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-12">
+        <IftaLabel class="xl:col-span-4">
+          <InputText
+            v-model="recordFilter"
+            fluid
+            placeholder="Search patient, record ID, clinic, PT, status, or date"
+            :pt="ptInputText"
+          />
+          <!-- <label>Search Appointment</label> -->
+        </IftaLabel>
+
+        <IftaLabel class="xl:col-span-2">
+          <Select
+            v-model="statusFilter"
+            :options="appointmentStatusOptions"
+            showClear
+            fluid
+            placeholder="All statuses"
+            :pt="ptSelect"
+          />
+          <label>Status</label>
+        </IftaLabel>
+
+        <IftaLabel class="xl:col-span-2">
+          <Select
+            v-model="phaseFilter"
+            :options="appointmentPhaseOptions"
+            optionLabel="label"
+            optionValue="value"
+            showClear
+            fluid
+            placeholder="All phases"
+            :pt="ptSelect"
+          />
+          <label>Phase</label>
+        </IftaLabel>
+
+        <IftaLabel class="xl:col-span-3">
+          <Select
+            v-model="ptFilter"
+            :options="ptFilterOptions"
+            optionLabel="label"
+            optionValue="value"
+            showClear
+            filter
+            fluid
+            placeholder="All assigned PTs"
+            :pt="ptSelect"
+          />
+          <label>Assigned PT</label>
+        </IftaLabel>
+
+        <div class="flex items-end xl:col-span-1">
+          <Button
+            label="Clear"
+            icon="pi pi-filter-slash"
+            severity="secondary"
+            text
+            size="small"
+            class="w-full"
+            :disabled="!hasActiveFilters || isLoading"
+            @click="clearFilters"
+          />
+        </div>
+      </div>
+
+      <div class="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div class="flex flex-wrap items-center gap-2 text-[rgb(var(--app-fg))]/60">
+          <span class="rounded-full bg-white px-2.5 py-1 font-semibold ring-1 ring-[rgb(var(--app-border))] dark:bg-white/5">
+            {{ tableSummaryLabel }}
+          </span>
+          <span v-if="recordFilter.trim()" class="rounded-full bg-amber-50 px-2.5 py-1 font-semibold text-amber-700 ring-1 ring-amber-100 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-400/20">
+            Smart search ignores date and clinic filters
+          </span>
+        </div>
+
+        <span v-if="hasActiveFilters" class="font-medium text-[rgb(var(--app-fg))]/50">
+          Filters active
+        </span>
+      </div>
+    </div>
+
+    <div class="app-appointment-table-shell overflow-hidden rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] shadow-sm">
       <DataTable
         :value="appointments"
         dataKey="id"
@@ -103,36 +132,85 @@
         :totalRecords="totalElements"
         :loading="isLoading"
         selectionMode="single"
+        stripedRows
+        rowHover
+        scrollable
+        scrollHeight="560px"
+        responsiveLayout="scroll"
         @page="onPage"
         @rowSelect="onSelectRow"
         :pt="{
+          root: { class: 'text-sm' },
+          table: { class: 'min-w-[1180px]' },
+          headerRow: { class: 'bg-[rgb(var(--app-bg-soft))]' },
           column: {
             headerCell: {
-              class: 'app-appointment-table-th'
+              class: 'app-appointment-table-th whitespace-nowrap bg-[rgb(var(--app-bg-soft))] text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55'
             },
             bodyCell: {
-              class: 'app-appointment-table-td'
+              class: 'app-appointment-table-td align-top'
             }
+          },
+          paginator: {
+            root: { class: 'border-t border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))]/70' }
           }
         }"
       >
         <template #empty>
-          <div class="app-appointment-empty">
-            No appointments found for the selected date and filters.
+          <div class="flex flex-col items-center justify-center gap-2 px-4 py-12 text-center">
+            <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400 dark:bg-white/10 dark:text-slate-300">
+              <i class="pi pi-calendar-times text-xl" />
+            </div>
+            <div class="space-y-1">
+              <p class="font-semibold text-[rgb(var(--app-fg))]">No appointments found</p>
+              <p class="app-appointment-muted text-sm">Try clearing filters, changing the selected date, or switching clinics.</p>
+            </div>
+            <Button
+              v-if="hasActiveFilters"
+              label="Clear filters"
+              icon="pi pi-filter-slash"
+              severity="secondary"
+              outlined
+              size="small"
+              @click="clearFilters"
+            />
           </div>
         </template>
 
-        <Column field="patient_name" header="Patient" />
-
-        <Column field="doctor_name" header="Assigned PT">
+        <Column field="patient_name" header="Patient" frozen>
           <template #body="{ data }">
-            {{ data.doctor_name || "Unassigned" }}
+            <div class="min-w-[180px] space-y-1">
+              <button
+                type="button"
+                class="block max-w-[220px] truncate text-left font-semibold  hover:underline dark:text-violet-300"
+                @click.stop="emit('appointment-click', data)"
+              >
+                {{ data.patient_name || "Unnamed Patient" }}
+              </button>
+              <p class="text-xs text-[rgb(var(--app-fg))]/45">
+                ID: {{ data.record_id || data.id }}
+              </p>
+            </div>
           </template>
         </Column>
 
-        <Column field="starts_at" header="Start">
+        <Column field="doctor_name" header="Assigned PT">
           <template #body="{ data }">
-            {{ formatDateTime(data.starts_at) }}
+            <div class="min-w-[150px]">
+              <p class="font-medium text-[rgb(var(--app-fg))]">{{ data.doctor_name || "Unassigned" }}</p>
+              <p v-if="!data.doctor_name" class="text-xs text-amber-600 dark:text-amber-300">Needs assignment</p>
+            </div>
+          </template>
+        </Column>
+
+        <Column field="starts_at" header="Schedule">
+          <template #body="{ data }">
+            <div class="min-w-[170px] space-y-1">
+              <p class="font-medium text-[rgb(var(--app-fg))]">{{ formatDateTime(data.starts_at) }}</p>
+              <p class="text-xs text-[rgb(var(--app-fg))]/45">
+                Ends {{ formatDateTime(data.ends_at) }}
+              </p>
+            </div>
           </template>
         </Column>
 
@@ -141,6 +219,7 @@
             <Tag
               :value="displayAppointmentStatus(data.appointment_status)"
               :severity="appointmentSeverity(data.appointment_status)"
+              rounded
             />
           </template>
         </Column>
@@ -150,6 +229,7 @@
             <Tag
               :value="displayAppointmentPhase(data.appointment_phase)"
               :severity="appointmentPhaseSeverity(data.appointment_phase)"
+              rounded
             />
           </template>
         </Column>
@@ -159,20 +239,21 @@
             <Tag
               :value="displayLocationContext(data.location_context)"
               :severity="appointmentLocationContextSeverity(data.location_context)"
+              rounded
             />
           </template>
         </Column>
 
         <Column field="specialty_tag_name" header="Specialty">
           <template #body="{ data }">
-            <div class="space-y-1">
-              <p>{{ data.specialty_tag_name || "N/A" }}</p>
-
+            <div class="min-w-[150px] space-y-1">
+              <p class="truncate font-medium">{{ data.specialty_tag_name || "N/A" }}</p>
               <Tag
                 v-if="data.specialty_tag_name && data.specialty_tag_is_active === false"
-                value="Inactive Specialty"
+                value="Inactive"
                 severity="secondary"
                 class="text-xs"
+                rounded
               />
             </div>
           </template>
@@ -180,63 +261,44 @@
 
         <Column field="treatment_area_name" header="Clinic Room">
           <template #body="{ data }">
-            <div class="space-y-1">
+            <div class="min-w-[150px] space-y-1">
               <TreatmentAreaChip
                 :name="data.treatment_area_name"
                 :color="data.treatment_area_color"
               />
-
               <Tag
                 v-if="data.treatment_area_name && data.treatment_area_is_active === false"
-                value="Inactive Room"
+                value="Inactive"
                 severity="secondary"
                 class="text-xs"
+                rounded
               />
             </div>
           </template>
         </Column>
 
-        <Column field="billing_status" header="Billing Status">
+        <Column field="billing_status" header="Billing">
           <template #body="{ data }">
             <Tag
               :value="displayBillingStatus(data.billing_status, data.billing_type)"
               :severity="billingSeverity(data.billing_status, data.billing_type)"
+              rounded
             />
           </template>
         </Column>
 
         <Column field="reschedule_count" header="Reschedules">
           <template #body="{ data }">
-            <span class="font-medium">
-              {{ data.reschedule_count }}
+            <span class="inline-flex min-w-8 justify-center rounded-full bg-[rgb(var(--app-bg-soft))] px-2 py-1 text-xs font-bold text-[rgb(var(--app-fg))]/70 ring-1 ring-[rgb(var(--app-border))]">
+              {{ data.reschedule_count ?? 0 }}
             </span>
           </template>
         </Column>
 
-        <Column header="Actions">
+        <Column header="Actions" frozen alignFrozen="right">
           <template #body="{ data }">
-            <div class="flex items-center gap-1">
-              <Button
-                size="small"
-                text
-                rounded
-                icon="pi pi-eye"
-                aria-label="View appointment"
-                v-tooltip.top="'View appointment'"
-                @click.stop="emit('appointment-click', data)"
-              />
-
-              <Button
-                size="small"
-                text
-                rounded
-                icon="pi pi-calendar-plus"
-                aria-label="Reschedule appointment"
-                v-tooltip.top="'Reschedule appointment'"
-                @click.stop="emit('reschedule', data)"
-              />
-
-              <Button
+            <div class="flex items-center justify-end gap-1">
+                            <Button
                 v-if="canCancelAppointment(data)"
                 size="small"
                 text
@@ -249,8 +311,26 @@
                 :disabled="isCancellingAppointment(data)"
                 @click.stop="onCancelAppointment(data)"
               />
-
               <Button
+                size="small"
+                text
+                rounded
+                icon="pi pi-eye"
+                aria-label="View appointment"
+                v-tooltip.top="'View appointment'"
+                @click.stop="emit('appointment-click', data)"
+              />
+              <Button
+                size="small"
+                text
+                rounded
+                icon="pi pi-calendar-plus"
+                aria-label="Reschedule appointment"
+                v-tooltip.top="'Reschedule appointment'"
+                @click.stop="emit('reschedule', data)"
+              />
+
+              <!-- <Button
                 v-if="canDeleteAppointments"
                 size="small"
                 text
@@ -260,7 +340,7 @@
                 aria-label="Delete appointment"
                 v-tooltip.top="'Delete appointment'"
                 @click.stop="emit('delete', data)"
-              />
+              /> -->
             </div>
           </template>
         </Column>
@@ -316,9 +396,7 @@ const globalClinicStore = clinicStore()
 const { selectedClinicId } = storeToRefs(globalClinicStore)
 const authSession = useAuthSessionStore()
 
-const canDeleteAppointments = computed(() =>
-  authSession.hasAnyPermission("Appointment::DELETE")
-)
+
 
 const canCancelAppointments = computed(() =>
   authSession.hasAnyPermission("Appointment::UPDATE", "Appointment::CANCEL")
@@ -347,7 +425,7 @@ const ptFilterOptions = computed(() => [
   ...ptDoctorOptions.value.map((option) => ({ label: option.label, value: option.id })),
 ])
 
-const appointmentStatusOptions = ["Pending", "Rescheduled", "No show", "Cancelled", "Completed"]
+const appointmentStatusOptions = ["Pending", "Completed", "Cancelled"]
 
 const appointmentPhaseOptions: Array<{ label: string; value: AppointmentPhase }> = [
   { label: "Evaluation", value: "EVAL" },
@@ -366,6 +444,41 @@ const selectedDateIso = computed((): string => {
 
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
 })
+
+
+const selectedDateLabel = computed(() =>
+  props.calendarDate.toLocaleDateString("en-PH", {
+    weekday: "short",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  })
+)
+
+const hasActiveFilters = computed(() =>
+  !!recordFilter.value.trim() ||
+  !!statusFilter.value ||
+  !!phaseFilter.value ||
+  !!ptFilter.value
+)
+
+const tableSummaryLabel = computed(() => {
+  const start = totalElements.value === 0 ? 0 : (page.value - 1) * pageSize.value + 1
+  const end = Math.min(page.value * pageSize.value, totalElements.value)
+
+  return totalElements.value === 0
+    ? "No appointments to show"
+    : `Showing ${start}-${end} of ${totalElements.value} appointments`
+})
+
+const clearFilters = (): void => {
+  recordFilter.value = ""
+  statusFilter.value = undefined
+  phaseFilter.value = undefined
+  ptFilter.value = undefined
+  page.value = 1
+  void fetchAppointments()
+}
 
 const sectionCardClass = "app-appointment-card space-y-4"
 const sectionTitleClass = "app-appointment-title text-lg"

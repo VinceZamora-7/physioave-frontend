@@ -1,14 +1,20 @@
 <template>
-  <section class="space-y-4">
-    <article class="app-section-card-comfy">
-      <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-        <div class="space-y-1">
-          <p class="m-0 text-xs font-semibold uppercase tracking-[0.22em] text-[rgb(var(--app-fg))]/50">HMO Dashboard</p>
-          <h3 class="m-0 text-lg font-bold text-[rgb(var(--app-fg))]">Manager HMO Dashboard</h3>
-          <p class="m-0 text-sm leading-6 text-[rgb(var(--app-fg))]/60">HMO billings, patients, and statement tools for the selected profile.</p>
+  <section class="space-y-5">
+    <article class="app-section-card-comfy overflow-hidden">
+      <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div class="min-w-0 space-y-1">
+          <p class="m-0 text-xs font-semibold uppercase tracking-[0.22em] text-[rgb(var(--app-fg))]/45">
+            HMO Dashboard
+          </p>
+          <h3 class="m-0 text-xl font-bold tracking-tight text-[rgb(var(--app-fg))]">
+            Manager HMO Dashboard
+          </h3>
+          <p class="m-0 max-w-2xl text-sm leading-6 text-[rgb(var(--app-fg))]/60">
+            Review HMO patients, payments, outstanding balances, and statement tools from one workspace.
+          </p>
         </div>
 
-        <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div class="grid w-full grid-cols-1 gap-2 sm:grid-cols-[minmax(220px,1fr)_180px_auto] xl:max-w-2xl">
           <Select
             v-model="selectedHmoId"
             :options="hmoOptions"
@@ -17,42 +23,96 @@
             placeholder="All HMO profiles"
             showClear
             filter
-            class="min-w-64"
+            class="w-full"
           />
-          <DatePicker v-model="selectedMonth" view="month" dateFormat="MM yy" :manualInput="false" showIcon class="min-w-48" />
-          <Button label="Refresh" icon="pi pi-refresh" outlined size="small" :loading="loadingAny" @click="loadDashboard" />
+          <DatePicker
+            v-model="selectedMonth"
+            view="month"
+            dateFormat="MM yy"
+            :manualInput="false"
+            showIcon
+            class="w-full"
+          />
+          <Button
+            label="Refresh"
+            icon="pi pi-refresh"
+            outlined
+            size="small"
+            class="justify-center"
+            :loading="loadingAny"
+            @click="loadDashboard"
+          />
         </div>
       </div>
 
-      <Message v-if="!canManageHmoDashboard" severity="warn" :closable="false" size="small" class="mt-4">
-        Manager dashboard controls are available to operations leadership roles. HMO totals and patient lists remain visible.
-      </Message>
-      <Message v-if="error" severity="warn" :closable="false" size="small" class="mt-4">{{ error }}</Message>
+      <div class="mt-4 space-y-2">
+        <Message v-if="!canManageHmoDashboard" severity="warn" :closable="false" size="small">
+          Manager dashboard controls are available to operations leadership roles. HMO totals and patient lists remain visible.
+        </Message>
+        <Message v-if="error" severity="warn" :closable="false" size="small">
+          {{ error }}
+        </Message>
+      </div>
 
-      <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
+      <div class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-4">
-          <div class="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--app-fg))]/50">HMO Patients</div>
-          <div class="mt-2 text-2xl font-bold text-[rgb(var(--app-fg))]">{{ hmoPatients.length }}</div>
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="m-0 text-xs font-semibold uppercase tracking-wide text-[rgb(var(--app-fg))]/50">HMO Patients</p>
+              <p class="m-0 mt-2 text-2xl font-bold text-[rgb(var(--app-fg))]">{{ hmoPatients.length }}</p>
+            </div>
+            <span class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-700 dark:text-sky-300">
+              <i class="pi pi-users" />
+            </span>
+          </div>
         </div>
+
         <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-4">
-          <div class="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--app-fg))]/50">Total Transactions</div>
-          <div class="mt-2 text-2xl font-bold text-[rgb(var(--app-fg))]">{{ transactions.length }}</div>
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="m-0 text-xs font-semibold uppercase tracking-wide text-[rgb(var(--app-fg))]/50">Transactions</p>
+              <p class="m-0 mt-2 text-2xl font-bold text-[rgb(var(--app-fg))]">{{ transactions.length }}</p>
+            </div>
+            <span class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-500/10 text-violet-700 dark:text-violet-300">
+              <i class="pi pi-receipt" />
+            </span>
+          </div>
         </div>
-        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-4">
-          <div class="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--app-fg))]/50">Paid By HMO</div>
-          <div class="mt-2 text-2xl font-bold text-emerald-700 dark:text-emerald-300">{{ asCurrency(totalPaid) }}</div>
+
+        <div class="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-400/20 dark:bg-emerald-500/10">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="m-0 text-xs font-semibold uppercase tracking-wide text-emerald-700/70 dark:text-emerald-200/70">Paid By HMO</p>
+              <p class="m-0 mt-2 text-2xl font-bold text-emerald-700 dark:text-emerald-300">{{ asCurrency(totalPaid) }}</p>
+            </div>
+            <span class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+              <i class="pi pi-check-circle" />
+            </span>
+          </div>
         </div>
-        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-4">
-          <div class="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--app-fg))]/50">Outstanding</div>
-          <div class="mt-2 text-2xl font-bold text-amber-700 dark:text-amber-300">{{ asCurrency(totalOutstanding) }}</div>
+
+        <div class="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-400/20 dark:bg-amber-500/10">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="m-0 text-xs font-semibold uppercase tracking-wide text-amber-700/70 dark:text-amber-200/70">Outstanding</p>
+              <p class="m-0 mt-2 text-2xl font-bold text-amber-700 dark:text-amber-300">{{ asCurrency(totalOutstanding) }}</p>
+            </div>
+            <span class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-700 dark:text-amber-300">
+              <i class="pi pi-exclamation-circle" />
+            </span>
+          </div>
         </div>
       </div>
 
-      <div class="mt-3 flex justify-end">
+      <div class="mt-4 flex flex-col gap-2 border-t border-[rgb(var(--app-border))] pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <p class="m-0 text-xs leading-5 text-[rgb(var(--app-fg))]/55">
+          Showing {{ selectedHmoName || 'all HMO profiles' }} for {{ selectedMonth.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' }) }}.
+        </p>
         <Button
-          label="Claimed"
+          label="Mark Outstanding as Claimed"
           icon="pi pi-check-circle"
           severity="success"
+          size="small"
           :loading="claimingHmoPayments"
           :disabled="claimingHmoPayments || totalOutstanding <= 0"
           @click="claimOutstandingHmoBillings"
@@ -62,52 +122,79 @@
 
     <article class="app-section-card-comfy">
       <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div class="space-y-1">
-          <div class="flex items-center gap-2">
-            <span class="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-700 dark:text-sky-300">
-              <i class="pi pi-users" />
-            </span>
-            <div>
-              <h4 class="m-0 text-base font-bold text-[rgb(var(--app-fg))]">HMO Patients</h4>
-              <p class="m-0 text-sm leading-6 text-[rgb(var(--app-fg))]/60">Saved HMO information{{ selectedHmoName ? ` for ${selectedHmoName}` : '' }}.</p>
-            </div>
+        <div class="flex items-start gap-3">
+          <span class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-700 dark:text-sky-300">
+            <i class="pi pi-users" />
+          </span>
+          <div class="min-w-0">
+            <h4 class="m-0 text-base font-bold text-[rgb(var(--app-fg))]">HMO Patients</h4>
+            <p class="m-0 mt-1 text-sm leading-6 text-[rgb(var(--app-fg))]/60">
+              Saved HMO information{{ selectedHmoName ? ` for ${selectedHmoName}` : '' }}.
+            </p>
           </div>
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
           <Tag :value="`${hmoPatients.length} patient${hmoPatients.length === 1 ? '' : 's'}`" severity="info" />
-          <Button label="Recent Transactions" icon="pi pi-history" outlined size="small" @click="transactionsVisible = true" />
+          <Button label="Transactions" icon="pi pi-history" outlined size="small" @click="transactionsVisible = true" />
           <Button label="Create SOA" icon="pi pi-file" outlined size="small" @click="openHmoSoaDialog" />
         </div>
       </div>
 
-      <div class="mt-4 overflow-hidden rounded-2xl border border-[rgb(var(--app-border))]">
-        <DataTable :value="hmoPatients" :loading="loadingPatients" size="small" scrollable scrollHeight="420px" dataKey="id" paginator :rows="10" :rowsPerPageOptions="[10, 25, 50]">
+      <div class="mt-4 overflow-hidden rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))]">
+        <DataTable
+          :value="hmoPatients"
+          :loading="loadingPatients"
+          size="small"
+          scrollable
+          scrollHeight="520px"
+          dataKey="id"
+          paginator
+          :rows="10"
+          :rowsPerPageOptions="[10, 25, 50]"
+          stripedRows
+          rowHover
+          tableStyle="min-width: 920px"
+          :pt="{
+            header: { class: 'border-b border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))]' },
+            column: {
+              headerCell: { class: 'bg-[rgb(var(--app-bg-soft))] text-xs font-bold uppercase tracking-wide text-[rgb(var(--app-fg))]/55' },
+              bodyCell: { class: 'align-top text-sm' }
+            }
+          }"
+        >
           <template #empty>
             <EmptyState icon="pi pi-user-plus" title="No HMO patients found" text="Patients with saved HMO information will appear here." />
           </template>
 
-          <Column header="Patient" style="min-width: 240px">
+          <Column header="Patient" style="min-width: 260px">
             <template #body="{ data }">
-              <div class="space-y-1">
-                <div class="font-semibold text-[rgb(var(--app-fg))]">{{ data.full_name }}</div>
-                <div class="text-xs text-[rgb(var(--app-fg))]/60">{{ data.public_id || `PATIENT-${data.id}` }}</div>
-                <div class="text-xs text-[rgb(var(--app-fg))]/60">{{ data.phone_number || "No contact number" }}</div>
+              <div class="flex items-start gap-3">
+                <span class="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sky-500/10 text-xs font-bold text-sky-700 dark:text-sky-300">
+                  {{ getInitials(data.full_name) }}
+                </span>
+                <div class="min-w-0 space-y-1">
+                  <div class="truncate font-semibold text-[rgb(var(--app-fg))]">{{ data.full_name }}</div>
+                  <div class="text-xs text-[rgb(var(--app-fg))]/60">{{ data.public_id || `PATIENT-${data.id}` }}</div>
+                  <div class="text-xs text-[rgb(var(--app-fg))]/60">{{ data.phone_number || "No contact number" }}</div>
+                </div>
               </div>
             </template>
           </Column>
 
-          <Column header="HMO Information" style="min-width: 240px">
+          <Column header="HMO Information" style="min-width: 280px">
             <template #body="{ data }">
               <div class="space-y-1">
                 <div class="font-semibold text-[rgb(var(--app-fg))]">{{ data.hmo_name || data.sponsor_company_name || "HMO" }}</div>
-                <div class="text-xs text-[rgb(var(--app-fg))]/60">Approval {{ data.sponsor_approval_code || "N/A" }}</div>
-                <div class="text-xs text-[rgb(var(--app-fg))]/60">Validity {{ formatDateOnly(data.sponsor_validity_start_date) }} - {{ formatDateOnly(data.sponsor_validity_end_date) }}</div>
+                <div class="text-xs text-[rgb(var(--app-fg))]/60">Approval: {{ data.sponsor_approval_code || "N/A" }}</div>
+                <div class="text-xs text-[rgb(var(--app-fg))]/60">
+                  Validity: {{ formatDateOnly(data.sponsor_validity_start_date) }} – {{ formatDateOnly(data.sponsor_validity_end_date) }}
+                </div>
               </div>
             </template>
           </Column>
 
-          <Column header="Demographics" style="width: 160px">
+          <Column header="Profile" style="width: 170px">
             <template #body="{ data }">
               <div class="space-y-1 text-xs text-[rgb(var(--app-fg))]/70">
                 <div class="font-medium text-[rgb(var(--app-fg))]">{{ data.age ?? "N/A" }} years old</div>
@@ -116,13 +203,13 @@
             </template>
           </Column>
 
-          <Column header="Status" style="width: 120px">
+          <Column header="Status" style="width: 130px">
             <template #body="{ data }">
               <Tag :value="data.is_active ? 'Active' : 'Inactive'" :severity="data.is_active ? 'success' : 'danger'" class="text-xs" />
             </template>
           </Column>
 
-          <Column header="Actions" style="width: 140px">
+          <Column header="Actions" frozen alignFrozen="right" style="width: 140px">
             <template #body="{ data }">
               <Button label="Billings" icon="pi pi-file" outlined size="small" @click="openPatientBillings(data)" />
             </template>
@@ -141,7 +228,7 @@
           <Button label="Refresh" icon="pi pi-refresh" outlined size="small" :loading="loadingTransactions" @click="loadTransactions" />
         </div>
 
-        <DataTable :value="transactions" dataKey="id" :loading="loadingTransactions" size="small" scrollable scrollHeight="440px" paginator :rows="10">
+        <DataTable :value="transactions" dataKey="id" :loading="loadingTransactions" size="small" scrollable scrollHeight="480px" paginator :rows="10" stripedRows rowHover tableStyle="min-width: 860px">
           <template #empty>
             <EmptyState icon="pi pi-inbox" title="No HMO transactions found" text="HMO billings will appear here." />
           </template>
@@ -152,7 +239,7 @@
             <template #body="{ data }">
               <div class="space-y-1">
                 <div class="font-semibold">{{ data.patient_name || "No patient linked" }}</div>
-                <div class="text-xs text-[rgb(var(--app-fg))]/60">BILLING-{{ data.id }}<span v-if="data.receipt_number"> - Receipt {{ data.receipt_number }}</span></div>
+                <div class="text-xs text-[rgb(var(--app-fg))]/60">BILLING-{{ data.id }}<span v-if="data.receipt_number"> · Receipt {{ data.receipt_number }}</span></div>
               </div>
             </template>
           </Column>
@@ -165,30 +252,12 @@
             </template>
           </Column>
           <Column header="Total" style="width: 150px">
-            <template #body="{ data }">
-              <div class="text-right font-bold">{{ asCurrency(data.total_amount) }}</div>
-            </template>
+            <template #body="{ data }"><div class="text-right font-bold">{{ asCurrency(data.total_amount) }}</div></template>
           </Column>
           <Column header="Outstanding" style="width: 150px">
-            <template #body="{ data }">
-              <div class="text-right">{{ asCurrency(Math.max(0, Number(data.total_amount ?? 0) - Number(data.amount_paid ?? 0))) }}</div>
-            </template>
+            <template #body="{ data }"><div class="text-right font-semibold text-amber-700 dark:text-amber-300">{{ asCurrency(Math.max(0, Number(data.total_amount ?? 0) - Number(data.amount_paid ?? 0))) }}</div></template>
           </Column>
         </DataTable>
-      </div>
-    </Dialog>
-
-    <Dialog v-model:visible="soaVisible" header="Create Statement Of Account (HMO)" modal :style="{ width: '520px' }">
-      <div class="space-y-3">
-        <IftaLabel>
-          <DatePicker v-model="soaRange" selectionMode="range" dateFormat="yy-mm-dd" :manualInput="false" showIcon fluid />
-          <label>Date Range</label>
-        </IftaLabel>
-
-        <div class="flex justify-end gap-2 pt-2">
-          <Button label="Cancel" text @click="soaVisible = false" />
-          <Button label="Generate" icon="pi pi-print" :disabled="!hasValidRange" @click="generateSoa" />
-        </div>
       </div>
     </Dialog>
 
@@ -198,7 +267,7 @@
           <div class="space-y-1">
             <h4 class="m-0 text-base font-bold text-[rgb(var(--app-fg))]">{{ selectedPatientName }}</h4>
             <p class="m-0 text-sm leading-6 text-[rgb(var(--app-fg))]/60">
-              HMO billings use the saved individual service lines and negotiated HMO prices from each billing record.
+              HMO billings use the saved service lines and negotiated HMO prices from each billing record.
             </p>
           </div>
 
@@ -220,6 +289,7 @@
               </span>
               <div class="min-w-0 flex-1">
                 <h4 class="m-0 text-sm font-bold text-[rgb(var(--app-fg))]">{{ printable.title }}</h4>
+                <p class="m-0 mt-1 text-xs leading-5 text-[rgb(var(--app-fg))]/55">Generate a print-ready HMO document for this patient.</p>
               </div>
             </div>
 
@@ -239,14 +309,14 @@
 
         <Message v-if="patientBillingError" severity="warn" :closable="false" size="small">{{ patientBillingError }}</Message>
 
-        <DataTable :value="selectedPatientBillings" dataKey="id" :loading="loadingPatientBillings" size="small" scrollable scrollHeight="420px" paginator :rows="10">
+        <DataTable :value="selectedPatientBillings" dataKey="id" :loading="loadingPatientBillings" size="small" scrollable scrollHeight="440px" paginator :rows="10" stripedRows rowHover tableStyle="min-width: 760px">
           <template #empty>
             <EmptyState icon="pi pi-inbox" title="No HMO billings found" text="This patient has no HMO billings in the selected month." />
           </template>
           <Column header="Created" style="width: 160px">
             <template #body="{ data }">{{ formatDateTime(data.created_at) }}</template>
           </Column>
-          <Column header="Billing" style="min-width: 220px">
+          <Column header="Billing" style="min-width: 240px">
             <template #body="{ data }">
               <div class="space-y-1">
                 <div class="font-semibold">{{ getBillingReference(data) }}</div>
@@ -255,19 +325,13 @@
             </template>
           </Column>
           <Column header="Status" style="width: 130px">
-            <template #body="{ data }">
-              <Tag :value="data.billing_status || 'Pending'" :severity="statusSeverity(data.billing_status)" class="text-xs" />
-            </template>
+            <template #body="{ data }"><Tag :value="data.billing_status || 'Pending'" :severity="statusSeverity(data.billing_status)" class="text-xs" /></template>
           </Column>
           <Column header="Total" style="width: 130px">
-            <template #body="{ data }">
-              <div class="text-right font-bold">{{ asCurrency(Number(data.total_amount ?? data.amount_due ?? 0)) }}</div>
-            </template>
+            <template #body="{ data }"><div class="text-right font-bold">{{ asCurrency(Number(data.total_amount ?? data.amount_due ?? 0)) }}</div></template>
           </Column>
-          <Column header="Outstanding" style="width: 130px">
-            <template #body="{ data }">
-              <div class="text-right">{{ asCurrency(getBillingOutstanding(data)) }}</div>
-            </template>
+          <Column header="Outstanding" style="width: 140px">
+            <template #body="{ data }"><div class="text-right font-semibold text-amber-700 dark:text-amber-300">{{ asCurrency(getBillingOutstanding(data)) }}</div></template>
           </Column>
         </DataTable>
       </div>
@@ -279,14 +343,12 @@
 import { computed, onMounted, ref, watch } from "vue"
 import { storeToRefs } from "pinia"
 import { useRouter } from "vue-router"
-import { useQueryClient } from "@tanstack/vue-query"
 import { useToast } from "primevue/usetoast"
 import Button from "primevue/button"
 import Column from "primevue/column"
 import DataTable from "primevue/datatable"
 import DatePicker from "primevue/datepicker"
 import Dialog from "primevue/dialog"
-import IftaLabel from "primevue/iftalabel"
 import Message from "primevue/message"
 import Select from "primevue/select"
 import Tag from "primevue/tag"
@@ -294,28 +356,14 @@ import type { Pageable } from "@/models/paging"
 import type { Patient } from "@/features/patients/types/patient"
 import type { Lookup } from "@/models/global.model"
 import { billingPhase1Service, type BillingListItem, type HmoRecentHistoryItem } from "@/features/billing/api/billing-phase1.service"
-import {
-  asCurrency as invoiceCurrency,
-  escapeHtml,
-  renderStandardInvoiceWindow,
-  type InvoiceDetailRow
-} from "@/features/billing/invoices/invoice-layout.util"
-import { renderHmoInvoiceWindow, type HmoInvoiceLine } from "@/features/billing/invoices/hmo-invoice.util"
-import {
-  openEncounterTicketPdfWindow,
-  renderEncounterTicketBulkPdfWindow,
-  type EncounterTicketPdfCard
-} from "@/utils/encounter-ticket-pdf.util"
 import { pamsAPI } from "@/utils/axios-interceptor"
 import { getApiErrorMessage } from "@/utils/actionable-error.util"
 import { errorToast, successToast } from "@/utils/toast.util"
 import { useAuthSessionStore } from "@/stores/auth-session.store"
-import { billingContextTanstackService } from "@/features/billing/queries/billing-context.tanstack.service"
 
 const toast = useToast()
 const router = useRouter()
 const authSession = useAuthSessionStore()
-const queryClient = useQueryClient()
 const { roleName } = storeToRefs(authSession)
 const hmoOptions = ref<Lookup[]>([])
 const selectedHmoId = ref<number | null>(null)
@@ -328,8 +376,6 @@ const loadingTransactions = ref(false)
 const claimingHmoPayments = ref(false)
 const error = ref("")
 const transactionsVisible = ref(false)
-const soaVisible = ref(false)
-const soaRange = ref<Date[] | null>(null)
 const patientBillingsVisible = ref(false)
 const selectedPatient = ref<Patient | null>(null)
 const selectedPatientBillings = ref<BillingListItem[]>([])
@@ -352,11 +398,6 @@ const loadingAny = computed(() => loadingProfiles.value || loadingPatients.value
 const selectedPeriodYear = computed(() => selectedMonth.value.getFullYear())
 const selectedPeriodMonth = computed(() => selectedMonth.value.getMonth() + 1)
 
-const hasValidRange = computed(() => {
-  const r = soaRange.value
-  return Array.isArray(r) && r.length === 2 && r[0] instanceof Date && r[1] instanceof Date
-})
-
 const selectedPatientName = computed(() =>
   selectedPatient.value?.full_name || selectedPatient.value?.public_id || "Selected HMO Patient"
 )
@@ -378,86 +419,7 @@ const formatDateTime = (value: string | null): string => {
   return dt.toLocaleString("en-PH", { year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })
 }
 
-type HmoRawLineItem = {
-  name?: string
-  quantity?: number | string
-  price?: number | string
-  unitPrice?: number | string
-  unit_price?: number | string
-  lineTotal?: number | string
-  line_total?: number | string
-  treatmentDate?: string
-  treatment_date?: string
-  laterality?: string
-  bodyArea?: string
-  body_area?: string
-}
 
-const getBillingDetail = async (billing: BillingListItem): Promise<BillingListItem> =>
-  (await billingContextTanstackService.fetchContext(queryClient, billing.id))?.billing ?? billing
-
-const loadSelectedPatientBillingDetails = async (): Promise<BillingListItem[]> => {
-  const details = await Promise.all(selectedPatientBillings.value.map(getBillingDetail))
-  return details.filter((billing): billing is BillingListItem => !!billing)
-}
-
-const parseBillingLineItems = (billing: BillingListItem): HmoInvoiceLine[] => {
-  let parsed: unknown = []
-  try {
-    parsed = JSON.parse(billing.line_items_json || "[]")
-  } catch {
-    parsed = []
-  }
-
-  const rawLines = Array.isArray(parsed) ? parsed as HmoRawLineItem[] : []
-  if (!rawLines.length) {
-    const unitPrice = Number(billing.total_amount ?? billing.amount_due ?? 0)
-    return [{
-      name: billing.service_name || billing.package_name || "HMO Service",
-      quantity: 1,
-      unitPrice,
-      lineTotal: unitPrice,
-      treatmentDate: billing.hmo_loa_date || billing.created_at
-    }]
-  }
-
-  return rawLines.map(line => {
-    const quantity = Math.max(1, Number(line.quantity ?? 1))
-    const unitPrice = Number(line.price ?? line.unitPrice ?? line.unit_price ?? 0)
-    const lineTotal = Number(line.lineTotal ?? line.line_total ?? quantity * unitPrice)
-    return {
-      name: String(line.name ?? billing.service_name ?? billing.package_name ?? "HMO Service"),
-      quantity,
-      unitPrice,
-      lineTotal,
-      treatmentDate: line.treatmentDate ?? line.treatment_date ?? billing.hmo_loa_date ?? billing.created_at,
-      laterality: line.laterality,
-      bodyArea: line.bodyArea ?? line.body_area
-    }
-  })
-}
-
-const renderHmoPrintableRows = (lines: HmoInvoiceLine[]): string =>
-  lines.map((line, index) => `
-    <tr>
-      <td class="text-center">${index + 1}</td>
-      <td class="text-center">${escapeHtml(formatDateOnly(line.treatmentDate))}</td>
-      <td>${escapeHtml(line.name)}</td>
-      <td class="text-center">${line.quantity}</td>
-      <td class="text-center">${escapeHtml(line.laterality || "N/A")}</td>
-      <td class="text-center">${escapeHtml(line.bodyArea || "N/A")}</td>
-      <td class="text-right">${escapeHtml(invoiceCurrency(line.unitPrice))}</td>
-      <td class="text-right">${escapeHtml(invoiceCurrency(line.lineTotal))}</td>
-    </tr>
-  `).join("")
-
-const getHmoDetailRows = (billing?: BillingListItem): InvoiceDetailRow[] => [
-  { label: "Billing To", value: billing?.hmo_name || selectedHmoName.value || "HMO" },
-  { label: "HMO Type", value: billing?.hmo_type_name || "N/A" },
-  { label: "Company Name", value: billing?.hmo_company_name || "N/A" },
-  { label: "LOA Approval No.", value: billing?.hmo_loa_number || billing?.hmo_approval_code || "N/A" },
-  { label: "LOA Approval date", value: formatDateOnly(billing?.hmo_loa_date) }
-]
 
 const statusSeverity = (value: string | null): "success" | "danger" | "warn" | "secondary" | "info" => {
   const normalized = String(value ?? "").trim().toLowerCase()
@@ -528,14 +490,6 @@ const openHmoPrintRoute = (routeName: "hmo-patient-profile-print" | "hmo-patient
   return popup
 }
 
-const openPrintWindow = (title: string): Window | null => {
-  const popup = window.open("", "_blank")
-  if (!popup || popup.closed) {
-    patientBillingError.value = `Unable to open ${title}. Allow pop-ups for this site, then try again.`
-    return null
-  }
-  return popup
-}
 
 const getBillingReference = (billing: Pick<BillingListItem, "id" | "public_id" | "receipt_number">): string =>
   billing.public_id || billing.receipt_number || `BILLING-${billing.id}`
@@ -543,25 +497,6 @@ const getBillingReference = (billing: Pick<BillingListItem, "id" | "public_id" |
 const getBillingOutstanding = (billing: Pick<BillingListItem, "total_amount" | "amount_due" | "amount_paid">): number =>
   Math.max(0, Number((Number(billing.total_amount ?? billing.amount_due ?? 0) - Number(billing.amount_paid ?? 0)).toFixed(2)))
 
-const renderBulkHmoSoaRows = (rows: HmoRecentHistoryItem[]): string => {
-  if (!rows.length) {
-    return `<tr><td colspan="10" class="text-center">No SOA records found for the selected period.</td></tr>`
-  }
-  return rows.map((row, index) => `
-    <tr>
-      <td class="text-center">${index + 1}</td>
-      <td>${escapeHtml(row.patient_name || "N/A")}</td>
-      <td>${escapeHtml(row.receipt_number || `BILLING-${row.id}`)}</td>
-      <td>${escapeHtml(row.billing_status || "N/A")}</td>
-      <td>${escapeHtml(row.physical_therapist || "N/A")}</td>
-      <td>${escapeHtml(row.doctor || "N/A")}</td>
-      <td>${escapeHtml(row.diagnosis || "N/A")}</td>
-      <td class="text-center">${escapeHtml(formatDateOnly(row.created_at))}</td>
-      <td>${escapeHtml(row.service_name || "HMO Service")}</td>
-      <td class="text-right">${escapeHtml(asCurrency(Number(row.total_amount ?? 0)))}</td>
-    </tr>
-  `).join("")
-}
 
 const getSelectedMonthRange = (): { from: Date; to: Date } => {
   const from = new Date(selectedPeriodYear.value, selectedPeriodMonth.value - 1, 1)
@@ -728,27 +663,6 @@ const formatYmd = (value: Date): string => {
   return `${y}-${m}-${d}`
 }
 
-const generateSoa = async (): Promise<void> => {
-  if (!hasValidRange.value) return
-  const [from, to] = soaRange.value as Date[]
-  const popup = window.open(router.resolve({
-    name: "hmo-soa-print",
-    query: {
-      hmo_id: selectedHmoId.value ? String(selectedHmoId.value) : undefined,
-      hmo_name: selectedHmoName.value || undefined,
-      from: formatYmd(from),
-      to: formatYmd(to),
-      autoprint: "1"
-    }
-  }).href, "_blank", "noopener,noreferrer")
-
-  if (popup && !popup.closed) {
-    soaVisible.value = false
-    return
-  }
-
-  error.value = "Unable to open the HMO SOA print view. Allow pop-ups for this site, then try again."
-}
 
 const printPatientIndividualBilling = async (): Promise<void> => {
   if (!openHmoPrintRoute("hmo-patient-profile-print")) return
@@ -761,51 +675,7 @@ const printPatientHmoInvoice = async (): Promise<void> => {
   }
 }
 
-const printPatientSoa = async (): Promise<void> => {
-  if (!selectedPatient.value) return
-  if (!openHmoPrintRoute("hmo-patient-billing-summary-print")) {
-    patientBillingError.value = "Unable to open HMO billing summary. Allow pop-ups for this site, then try again."
-  }
-}
 
-const buildHmoEncounterTicketCards = (detail: BillingListItem): EncounterTicketPdfCard[] =>
-  (detail.encounter_tickets ?? [])
-    .filter(ticket => ticket.record_locked)
-    .map(ticket => {
-      const snap = ticket.billing_snapshot
-      const pkgName = ticket.active_billing_package_name?.trim() || snap?.active_billing_package_name?.trim() || ""
-      const pkgId = ticket.active_billing_package_id?.trim() || snap?.active_billing_package_id?.trim() || ""
-      const pkgSource = ticket.active_billing_package_source?.trim() || snap?.active_billing_package_source?.trim() || ""
-      const activeBillingPackageLabel = pkgName && pkgId && pkgName !== pkgId
-        ? `${pkgName} (${pkgId})`
-        : pkgName || pkgId || "No active billing package linked"
-
-      return {
-        slipNumber: ticket.slip_number || `ETS-${ticket.id}`,
-        encounterTicketId: ticket.id,
-        patientName: snap?.patient_name || detail.patient_name || selectedPatientName.value,
-        providerName: snap?.provider_name || detail.physical_therapist || "Unassigned",
-        serviceName: snap?.service_name || detail.service_name || "Therapy Session",
-        specialtyName: snap?.specialty_tag_name,
-        specialtyIsActive: snap?.specialty_tag_is_active,
-        treatmentAreaName: snap?.treatment_area_name,
-        treatmentAreaColor: snap?.treatment_area_color,
-        treatmentAreaIsActive: snap?.treatment_area_is_active,
-        billingRoute: "HMO",
-        attendanceStatus: ticket.attendance_status === "ATTENDED" ? "Attended" : "No Show",
-        attendedAt: ticket.attended_at,
-        signedOffAt: ticket.signed_off_at,
-        lockedAt: ticket.locked_at,
-        appointmentId: snap?.appointment_public_id ?? ticket.appointment_public_id ?? detail.appointment_public_id ?? detail.appointment_id,
-        billingId: ticket.phase1_billing_public_id ?? detail.public_id ?? detail.id,
-        activeBillingPackageLabel,
-        activeBillingPackageSource: pkgSource ? `Linked billing package - ${pkgSource}` : undefined,
-        deductionSummary: "Deducting 1 Session from HMO Allocation",
-        signatureDataUrl: ticket.patient_signature_data_url,
-        ptSignatureDataUrl: ticket.pt_signature_data_url,
-        sessionSequenceLabel: snap?.session_sequence_label
-      }
-    })
 
 const printPatientAttendanceRecord = async (): Promise<void> => {
   if (!openHmoPrintRoute("hmo-attendance-treatment-print")) {
@@ -827,6 +697,20 @@ const printHmoPrintable = (event: HmoPrintableEvent): void => {
     return
   }
   void printPatientAttendanceRecord()
+}
+
+const getInitials = (value?: string | null): string => {
+  const parts = String(value ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+
+  if (!parts.length) return "HM"
+
+  return parts
+    .slice(0, 2)
+    .map(part => part.charAt(0).toUpperCase())
+    .join("")
 }
 
 watch([selectedHmoId, selectedMonth], () => {

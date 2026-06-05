@@ -657,6 +657,17 @@ const isPackageLikeLine = (line: SelfPayLineItem): boolean => {
   )
 }
 
+const isBundleLikeLine = (line: SelfPayLineItem): boolean => {
+  const type = String(line.type ?? "").trim().toLowerCase()
+
+  return (
+    type === "bundle" ||
+    type === "service-bundle" ||
+    type === "service_bundle" ||
+    Boolean(line.bundle_name || line.bundleName)
+  )
+}
+
 const getPositiveRecordNumber = (record: unknown, key: string): number => {
   const parsed = Number(getRecordValue(record, key))
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
@@ -695,38 +706,23 @@ const appendIncludedServiceRows = (
     const childName = getServiceName(child, "Included Service")
     const childPath = `${path}-${childIndex}`
 
-    const isBundle = childChildren.length > 0
+    const isBundle = isBundleLikeLine(child)
 
     if (isBundle) {
-      for (let bundleIndex = 1; bundleIndex <= childQuantity; bundleIndex += 1) {
-        const bundlePath = `${childPath}-bundle-${bundleIndex}`
-
-        output.push({
-          key: `${billingIdValue}-${parentIndex}-${bundlePath}`,
-          itemNo: null,
-          billingDate,
-          serviceName: `- ${childName}${childQuantity > 1 ? ` ${bundleIndex}` : ""}`,
-          quantity: childQuantity,
-          bodyArea: getBodyArea(child),
-          unitPrice: 0,
-          unitTotal: 0,
-          level,
-          isIncluded: true,
-          isPackageParent: false,
-          isBundleParent: true
-        })
-
-        appendIncludedServiceRows(
-          childChildren,
-          billingIdValue,
-          parentIndex,
-          billingDate,
-          output,
-          level + 1,
-          bundlePath
-        )
-      }
-
+      output.push({
+        key: `${billingIdValue}-${parentIndex}-${childPath}-bundle`,
+        itemNo: null,
+        billingDate,
+        serviceName: `- ${childQuantity} ${childName}`,
+        quantity: childQuantity,
+        bodyArea: getBodyArea(child),
+        unitPrice: 0,
+        unitTotal: 0,
+        level,
+        isIncluded: true,
+        isPackageParent: false,
+        isBundleParent: true
+      })
       return
     }
 
@@ -734,7 +730,7 @@ const appendIncludedServiceRows = (
       key: `${billingIdValue}-${parentIndex}-${childPath}`,
       itemNo: null,
       billingDate,
-      serviceName: `- ${childName}`,
+      serviceName: `- ${childQuantity} ${childName}`,
       quantity: childQuantity,
       bodyArea: getBodyArea(child),
       unitPrice: 0,
@@ -757,52 +753,32 @@ const appendPackageGroupSessionRows = (
   const sessionBillings = getPackageGroupSessionBillings(billing)
   const bundleName = bundleLine ? getServiceName(bundleLine, "") : ""
   const bundleQuantity = bundleLine ? getQuantity(bundleLine) : 0
-  const totalSessions = sessionBillings.length || bundleQuantity || getPositiveRecordNumber(billing, "total_sessions")
+  const totalSessions = bundleQuantity || getPositiveRecordNumber(billing, "total_sessions") || sessionBillings.length
 
-  sessionBillings.forEach((sessionBilling, index) => {
-    const sequence = Number(sessionBilling.session_sequence ?? index + 1)
-    const sessionName = firstNonBlank(
+  if (totalSessions <= 0) return
+
+  const firstSessionBilling = sessionBillings[0]
+  const bundleDisplayName = stripPackageSessionDescriptor(
+    firstNonBlank(
       bundleName,
-      stripPackageSessionSuffix(String(sessionBilling.service_name ?? "")),
-      `Session ${sequence || index + 1}`
+      "Package Session"
     )
+  )
 
-    output.push({
-      key: `${billing.id}-${parentIndex}-package-session-${sessionBilling.id ?? index}`,
-      itemNo: null,
-      billingDate: sessionBilling.created_at ? formatDate(sessionBilling.created_at) : billingDate,
-      serviceName: `- ${sequence > 0 ? `${sequence} ` : ""}${sessionName}`,
-      quantity: 1,
-      bodyArea: "N/A",
-      unitPrice: 0,
-      unitTotal: 0,
-      level: 1,
-      isIncluded: true,
-      isPackageParent: false,
-      isBundleParent: true
-    })
+  output.push({
+    key: `${billing.id}-${parentIndex}-package-session-bundle`,
+    itemNo: null,
+    billingDate: firstSessionBilling?.created_at ? formatDate(firstSessionBilling.created_at) : billingDate,
+    serviceName: `- (${totalSessions}) ${bundleDisplayName}`,
+    quantity: totalSessions,
+    bodyArea: "N/A",
+    unitPrice: 0,
+    unitTotal: 0,
+    level: 1,
+    isIncluded: true,
+    isPackageParent: false,
+    isBundleParent: true
   })
-
-  if (!sessionBillings.length && totalSessions > 0) {
-    for (let index = 1; index <= totalSessions; index += 1) {
-      const sessionName = firstNonBlank(bundleName, `Session ${index}`)
-
-      output.push({
-        key: `${billing.id}-${parentIndex}-package-session-fallback-${index}`,
-        itemNo: null,
-        billingDate,
-        serviceName: `- ${index} ${sessionName}`,
-        quantity: 1,
-        bodyArea: "N/A",
-        unitPrice: 0,
-        unitTotal: 0,
-        level: 1,
-        isIncluded: true,
-        isPackageParent: false,
-        isBundleParent: true
-      })
-    }
-  }
 }
 
 const buildRows = (billing: BillingListItem): SelfPaySummaryRow[] => {
@@ -881,21 +857,23 @@ const buildRows = (billing: BillingListItem): SelfPaySummaryRow[] => {
     const children = getDirectChildren(line)
 
     if (isPackageLikeLine(line) && isSessionScopedPackageBilling(billing)) {
-      const bundleChild = children.find(child => getDirectChildren(child).length > 0)
-      const directServiceChildren = bundleChild
-        ? children.filter(child => child !== bundleChild)
-        : children
       const fallbackLineTotal = getUnitTotal(line, getQuantity(line))
       const packageTotal = getPackageGroupTotal(billing)
       const fullPackagePrice = packageTotal > 0
         ? packageTotal
         : Number(billing.total_amount ?? billing.amount_due ?? fallbackLineTotal)
       const packageServiceName = stripPackageSessionDescriptor(
-        billing.service_name || getServiceName(line, "Package Service")
+        getServiceName(line, "Package Service")
       )
+      const bundleQuantity = children
+        .filter(child => isBundleLikeLine(child))
+        .reduce((sum, child) => sum + getQuantity(child), 0)
+      const packageDisplayName = bundleQuantity > 0
+        ? `(${bundleQuantity}) ${packageServiceName} `
+        : packageServiceName
       const sessionLine = {
         ...line,
-        name: packageServiceName,
+        name: packageDisplayName,
         quantity: 1,
         price: fullPackagePrice,
         lineTotal: fullPackagePrice
@@ -904,10 +882,9 @@ const buildRows = (billing: BillingListItem): SelfPaySummaryRow[] => {
       pushTopLevelRow({
         ...sessionLine,
         children: []
-      }, `${index}-package-session`, packageServiceName || "Package Service")
-      appendPackageGroupSessionRows(billing, index, billingDate, output, bundleChild)
+      }, `${index}-package-session`, packageDisplayName || "Package Service")
       appendIncludedServiceRows(
-        directServiceChildren,
+        children,
         billing.id,
         index,
         billingDate,
