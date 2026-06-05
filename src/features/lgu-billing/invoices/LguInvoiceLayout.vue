@@ -1,7 +1,6 @@
 <template>
   <main class="lgu-invoice-page min-h-screen bg-[#f5f5f5] text-black">
     <section class="lgu-invoice-container">
-    <section class="lgu-invoice-container">
       <section class="lgu-invoice-sheet">
         <header class="lgu-invoice-top">
           <div class="lgu-invoice-heading">
@@ -33,7 +32,6 @@
 
         <template v-else>
           <div v-if="$slots.details" class="lgu-invoice-details">
-          <div v-if="$slots.details" class="lgu-invoice-details">
             <slot name="details" />
           </div>
 
@@ -61,7 +59,7 @@
 <script setup lang="ts">
 import Button from "primevue/button"
 import { useLguInvoicePrintActions } from "./lgu-invoice.shared"
-import { useLguInvoicePrintActions } from "./lgu-invoice.shared"
+
 
 withDefaults(
   defineProps<{
@@ -74,19 +72,7 @@ withDefaults(
     hasError: false
   }
 )
-withDefaults(
-  defineProps<{
-    title: string
-    subtitle?: string
-    hasError?: boolean
-  }>(),
-  {
-    subtitle: "",
-    hasError: false
-  }
-)
 
-const { printPage, goBack } = useLguInvoicePrintActions()
 const { printPage, goBack } = useLguInvoicePrintActions()
 </script>
 
@@ -317,12 +303,10 @@ const { printPage, goBack } = useLguInvoicePrintActions()
     margin: 0 !important;
   }
 
-  .print\:hidden,
-  .lgu-invoice-toolbar {
-  .print\:hidden,
-  .lgu-invoice-toolbar {
-    display: none !important;
-  }
+.print\:hidden,
+.lgu-invoice-toolbar {
+  display: none !important;
+}
 
   .lgu-invoice-page {
     width: auto !important;
@@ -449,4 +433,5 @@ const { printPage, goBack } = useLguInvoicePrintActions()
     max-width: 300px !important;
   }
 }
+
 </style>

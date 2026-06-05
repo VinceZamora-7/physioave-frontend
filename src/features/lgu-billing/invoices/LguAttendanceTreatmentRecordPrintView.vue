@@ -113,7 +113,7 @@
               </td>
 
               <td class="text-left service-name-cell">
-                {{ row.serviceName || "—" }}
+                {{ stripPackageSessionSuffix(row.serviceName) || "—" }}
               </td>
 
               <td class="text-center">
@@ -485,6 +485,12 @@ const getRecordValue = (record: unknown, key: string): unknown => {
   if (!record || typeof record !== "object") return undefined
   return (record as Record<string, unknown>)[key]
 }
+
+const stripPackageSessionSuffix = (value: string): string =>
+  value
+    .replace(/\s+-\s+Session\s+\d+\s+of\s+\d+\s*$/i, "")
+    .replace(/\s+Session\s+-\s+Session\s+\d+\s+of\s+\d+\s*$/i, "")
+    .trim()
 
 const parseAmount = (value: unknown): number | null => {
   if (value === null || value === undefined || value === "") return null

@@ -10,7 +10,7 @@
     </template>
 
     <template #toolbar>
-      <Button label="Print" icon="pi pi-print" @click="printPage" />
+      <Button label="Print" icon="pi pi-print" @click="() => printPage()" />
       <Button label="Close" icon="pi pi-times" severity="secondary" outlined @click="goBack" />
     </template>
 
@@ -171,10 +171,6 @@ import {
   patientEvaluationVisitLogService,
   type PatientEvaluationVisitLogItem
 } from "@/features/patients/api/patient-evaluation-visit-log.service"
-import {
-  patientEvaluationVisitLogService,
-  type PatientEvaluationVisitLogItem
-} from "@/features/patients/api/patient-evaluation-visit-log.service"
 import { patientTanstackService } from "@/features/patients/queries/patient.tanstack.service"
 import type { PatientHMOInformation } from "@/models/hmo-information"
 import HmoInvoiceLayout from "./HmoInvoiceLayout.vue"
@@ -202,11 +198,6 @@ type BillingSummarySource = BillingListItem & {
   hmo_loa_date?: string | null
   loa_date?: string | null
   receipt_number?: string | null
-  hmo_approval_code?: string | null
-  hmo_loa_number?: string | null
-  hmo_loa_date?: string | null
-  loa_date?: string | null
-  receipt_number?: string | null
 }
 
 const route = useRoute()
@@ -216,7 +207,6 @@ const { printPage, goBack } = useHmoInvoicePrintActions()
 const rows = ref<BillingSummaryRow[]>([])
 const error = ref("")
 const sponsorInfo = ref<PatientHMOInformation | null>(null)
-const billingDetail = ref<BillingSummarySource | null>(null)
 const billingDetail = ref<BillingSummarySource | null>(null)
 const evaluationVisitLogs = ref<PatientEvaluationVisitLogItem[]>([])
 
@@ -236,18 +226,6 @@ const billingId = computed(() => {
   const parsed = Number(String(route.query.billing_id ?? route.query.id ?? "").trim())
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 })
-
-const patientName = computed(() =>
-  String(route.query.patient_name ?? "Patient").trim() || "Patient"
-)
-
-const patientAddress = computed(() =>
-  billingDetail.value?.patient_address?.trim() || "N/A"
-)
-
-const patientAge = computed(() =>
-  billingDetail.value?.patient_age?.trim() || "N/A"
-)
 
 const patientName = computed(() =>
   String(route.query.patient_name ?? "Patient").trim() || "Patient"
@@ -289,21 +267,7 @@ const sponsorCompanyName = computed(() =>
   sponsorRecord.value?.company_name?.trim() || hmoLabel.value
 )
 
-
-const sponsorHmoType = computed(() =>
-  sponsorRecord.value?.hmo_type_name?.trim() || "N/A"
-)
-
-const sponsorCompanyName = computed(() =>
-  sponsorRecord.value?.company_name?.trim() || hmoLabel.value
-)
-
 const dateSigned = computed(() =>
-  new Date().toLocaleDateString("en-PH", {
-    year: "numeric",
-    month: "long",
-    day: "numeric"
-  })
   new Date().toLocaleDateString("en-PH", {
     year: "numeric",
     month: "long",
@@ -322,14 +286,6 @@ const billingDateLabel = computed(() =>
 const getBillingRecordId = (
   billing?: Pick<BillingListItem, "id" | "public_id"> | null
 ): string =>
-
-const billingDateLabel = computed(() =>
-  formatDate(billingDetail.value?.created_at)
-)
-
-const getBillingRecordId = (
-  billing?: Pick<BillingListItem, "id" | "public_id"> | null
-): string =>
   billing ? firstNonBlank(billing.public_id, `BILLING-${billing.id}`) : "N/A"
 
 
@@ -337,23 +293,6 @@ const referenceNoLabel = computed(() =>
   getBillingRecordId(billingDetail.value)
 )
 
-const getLoaApprovalNo = (billing?: BillingSummarySource | null): string => {
-  return firstNonBlank(
-    billing?.hmo_approval_code,
-    billing?.hmo_loa_number,
-    sponsorRecord.value?.approval_code,
-    billing?.receipt_number,
-    getBillingRecordId(billing)
-  ) || "N/A"
-}
-
-const sponsorApprovalNo = computed(() =>
-  getLoaApprovalNo(billingDetail.value)
-)
-
-const grandTotal = computed(() =>
-  rows.value.reduce((sum, row) => sum + Number(row.unitTotal ?? 0), 0)
-)
 const getLoaApprovalNo = (billing?: BillingSummarySource | null): string => {
   return firstNonBlank(
     billing?.hmo_approval_code,
@@ -390,10 +329,6 @@ const doctor = computed(() =>
   billingDetail.value?.doctor?.trim() || "N/A"
 )
 
-const doctor = computed(() =>
-  billingDetail.value?.doctor?.trim() || "N/A"
-)
-
 const formatDiagnosis = (value?: string | null): string => {
   const diagnosis = String(value ?? "").trim()
   if (!diagnosis) return "N/A"
@@ -402,15 +337,6 @@ const formatDiagnosis = (value?: string | null): string => {
   if (!markerMatch) return diagnosis
 
   const marker = markerMatch[1].toUpperCase()
-  const laterality =
-    marker === "L" || marker === "LEFT"
-      ? "L"
-      : marker === "R" || marker === "RIGHT"
-        ? "R"
-        : marker === "B" || marker === "BOTH" || marker === "BILATERAL"
-          ? "B"
-          : ""
-
   const laterality =
     marker === "L" || marker === "LEFT"
       ? "L"
@@ -462,13 +388,6 @@ const diagnosisParts = computed(() => {
           ? "Right"
           : "Both"
 
-    const laterality =
-      marker === "L" || marker === "LEFT"
-        ? "Left"
-        : marker === "R" || marker === "RIGHT"
-          ? "Right"
-          : "Both"
-
     return {
       laterality,
       bodyArea: markerMatch[2]?.trim() || "N/A"
@@ -493,9 +412,6 @@ const normalizeBodyArea = (value?: string | null): string => {
   const text = String(value ?? "").trim()
   if (!text) return "N/A"
 
-  const withoutParentheses = text
-    .replace(/\s*\((?:L|R|B|LEFT|RIGHT|BOTH|BILATERAL)\s*\)/gi, "")
-    .trim()
   const withoutParentheses = text
     .replace(/\s*\((?:L|R|B|LEFT|RIGHT|BOTH|BILATERAL)\s*\)/gi, "")
     .trim()
@@ -536,10 +452,6 @@ const formatCurrency = (value?: number | null): string =>
     style: "currency",
     currency: "PHP"
   })
-  Number(value ?? 0).toLocaleString("en-PH", {
-    style: "currency",
-    currency: "PHP"
-  })
 
 const formatDate = (value?: string | null): string => {
   if (!value) return "-"
@@ -550,10 +462,6 @@ const formatDate = (value?: string | null): string => {
 const parseLineItems = (billing: BillingSummarySource): Array<Record<string, unknown>> => {
   try {
     const parsed = JSON.parse(billing.line_items_json || "[]") as unknown
-
-    return Array.isArray(parsed)
-      ? parsed.filter(item => item && typeof item === "object") as Array<Record<string, unknown>>
-      : []
 
     return Array.isArray(parsed)
       ? parsed.filter(item => item && typeof item === "object") as Array<Record<string, unknown>>
@@ -569,21 +477,12 @@ const getLoaDate = (billing: BillingSummarySource): string =>
     billing.loa_date,
     sponsorInfo.value?.validity_start_date
   )
-  firstNonBlank(
-    billing.hmo_loa_date,
-    billing.loa_date,
-    sponsorInfo.value?.validity_start_date
-  )
 
 const enrichBillingItems = async (
   items: BillingListItem[]
 ): Promise<BillingSummarySource[]> => {
   const detailedItems = await Promise.all(items.map(async item => {
     try {
-      const context = item.id > 0
-        ? await billingContextTanstackService.fetchContext(queryClient, item.id)
-        : undefined
-
       const context = item.id > 0
         ? await billingContextTanstackService.fetchContext(queryClient, item.id)
         : undefined
@@ -640,15 +539,6 @@ const buildRows = (items: BillingSummarySource[]): BillingSummaryRow[] => {
 
     lineItems.forEach((lineItem, lineIndex) => {
       const quantity = Math.max(1, Number(lineItem.quantity ?? 1))
-      const laterality = String(
-        lineItem.laterality ??
-        lineItem.laterality_name ??
-        diagnosisParts.value.laterality ??
-        "N/A"
-      )
-      const bodyArea = normalizeBodyArea(
-        String(lineItem.body_area ?? lineItem.bodyArea ?? diagnosisParts.value.bodyArea ?? "")
-      )
       const laterality = String(
         lineItem.laterality ??
         lineItem.laterality_name ??

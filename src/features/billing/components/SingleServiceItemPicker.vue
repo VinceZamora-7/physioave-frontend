@@ -1,8 +1,8 @@
 <template>
   <div class="space-y-4">
-    <!-- Available Services Table -->
     <div class="space-y-2">
       <h4 class="font-medium text-sm">Available Services</h4>
+
       <div class="overflow-x-auto rounded-lg border border-[rgb(var(--app-border))]">
         <table class="w-full text-sm">
           <thead class="bg-[rgb(var(--app-bg-secondary))] border-b border-[rgb(var(--app-border))]">
@@ -17,63 +17,43 @@
               <th class="px-3 py-2 text-center font-semibold w-24">Price</th>
             </tr>
           </thead>
+
           <tbody>
-            <tr v-for="idx in maxRows" :key="idx" class="border-b border-[rgb(var(--app-border))] hover:bg-[rgb(var(--app-bg-hover))]">
-              <!-- Machines -->
+            <tr
+              v-for="idx in maxRows"
+              :key="idx"
+              class="border-b border-[rgb(var(--app-border))] hover:bg-[rgb(var(--app-bg-hover))]"
+            >
               <td class="px-3 py-2">
                 <div v-if="machines[idx - 1]" class="text-sm">{{ machines[idx - 1].name }}</div>
               </td>
               <td class="px-3 py-2 text-center">
                 <div v-if="machines[idx - 1]" class="flex items-center justify-between gap-2">
                   <span class="text-xs">{{ asCurrency(machines[idx - 1].price) }}</span>
-                  <Button
-                    size="small"
-                    text
-                    rounded
-                    icon="pi pi-plus"
-                    class="h-6 w-6"
-                    @click="addServiceLine('machine', machines[idx - 1])"
-                  />
+                  <Button size="small" text rounded icon="pi pi-plus" class="h-6 w-6" :disabled="disabled" @click="addServiceLine('machine', machines[idx - 1])" />
                 </div>
               </td>
 
-              <!-- Techniques -->
               <td class="px-3 py-2">
                 <div v-if="techniques[idx - 1]" class="text-sm">{{ techniques[idx - 1].name }}</div>
               </td>
               <td class="px-3 py-2 text-center">
                 <div v-if="techniques[idx - 1]" class="flex items-center justify-between gap-2">
                   <span class="text-xs">{{ asCurrency(techniques[idx - 1].price) }}</span>
-                  <Button
-                    size="small"
-                    text
-                    rounded
-                    icon="pi pi-plus"
-                    class="h-6 w-6"
-                    @click="addServiceLine('technique', techniques[idx - 1])"
-                  />
+                  <Button size="small" text rounded icon="pi pi-plus" class="h-6 w-6" :disabled="disabled" @click="addServiceLine('technique', techniques[idx - 1])" />
                 </div>
               </td>
 
-              <!-- Evaluations -->
               <td class="px-3 py-2">
                 <div v-if="evaluations[idx - 1]" class="text-sm">{{ evaluations[idx - 1].name }}</div>
               </td>
               <td class="px-3 py-2 text-center">
                 <div v-if="evaluations[idx - 1]" class="flex items-center justify-between gap-2">
                   <span class="text-xs">{{ asCurrency(evaluations[idx - 1].price) }}</span>
-                  <Button
-                    size="small"
-                    text
-                    rounded
-                    icon="pi pi-plus"
-                    class="h-6 w-6"
-                    @click="addServiceLine('evaluation', evaluations[idx - 1])"
-                  />
+                  <Button size="small" text rounded icon="pi pi-plus" class="h-6 w-6" :disabled="disabled" @click="addServiceLine('evaluation', evaluations[idx - 1])" />
                 </div>
               </td>
 
-              <!-- Add-ons -->
               <td class="px-3 py-2">
                 <div v-if="addOns[idx - 1]" class="text-sm">
                   {{ formatAddOnName(addOns[idx - 1]) }}
@@ -82,14 +62,7 @@
               <td class="px-3 py-2 text-center">
                 <div v-if="addOns[idx - 1]" class="flex items-center justify-between gap-2">
                   <span class="text-xs">{{ asCurrency(addOns[idx - 1].price) }}</span>
-                  <Button
-                    size="small"
-                    text
-                    rounded
-                    icon="pi pi-plus"
-                    class="h-6 w-6"
-                    @click="addServiceLine(addOns[idx - 1].type, addOns[idx - 1])"
-                  />
+                  <Button size="small" text rounded icon="pi pi-plus" class="h-6 w-6" :disabled="disabled" @click="addServiceLine(addOns[idx - 1].type, addOns[idx - 1])" />
                 </div>
               </td>
             </tr>
@@ -98,16 +71,18 @@
       </div>
     </div>
 
-    <!-- Selected Items with Price Editing -->
     <div v-if="modelValue.length > 0" class="space-y-2">
       <h4 class="font-medium text-sm">Selected Items ({{ modelValue.length }})</h4>
+
       <DataTable :value="modelValue" size="small" dataKey="key" class="rounded-lg border border-[rgb(var(--app-border))]">
         <Column field="name" header="Service" />
+
         <Column field="type" header="Type" style="width: 120px">
           <template #body="{data}">
             <Tag :value="formatType(data.type)" />
           </template>
         </Column>
+
         <Column header="Unit Price" style="width: 140px">
           <template #body="{data}">
             <InputNumber
@@ -116,24 +91,35 @@
               currency="PHP"
               locale="en-PH"
               :min="0"
+              :minFractionDigits="0"
+              :maxFractionDigits="0"
               class="w-full"
-              @update:model-value="onPriceEdit(data.key, Number($event ?? 0))"
+              :disabled="disabled"
+              @update:model-value="onPriceEdit(data.key, $event)"
             />
           </template>
         </Column>
+
         <Column header="Qty" style="width: 80px">
           <template #body="{data}">
             <InputNumber
               :model-value="data.quantity"
               :min="1"
+              :minFractionDigits="0"
+              :maxFractionDigits="0"
               class="w-full"
-              @update:model-value="onQuantityEdit(data.key, Number($event ?? 1))"
+              :disabled="disabled"
+              @update:model-value="onQuantityEdit(data.key, $event)"
             />
           </template>
         </Column>
+
         <Column header="Line Total" style="width: 130px">
-          <template #body="{data}">{{ asCurrency(data.price * data.quantity) }}</template>
+          <template #body="{data}">
+            {{ asCurrency(toWholePeso(data.price) * toWholeQty(data.quantity)) }}
+          </template>
         </Column>
+
         <Column header="Actions" style="width: 80px">
           <template #body="{data}">
             <Button
@@ -141,6 +127,7 @@
               text
               severity="danger"
               icon="pi pi-trash"
+              :disabled="disabled"
               @click="removeLine(data.key)"
             />
           </template>
@@ -151,7 +138,7 @@
 </template>
 
 <script setup lang="ts">
-import {computed} from "vue"
+import { computed } from "vue"
 import Button from "primevue/button"
 import Column from "primevue/column"
 import DataTable from "primevue/datatable"
@@ -190,15 +177,41 @@ interface Props {
   addOnMachines: BillingPickerLookup[]
   addOnTechniques: BillingPickerLookup[]
   addOnHomeServices: BillingPickerLookup[]
+  disabled?: boolean
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  disabled: false
+})
+
 const emit = defineEmits<{
   "update:modelValue": [value: BillingPickedLine[]]
 }>()
 
+const disabled = computed(() => props.disabled)
+
+const toWholePeso = (value: unknown): number => {
+  const parsed = Number(value ?? 0)
+  return Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : 0
+}
+
+const toWholeQty = (value: unknown): number => {
+  const parsed = Number(value ?? 1)
+  return Number.isFinite(parsed) ? Math.max(1, Math.trunc(parsed)) : 1
+}
+
+const createLineKey = (): string =>
+  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+
 const asCurrency = (value: number): string =>
-  Number(value ?? 0).toLocaleString("en-PH", {style: "currency", currency: "PHP"})
+  toWholePeso(value).toLocaleString("en-PH", {
+    style: "currency",
+    currency: "PHP",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  })
 
 const formatType = (type: BillingLineType): string => {
   const typeMap: Record<BillingLineType, string> = {
@@ -209,66 +222,92 @@ const formatType = (type: BillingLineType): string => {
     "add-on-technique": "Add-on (Technique)",
     "add-on-home-service": "Add-on (Home Service)"
   }
+
   return typeMap[type] || type
 }
 
 const formatAddOnName = (item: BillingPickerLookup): string => {
-  const typeLabel = item.type === "add-on-machine"
-    ? "Machine"
-    : item.type === "add-on-technique"
-      ? "Technique"
-      : "Home Service"
+  const typeLabel =
+    item.type === "add-on-machine"
+      ? "Machine"
+      : item.type === "add-on-technique"
+        ? "Technique"
+        : "Home Service"
+
   return `Add-on: ${item.name} (${typeLabel})`
 }
 
-// Combine all add-ons into a single array with type info
 const addOns = computed(() => [
-  ...props.addOnMachines.map(m => ({...m, type: "add-on-machine" as BillingLineType})),
-  ...props.addOnTechniques.map(m => ({...m, type: "add-on-technique" as BillingLineType})),
-  ...props.addOnHomeServices.map(m => ({...m, type: "add-on-home-service" as BillingLineType}))
+  ...props.addOnMachines.map(item => ({ ...item, type: "add-on-machine" as BillingLineType })),
+  ...props.addOnTechniques.map(item => ({ ...item, type: "add-on-technique" as BillingLineType })),
+  ...props.addOnHomeServices.map(item => ({ ...item, type: "add-on-home-service" as BillingLineType }))
 ])
 
-const maxRows = computed(() => {
-  return Math.max(
+const maxRows = computed(() =>
+  Math.max(
     props.machines.length,
     props.techniques.length,
     props.evaluations.length,
     addOns.value.length
   )
-})
+)
+
+const getServiceDisplayName = (type: BillingLineType, service: BillingPickerLookup): string =>
+  type.startsWith("add-on")
+    ? formatAddOnName({ ...service, type })
+    : service.name
 
 const addServiceLine = (type: BillingLineType, service: BillingPickerLookup): void => {
-  const next: BillingPickedLine[] = [
+  if (props.disabled) return
+
+  const existing = props.modelValue.find(item =>
+    item.type === type && String(item.id) === String(service.id)
+  )
+
+  if (existing) {
+    emit("update:modelValue", props.modelValue.map(item =>
+      item.key === existing.key
+        ? { ...item, quantity: toWholeQty(item.quantity) + 1 }
+        : item
+    ))
+    return
+  }
+
+  emit("update:modelValue", [
     ...props.modelValue,
     {
-      key: crypto.randomUUID(),
+      key: createLineKey(),
       id: service.id,
       type,
-      name: type.startsWith("add-on")
-        ? `Add-on: ${service.name}`
-        : service.name,
-      price: Number(service.price ?? 0),
+      name: getServiceDisplayName(type, service),
+      price: toWholePeso(service.price),
       quantity: 1
     }
-  ]
-  emit("update:modelValue", next)
+  ])
 }
 
 const removeLine = (key: string): void => {
+  if (props.disabled) return
   emit("update:modelValue", props.modelValue.filter(item => item.key !== key))
 }
 
-const onPriceEdit = (key: string, newPrice: number): void => {
-  const updated = props.modelValue.map(item =>
-    item.key === key ? {...item, price: newPrice} : item
-  )
-  emit("update:modelValue", updated)
+const onPriceEdit = (key: string, newPrice: unknown): void => {
+  if (props.disabled) return
+
+  emit("update:modelValue", props.modelValue.map(item =>
+    item.key === key
+      ? { ...item, price: toWholePeso(newPrice) }
+      : item
+  ))
 }
 
-const onQuantityEdit = (key: string, newQuantity: number): void => {
-  const updated = props.modelValue.map(item =>
-    item.key === key ? {...item, quantity: Math.max(1, newQuantity)} : item
-  )
-  emit("update:modelValue", updated)
+const onQuantityEdit = (key: string, newQuantity: unknown): void => {
+  if (props.disabled) return
+
+  emit("update:modelValue", props.modelValue.map(item =>
+    item.key === key
+      ? { ...item, quantity: toWholeQty(newQuantity) }
+      : item
+  ))
 }
 </script>

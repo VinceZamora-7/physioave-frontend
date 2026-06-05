@@ -61,8 +61,6 @@ export const formatLguPatientProgramStatus = (
   dropoutStatus?: string | null
 ): string =>
   formatLguStatus(resolveLguPatientProgramStatus(billingProgramStatus, dropoutStatus))
-): string =>
-  formatLguStatus(resolveLguPatientProgramStatus(billingProgramStatus, dropoutStatus))
 
 const getTableColumnCount = (table: HTMLTableElement): number => {
   const row = table.tHead?.rows?.[0] ?? table.rows?.[0]

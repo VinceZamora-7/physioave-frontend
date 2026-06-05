@@ -222,6 +222,7 @@
                 rounded
                 icon="pi pi-eye"
                 aria-label="View appointment"
+                v-tooltip.top="'View appointment'"
                 @click.stop="emit('appointment-click', data)"
               />
 
@@ -231,7 +232,22 @@
                 rounded
                 icon="pi pi-calendar-plus"
                 aria-label="Reschedule appointment"
+                v-tooltip.top="'Reschedule appointment'"
                 @click.stop="emit('reschedule', data)"
+              />
+
+              <Button
+                v-if="canCancelAppointment(data)"
+                size="small"
+                text
+                rounded
+                severity="warn"
+                icon="pi pi-ban"
+                aria-label="Cancel appointment"
+                v-tooltip.top="'Cancel appointment'"
+                :loading="isCancellingAppointment(data)"
+                :disabled="isCancellingAppointment(data)"
+                @click.stop="onCancelAppointment(data)"
               />
 
               <Button
@@ -242,6 +258,7 @@
                 severity="danger"
                 icon="pi pi-trash"
                 aria-label="Delete appointment"
+                v-tooltip.top="'Delete appointment'"
                 @click.stop="emit('delete', data)"
               />
             </div>
@@ -273,7 +290,7 @@ import {
 } from "@/features/appointments/api/appointment-phase1.service"
 import { exportToExcel } from "@/utils/export-excel.util"
 import { getApiErrorMessage, type ApiErrorMessageOptions } from "@/utils/actionable-error.util"
-import { errorToast } from "@/utils/toast.util"
+import { errorToast, successToast } from "@/utils/toast.util"
 import { defaultPage } from "@/models/paging"
 import { Status } from "@/utils/global.type"
 import type { Staff } from "@/features/staff/types/staff"
@@ -299,56 +316,60 @@ const globalClinicStore = clinicStore()
 const { selectedClinicId } = storeToRefs(globalClinicStore)
 const authSession = useAuthSessionStore()
 
-// Permissions
 const canDeleteAppointments = computed(() =>
   authSession.hasAnyPermission("Appointment::DELETE")
 )
 
-// Table state
+const canCancelAppointments = computed(() =>
+  authSession.hasAnyPermission("Appointment::UPDATE", "Appointment::CANCEL")
+)
+
 const appointments = ref<AppointmentListItem[]>([])
 const page = ref(1)
 const pageSize = ref(10)
 const totalElements = ref(0)
 const isLoading = ref(false)
+const cancellingAppointmentIds = ref<Set<number>>(new Set())
 let fetchRequestId = 0
 
-// Filter state
 const recordFilter = ref("")
 const statusFilter = ref<string>()
 const phaseFilter = ref<AppointmentPhase>()
+
 type DoctorConsultantFilterValue = number | "UNASSIGNED"
+
 const ptFilter = ref<DoctorConsultantFilterValue>()
 
-// PT filter options
 const ptDoctorOptions = ref<Array<{ id: number; label: string }>>([])
+
 const ptFilterOptions = computed(() => [
   { label: "Unassigned", value: "UNASSIGNED" as const },
-  ...ptDoctorOptions.value.map((o) => ({ label: o.label, value: o.id })),
+  ...ptDoctorOptions.value.map((option) => ({ label: option.label, value: option.id })),
 ])
 
-// Static options
 const appointmentStatusOptions = ["Pending", "Rescheduled", "No show", "Cancelled", "Completed"]
+
 const appointmentPhaseOptions: Array<{ label: string; value: AppointmentPhase }> = [
   { label: "Evaluation", value: "EVAL" },
   { label: "Re-Evaluation", value: "RE_EVAL" },
   { label: "Session", value: "SESSION" },
 ]
 
-// Derived computeds
 const selectedDoctorConsultantId = computed(() =>
   typeof ptFilter.value === "number" ? ptFilter.value : undefined
 )
+
 const isUnassignedDoctorConsultantFilter = computed(() => ptFilter.value === "UNASSIGNED")
+
 const selectedDateIso = computed((): string => {
-  const d = props.calendarDate
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+  const date = props.calendarDate
+
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
 })
 
-// Styles
 const sectionCardClass = "app-appointment-card space-y-4"
 const sectionTitleClass = "app-appointment-title text-lg"
 
-// Formatter helpers
 const isPhysicalTherapistProviderType = (providerType?: string | null): boolean =>
   String(providerType ?? "").trim().toUpperCase() === "PHYSICAL_THERAPIST"
 
@@ -368,15 +389,18 @@ const displayAppointmentStatus = (status?: string): string =>
 
 const appointmentSeverity = (status?: string): "success" | "warn" | "danger" | "info" => {
   const normalized = normalizeAppointmentStatus(status)
+
   if (normalized === "COMPLETED") return "success"
   if (normalized === "RESCHEDULED") return "warn"
   if (normalized === "CANCELLED" || normalized === "NO_SHOW") return "danger"
+
   return "info"
 }
 
 const appointmentPhaseSeverity = (phase?: AppointmentPhase): "info" | "contrast" | "warn" => {
   if (phase === "EVAL") return "info"
   if (phase === "RE_EVAL") return "warn"
+
   return "contrast"
 }
 
@@ -384,16 +408,19 @@ const appointmentLocationContextSeverity = (
   locationContext?: AppointmentLocationContext
 ): "success" | "warn" => {
   if (locationContext === "HOME_CARE") return "warn"
+
   return "success"
 }
 
 const displayAppointmentPhase = (phase?: AppointmentPhase): string => {
   if (phase === "RE_EVAL") return "RE-EVAL"
+
   return phase ?? "SESSION"
 }
 
 const displayLocationContext = (locationContext?: AppointmentLocationContext): string => {
   if (locationContext === "HOME_CARE") return "HOME CARE"
+
   return "IN-CLINIC"
 }
 
@@ -403,15 +430,21 @@ const billingSeverity = (
 ): "success" | "warn" | "danger" | "info" => {
   const normalized = (status || "UNBILLED").trim().toUpperCase()
   const normalizedBillingType = normalizeBillingTypeForCalendar(billingType)
+
   if (normalized === "PAID") return "success"
+
   if (normalized === "BILLED") {
     return normalizedBillingType === "HMO_BILLING" || normalizedBillingType === "LGU_BILLING"
       ? "success"
       : "info"
   }
-  if (normalized === "PARTIAL" || normalized === "PENDING" || normalized === "UNBILLED")
+
+  if (normalized === "PARTIAL" || normalized === "PENDING" || normalized === "UNBILLED") {
     return "warn"
+  }
+
   if (normalized === "VOID") return "danger"
+
   return "info"
 }
 
@@ -420,21 +453,101 @@ const displayBillingStatus = (status?: string, billingType?: string): string => 
   const normalizedBillingType = normalizeBillingTypeForCalendar(billingType)
   const isHmoOrLgu =
     normalizedBillingType === "HMO_BILLING" || normalizedBillingType === "LGU_BILLING"
+
   if (normalized === "PAID") return "Paid"
   if (normalized === "BILLED") return "Paid"
+
   if (normalized === "PARTIAL") {
-    return isHmoOrLgu ? "Pending" : "Partial (The patient payed some of current balance)"
+    return isHmoOrLgu ? "Pending" : "Partial (The patient paid some of current balance)"
   }
+
   if (normalized === "PENDING" || normalized === "UNBILLED") {
     return isHmoOrLgu ? "Pending" : "Pending (Not yet Billed)"
   }
+
   if (normalized === "VOID") return "Void"
+
   return normalized
+}
+
+const canCancelAppointment = (appointment: AppointmentListItem): boolean => {
+  const status = normalizeAppointmentStatus(appointment.appointment_status)
+
+  return canCancelAppointments.value &&
+    status !== "CANCELLED" &&
+    status !== "COMPLETED"
+}
+
+const getAppointmentId = (appointment: AppointmentListItem): number =>
+  Number((appointment as AppointmentListItem & { id: number }).id)
+
+const isCancellingAppointment = (appointment: AppointmentListItem): boolean =>
+  cancellingAppointmentIds.value.has(getAppointmentId(appointment))
+
+const setAppointmentCancelling = (appointmentId: number, value: boolean): void => {
+  const next = new Set(cancellingAppointmentIds.value)
+
+  if (value) {
+    next.add(appointmentId)
+  } else {
+    next.delete(appointmentId)
+  }
+
+  cancellingAppointmentIds.value = next
+}
+
+const onCancelAppointment = async (appointment: AppointmentListItem): Promise<void> => {
+  const appointmentId = getAppointmentId(appointment)
+
+  if (!Number.isFinite(appointmentId) || appointmentId <= 0) {
+    errorToast(toast, "Invalid appointment selected")
+    return
+  }
+
+  if (!canCancelAppointment(appointment)) {
+    errorToast(toast, "This appointment cannot be cancelled")
+    return
+  }
+
+  const patientName = String(appointment.patient_name ?? "this appointment").trim() || "this appointment"
+  const confirmed = window.confirm(`Cancel ${patientName}? This will mark the appointment as Cancelled.`)
+
+  if (!confirmed) return
+
+  setAppointmentCancelling(appointmentId, true)
+
+  try {
+    await pamsAPI.patch<void>(`/appointments/${appointmentId}/status`, {
+      appointment_status: "CANCELLED"
+    })
+
+    appointments.value = appointments.value.map(item =>
+      getAppointmentId(item) === appointmentId
+        ? { ...item, appointment_status: "Cancelled" }
+        : item
+    )
+
+    publishTableData()
+    successToast(toast, "Appointment cancelled")
+    await fetchAppointments()
+  } catch (error: unknown) {
+    errorToast(
+      toast,
+      getApiErrorMessage(error, {
+        baseMessage: "Could not cancel appointment",
+        permissionHint: "Appointment::UPDATE permission is required to cancel appointments.",
+        notFoundHint: "This appointment may no longer exist.",
+        invalidInputHint: "Only active, pending, or rescheduled appointments can be cancelled.",
+        retryHint: "Refresh the table and try again."
+      })
+    )
+  } finally {
+    setAppointmentCancelling(appointmentId, false)
+  }
 }
 
 const formatDateTime = (value: string | Date): string => new Date(value).toLocaleString()
 
-// Error helper
 const resolveTableErrorOptions = (action: "load" | "export"): ApiErrorMessageOptions => {
   if (action === "export") {
     return {
@@ -465,12 +578,12 @@ const publishTableData = (): void => {
   })
 }
 
-// Load PT filter staff from API
 const loadPtFilterOptions = async (): Promise<void> => {
   if (!selectedClinicId.value) {
     ptDoctorOptions.value = []
     return
   }
+
   try {
     const response = await pamsAPI.get<Pageable<Staff>>("/staffs/lookup", {
       params: {
@@ -481,13 +594,15 @@ const loadPtFilterOptions = async (): Promise<void> => {
         clinic_id: selectedClinicId.value,
       },
     })
+
     ptDoctorOptions.value = (response.data?.content ?? [])
       .filter(
-        (s: Staff) =>
-          isPhysicalTherapistProviderType(s.appointment_provider_type) ||
-          isPhysicalTherapistProviderType(s.secondary_appointment_provider_type)
+        (staff: Staff) =>
+          isPhysicalTherapistProviderType(staff.appointment_provider_type) ||
+          isPhysicalTherapistProviderType(staff.secondary_appointment_provider_type)
       )
-      .map((s: Staff) => ({ id: s.id, label: s.name }))
+      .map((staff: Staff) => ({ id: staff.id, label: staff.name }))
+
     if (
       typeof ptFilter.value === "number" &&
       !ptDoctorOptions.value.some((option) => option.id === ptFilter.value)
@@ -496,19 +611,22 @@ const loadPtFilterOptions = async (): Promise<void> => {
     }
   } catch {
     ptDoctorOptions.value = []
+
     if (typeof ptFilter.value === "number") {
       ptFilter.value = undefined
     }
   }
 }
 
-// Fetch appointments
 const fetchAppointments = async (): Promise<void> => {
   const requestId = ++fetchRequestId
+
   try {
     isLoading.value = true
+
     const normalizedRecordFilter = recordFilter.value.trim()
     const isRecordSearchActive = !!normalizedRecordFilter
+
     const response = await appointmentPhase1Service.getAll({
       page: page.value,
       size: pageSize.value,
@@ -522,12 +640,16 @@ const fetchAppointments = async (): Promise<void> => {
       phase: isRecordSearchActive ? undefined : phaseFilter.value,
       date: isRecordSearchActive ? undefined : selectedDateIso.value,
     })
+
     if (requestId !== fetchRequestId) return
+
     appointments.value = response?.content ?? []
     totalElements.value = response?.total_elements ?? 0
+
     publishTableData()
   } catch (error: unknown) {
     if (requestId !== fetchRequestId) return
+
     errorToast(
       toast,
       extractApiErrorMessage(error, "load")
@@ -548,6 +670,7 @@ defineExpose({ refresh })
 const onPage = async (event: DataTablePageEvent): Promise<void> => {
   page.value = Math.floor((event.first ?? 0) / (event.rows ?? pageSize.value)) + 1
   pageSize.value = event.rows ?? pageSize.value
+
   await fetchAppointments()
 }
 
@@ -559,6 +682,7 @@ const onExportCsv = async (): Promise<void> => {
   try {
     const normalizedRecordFilter = recordFilter.value.trim()
     const isRecordSearchActive = !!normalizedRecordFilter
+
     const response = await appointmentPhase1Service.exportCsv({
       clinic_id: isRecordSearchActive ? undefined : selectedClinicId.value,
       doctor_id: isRecordSearchActive ? undefined : selectedDoctorConsultantId.value,
@@ -570,14 +694,15 @@ const onExportCsv = async (): Promise<void> => {
       phase: isRecordSearchActive ? undefined : phaseFilter.value,
       date: isRecordSearchActive ? undefined : selectedDateIso.value,
     })
+
     if (!response) return
+
     exportToExcel(response)
   } catch (error: unknown) {
     errorToast(toast, extractApiErrorMessage(error, "export"))
   }
 }
 
-// Watchers
 watch([() => props.calendarDate, statusFilter, phaseFilter], () => {
   page.value = 1
   void fetchAppointments()
@@ -589,11 +714,14 @@ watch(ptFilter, () => {
 })
 
 let recordFilterDebounceHandle: ReturnType<typeof setTimeout> | undefined
+
 watch(recordFilter, () => {
   page.value = 1
+
   if (recordFilterDebounceHandle) {
     clearTimeout(recordFilterDebounceHandle)
   }
+
   recordFilterDebounceHandle = setTimeout(() => {
     void fetchAppointments()
   }, 250)
@@ -604,14 +732,15 @@ watch(selectedClinicId, async () => {
   appointments.value = []
   totalElements.value = 0
   publishTableData()
+
   await loadPtFilterOptions()
+
   page.value = 1
   void fetchAppointments()
 })
 
 onMounted(async () => {
   await authSession.ensureLoaded()
-  // Initial data fetch is triggered by parent's onMounted calling refresh() after clinics are loaded
   await loadPtFilterOptions()
 })
 </script>

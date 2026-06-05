@@ -6,7 +6,6 @@
   >
     <template #toolbar>
       <Button label="Print" icon="pi pi-print" @click="printPage()" />
-      <Button label="Print" icon="pi pi-print" @click="printPage()" />
       <Button label="Close" icon="pi pi-times" severity="secondary" outlined @click="goBack" />
     </template>
 
@@ -20,12 +19,10 @@
           <div class="line">
             <span class="label">Partner Institution:</span>
             <span>{{ partnerLabel || " " }}</span>
-            <span>{{ partnerLabel || " " }}</span>
           </div>
 
           <div class="line">
             <span class="label">Billing Date:</span>
-            <span>{{ billingDateLabel || " " }}</span>
             <span>{{ billingDateLabel || " " }}</span>
           </div>
         </div>
@@ -33,7 +30,6 @@
         <div class="details-group">
           <div class="line">
             <span class="label">Transaction Period:</span>
-            <span>{{ periodLabel || " " }}</span>
             <span>{{ periodLabel || " " }}</span>
           </div>
 
@@ -71,15 +67,6 @@
               <th class="text-left">PT SERVICE RENDERED</th>
               <th class="text-center">SESSION SEQUENCE</th>
               <th class="text-right">INVOICE BILLING TOTAL</th>
-              <th class="text-center">ITEM No.</th>
-              <th class="text-left">PATIENT NAME</th>
-              <th class="text-left">REFERRAL FORM No.</th>
-              <th class="text-left">REFERENCE NO.</th>
-              <th class="text-left">PROGRAM STATUS</th>
-              <th class="text-center">TREATMENT DATE</th>
-              <th class="text-left">PT SERVICE RENDERED</th>
-              <th class="text-center">SESSION SEQUENCE</th>
-              <th class="text-right">INVOICE BILLING TOTAL</th>
             </tr>
           </thead>
 
@@ -90,49 +77,8 @@
               </td>
             </tr>
 
-            <tr v-if="!rows.length">
-              <td colspan="9" class="empty-row">
-                No statement of account items found.
-              </td>
-            </tr>
-
             <template v-for="row in rows" :key="row.key">
               <tr v-if="row.kind === 'service'">
-                <td class="text-center">
-                  {{ row.itemNo ?? "" }}
-                </td>
-
-                <td>
-                  {{ row.patientName || " " }}
-                </td>
-
-                <td>
-                  {{ row.referralFormNo || " " }}
-                </td>
-
-                <td>
-                  {{ row.referenceNo || " " }}
-                </td>
-
-                <td>
-                  {{ row.programStatus || " " }}
-                </td>
-
-                <td class="text-center">
-                  {{ row.treatmentDate ? formatDate(row.treatmentDate) : " " }}
-                </td>
-
-                <td class="service-name-cell">
-                  {{ row.serviceName || " " }}
-                </td>
-
-                <td class="text-center">
-                  {{ row.sessionSequence || " " }}
-                </td>
-
-                <td class="text-right">
-                  {{ formatPrice(row.price) }}
-                </td>
                 <td class="text-center">
                   {{ row.itemNo ?? "" }}
                 </td>
@@ -199,29 +145,6 @@
       </div>
     </template>
 
-<template #bottom>
-  <div class="approval-wrap">
-    <div class="approval-card">
-      <div class="approval-label">
-        Approved by:
-      </div>
-
-      <div class="approval-name">
-        RENALOU B. CORDOVA, PTRP, UK-PT
-      </div>
-
-      <div class="approval-line"></div>
-
-      <div class="approval-title">
-        Chief Operations Officer
-      </div>
-
-      <div class="approval-signed">
-        Date Signed: {{ dateSigned }}
-      </div>
-    </div>
-  </div>
-</template>
 <template #bottom>
   <div class="approval-wrap">
     <div class="approval-card">
@@ -1483,50 +1406,24 @@ onMounted(() => {
 
 .general-soa-table .col-item {
   width: 6%;
-@media screen {
-  .general-soa-table {
-    min-width: 1120px;
-  }
 }
 
-.general-soa-table .col-item {
-  width: 6%;
-}
-
-.general-soa-table .col-patient {
-  width: 12%;
 .general-soa-table .col-patient {
   width: 12%;
 }
 
 .general-soa-table .col-referral {
   width: 12%;
-.general-soa-table .col-referral {
-  width: 12%;
 }
 
-.general-soa-table .col-reference {
-  width: 12%;
 .general-soa-table .col-reference {
   width: 12%;
 }
 
 .general-soa-table .col-status {
   width: 10%;
-.general-soa-table .col-status {
-  width: 10%;
 }
 
-.general-soa-table .col-date {
-  width: 10%;
-}
-
-.general-soa-table .col-service {
-  width: 20%;
-}
-
-.general-soa-table .col-session {
-  width: 10%;
 .general-soa-table .col-date {
   width: 10%;
 }
@@ -1545,23 +1442,14 @@ onMounted(() => {
 
 .service-name-cell {
   font-weight: 600;
-.general-soa-table .col-total {
-  width: 8%;
 }
 
-.service-name-cell {
-  font-weight: 600;
-}
-
-.empty-row {
-  padding: 14px 10px;
 .empty-row {
   padding: 14px 10px;
   text-align: center;
   color: #6b7280;
   font-style: italic;
 }
-
 
 @media print {
   .general-soa-table .col-item {
@@ -1600,7 +1488,6 @@ onMounted(() => {
     width: 8%;
   }
 
-
   :global(html.lgu-print-portrait) .general-soa-table .col-item {
     width: 5%;
   }
@@ -1614,7 +1501,7 @@ onMounted(() => {
   }
 
   :global(html.lgu-print-portrait) .general-soa-table .col-reference {
-    width: 11%;
+    width: 12%;
   }
 
   :global(html.lgu-print-portrait) .general-soa-table .col-status {
@@ -1626,15 +1513,15 @@ onMounted(() => {
   }
 
   :global(html.lgu-print-portrait) .general-soa-table .col-service {
-    width: 20%;
+    width: 21%;
   }
 
   :global(html.lgu-print-portrait) .general-soa-table .col-session {
-    width: 11%;
+    width: 10%;
   }
 
   :global(html.lgu-print-portrait) .general-soa-table .col-total {
-    width: 9%;
+    width: 8%;
   }
 
   :global(html.lgu-print-landscape) .general-soa-table .col-item {
@@ -1655,26 +1542,12 @@ onMounted(() => {
 
   :global(html.lgu-print-landscape) .general-soa-table .col-status {
     width: 10%;
-  :global(html.lgu-print-landscape) .general-soa-table .col-status {
-    width: 10%;
   }
 
   :global(html.lgu-print-landscape) .general-soa-table .col-date {
     width: 10%;
-  :global(html.lgu-print-landscape) .general-soa-table .col-date {
-    width: 10%;
   }
 
-  :global(html.lgu-print-landscape) .general-soa-table .col-service {
-    width: 22%;
-  }
-
-  :global(html.lgu-print-landscape) .general-soa-table .col-session {
-    width: 9%;
-  }
-
-  :global(html.lgu-print-landscape) .general-soa-table .col-total {
-    width: 8%;
   :global(html.lgu-print-landscape) .general-soa-table .col-service {
     width: 22%;
   }

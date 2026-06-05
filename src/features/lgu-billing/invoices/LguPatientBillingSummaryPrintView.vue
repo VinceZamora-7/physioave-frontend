@@ -13,7 +13,6 @@
 
     <template #toolbar>
       <Button label="Print" icon="pi pi-print" @click="printPage()" />
-      <Button label="Print" icon="pi pi-print" @click="printPage()" />
       <Button label="Close" icon="pi pi-times" severity="secondary" outlined @click="goBack" />
     </template>
 
@@ -29,24 +28,20 @@
               <div class="profile-row">
                 <span class="profile-label">Patient Name:</span>
                 <span class="profile-value">{{ patientName || "—" }}</span>
-                <span class="profile-value">{{ patientName || "—" }}</span>
               </div>
 
               <div class="profile-row">
                 <span class="profile-label">Address:</span>
-                <span class="profile-value">{{ patientAddress || "—" }}</span>
                 <span class="profile-value">{{ patientAddress || "—" }}</span>
               </div>
 
               <div class="profile-row">
                 <span class="profile-label">Age:</span>
                 <span class="profile-value">{{ patientAge || "—" }}</span>
-                <span class="profile-value">{{ patientAge || "—" }}</span>
               </div>
 
               <div class="profile-row">
                 <span class="profile-label">Program Status:</span>
-                <span class="profile-value">{{ patientProgramStatus || "—" }}</span>
                 <span class="profile-value">{{ patientProgramStatus || "—" }}</span>
               </div>
             </div>
@@ -55,18 +50,15 @@
               <div class="profile-row profile-row--wide-label">
                 <span class="profile-label">Physical Therapist:</span>
                 <span class="profile-value">{{ physicalTherapistName || "—" }}</span>
-                <span class="profile-value">{{ physicalTherapistName || "—" }}</span>
               </div>
 
               <div class="profile-row profile-row--wide-label">
                 <span class="profile-label">Doctor:</span>
                 <span class="profile-value">{{ doctorName || "—" }}</span>
-                <span class="profile-value">{{ doctorName || "—" }}</span>
               </div>
 
               <div class="profile-row profile-row--wide-label">
                 <span class="profile-label">Diagnosis:</span>
-                <span class="profile-value">{{ diagnosis || "—" }}</span>
                 <span class="profile-value">{{ diagnosis || "—" }}</span>
               </div>
             </div>
@@ -86,22 +78,8 @@
             <col class="col-unit-total" />
           </colgroup>
 
-        <table class="summary-table patient-billing-summary-table">
-          <colgroup>
-            <col class="col-item-no" />
-            <col class="col-treatment-date" />
-            <col class="col-service-rendered" />
-            <col class="col-session-sequence" />
-            <col class="col-unit-total" />
-          </colgroup>
-
           <thead>
             <tr>
-              <th class="text-center">ITEM No.</th>
-              <th class="text-right">TREATMENT DATE</th>
-              <th class="text-left">PT SERVICE RENDERED</th>
-              <th class="text-center">SESSION SEQUENCE</th>
-              <th class="text-right">UNIT TOTAL</th>
               <th class="text-center">ITEM No.</th>
               <th class="text-right">TREATMENT DATE</th>
               <th class="text-left">PT SERVICE RENDERED</th>
@@ -117,20 +95,10 @@
               </td>
             </tr>
 
-            <tr v-if="!invoiceRows.length">
-              <td colspan="5" class="empty-row">
-                No billing summary items found.
-              </td>
-            </tr>
-
             <tr
               v-for="row in invoiceRows"
               :key="row.key"
               :data-level="row.level ?? 0"
-              :class="{
-                'item-group-start': row.isParent,
-                'line-item-child': !row.isParent && Number(row.level ?? 0) > 0
-              }"
               :class="{
                 'item-group-start': row.isParent,
                 'line-item-child': !row.isParent && Number(row.level ?? 0) > 0
@@ -141,29 +109,23 @@
               </td>
 
               <td class="text-right">
-                {{ row.isParent ? "" : row.treatmentDate ? formatDate(row.treatmentDate) : "—" }}
-                {{ row.isParent ? "" : row.treatmentDate ? formatDate(row.treatmentDate) : "—" }}
+                {{ row.isParent ? "" : row.treatmentDate ? formatDate(row.treatmentDate) : "-" }}
               </td>
 
               <td class="text-left service-name-cell">
-                {{ row.serviceName || "—" }}
-              <td class="text-left service-name-cell">
-                {{ row.serviceName || "—" }}
+                {{ stripPackageSessionSuffix(row.serviceName) || "-" }}
               </td>
 
               <td class="text-center">
-                {{ row.isParent ? "" : row.sessionSequence || "—" }}
-                {{ row.isParent ? "" : row.sessionSequence || "—" }}
+                {{ row.isParent ? "" : row.sessionSequence || "-" }}
               </td>
 
               <td class="text-right">
                 {{
                   row.isParent || row.unitTotal === null
                     ? ""
-                    ? ""
                     : row.unitTotal > 0
                       ? formatCurrency(row.unitTotal)
-                      : "FREE"
                       : "FREE"
                 }}
               </td>
@@ -173,11 +135,8 @@
           <tfoot>
             <tr class="grand-total-row">
               <td colspan="4" class="text-right">
-            <tr class="grand-total-row">
-              <td colspan="4" class="text-right">
                 Grand Total:
               </td>
-              <td class="text-right">
               <td class="text-right">
                 {{ formatCurrency(billing.grand_total ?? billing.total_amount ?? 0) }}
               </td>
@@ -187,48 +146,29 @@
       </div>
     </template>
 
-<template #bottom>
-  <div class="approval-wrap">
-    <div class="approval-card">
-      <div class="approval-label">
-        Approved by:
-      </div>
-<template #bottom>
-  <div class="approval-wrap">
-    <div class="approval-card">
-      <div class="approval-label">
-        Approved by:
-      </div>
+    <template #bottom>
+      <div class="approval-wrap">
+        <div class="approval-card">
+          <div class="approval-label">
+            Approved by:
+          </div>
 
-      <div class="approval-name">
-        RENALOU B. CORDOVA, PTRP, UK-PT
-      </div>
-      <div class="approval-name">
-        RENALOU B. CORDOVA, PTRP, UK-PT
-      </div>
+          <div class="approval-name">
+            RENALOU B. CORDOVA, PTRP, UK-PT
+          </div>
 
-      <div class="approval-line"></div>
-      <div class="approval-line"></div>
+          <div class="approval-line"></div>
 
-      <div class="approval-title">
-        Chief Operations Officer
-      </div>
-      <div class="approval-title">
-        Chief Operations Officer
-      </div>
+          <div class="approval-title">
+            Chief Operations Officer
+          </div>
 
-      <div class="approval-signed">
-        Date Signed: {{ dateSigned }}
+          <div class="approval-signed">
+            Date Signed: {{ dateSigned }}
+          </div>
+        </div>
       </div>
-    </div>
-  </div>
-</template>
-      <div class="approval-signed">
-        Date Signed: {{ dateSigned }}
-      </div>
-    </div>
-  </div>
-</template>
+    </template>
   </LguInvoiceLayout>
 </template>
 
@@ -443,8 +383,16 @@ const lguSponsor = computed(() => sponsorInfo.value)
 const lguProgramLabel = computed(() => lguSponsor.value?.lgu_program_name || lguSponsor.value?.company_name || "LGU")
 const patientAddress = computed(() => billingDetail.value?.patient_address || NOT_AVAILABLE_LABEL)
 const patientAge = computed(() => billingDetail.value?.patient_age || NOT_AVAILABLE_LABEL)
-const physicalTherapistName = computed(() => billingDetail.value?.physical_therapist || NOT_AVAILABLE_LABEL)
-const doctorName = computed(() => billingDetail.value?.doctor || NOT_AVAILABLE_LABEL)
+const physicalTherapistName = computed(() =>
+  billingDetail.value?.physical_therapist_name ||
+  billingDetail.value?.physical_therapist ||
+  NOT_AVAILABLE_LABEL
+)
+const doctorName = computed(() =>
+  billingDetail.value?.doctor_name ||
+  billingDetail.value?.doctor ||
+  NOT_AVAILABLE_LABEL
+)
 const diagnosis = computed(() => billingDetail.value?.diagnosis || NOT_AVAILABLE_LABEL)
 const patientProgramStatus = computed(() =>
   formatLguPatientProgramStatus(
@@ -468,8 +416,8 @@ const validityLabel = computed(() => {
 
 const billing = computed(() => {
   const selectedBillingAmount = Number(
-    billingDetail.value?.amount_due ??
     billingDetail.value?.total_amount ??
+    billingDetail.value?.amount_due ??
     0
   )
 
@@ -594,6 +542,12 @@ const getRecordValue = (record: unknown, key: string): unknown => {
   if (!record || typeof record !== "object") return undefined
   return (record as Record<string, unknown>)[key]
 }
+
+const stripPackageSessionSuffix = (value: string): string =>
+  value
+    .replace(/\s+-\s+Session\s+\d+\s+of\s+\d+\s*$/i, "")
+    .replace(/\s+Session\s+-\s+Session\s+\d+\s+of\s+\d+\s*$/i, "")
+    .trim()
 
 const parseAmount = (value: unknown): number | null => {
   if (value === null || value === undefined || value === "") return null
@@ -948,6 +902,36 @@ const selectedAppointmentSessionSequences = computed(() => {
   return completedIndex >= 0 ? [completedIndex + 1] : []
 })
 
+const isBillingScopedInvoice = computed(() => billingId.value > 0)
+
+const billingLinkedAppointmentId = computed(() =>
+  getNumberFromRecord(billingDetail.value, [
+    "appointment_id",
+    "appointmentId",
+    "root_appointment_id",
+    "rootAppointmentId"
+  ])
+)
+
+const scopedCompletedAppointments = computed(() => {
+  if (selectedAppointmentId.value > 0) {
+    return completedAppointments.value.filter(appointment =>
+      Number(appointment.appointment_id ?? 0) === selectedAppointmentId.value
+    )
+  }
+
+  if (isBillingScopedInvoice.value) {
+    const linkedAppointmentId = billingLinkedAppointmentId.value
+    return linkedAppointmentId > 0
+      ? completedAppointments.value.filter(appointment =>
+          Number(appointment.appointment_id ?? 0) === linkedAppointmentId
+        )
+      : []
+  }
+
+  return completedAppointments.value
+})
+
 const getLineAppointmentId = (item: InvoiceLineNode): number =>
   getNumberFromRecord(item, [
     "appointment_id",
@@ -1142,9 +1126,8 @@ const invoiceRows = computed<TableRow[]>(() => {
     }
   }
 
-  // Session-based fallback: use authorization sessions tied to this specific billing.
-  // Each consumption row becomes its own display row, correctly showing all service types.
-  // Works both before claim creation (phase1_billing_id match) and after (monthly/dropout_billing_id match).
+  // Billing-scoped invoice fallback: use only sessions tied to the current billing.
+  // Do not append other completed appointments from the same patient or period.
   const currentBillingId = Number(billingDetail.value?.id ?? billingId.value ?? 0)
   if (currentBillingId > 0 && detail.value?.authorizations?.length) {
     const totalCompleted = completedSessionSequences.value.length
@@ -1169,85 +1152,24 @@ const invoiceRows = computed<TableRow[]>(() => {
       .sort((a, b) => Number(a.session_sequence ?? 0) - Number(b.session_sequence ?? 0))
 
     if (sessionsForBilling.length > 0) {
-      // Also include completed appointments that have no consumption record yet,
-      // scoped to the transaction date range if available.
-      const coveredAppointmentIds = new Set(sessionsForBilling.map(s => Number(s.appointment_id)))
-      const rangeFrom = transactionFromDate.value
-      const rangeTo = transactionToDate.value
-      const uncoveredAppointments = completedAppointments.value.filter(appt => {
-        if (
-          selectedAppointmentId.value > 0 &&
-          Number(appt.appointment_id ?? 0) !== selectedAppointmentId.value
-        ) {
-          return false
-        }
+      const billingAmount = Number(billingDetail.value?.total_amount ?? billingDetail.value?.amount_due ?? billing.value.grand_total ?? 0)
+      const unitTotal = sessionsForBilling.length > 0 ? billingAmount / sessionsForBilling.length : 0
 
-        if (coveredAppointmentIds.has(Number(appt.appointment_id))) return false
-        if (rangeFrom || rangeTo) {
-          const apptDate = parseDate(appt.appointment_date)
-          if (!apptDate) return false
-          const apptTime = apptDate.getTime()
-          if (rangeFrom && apptTime < rangeFrom.getTime()) return false
-          if (rangeTo) {
-            const rangeToEnd = new Date(rangeTo)
-            rangeToEnd.setHours(23, 59, 59, 999)
-            if (apptTime > rangeToEnd.getTime()) return false
-          }
-        }
-        return true
-      })
-
-      type SessionRow = typeof sessionsForBilling[number]
-      type AppointmentRow = typeof uncoveredAppointments[number]
-      type CombinedRow = { type: 'session'; data: SessionRow } | { type: 'appointment'; data: AppointmentRow }
-
-      const combined: CombinedRow[] = [
-        ...sessionsForBilling.map(s => ({ type: 'session' as const, data: s })),
-        ...uncoveredAppointments.map(a => ({ type: 'appointment' as const, data: a }))
-      ]
-      combined.sort((a, b) => {
-        const dateA = parseDate(a.type === 'session' ? String(a.data.appointment_date ?? '') : (a.data as AppointmentRow).appointment_date)?.getTime() ?? 0
-        const dateB = parseDate(b.type === 'session' ? String(b.data.appointment_date ?? '') : (b.data as AppointmentRow).appointment_date)?.getTime() ?? 0
-        return dateA - dateB
-      })
-
-      const billingAmount = Number(billingDetail.value?.amount_due ?? billing.value.grand_total ?? 0)
-      const unitTotal = combined.length > 0 ? billingAmount / combined.length : 0
-
-      return combined.map((row, index) => {
-        if (row.type === 'session') {
-          const session = row.data
-          return {
-            key: `session-${session.id ?? index}`,
-            itemNo: index + 1,
-            treatmentDate: String(session.appointment_date ?? ''),
-            serviceName: String(session.service_name ?? '').trim() || '—',
-            sessionSequence: `${Number(session.session_sequence ?? index + 1)} / ${session.authTotal}`,
-            unitTotal
-          }
-        } else {
-          const appointment = row.data
-          return {
-            key: `uncovered-${appointment.appointment_id}`,
-            itemNo: index + 1,
-            treatmentDate: appointment.appointment_date,
-            serviceName: fallbackServiceName(appointment),
-            sessionSequence: `${index + 1} / ${combined.length}`,
-            unitTotal
-          }
-        }
-      })
+      return sessionsForBilling.map((session, index) => ({
+        key: `session-${session.id ?? index}`,
+        itemNo: index + 1,
+        treatmentDate: String(session.appointment_date ?? ''),
+        serviceName: String(session.service_name ?? '').trim() || '—',
+        sessionSequence: `${Number(session.session_sequence ?? index + 1)} / ${session.authTotal}`,
+        unitTotal
+      }))
     }
   }
 
-  const appointmentScopedCompletedAppointments = selectedAppointmentId.value > 0
-    ? completedAppointments.value.filter(appointment =>
-        Number(appointment.appointment_id ?? 0) === selectedAppointmentId.value
-      )
-    : completedAppointments.value
+  const appointmentScopedCompletedAppointments = scopedCompletedAppointments.value
 
   if (appointmentScopedCompletedAppointments.length) {
-    const billingAmount = Number(billingDetail.value?.amount_due ?? billing.value.grand_total ?? 0)
+    const billingAmount = Number(billingDetail.value?.total_amount ?? billingDetail.value?.amount_due ?? billing.value.grand_total ?? 0)
     const fallbackUnitTotal = appointmentScopedCompletedAppointments.length > 0
       ? billingAmount / appointmentScopedCompletedAppointments.length
       : 0
@@ -1262,13 +1184,17 @@ const invoiceRows = computed<TableRow[]>(() => {
     }))
   }
 
+  if (isBillingScopedInvoice.value) {
+    return []
+  }
+
   return (detail.value?.package_availments ?? []).map((pkg, index) => ({
     key: String(pkg.authorization_id),
     itemNo: index + 1,
     treatmentDate: billingDetail.value?.created_at || "",
     serviceName: pkg.package_name || "—",
     sessionSequence: `${pkg.used_count} / ${pkg.availed_count}`,
-      unitTotal: Number(billingDetail.value?.amount_due ?? billing.value.grand_total ?? 0)
+    unitTotal: Number(billingDetail.value?.total_amount ?? billingDetail.value?.amount_due ?? billing.value.grand_total ?? 0)
   }))
 })
 
@@ -1369,20 +1295,8 @@ onMounted(() => {
 
 .patient-billing-summary-table .col-treatment-date {
   width: 18%;
-.patient-billing-summary-table .col-item-no {
-  width: 11%;
 }
 
-.patient-billing-summary-table .col-treatment-date {
-  width: 18%;
-}
-
-.patient-billing-summary-table .col-service-rendered {
-  width: 36%;
-}
-
-.patient-billing-summary-table .col-session-sequence {
-  width: 18%;
 .patient-billing-summary-table .col-service-rendered {
   width: 36%;
 }
@@ -1393,12 +1307,8 @@ onMounted(() => {
 
 .patient-billing-summary-table .col-unit-total {
   width: 17%;
-.patient-billing-summary-table .col-unit-total {
-  width: 17%;
 }
 
-.service-name-cell {
-  font-weight: 600;
 .service-name-cell {
   font-weight: 600;
 }
@@ -1408,77 +1318,8 @@ onMounted(() => {
   text-align: center;
   color: #6b7280;
   font-style: italic;
-.empty-row {
-  padding: 14px 10px;
-  text-align: center;
-  color: #6b7280;
-  font-style: italic;
 }
 
-@media print {
-  .patient-billing-summary-table .col-item-no {
-    width: 9%;
-  }
-
-  .patient-billing-summary-table .col-treatment-date {
-    width: 17%;
-  }
-
-  .patient-billing-summary-table .col-service-rendered {
-    width: 38%;
-  }
-
-  .patient-billing-summary-table .col-session-sequence {
-    width: 18%;
-  }
-
-  .patient-billing-summary-table .col-unit-total {
-    width: 18%;
-  }
-
-  .service-name-cell {
-    font-weight: 600;
-  }
-
-  :global(html.lgu-print-portrait) .patient-billing-summary-table .col-item-no {
-    width: 9%;
-  }
-
-  :global(html.lgu-print-portrait) .patient-billing-summary-table .col-treatment-date {
-    width: 18%;
-  }
-
-  :global(html.lgu-print-portrait) .patient-billing-summary-table .col-service-rendered {
-    width: 35%;
-  }
-
-  :global(html.lgu-print-portrait) .patient-billing-summary-table .col-session-sequence {
-    width: 20%;
-  }
-
-  :global(html.lgu-print-portrait) .patient-billing-summary-table .col-unit-total {
-    width: 18%;
-  }
-
-  :global(html.lgu-print-landscape) .patient-billing-summary-table .col-item-no {
-    width: 10%;
-  }
-
-  :global(html.lgu-print-landscape) .patient-billing-summary-table .col-treatment-date {
-    width: 17%;
-  }
-
-  :global(html.lgu-print-landscape) .patient-billing-summary-table .col-service-rendered {
-    width: 39%;
-  }
-
-  :global(html.lgu-print-landscape) .patient-billing-summary-table .col-session-sequence {
-    width: 17%;
-  }
-
-  :global(html.lgu-print-landscape) .patient-billing-summary-table .col-unit-total {
-    width: 17%;
-  }
 @media print {
   .patient-billing-summary-table .col-item-no {
     width: 9%;

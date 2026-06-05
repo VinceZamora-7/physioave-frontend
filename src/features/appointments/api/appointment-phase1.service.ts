@@ -225,7 +225,25 @@ export interface DailyPtDeckGroup {
 export interface AppointmentSessionSchedulePayload {
   starts_at: string
   ends_at: string
-  label?: string
+  label?: string | null
+
+  appointment_phase?: AppointmentPhase
+
+  create_billing?: boolean
+  billing_strategy?: "PER_APPOINTMENT"
+  billing_type?: AppointmentBillingType
+  service_type?: AppointmentServiceType
+
+  amount_due?: number
+  service_name?: string | null
+  line_items_json?: string | null
+
+  session_id?: string | number | null
+  session_name?: string | null
+  session_sequence?: number
+  session_occurrence?: number
+  total_sessions?: number
+  session_sequence_label?: string | null
 }
 
 export interface ReschedulePayload {
@@ -264,11 +282,16 @@ export interface AppointmentCreatePayload {
   service_type?: AppointmentServiceType
   shared_phase1_billing_id?: number
   package_id?: number
+  package_name?: string
   lgu_program_id?: number
   service_name?: string
   amount_due?: number
+  total_package_amount_due?: number
   line_items_json?: string
   notes?: string
+  billing_strategy?: "PER_APPOINTMENT"
+  package_billing_mode?: "PER_APPOINTMENT"
+  create_billing_per_appointment?: boolean
 }
 
 export interface AppointmentCreateResult {
@@ -276,8 +299,11 @@ export interface AppointmentCreateResult {
   appointment_public_id?: string
   appointment_ids: number[]
   appointment_public_ids?: string[]
+
   billing_id?: number
   billing_public_id?: string
+  billing_ids?: number[]
+  billing_public_ids?: string[]
 }
 
 export interface AppointmentUpdatePayload {

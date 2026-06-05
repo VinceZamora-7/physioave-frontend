@@ -1304,9 +1304,17 @@ type PackageServiceOffer = {
   sessionIds?: string[]
   sessionQty?: number
   sessionItems?: Array<{id: string; qty: number}>
+  invoiceSubItems?: PackageInvoicePrintSubItem[]
   evaluationQty: number
   packagePrice: number
   status: string
+}
+type PackageInvoicePrintSubItem = {
+  name: string
+  quantity: number
+  unitPrice?: number
+  dropoutUnitPrice?: number
+  children?: PackageInvoicePrintSubItem[]
 }
 type SelectedServiceLine = {
   type: string
@@ -1685,6 +1693,31 @@ const normalizeQtyItems = (value: unknown): Array<{id: string; qty: number}> =>
     }]
   })
 
+const normalizeInvoiceSubItems = (value: unknown): PackageInvoicePrintSubItem[] =>
+  parseMaybeJsonArray(value).flatMap(entry => {
+    if (!entry || typeof entry !== "object") return []
+    const raw = entry as Record<string, unknown>
+    const name = String(raw.name ?? "").trim()
+    if (!name) return []
+
+    const rawUnitPrice = raw.unitPrice ?? raw.unit_price ?? raw.price
+    const unitPrice = rawUnitPrice === undefined || rawUnitPrice === null || String(rawUnitPrice).trim() === ""
+      ? undefined
+      : normalizeNonNegativeNumber(rawUnitPrice)
+    const rawDropoutUnitPrice = raw.dropoutUnitPrice ?? raw.dropout_unit_price ?? raw.dropoutPrice ?? raw.dropout_price
+    const dropoutUnitPrice = rawDropoutUnitPrice === undefined || rawDropoutUnitPrice === null || String(rawDropoutUnitPrice).trim() === ""
+      ? undefined
+      : normalizeNonNegativeNumber(rawDropoutUnitPrice)
+
+    return [{
+      name,
+      quantity: normalizePositiveInt(raw.quantity ?? raw.qty, 1),
+      ...(unitPrice === undefined ? {} : { unitPrice }),
+      ...(dropoutUnitPrice === undefined ? {} : { dropoutUnitPrice }),
+      children: normalizeInvoiceSubItems(raw.children)
+    }]
+  })
+
 const normalizeBundledService = (value: unknown): BundledService | null => {
   if (!value || typeof value !== "object") return null
 
@@ -1788,6 +1821,7 @@ const normalizePackageServiceOffer = (value: unknown): PackageServiceOffer | nul
     sessionIds: normalizeStringIdArray(raw.sessionIds ?? raw.session_ids ?? raw.session_ids_json),
     sessionQty: normalizePositiveInt(raw.sessionQty ?? raw.session_qty, 1),
     sessionItems: normalizeQtyItems(raw.sessionItems ?? raw.session_items ?? raw.session_items_json),
+    invoiceSubItems: normalizeInvoiceSubItems(raw.invoiceSubItems ?? raw.invoice_sub_items),
     packagePrice: normalizeNonNegativeNumber(raw.packagePrice ?? raw.package_price),
     status: normalizePackageStatus(raw)
   }
@@ -1894,33 +1928,41 @@ const catalogContextToServices = (context: ServiceCatalogContext): SingleService
 ]
 
 const catalogContextToPackageOffers = (context: ServiceCatalogContext): PackageServiceOffer[] =>
-  context.package_offers.map(item => ({
-    id: context.scope === "LGU" ? `lgu-${item.id}` : String(item.id),
-    name: item.name,
-    offerScope: item.offer_scope,
-    bundleId: item.bundle_template_id == null ? undefined : context.scope === "LGU" ? `lgu-${item.bundle_template_id}` : String(item.bundle_template_id),
-    bundleQty: Number(item.bundle_qty ?? 1),
-    bundleItems: item.bundle_items?.map(entry => ({id: String(entry.id), qty: Math.max(1, Number(entry.qty ?? 1))})),
-    machineIds: item.machine_ids?.map(id => catalogPackageItemId("machine", id, context.scope)),
-    machineQty: Number(item.machine_qty ?? 1),
-    machineItems: mapCatalogPackageItems(item.machine_items, "machine", context.scope),
-    techniqueIds: item.technique_ids?.map(id => catalogPackageItemId("technique", id, context.scope)),
-    techniqueQty: Number(item.technique_qty ?? 1),
-    techniqueItems: mapCatalogPackageItems(item.technique_items, "technique", context.scope),
-    evaluationIds: item.evaluation_ids?.map(id => catalogPackageItemId("evaluation", id, context.scope)) ?? [],
-    evaluationItems: mapCatalogPackageItems(item.evaluation_items, "evaluation", context.scope),
-    addOnIds: [
-      ...mapCatalogPackageItems(item.add_on_items, "add-on-machine", context.scope).map(entry => entry.id),
-    ],
-    addOnQty: 1,
-    addOnItems: mapCatalogPackageItems(item.add_on_items, "add-on-machine", context.scope),
-    sessionIds: item.session_ids?.map(String),
-    sessionQty: Number(item.session_qty ?? 1),
-    sessionItems: item.session_items?.map(entry => ({id: String(entry.id), qty: Math.max(1, Number(entry.qty ?? 1))})),
-    evaluationQty: Number(item.evaluation_qty ?? 1),
-    packagePrice: Number(item.package_price ?? 0),
-    status: item.is_active ? "Active" : "Inactive"
-  }))
+  context.package_offers.map(item => {
+    const raw = item as typeof item & {
+      invoiceSubItems?: unknown
+      invoice_sub_items?: unknown
+    }
+
+    return {
+      id: context.scope === "LGU" ? `lgu-${item.id}` : String(item.id),
+      name: item.name,
+      offerScope: item.offer_scope,
+      bundleId: item.bundle_template_id == null ? undefined : context.scope === "LGU" ? `lgu-${item.bundle_template_id}` : String(item.bundle_template_id),
+      bundleQty: Number(item.bundle_qty ?? 1),
+      bundleItems: item.bundle_items?.map(entry => ({id: String(entry.id), qty: Math.max(1, Number(entry.qty ?? 1))})),
+      machineIds: item.machine_ids?.map(id => catalogPackageItemId("machine", id, context.scope)),
+      machineQty: Number(item.machine_qty ?? 1),
+      machineItems: mapCatalogPackageItems(item.machine_items, "machine", context.scope),
+      techniqueIds: item.technique_ids?.map(id => catalogPackageItemId("technique", id, context.scope)),
+      techniqueQty: Number(item.technique_qty ?? 1),
+      techniqueItems: mapCatalogPackageItems(item.technique_items, "technique", context.scope),
+      evaluationIds: item.evaluation_ids?.map(id => catalogPackageItemId("evaluation", id, context.scope)) ?? [],
+      evaluationItems: mapCatalogPackageItems(item.evaluation_items, "evaluation", context.scope),
+      addOnIds: [
+        ...mapCatalogPackageItems(item.add_on_items, "add-on-machine", context.scope).map(entry => entry.id),
+      ],
+      addOnQty: 1,
+      addOnItems: mapCatalogPackageItems(item.add_on_items, "add-on-machine", context.scope),
+      sessionIds: item.session_ids?.map(String),
+      sessionQty: Number(item.session_qty ?? 1),
+      sessionItems: item.session_items?.map(entry => ({id: String(entry.id), qty: Math.max(1, Number(entry.qty ?? 1))})),
+      invoiceSubItems: normalizeInvoiceSubItems(raw.invoiceSubItems ?? raw.invoice_sub_items),
+      evaluationQty: Number(item.evaluation_qty ?? 1),
+      packagePrice: Number(item.package_price ?? 0),
+      status: item.is_active ? "Active" : "Inactive"
+    }
+  })
 
 const createLineSeverity = (type: string): "info" | "success" | "warning" | "secondary" | "contrast" => {
   switch (type) {
@@ -3305,89 +3347,157 @@ type CreateAppointmentSchedulePayload = {
   totalOccurrences?: number
 }
 
-const buildCreateBillingLineItemsJson = (): string =>
-  JSON.stringify(selectedServiceLines.value.map(line => ({
-    id: line.id,
-    type: line.type,
-    name: line.name,
-    quantity: 1,
-    price: getEffectiveCreateLinePrice(line),
-    originalPrice: getCreateLineOriginalPrice(line)
-  })))
-
-const getPerAppointmentBillingAmount = (scheduleCount: number): number => {
-  const total = Number(subtotalFromServiceLines.value ?? 0)
-
-  if (!selectedPackageHasSessionSchedules.value || scheduleCount <= 1) {
-    return Number.isFinite(total) ? total : 0
-  }
-
-  return Number(((Number.isFinite(total) ? total : 0) / scheduleCount).toFixed(2))
+type CreateBillingLineItemPayload = {
+  id: string
+  type: string
+  name: string
+  quantity: number
+  price: number
+  originalPrice: number
+  children?: CreateBillingLineItemPayload[]
 }
 
-const buildPerAppointmentServiceName = (
-  schedule: CreateAppointmentSchedulePayload,
-  index: number,
-  total: number
-): string => {
-  const packageName = selectedPackageOfferDetail.value?.name?.trim()
-  const sessionName = schedule.sessionName?.trim()
-  const sequenceLabel = `Session ${schedule.occurrence ?? index + 1} of ${schedule.totalOccurrences ?? total}`
+const buildPackageInvoiceChildren = (items: PackageInvoicePrintSubItem[] | undefined): CreateBillingLineItemPayload[] =>
+  (items ?? []).map((item, index) => ({
+    id: `package-included-${index + 1}`,
+    type: "included-service",
+    name: item.name,
+    quantity: item.quantity,
+    price: Number(item.unitPrice ?? 0),
+    originalPrice: Number(item.unitPrice ?? 0),
+    children: buildPackageInvoiceChildren(item.children)
+  }))
 
-  if (packageName && sessionName) {
-    return `${packageName} - ${sessionName} (${sequenceLabel})`
+const toIncludedBillingLine = (
+  id: string,
+  name: string,
+  quantity: number,
+  price = 0
+): CreateBillingLineItemPayload => ({
+  id,
+  type: "included-service",
+  name,
+  quantity: Math.max(1, Number(quantity ?? 1)),
+  price: Math.max(0, Number(price ?? 0)),
+  originalPrice: Math.max(0, Number(price ?? 0))
+})
+
+const buildPackageComponentChildren = (pkg: PackageServiceOffer): CreateBillingLineItemPayload[] => {
+  const serviceById = new Map(activeSinglePayServices.value.map(service => [service.id, service]))
+  const children: CreateBillingLineItemPayload[] = []
+
+  const appendServiceItems = (
+    items: Array<{id?: string; qty: number}>,
+    path: string
+  ): void => {
+    items.forEach((item, index) => {
+      if (!item.id) return
+      const service = serviceById.get(item.id)
+      if (!service) return
+      children.push(toIncludedBillingLine(
+        `${path}-${index + 1}`,
+        service.name,
+        item.qty,
+        service.price
+      ))
+    })
   }
 
-  if (packageName) {
-    return `${packageName} (${sequenceLabel})`
-  }
+  appendServiceItems(expandQtyItems(pkg.machineItems, pkg.machineIds, pkg.machineQty), "package-machine")
+  appendServiceItems(expandQtyItems(pkg.techniqueItems, pkg.techniqueIds, pkg.techniqueQty), "package-technique")
+  appendServiceItems(expandQtyItems(pkg.evaluationItems, pkg.evaluationIds, pkg.evaluationQty), "package-evaluation")
+  appendServiceItems(expandQtyItems(pkg.addOnItems, pkg.addOnIds, pkg.addOnQty), "package-addon")
 
-  if (sessionName) {
-    return `${sessionName} (${sequenceLabel})`
-  }
+  expandQtyItems(pkg.sessionItems, pkg.sessionIds, pkg.sessionQty).forEach((item, index) => {
+    children.push(toIncludedBillingLine(
+      `package-session-${index + 1}`,
+      item.id ? resolveSessionServiceName(item.id) : `${pkg.name} Session`,
+      item.qty,
+      0
+    ))
+  })
 
-  return `${createBillingType.value.replace("_", " ")} - ${selectedServiceLines.value.length} items`
+  return children
 }
 
-const buildPerAppointmentBillingLineItemsJson = (
-  schedule: CreateAppointmentSchedulePayload,
-  index: number,
-  total: number
-): string => {
-  if (!selectedPackageHasSessionSchedules.value) {
-    return buildCreateBillingLineItemsJson()
-  }
+const buildPackageBillingChildren = (pkg: PackageServiceOffer | null): CreateBillingLineItemPayload[] => {
+  if (!pkg) return []
+  const invoiceChildren = buildPackageInvoiceChildren(pkg.invoiceSubItems)
+  return invoiceChildren.length ? invoiceChildren : buildPackageComponentChildren(pkg)
+}
 
-  const unitPrice = getPerAppointmentBillingAmount(total)
-  const sequenceLabel = `Session ${schedule.occurrence ?? index + 1} of ${schedule.totalOccurrences ?? total}`
+const buildCreateBillingLineItems = (): CreateBillingLineItemPayload[] =>
+  selectedServiceLines.value.map(line => {
+    const packageChildren = line.type === "package" && selectedPackageOfferDetail.value?.id === line.id
+      ? buildPackageBillingChildren(selectedPackageOfferDetail.value)
+      : []
 
-  return JSON.stringify([{
-    id: selectedPackageOfferId.value ?? schedule.sessionId ?? `package-session-${index + 1}`,
-    type: "package-session",
-    name: buildPerAppointmentServiceName(schedule, index, total),
-    quantity: 1,
-    price: unitPrice,
-    originalPrice: unitPrice,
-    package_offer_id: selectedPackageOfferId.value,
-    package_name: selectedPackageOfferDetail.value?.name,
-    session_id: schedule.sessionId,
-    session_name: schedule.sessionName,
-    session_sequence_label: sequenceLabel,
-    session_occurrence: schedule.occurrence ?? index + 1,
-    total_sessions: schedule.totalOccurrences ?? total,
-    starts_at: schedule.startsAt.toISOString(),
-    ends_at: schedule.endsAt.toISOString(),
-    included_services: selectedServiceLines.value.map(line => ({
+    return {
       id: line.id,
       type: line.type,
       name: line.name,
       quantity: 1,
       price: getEffectiveCreateLinePrice(line),
-      originalPrice: getCreateLineOriginalPrice(line)
-    }))
-  }])
+      originalPrice: getCreateLineOriginalPrice(line),
+      ...(packageChildren.length ? { children: packageChildren } : {})
+    }
+  })
+
+const buildCreateBillingLineItemsJson = (): string =>
+  JSON.stringify(buildCreateBillingLineItems())
+
+const getPerAppointmentBillingAmount = (scheduleCount: number): number => {
+  const count = Math.max(1, scheduleCount)
+
+  if (!selectedPackageHasSessionSchedules.value || count <= 1) {
+    return subtotalFromServiceLines.value
+  }
+
+  return Number((subtotalFromServiceLines.value / count).toFixed(2))
 }
 
+const buildPerAppointmentServiceName = (
+  schedule: CreateAppointmentSchedulePayload,
+  index: number,
+  scheduleCount: number
+): string => {
+  const sequenceLabel = `Session ${schedule.occurrence ?? index + 1} of ${schedule.totalOccurrences ?? scheduleCount}`
+
+  if (schedule.sessionName) {
+    return `${schedule.sessionName} - ${sequenceLabel}`
+  }
+
+  if (selectedPackageOfferDetail.value?.name) {
+    return `${selectedPackageOfferDetail.value.name} - ${sequenceLabel}`
+  }
+
+  return `${createBillingType.value.replace(/_/g, " ")} - ${sequenceLabel}`
+}
+
+const buildPerAppointmentBillingLineItemsJson = (
+  schedule: CreateAppointmentSchedulePayload,
+  index: number,
+  scheduleCount: number
+): string => {
+  const sequenceLabel = `Session ${schedule.occurrence ?? index + 1} of ${schedule.totalOccurrences ?? scheduleCount}`
+
+  return JSON.stringify([
+    ...buildCreateBillingLineItems().map(line => ({
+      ...line,
+      session_sequence: schedule.occurrence ?? index + 1,
+      total_sessions: schedule.totalOccurrences ?? scheduleCount,
+      session_sequence_label: sequenceLabel,
+      appointment_phase: createPhase.value
+    }))
+  ])
+}
+
+const selectedPackageOfferNumericId = computed(() => {
+  const rawId = selectedPackageOfferDetail.value?.id
+  if (!rawId) return undefined
+  const parsed = Number(String(rawId).replace(/^lgu-/i, ""))
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+})
 
 const submitCreateAppointment = async (): Promise<void> => {
   if (isCreatingAppointment.value) return
@@ -3459,8 +3569,10 @@ const submitCreateAppointment = async (): Promise<void> => {
         starts_at: schedule.startsAt.toISOString(),
         ends_at: schedule.endsAt.toISOString(),
         label: schedule.label,
+        appointment_phase: createPhase.value,
         session_id: schedule.sessionId,
         session_name: schedule.sessionName,
+        session_sequence: schedule.occurrence ?? index + 1,
         session_occurrence: schedule.occurrence ?? index + 1,
         total_sessions: schedule.totalOccurrences ?? scheduleCount,
         session_sequence_label: `Session ${schedule.occurrence ?? index + 1} of ${schedule.totalOccurrences ?? scheduleCount}`,
@@ -3486,12 +3598,14 @@ const submitCreateAppointment = async (): Promise<void> => {
       support_staff_id: createSupportStaff.value,
     ends_at: primarySchedule.endsAt.toISOString(),
     session_schedules: sessionSchedulesPayload,
-    appointment_phase: createPhase.value,
+
     amount_due: selectedPackageHasSessionSchedules.value ? perAppointmentAmountDue : subtotalFromServiceLines.value,
     total_package_amount_due: selectedPackageHasSessionSchedules.value ? subtotalFromServiceLines.value : undefined,
+    package_id: selectedPackageOfferNumericId.value,
+    package_name: selectedPackageOfferDetail.value?.name,
     service_name: selectedPackageHasSessionSchedules.value
       ? buildPerAppointmentServiceName(primarySchedule, 0, scheduleCount)
-      : `${createBillingType.value.replace("_", " ")} - ${selectedServiceLines.value.length} items`,
+      : `${createBillingType.value.replace(/_/g, " ")} - ${selectedServiceLines.value.length} items`,
     billing_type: createBillingType.value,
     service_type: resolveCreateServiceType(createBillingType.value),
     billing_strategy: "PER_APPOINTMENT",
@@ -3507,6 +3621,7 @@ const submitCreateAppointment = async (): Promise<void> => {
     package_billing_mode?: "PER_APPOINTMENT"
     create_billing_per_appointment?: boolean
     total_package_amount_due?: number
+    package_name?: string
   }
 
   try {

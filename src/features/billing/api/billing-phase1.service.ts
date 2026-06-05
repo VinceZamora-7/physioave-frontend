@@ -38,12 +38,13 @@ export type DiscountType = "PERCENTAGE" | "FIXED"
 
 export interface BillingLineItem {
   id: number | string
-  type: "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service" | "bundle" | "package"
+  type: "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service" | "bundle" | "package" | "included-service"
   name: string
   price: number
   quantity: number
   originalPrice?: number
   body_area?: string
+  children?: BillingLineItem[]
 }
 
 export interface BillingListItem {
@@ -63,6 +64,10 @@ export interface BillingListItem {
   line_items_json?: string
   package_id?: number
   package_name?: string
+  package_group_id?: number | string
+  session_sequence?: number
+  session_sequence_label?: string
+  total_sessions?: number
   billing_status: string
   amount_due: number
   amount_paid: number
@@ -87,6 +92,7 @@ export interface BillingListItem {
   vatable_amount?: number
   vat_amount?: number
   // HMO enrichment (populated on detail fetch for HMO billings)
+  hmo_id?: number
   hmo_name?: string
   hmo_type_name?: string
   hmo_company_name?: string
@@ -364,6 +370,35 @@ export interface RecordPaymentRequest {
   note?: string
 }
 
+export type PackageGroupPaymentPayload = {
+  amountTendered: number
+  paymentType: string
+  referenceNo?: string
+  note?: string
+}
+
+export type PackageGroupPaymentResult = {
+  package_group_id: number
+  package_payment_status: string
+  amount_tendered: number
+  amount_applied: number
+  change_given: number
+  package_total: number
+  package_paid: number
+  package_balance: number
+  paid_billing_ids: number[]
+  payment_logs: Array<{
+    logEntryId: number
+    billingId: number
+    amountApplied: number
+    amountTendered: number
+    changeGiven: number
+    balanceBefore: number
+    balanceAfter: number
+    newStatus: string
+  }>
+}
+
 export interface MarkAppointmentBilledRequest {
   appointment_id: number
   loa_number?: string
@@ -381,6 +416,18 @@ export const billingPhase1Service = {
     const {data} = await pamsAPI.get<Pageable<BillingListItem>>("/billings", {params})
     return data
   },
+
+  async recordPackageGroupPayment(
+  packageGroupId: number,
+  payload: PackageGroupPaymentPayload
+): Promise<PackageGroupPaymentResult> {
+  const { data } = await pamsAPI.post<PackageGroupPaymentResult>(
+    `/billings/package-groups/${packageGroupId}/pay-full`,
+    payload
+  )
+
+  return data
+},
   async save(payload: BillingRequest): Promise<number | undefined> {
     const {data} = await pamsAPI.post<number>("/billings", payload)
     return data

@@ -45,6 +45,14 @@ export type ServiceCatalogPackageItem = {
   isComplimentary?: boolean;
 };
 
+export type ServiceCatalogInvoiceSubItem = {
+  name: string;
+  quantity: number;
+  unitPrice?: number;
+  dropoutUnitPrice?: number;
+  children?: ServiceCatalogInvoiceSubItem[];
+};
+
 export type ServiceCatalogPackageOffer = {
   id: number;
   name: string;
@@ -67,6 +75,7 @@ export type ServiceCatalogPackageOffer = {
   session_ids: number[];
   session_qty: number;
   session_items: ServiceCatalogPackageItem[];
+  invoice_sub_items?: ServiceCatalogInvoiceSubItem[];
   package_price: number;
   is_active: boolean;
 };

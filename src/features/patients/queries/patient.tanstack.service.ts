@@ -4,10 +4,12 @@ import {
   useInfiniteQuery,
   useMutation,
   useQuery
-} from "@tanstack/vue-query";
-import {defaultPageSize, defaultStatus, type Pageable} from "@/models/paging.ts";
-import {patientService} from "@/features/patients/api/patient.service";
-import {computed, type Ref} from "vue";
+} from "@tanstack/vue-query"
+import { computed, type Ref } from "vue"
+import type { AxiosResponse } from "axios"
+
+import { defaultPageSize, defaultStatus, type Pageable } from "@/models/paging.ts"
+import { patientService } from "@/features/patients/api/patient.service"
 import type {
   Patient,
   PatientContext,
@@ -15,15 +17,14 @@ import type {
   PatientExportRequestParams,
   PatientRequestBody,
   PatientRequestParams
-} from "@/features/patients/types/patient";
-import type {AxiosResponse} from "axios";
-
-import type {Lookup} from "@/models/global.model.ts";
-import {PatientTanstackKey} from "@/utils/keys/tanstack-key.ts";
+} from "@/features/patients/types/patient"
+import type { Lookup } from "@/models/global.model.ts"
+import { PatientTanstackKey } from "@/utils/keys/tanstack-key.ts"
 
 export const patientTanstackService = {
-  getAll(params: Ref<PatientRequestParams>,
-         key: PatientTanstackKey = PatientTanstackKey.PATIENTS
+  getAll(
+    params: Ref<PatientRequestParams>,
+    key: PatientTanstackKey = PatientTanstackKey.PATIENTS
   ) {
     const queryKey = computed(() => [
       key,
@@ -31,7 +32,7 @@ export const patientTanstackService = {
       params.value.pageable_request.size,
       params.value.pageable_request.name ?? null,
       params.value.pageable_request.status,
-      params.value.clinic_id ?? null,
+      params.value.clinic_id ?? null
     ])
 
     return useQuery<Pageable<Patient> | undefined>({
@@ -40,49 +41,65 @@ export const patientTanstackService = {
       placeholderData: keepPreviousData,
       retry: 1,
       refetchOnWindowFocus: false,
-      staleTime: 1000 * 60 * 5, // 5 minutes
+      staleTime: 1000 * 60 * 5
     })
   },
 
-  getAllLookup(queryClient: QueryClient,
-               clinicId: number | undefined,
-               page: number,
-               name: string | undefined,
-               key: PatientTanstackKey = PatientTanstackKey.PATIENTS_LOOKUP) {
-
+  getAllLookup(
+    queryClient: QueryClient,
+    clinicId: number | undefined,
+    page: number,
+    name: string | undefined,
+    key: PatientTanstackKey = PatientTanstackKey.PATIENTS_LOOKUP
+  ) {
     return queryClient.fetchQuery<Pageable<Lookup> | undefined>({
-      queryKey: [key],
+      queryKey: [
+        key,
+        clinicId ?? null,
+        page,
+        name ?? null
+      ],
       queryFn: () => {
         const requestParams: PatientRequestParams = {
           pageable_request: {
-            page: page,
+            page,
             size: defaultPageSize,
             status: defaultStatus,
-            name: name,
+            name
           },
           clinic_id: clinicId
         }
+
         return patientService.getAllLookup(requestParams)
-      }
+      },
+      staleTime: 1000 * 60 * 5
     })
   },
 
-  getAllInfiniteQuery(name: Ref<string | undefined>,
-                      clinicId: Ref<number | undefined>,
-                      key: PatientTanstackKey = PatientTanstackKey.PATIENTS_INFINITE_QUERY) {
+  getAllInfiniteQuery(
+    name: Ref<string | undefined>,
+    clinicId: Ref<number | undefined>,
+    key: PatientTanstackKey = PatientTanstackKey.PATIENTS_INFINITE_QUERY
+  ) {
+    const queryKey = computed(() => [
+      key,
+      clinicId.value ?? null,
+      name.value ?? null
+    ])
 
     return useInfiniteQuery<Pageable<Lookup> | undefined>({
-      queryKey: [key],
-      queryFn: (params) => {
+      queryKey,
+      queryFn: params => {
         const requestParams: PatientRequestParams = {
           pageable_request: {
             page: params.pageParam as number,
             size: defaultPageSize,
             status: defaultStatus,
-            name: name.value,
+            name: name.value
           },
           clinic_id: clinicId.value
         }
+
         return patientService.getAllLookup(requestParams)
       },
       initialPageParam: 1,
@@ -90,7 +107,7 @@ export const patientTanstackService = {
       getPreviousPageParam: firstPage => firstPage?.previous_page,
       placeholderData: keepPreviousData,
       refetchOnWindowFocus: false,
-      staleTime: 1000 * 60 * 5, // 5 minutes
+      staleTime: 1000 * 60 * 5,
       enabled: false
     })
   },
@@ -103,7 +120,7 @@ export const patientTanstackService = {
     return queryClient.fetchQuery<PatientContext | undefined>({
       queryKey: [key, patientId],
       queryFn: () => patientService.getContext(patientId),
-      staleTime: 1000 * 60 * 5,
+      staleTime: 1000 * 60 * 5
     })
   },
 
@@ -113,14 +130,13 @@ export const patientTanstackService = {
     key: PatientTanstackKey = PatientTanstackKey.PATIENTS_EXPORT
   ) {
     return queryClient.fetchQuery<AxiosResponse<Blob> | undefined>({
-      queryKey: [key],
-      queryFn: () =>
-        patientService.export(params),
+      queryKey: [key, params],
+      queryFn: () => patientService.export(params)
     })
   },
 
   save(key: PatientTanstackKey = PatientTanstackKey.PATIENTS) {
-    return useMutation<{id: number; public_id?: string} | undefined, Error, PatientRequestBody>({
+    return useMutation<{ id: number; public_id?: string } | undefined, Error, PatientRequestBody>({
       mutationKey: [key],
       mutationFn: patientService.save
     })
@@ -138,6 +154,5 @@ export const patientTanstackService = {
       mutationKey: [key],
       mutationFn: patientService.toggleStatus
     })
-  },
-
+  }
 }
