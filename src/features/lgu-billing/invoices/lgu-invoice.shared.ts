@@ -1,7 +1,6 @@
 import { useRouter } from "vue-router"
 
 const LGU_INVOICE_PRINT_STYLE_ID = "lgu-invoice-auto-print-style"
-const PRINT_TABLE_SELECTOR = ".summary-table, .soa-table"
 
 export type LguPrintOrientation = "portrait" | "landscape"
 export type LguPrintOrientationMode = LguPrintOrientation | "auto"
@@ -62,47 +61,7 @@ export const formatLguPatientProgramStatus = (
 ): string =>
   formatLguStatus(resolveLguPatientProgramStatus(billingProgramStatus, dropoutStatus))
 
-const getTableColumnCount = (table: HTMLTableElement): number => {
-  const row = table.tHead?.rows?.[0] ?? table.rows?.[0]
-  if (!row) return 0
-
-  return Array.from(row.cells).reduce((total, cell) => {
-    return total + Math.max(cell.colSpan || 1, 1)
-  }, 0)
-}
-
 const resolveAutoPrintOrientation = (): LguPrintOrientation => {
-  if (typeof document === "undefined") return "portrait"
-
-  const sheet = document.querySelector<HTMLElement>(".lgu-invoice-sheet")
-  const tables = Array.from(
-    document.querySelectorAll<HTMLTableElement>(PRINT_TABLE_SELECTOR)
-  )
-
-  const maxColumnCount = tables.reduce((max, table) => {
-    return Math.max(max, getTableColumnCount(table))
-  }, 0)
-
-  const hasOverflowingTable = tables.some((table) => {
-    const wrapper = table.closest<HTMLElement>(".table-wrap")
-    const availableWidth = wrapper?.clientWidth || table.clientWidth || 0
-
-    return table.scrollWidth > availableWidth + 8
-  })
-
-  const sheetWidth = sheet?.scrollWidth ?? 0
-  const sheetHeight = sheet?.scrollHeight ?? 0
-  const contentLooksWide = sheetWidth > 0 && sheetHeight > 0 && sheetWidth > sheetHeight * 1.08
-
-  /*
-    Rule:
-    - Wide invoice tables usually need landscape.
-    - Simple/smaller printables stay portrait.
-  */
-  if (hasOverflowingTable || maxColumnCount >= 6 || contentLooksWide) {
-    return "landscape"
-  }
-
   return "portrait"
 }
 
@@ -354,7 +313,7 @@ const bindPrintListeners = (): void => {
   if (printListenersBound) return
 
   window.addEventListener("beforeprint", () => {
-    ensureLguInvoicePrintStyles("auto")
+    ensureLguInvoicePrintStyles("portrait")
   })
 
   window.addEventListener("afterprint", () => {
@@ -371,12 +330,12 @@ export const useLguInvoicePrintActions = (): {
 } => {
   const router = useRouter()
 
-  const ensurePrintStyles = (orientationMode: LguPrintOrientationMode = "auto"): void => {
+  const ensurePrintStyles = (orientationMode: LguPrintOrientationMode = "portrait"): void => {
     bindPrintListeners()
     ensureLguInvoicePrintStyles(orientationMode)
   }
 
-  const printPage = (orientationMode: LguPrintOrientationMode = "auto"): void => {
+  const printPage = (orientationMode: LguPrintOrientationMode = "portrait"): void => {
     ensurePrintStyles(orientationMode)
 
     requestAnimationFrame(() => {

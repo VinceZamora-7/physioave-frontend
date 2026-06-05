@@ -4,7 +4,7 @@
       <section class="lgu-invoice-sheet">
         <header class="lgu-invoice-top">
           <div class="lgu-invoice-heading">
-            <img class="lgu-invoice-logo" src="/app-logo.png" alt="PhysioAve" />
+            <img class="lgu-invoice-logo" src="/phsyioave-logo-white-updated.png" alt="PhysioAve" />
 
             <div v-if="$slots.meta" class="lgu-invoice-meta-grid">
               <slot name="meta" />

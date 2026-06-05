@@ -133,7 +133,7 @@ const tableHeaders = invoice.columns.map(column => `
       }
 
       @page {
-        size: auto;
+        size: A4 portrait;
         margin: 8mm;
       }
 

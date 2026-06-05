@@ -120,6 +120,7 @@
       :patient-detail-error="patientDetailError"
       :first-dropped-out-appointment-id="firstDroppedOutAppointmentId"
       :printing-claim-billing-id="printingClaimBillingId"
+      :creating-claim="creatingPatientClaim"
       :format-date-time="formatDateTime"
       :format-lgu-status="formatLguStatus"
       :lgu-status-severity="lguStatusSeverity"
@@ -128,6 +129,7 @@
       @print-attendance-record="exportPatientAttendanceRecord"
       @export-patient-lgu-details="exportPatientLguDetails"
       @export-patient-billing-summary="exportPatientProfileBillingSummary"
+      @create-claim="createSelectedPatientClaim"
       @download-claim-pdf="downloadClaimPdf"
     />
 
@@ -229,6 +231,7 @@ const selectedPatientDetail = ref<LguPatientCreditDetail | null>(null)
 const loadingPatientDetail = ref(false)
 const patientDetailError = ref("")
 const printingClaimBillingId = ref<number | null>(null)
+const creatingPatientClaim = ref(false)
 const exportsModalVisible = ref(false)
 const patientSoaPickerVisible = ref(false)
 const invoiceSessionPickerVisible = ref(false)
@@ -413,7 +416,7 @@ const getSelectedPatientPrintRange = (): { from: Date; to: Date } => {
 const openLguPatientPrintRoute = (
   routeName: "lgu-patient-profile-print" | "lgu-patient-billing-summary-print",
   patientId: number,
-  options: { billingId?: number | null; from?: Date; to?: Date } = {}
+  options: { billingId?: number | null; appointmentId?: number | null; from?: Date; to?: Date } = {}
 ): Window | null => {
   const range = options.from && options.to ? { from: options.from, to: options.to } : getSelectedPatientPrintRange()
   return openPrintableRouteWindow(
@@ -422,6 +425,7 @@ const openLguPatientPrintRoute = (
       query: {
         patient_id: String(patientId),
         ...(options.billingId ? { billing_id: String(options.billingId) } : {}),
+        ...(options.appointmentId ? { appointment_id: String(options.appointmentId) } : {}),
         transaction_from: formatYmd(range.from),
         transaction_to: formatYmd(range.to),
         autoprint: "1"
@@ -2009,6 +2013,7 @@ const printSessionInvoice = async (option?: LguInvoiceSessionOption): Promise<vo
   patientSoaRange.value = Number.isNaN(sessionDate.getTime()) ? null : [sessionDate, sessionDate]
   openLguPatientPrintRoute("lgu-patient-billing-summary-print", selectedPatientDetail.value?.patient_id ?? 0, {
     billingId: selectedOption.billingId,
+    appointmentId: selectedOption.appointmentId,
     from: sessionDate,
     to: sessionDate
   })
@@ -2736,6 +2741,36 @@ const loadDashboardBudget = async (): Promise<void> => {
     }
   }
 
+  const createSelectedPatientClaim = async (): Promise<void> => {
+    const patientId = selectedPatientDetail.value?.patient_id
+    if (!patientId || creatingPatientClaim.value) return
+
+    creatingPatientClaim.value = true
+    try {
+      const result = await lguBillingService.createPatientClaim({
+        patient_id: patientId,
+        billing_month: selectedBillingMonth.value
+      })
+
+      successToast(
+        toast,
+        result?.billing_public_id
+          ? `LGU claim ${result.billing_public_id} created`
+          : "LGU claim created"
+      )
+
+      await Promise.all([
+        refreshSelectedPatientDetail(),
+        loadTransactionHistory(),
+        loadDashboardBudget()
+      ])
+    } catch (error: unknown) {
+      errorToast(toast, extractApiErrorMessage(error, "Failed to create LGU claim"))
+    } finally {
+      creatingPatientClaim.value = false
+    }
+  }
+
   const downloadClaimPdf = async (billingId: number, sessionOption?: LguInvoiceSessionOption): Promise<void> => {
     if (!billingId || printingClaimBillingId.value) return
     printingClaimBillingId.value = billingId
@@ -2748,6 +2783,7 @@ const loadDashboardBudget = async (): Promise<void> => {
       const sessionDate = sessionOption?.appointmentDate ? new Date(sessionOption.appointmentDate) : null
       openLguPatientPrintRoute("lgu-patient-billing-summary-print", detail.patient_id, {
         billingId: detail.id,
+        appointmentId: sessionOption?.appointmentId,
         from: sessionDate && !Number.isNaN(sessionDate.getTime()) ? sessionDate : new Date(detail.created_at),
         to: sessionDate && !Number.isNaN(sessionDate.getTime()) ? sessionDate : new Date(detail.created_at)
       })

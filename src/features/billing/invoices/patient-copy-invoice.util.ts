@@ -101,7 +101,7 @@ export function renderPatientCopyInvoiceWindow(
     approvedBy: invoice.approvedBy,
     approverTitle: invoice.approverTitle,
     dateSigned: invoice.dateSigned,
-    pageSize: "A4 landscape",
+    pageSize: "A4",
     maxWidthPx: 1200,
     hideFinancialSummary: true,
     renderErrorMessage: "The patient statement could not be rendered. Please try again."

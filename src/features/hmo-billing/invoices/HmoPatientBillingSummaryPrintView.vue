@@ -26,7 +26,6 @@
               <div class="profile-row">
                 <span class="profile-label">Patient Name:</span>
                 <span class="profile-value">{{ patientName || "—" }}</span>
-                <span class="profile-value">{{ patientName || "—" }}</span>
               </div>
 
               <div class="profile-row">
@@ -35,7 +34,6 @@
               </div>
 
               <div class="profile-row">
-                <span class="profile-label">Age:</span>
                 <span class="profile-label">Age:</span>
                 <span class="profile-value">{{ patientAge }}</span>
               </div>
@@ -67,14 +65,12 @@
         <table class="summary-table">
           <thead>
             <tr>
-              <th class="w-[50px] text-center">No.</th>
+              <th class="w-[50px] text-center">No</th>
               <th class="w-[80px] text-center">LOA Date Issued</th>
               <th class="w-[120px] text-center">PT SERVICE RENDERED</th>
               <th class="w-[30px] text-center">QTY</th>
               <th class="w-[60px] text-center">LAT</th>
               <th class="w-[50px] text-center">BODY AREA</th>
-              <th class="w-[60px] text-center">UNIT PRICE</th>
-              <th class="w-[60px] text-center">UNIT TOTAL</th>
               <th class="w-[60px] text-center">UNIT PRICE</th>
               <th class="w-[60px] text-center">UNIT TOTAL</th>
             </tr>
@@ -94,17 +90,17 @@
           </tbody>
 
           <tfoot>
-            <tr>
+            <tr class="tfoot-border-bottom">
               <td
                 colspan="7"
                 class="text-right font-bold"
-                style="padding-top: 12px; border-top: 1px solid #e5e7eb;"
+                style="padding-top: 12px; border-top: 1px solid #e5e7eb; color: #B81212;"
               >
                 Grand Total:
               </td>
               <td
                 class="text-center font-bold"
-                style="padding-top: 12px; border-top: 1px solid #e5e7eb;"
+                style="padding-top: 12px; border-top: 1px solid #e5e7eb; color: #B81212;"
               >
                 {{ formatCurrency(grandTotal) }}
               </td>
@@ -114,49 +110,38 @@
       </div>
     </template>
 
-    <template #bottom>
-      <div
-        style="
-          width: 100%;
-          display: flex;
-          flex-direction: row;
-          justify-content: space-between;
-          align-items: center;
-          gap: 16px;
-          margin-top: 24px;
-          font-size: 13px;
-          color: #111827;
-        "
-      >
-        <div class="payment-box">
-          <h3>HMO DETAILS</h3>
-          <div><strong>Billing To:</strong> HMO</div>
-          <div><strong>HMO Type:</strong> {{ sponsorHmoType }}</div>
-          <div><strong>Company Name:</strong> {{ sponsorCompanyName }}</div>
-          <div><strong>LOA Approval No.:</strong> {{ sponsorApprovalNo }}</div>
-        </div>
+<template #bottom>
+  <div class="approval-wrap-hmo">
+    <section class="payment-box">
+      <span class="self-pay-bottom-text-header">HMO DETAILS</span>
+      <div><span class="self-pay-bottom-text">Billing To:</span> HMO</div>
+      <div><span class="self-pay-bottom-text">HMO Type:</span> {{ sponsorHmoType }}</div>
+      <div><span class="self-pay-bottom-text">Company Name:</span> {{ sponsorCompanyName }}</div>
+      <div><span class="self-pay-bottom-text">LOA Approval No.:</span> {{ sponsorApprovalNo }}</div>
+    </section>
 
-        <div class="approval-card">
-          <div class="approval-label">
-            Approved by:
-          </div>
-
-          <div class="approval-name">
-            RENALOU B. CORDOVA, PTRP, UK-PT
-          </div>
-
-          <div class="approval-line"></div>
-
-          <div class="approval-title">
-            Chief Operations Officer
-          </div>
-
-          <div class="approval-signed">
-            Date Signed: {{ dateSigned }}
-          </div>
-        </div>
+                    <section class="approval-card">
+      <div class="approval-label">
+        Approved by:
       </div>
-    </template>
+      <div>
+        &nbsp;
+      </div>
+
+      <div class="approval-name">
+        RENALOU B. CORDOVA, PTRP, UK-PT
+      </div>
+
+      <div class="approval-title">
+        Chief Operations Officer
+      </div>
+
+      <div class="approval-signed">
+        <strong>Date Signed:</strong> {{ dateSigned }}
+      </div>
+    </section>
+  </div>
+</template>
   </HmoInvoiceLayout>
 </template>
 
@@ -215,12 +200,10 @@ const patientId = computed(() => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 })
 
-
 const hmoId = computed(() => {
   const parsed = Number(String(route.query.hmo_id ?? "").trim())
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 })
-
 
 const billingId = computed(() => {
   const parsed = Number(String(route.query.billing_id ?? route.query.id ?? "").trim())
@@ -241,14 +224,12 @@ const patientAge = computed(() =>
 
 const sponsorRecord = computed(() => sponsorInfo.value)
 
-
 const hmoLabel = computed(() =>
   sponsorRecord.value?.company_name?.trim() ||
   sponsorRecord.value?.hmo_name?.trim() ||
   String(route.query.hmo_name ?? "HMO").trim() ||
   "HMO"
 )
-
 
 const firstNonBlank = (...values: unknown[]): string => {
   for (const value of values) {
@@ -275,7 +256,6 @@ const dateSigned = computed(() =>
   })
 )
 
-
 const dateFrom = computed(() => String(route.query.from ?? "").trim())
 const dateTo = computed(() => String(route.query.to ?? "").trim())
 
@@ -287,7 +267,6 @@ const getBillingRecordId = (
   billing?: Pick<BillingListItem, "id" | "public_id"> | null
 ): string =>
   billing ? firstNonBlank(billing.public_id, `BILLING-${billing.id}`) : "N/A"
-
 
 const referenceNoLabel = computed(() =>
   getBillingRecordId(billingDetail.value)
@@ -355,7 +334,6 @@ const latestEvaluationVisitLog = computed(() => {
     const leftTime = new Date(`${left.visit_date}T00:00:00`).getTime()
     const rightTime = new Date(`${right.visit_date}T00:00:00`).getTime()
 
-
     if (leftTime !== rightTime) return rightTime - leftTime
     return Number(right.id) - Number(left.id)
   })[0] ?? null
@@ -367,7 +345,6 @@ const diagnosisSource = computed(() => {
 
   const visitDiagnosis = String(latestEvaluationVisitLog.value?.doctor_diagnosis ?? "").trim()
   const visitLaterality = String(latestEvaluationVisitLog.value?.doctor_diagnosis_laterality ?? "").trim()
-
 
   if (!visitDiagnosis) return ""
 
@@ -397,7 +374,6 @@ const diagnosisParts = computed(() => {
   const wordMatch = value.match(/^(LEFT|RIGHT|BOTH|BILATERAL)\b[\s,;:-]*(.*)$/i)
   if (wordMatch) {
     const marker = wordMatch[1].toUpperCase()
-
 
     return {
       laterality: marker === "LEFT" ? "Left" : marker === "RIGHT" ? "Right" : "Both",
@@ -441,7 +417,6 @@ const diagnosis = computed(() => {
 
   const visitDiagnosis = String(latestEvaluationVisitLog.value?.doctor_diagnosis ?? "").trim()
   if (!visitDiagnosis) return "N/A"
-
 
   const laterality = String(latestEvaluationVisitLog.value?.doctor_diagnosis_laterality ?? "").trim()
   return laterality ? `${visitDiagnosis} (${laterality})` : visitDiagnosis
@@ -489,7 +464,6 @@ const enrichBillingItems = async (
 
       const detail = context?.billing
 
-
       return detail
         ? {
             ...item,
@@ -516,7 +490,6 @@ const buildRows = (items: BillingSummarySource[]): BillingSummaryRow[] => {
     if (!lineItems.length) {
       const unitPrice = Number(item.total_amount ?? 0)
 
-
       output.push({
         key: `${item.id}-${itemNo}`,
         itemNo,
@@ -531,7 +504,6 @@ const buildRows = (items: BillingSummarySource[]): BillingSummaryRow[] => {
         billingStatus,
         totalAmount: unitPrice
       })
-
 
       itemNo += 1
       return
@@ -568,7 +540,6 @@ const buildRows = (items: BillingSummarySource[]): BillingSummaryRow[] => {
         totalAmount: unitTotal
       })
 
-
       itemNo += 1
     })
   })
@@ -592,7 +563,6 @@ const load = async (): Promise<void> => {
       const context = await billingContextTanstackService.fetchContext(queryClient, billingId.value)
       const detail = context?.billing ?? null
 
-
       if (!detail) {
         error.value = "Billing record was not found."
         return
@@ -600,22 +570,18 @@ const load = async (): Promise<void> => {
 
       billingDetail.value = detail
 
-
       const [patientContext, visitLogs] = await Promise.all([
         patientTanstackService.fetchContext(queryClient, Number(detail.patient_id)),
         patientEvaluationVisitLogService.getAll(Number(detail.patient_id))
       ])
 
-
       const sponsorRecords = patientContext?.sponsor_information ?? []
-
 
       sponsorInfo.value =
         sponsorRecords.find(record => record.sponsor_context === "HMO" && Number(record.hmo_id) === hmoId.value) ??
         sponsorRecords.find(record => record.sponsor_context === "HMO") ??
         sponsorRecords[0] ??
         null
-
 
       evaluationVisitLogs.value = visitLogs ?? []
       rows.value = buildRows([detail])
@@ -637,18 +603,15 @@ const load = async (): Promise<void> => {
 
     const sponsorRecords = patientContext?.sponsor_information ?? []
 
-
     sponsorInfo.value =
       sponsorRecords.find(record => record.sponsor_context === "HMO" && Number(record.hmo_id) === hmoId.value) ??
       sponsorRecords.find(record => record.sponsor_context === "HMO") ??
       sponsorRecords[0] ??
       null
 
-
     evaluationVisitLogs.value = visitLogs ?? []
 
     const detailedItems = await enrichBillingItems((result?.content ?? []) as BillingListItem[])
-
 
     billingDetail.value =
       detailedItems.find(item => firstNonBlank(
@@ -657,7 +620,6 @@ const load = async (): Promise<void> => {
       )) ??
       detailedItems[0] ??
       null
-
 
     rows.value = buildRows(detailedItems)
   } catch (err: unknown) {

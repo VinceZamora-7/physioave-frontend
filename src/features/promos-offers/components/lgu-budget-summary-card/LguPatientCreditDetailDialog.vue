@@ -120,7 +120,22 @@
       </section>
 
       <section class="space-y-3">
-        <h4 class="m-0 text-sm font-bold text-[rgb(var(--app-fg))]">Billing Summary</h4>
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h4 class="m-0 text-sm font-bold text-[rgb(var(--app-fg))]">Billing Summary</h4>
+            <p class="m-0 mt-1 text-xs text-[rgb(var(--app-fg))]/60">Generate or review this patient's LGU claim billings.</p>
+          </div>
+
+          <Button
+            label="Create Claim"
+            icon="pi pi-plus-circle"
+            size="small"
+            :loading="creatingClaim"
+            :disabled="creatingClaim"
+            @click="$emit('create-claim')"
+          />
+        </div>
+
         <div v-if="selectedPatientDetail.billings.length" class="overflow-x-auto rounded-2xl border border-[rgb(var(--app-border))]">
           <table class="min-w-full text-sm">
             <thead class="bg-[rgb(var(--app-bg-soft))] text-left text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/60">
@@ -188,6 +203,7 @@ const props = defineProps<{
   patientDetailError: string
   firstDroppedOutAppointmentId: number | null
   printingClaimBillingId: number | null
+  creatingClaim: boolean
   formatDateTime: (value?: string) => string
   formatLguStatus: (value?: string | null) => string
   lguStatusSeverity: (value?: string | null) => "success" | "warn" | "danger" | "info" | "secondary"
@@ -201,6 +217,7 @@ const emit = defineEmits<{
   "print-attendance-record": []
   "export-patient-lgu-details": []
   "export-patient-billing-summary": []
+  "create-claim": []
   "download-claim-pdf": [billingId: number]
 }>()
 
