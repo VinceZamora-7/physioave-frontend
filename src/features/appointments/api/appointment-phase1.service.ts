@@ -335,6 +335,28 @@ export interface AppointmentPtCompletionPayload {
   pt_completion_tag?: string
 }
 
+export interface LguConsumedServiceLine {
+  credit_id?: number
+  service_id?: number | string
+  service_type?: string
+  name: string
+  quantity: number
+  price?: number
+  originalPrice?: number
+}
+
+export interface LguServiceConsumptionPayload {
+  services: LguConsumedServiceLine[]
+  notes?: string
+}
+
+export interface LguServiceConsumptionResult {
+  appointment_id: number
+  billing_id?: number
+  consumed_services_json: string
+  services: LguConsumedServiceLine[]
+}
+
 export interface AppointmentDailyLogItem {
   id: number
   public_id: string
@@ -668,6 +690,20 @@ export const appointmentPhase1Service = {
       `${APPOINTMENTS_PATH}/${id}/pt-completion`,
       payload
     )
+  },
+
+  consumeLguServices(
+    id: number,
+    payload: LguServiceConsumptionPayload
+  ): Promise<LguServiceConsumptionResult> {
+    return postData<LguServiceConsumptionResult, LguServiceConsumptionPayload>(
+      `${APPOINTMENTS_PATH}/${id}/consume-lgu-services`,
+      payload
+    )
+  },
+
+  getConsumedLguServices(id: number): Promise<LguServiceConsumptionResult> {
+    return getData<LguServiceConsumptionResult>(`${APPOINTMENTS_PATH}/${id}/consumed-services`)
   },
 
   updateDropoutStatus(

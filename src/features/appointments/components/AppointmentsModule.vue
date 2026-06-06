@@ -433,6 +433,27 @@
           />
         </div>
 
+        <template v-if="createBillingType === 'LGU_BILLING'">
+          <div
+            v-if="createPatientLguInfo"
+            class="mt-4 flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300"
+          >
+            <i class="pi pi-check-circle shrink-0 text-emerald-500 dark:text-emerald-300" />
+            <span>
+              <span class="font-medium">{{ createPatientLguInfo.lgu_program_name || "LGU program" }}</span>
+              <span v-if="createPatientLguInfo.referral_form_no" class="ml-1 opacity-75">· Referral {{ createPatientLguInfo.referral_form_no }}</span>
+            </span>
+          </div>
+
+          <div
+            v-else-if="createPatient && !syncingCreateLguProgram"
+            class="mt-4 flex items-center gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400"
+          >
+            <i class="pi pi-exclamation-triangle shrink-0 text-amber-500 dark:text-amber-400" />
+            <span>No LGU program is linked to this patient. Add LGU sponsor information in the Patients module first.</span>
+          </div>
+        </template>
+
         <!-- Care team and session setup (collapsible) -->
 <section
   class="mt-4 overflow-hidden rounded-2xl border border-[#A3D9E8] bg-[#EEF8FB] shadow-sm"
@@ -1406,7 +1427,9 @@ const packageSessionSchedules = ref<PackageSessionSchedule[]>([])
 const isCreatingAppointment = ref(false)
 const createPatientHmoId = ref<number | null>(null)
 const createPatientHmoInfo = ref<PatientHMOInformation | null>(null)
+const createPatientLguInfo = ref<PatientHMOInformation | null>(null)
 const syncingCreateHmoRates = ref(false)
+const syncingCreateLguProgram = ref(false)
 const createPatientMachineRateMap = ref<Map<number, number>>(new Map())
 const createPatientTechniqueRateMap = ref<Map<number, number>>(new Map())
 const createPatientEvaluationRateMap = ref<Map<number, number>>(new Map())
@@ -2271,6 +2294,37 @@ const syncCreatePatientHmoRates = async (): Promise<void> => {
   createPatientAddOnHomeServiceRateMap.value = addOnHomeServices.map
   } finally {
     syncingCreateHmoRates.value = false
+  }
+}
+
+const syncCreatePatientLguProgram = async (): Promise<void> => {
+  createPatientLguInfo.value = null
+
+  if (createBillingType.value !== "LGU_BILLING") return
+  const patientId = Number(createPatient.value)
+  if (!Number.isFinite(patientId) || patientId <= 0) return
+
+  syncingCreateLguProgram.value = true
+  try {
+    if (lguProgramOptions.value.length === 0) {
+      lguProgramOptions.value = (await lguBillingService.getPrograms()) ?? []
+    }
+
+    const patientContext = await patientTanstackService.fetchContext(queryClient, patientId)
+    const sponsorEntries = patientContext?.sponsor_information ?? []
+    const lguInfo = sponsorEntries.find(entry =>
+      entry.sponsor_context === "LGU" && Number(entry.lgu_program_id) > 0
+    ) ?? null
+    createPatientLguInfo.value = lguInfo
+
+    const lguProgramId = Number(lguInfo?.lgu_program_id)
+    if (Number.isFinite(lguProgramId) && lguProgramId > 0) {
+      createLguProgramId.value = lguProgramId
+    } else {
+      createLguProgramId.value = undefined
+    }
+  } finally {
+    syncingCreateLguProgram.value = false
   }
 }
 
@@ -3320,7 +3374,9 @@ const openCreateDialog = async (): Promise<void> => {
   selectedServiceLines.value = []
   createPatientHmoId.value = null
   createPatientHmoInfo.value = null
+  createPatientLguInfo.value = null
   syncingCreateHmoRates.value = false
+  syncingCreateLguProgram.value = false
   createPatientMachineRateMap.value = new Map()
   createPatientTechniqueRateMap.value = new Map()
   createPatientEvaluationRateMap.value = new Map()
@@ -3523,6 +3579,10 @@ const submitCreateAppointment = async (): Promise<void> => {
   }
   if (selectedCreateProviderRequiresSpecialty.value && !createSpecialtyTag.value) {
     errorToast(toast, "The selected provider role requires a specialty for this appointment")
+    return
+  }
+  if (createBillingType.value === "LGU_BILLING" && !createLguProgramId.value) {
+    errorToast(toast, "This patient is not linked to an LGU program. Add LGU sponsor information in Patients before creating an LGU appointment.")
     return
   }
 
@@ -4074,10 +4134,12 @@ watch(createBillingType, (billingType, previousBillingType) => {
   if (billingType === "LGU_BILLING" && lguProgramOptions.value.length === 0) {
     lguBillingService.getPrograms().then(programs => {
       lguProgramOptions.value = programs ?? []
+      void syncCreatePatientLguProgram()
     }).catch(() => { /* silently ignore */ })
   }
   if (billingType !== "LGU_BILLING") {
     createLguProgramId.value = undefined
+    createPatientLguInfo.value = null
   }
 })
 
@@ -4092,6 +4154,7 @@ watch(selectedPackageOfferDetail, () => {
 
 watch([createPatient, createBillingType], async () => {
   await syncCreatePatientHmoRates()
+  await syncCreatePatientLguProgram()
 })
 
 onMounted(async () => {

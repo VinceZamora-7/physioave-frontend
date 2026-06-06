@@ -68,6 +68,7 @@ export interface BillingListItem {
   service_type: string
   service_name?: string
   line_items_json?: string
+  consumed_services_json?: string | null
   package_id?: number
   package_name?: string
   package_group_id?: number | string

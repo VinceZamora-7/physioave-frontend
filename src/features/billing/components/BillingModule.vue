@@ -189,10 +189,20 @@
               </span>
             </template>
           </Column>
-          <Column header="Actions" style="width: 200px">
+          <Column header="Actions" style="width: 270px">
             <template #body="{data}">
-              <div class="flex items-center gap-1">
+              <div class="flex flex-wrap items-center gap-1">
                 <Button size="small" outlined icon="pi pi-eye" label="View" @click="openBillingDetails(data.representative_billing_id ?? data.id)" />
+                <Button
+                  v-if="isLguBillingRow(data) && !data.is_package_group_row"
+                  size="small"
+                  outlined
+                  icon="pi pi-file"
+                  label="Print Invoice"
+                  :disabled="!canPrintLguAppointmentInvoice(data)"
+                  v-tooltip.top="getLguAppointmentInvoiceTooltip(data)"
+                  @click="printLguAppointmentInvoice(data)"
+                />
                 <Button size="small" text icon="pi pi-pencil" v-tooltip.top="isBillingStatusLocked(resolveBillingRuntimeStatus(data)) ? 'Open in locked mode' : 'Edit'" @click="loadBillingForEdit(data.representative_billing_id ?? data.id)" />
               </div>
             </template>
@@ -789,7 +799,7 @@
           </div>
           <div class="mt-3 flex flex-wrap gap-2">
 <Button
-  label="Print Receipt"
+  :label="selectedBillingPrintButtonLabel"
   icon="pi pi-print"
   outlined
   :disabled="!canPrintSelectedBillingReceipt"
@@ -977,6 +987,15 @@
               <span class="text-right">{{ asCurrency(billing.amount_paid) }}</span>
               <span class="flex justify-end gap-1">
                 <Button size="small" text icon="pi pi-eye" v-tooltip.top="'Open billing'" @click="openBillingDetails(billing.id)" />
+                <Button
+                  v-if="isLguBillingRow(billing)"
+                  size="small"
+                  text
+                  icon="pi pi-file"
+                  v-tooltip.top="getLguAppointmentInvoiceTooltip(billing)"
+                  :disabled="!canPrintLguAppointmentInvoice(billing)"
+                  @click="printLguAppointmentInvoice(billing)"
+                />
                 <Button size="small" text icon="pi pi-pencil" v-tooltip.top="isBillingStatusLocked(resolveBillingRuntimeStatus(billing)) ? 'Open in locked mode' : 'Edit billing'" @click="loadBillingForEdit(billing.id)" />
               </span>
             </div>
@@ -1368,7 +1387,7 @@
       <template #footer>
         <Button
           v-if="selectedBillingDetail"
-          label="Print Receipt"
+          :label="selectedBillingPrintButtonLabel"
           icon="pi pi-print"
           outlined
           :disabled="!canPrintSelectedBillingReceipt"
@@ -2283,16 +2302,41 @@ const isPrintableBillingStatus = (value?: string): boolean => {
   return ["BILLED", "PAID", "DROPPED_OUT", "CROSS_MONTH_DROPPED_OUT"].includes(status)
 }
 
+const isLguBillingRow = (billing?: BillingListItem | null): boolean =>
+  normalizeBillingTypeValue(billing?.billing_type) === "LGU_BILLING"
+
+const isBillingMarkedBilled = (billing?: BillingListItem | null): boolean =>
+  normalizeBillingStatusLabel(resolveBillingRuntimeStatus(billing)) === "BILLED"
+
+const canPrintLguAppointmentInvoice = (billing?: BillingListItem | null): boolean =>
+  Boolean(billing) && isLguBillingRow(billing) && isBillingMarkedBilled(billing)
+
+const getLguAppointmentInvoiceTooltip = (billing?: BillingListItem | null): string =>
+  canPrintLguAppointmentInvoice(billing)
+    ? "Print this appointment invoice"
+    : "Mark this LGU appointment billing as billed first"
+
+const selectedBillingPrintButtonLabel = computed(() =>
+  isLguBillingRow(selectedBillingDetail.value) ? "Print Invoice" : "Print Receipt"
+)
+
 const canPrintSelectedBillingReceipt = computed<boolean>(() => {
   if (!selectedBillingDetail.value) return false
+  if (isLguBillingRow(selectedBillingDetail.value)) {
+    return canPrintLguAppointmentInvoice(selectedBillingDetail.value)
+  }
   return isPrintableBillingStatus(resolveBillingRuntimeStatus(selectedBillingDetail.value))
 })
 
 const printReceiptTooltip = computed(() => {
   if (!selectedBillingDetail.value) return "No billing selected"
 
+  if (isLguBillingRow(selectedBillingDetail.value)) {
+    return getLguAppointmentInvoiceTooltip(selectedBillingDetail.value)
+  }
+
   if (canPrintSelectedBillingReceipt.value) {
-    return "Print the current billing invoice"
+    return "Print the current billing receipt"
   }
 
   if (["DROPPED_OUT", "CROSS_MONTH_DROPPED_OUT"].includes(normalizeBillingStatusLabel(resolveBillingRuntimeStatus(selectedBillingDetail.value)))) {
@@ -3787,10 +3831,15 @@ const printSelectedBillingReceipt = async (): Promise<void> => {
   openBillingPrintableRoute(refreshed)
 }
 
+const printLguAppointmentInvoice = (billing: BillingListItem): void => {
+  if (!canPrintLguAppointmentInvoice(billing)) return
+  openBillingPrintableRoute(billing)
+}
+
 const canPrintPatientInvoiceCopy = computed<boolean>(() => {
   if (!selectedBillingDetail.value) return false
   const normalizedBillingType = normalizeBillingTypeValue(selectedBillingDetail.value.billing_type)
-  return normalizedBillingType === "HMO_BILLING" || normalizedBillingType === "LGU_BILLING"
+  return normalizedBillingType === "HMO_BILLING"
 })
 
 const printSelectedPatientInvoiceCopy = (): void => {

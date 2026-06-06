@@ -555,6 +555,14 @@ const getChildren = (item: InvoiceLineNode): InvoiceLineNode[] => [
 const hasNestedInvoiceLineItems = (value?: string | null): boolean =>
   parseInvoiceLineItems(value).some(item => getChildren(item).length > 0)
 
+const getConsumedServicesJson = (value?: {
+  consumed_services_json?: string | null
+  consumedServicesJson?: string | null
+} | null): string | null =>
+  value?.consumed_services_json?.trim()
+    || value?.consumedServicesJson?.trim()
+    || null
+
 const clearChildCollections = (item: InvoiceLineNode): InvoiceLineNode => {
   const next = { ...item }
 
@@ -927,7 +935,10 @@ const flattenInvoiceLineItems = (
   return rows
 }
 const invoiceRows = computed<TableRow[]>(() => {
-  const lineItems = parseInvoiceLineItems(billingDetail.value?.line_items_json)
+  const consumedLineItems = parseInvoiceLineItems(getConsumedServicesJson(billingDetail.value))
+  const lineItems = consumedLineItems.length
+    ? consumedLineItems
+    : parseInvoiceLineItems(billingDetail.value?.line_items_json)
   if (lineItems.length) {
     const flattenedRows = flattenInvoiceLineItems(lineItems)
     if (flattenedRows.some(row => !row.isParent)) {
@@ -1062,21 +1073,29 @@ const mergeClaimBillingJson = (
   billing: BillingListItem | null,
   claimBilling?: LguPatientCreditDetail["billings"][number] | null
 ): BillingListItem | null => {
-  if (!billing || !claimBilling?.line_items_json) return billing
+  if (!billing) return billing
 
-  const contextHasChildren = hasNestedInvoiceLineItems(billing.line_items_json)
+  const claimConsumedJson = getConsumedServicesJson(claimBilling)
+  const billingConsumedJson = getConsumedServicesJson(billing)
+  const billingWithConsumedJson = claimConsumedJson && !billingConsumedJson
+    ? { ...billing, consumed_services_json: claimConsumedJson }
+    : billing
+
+  if (!claimBilling?.line_items_json) return billingWithConsumedJson
+
+  const contextHasChildren = hasNestedInvoiceLineItems(billingWithConsumedJson.line_items_json)
   const claimHasChildren = hasNestedInvoiceLineItems(claimBilling.line_items_json)
   const shouldUseClaimJson = claimHasChildren && !contextHasChildren
 
-  if (!shouldUseClaimJson) return billing
+  if (!shouldUseClaimJson) return billingWithConsumedJson
 
   return {
-    ...billing,
-    service_name: claimBilling.service_name ?? billing.service_name,
-    package_name: claimBilling.package_name ?? billing.package_name,
+    ...billingWithConsumedJson,
+    service_name: claimBilling.service_name ?? billingWithConsumedJson.service_name,
+    package_name: claimBilling.package_name ?? billingWithConsumedJson.package_name,
     line_items_json: claimBilling.line_items_json,
-    amount_due: Number(claimBilling.amount_due ?? billing.amount_due),
-    pricing_source: claimBilling.pricing_source ?? billing.pricing_source
+    amount_due: Number(claimBilling.amount_due ?? billingWithConsumedJson.amount_due),
+    pricing_source: claimBilling.pricing_source ?? billingWithConsumedJson.pricing_source
   }
 }
 

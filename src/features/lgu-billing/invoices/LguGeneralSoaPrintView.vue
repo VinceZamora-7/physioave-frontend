@@ -104,7 +104,7 @@
                 </td>
 
                 <td class="service-name-cell">
-                  {{ row.serviceName || " " }}
+                  {{ row.level && row.level > 0 ? `- ${row.serviceName}` : row.serviceName || " " }}
                 </td>
 
                 <td class="text-center">
@@ -178,6 +178,7 @@ import { useQueryClient } from "@tanstack/vue-query"
 import Button from "primevue/button"
 import {
   billingPhase1Service,
+  type BillingListItem,
   type HmoRecentHistoryItem
 } from "@/features/billing/api/billing-phase1.service"
 import {
@@ -195,6 +196,8 @@ import {
 } from "./lgu-invoice.shared"
 import { getApiErrorMessage } from "@/utils/actionable-error.util"
 import { patientTanstackService } from "@/features/patients/queries/patient.tanstack.service"
+import { billingContextTanstackService } from "@/features/billing/queries/billing-context.tanstack.service"
+import { pamsAPI } from "@/utils/axios-interceptor"
 
 type Payer = "hmo" | "lgu"
 
@@ -210,6 +213,7 @@ type ServiceSoaRow = {
   serviceName: string
   sessionSequence: string
   price: number | null
+  level?: number
 }
 
 type PatientTotalRow = {
@@ -224,6 +228,20 @@ type PatientSoaContext = {
   referralFormNo?: string | null
   referralIssuedDate?: string | null
   completedSessionSequences: number[]
+}
+
+type LocalService = {
+  id: string
+  name: string
+}
+
+type LocalBundle = {
+  id: string
+  name: string
+  machineIds: string[]
+  techniqueIds: string[]
+  evaluationIds: string[]
+  addOnIds: string[]
 }
 
 type InvoiceLineItem = {
@@ -310,6 +328,7 @@ type InvoiceLineItem = {
   packageInclusions?: InvoiceLineItem[]
   availed_services?: Array<InvoiceLineItem | string>
   availedServices?: Array<InvoiceLineItem | string>
+  __printLevel?: number
 }
 
 type LguSoaHistoryItem = LguDashboardHistoryItem & InvoiceLineItem & {
@@ -317,13 +336,28 @@ type LguSoaHistoryItem = LguDashboardHistoryItem & InvoiceLineItem & {
   lineItemsJson?: string | null
 }
 
-type HmoSoaHistoryItem = HmoRecentHistoryItem & InvoiceLineItem & {
-  program_status?: string | null
-  reference_label?: string | null
-  phase1_billing_public_id?: string | null
-  line_items_json?: string | null
-  lineItemsJson?: string | null
-}
+type HmoSoaHistoryItem = HmoRecentHistoryItem &
+  InvoiceLineItem &
+  Partial<
+    Pick<
+      BillingListItem,
+      | "public_id"
+      | "line_items_json"
+      | "diagnosis"
+      | "hmo_loa_number"
+      | "hmo_loa_date"
+      | "loa_date"
+      | "hmo_approval_code"
+      | "receipt_number"
+      | "service_name"
+      | "total_amount"
+    >
+  > & {
+    program_status?: string | null
+    reference_label?: string | null
+    phase1_billing_public_id?: string | null
+    lineItemsJson?: string | null
+  }
 
 const { printPage, goBack } = useLguInvoicePrintActions()
 
@@ -440,6 +474,8 @@ const queryClient = useQueryClient()
 
 const rows = ref<SoaDisplayRow[]>([])
 const error = ref("")
+const localServices = ref<LocalService[]>([])
+const localBundles = ref<LocalBundle[]>([])
 
 const payer = computed<Payer>(() => {
   const normalized = String(route.params.payer ?? "").trim().toLowerCase()
@@ -840,7 +876,7 @@ const isPackageLine = (item: InvoiceLineItem): boolean => {
     "ptServiceRendered"
   ])
 
-  if (type === "package" || type === "bundle" || type === "parent") {
+  if (type === "package" || type === "package-service" || type === "package_service" || type === "parent") {
     return true
   }
 
@@ -860,6 +896,23 @@ const isPackageLine = (item: InvoiceLineItem): boolean => {
   ]).toLowerCase()
 
   return label.includes("package")
+}
+
+const isBundleLine = (item: InvoiceLineItem): boolean => {
+  const type = getText(item, ["type"]).toLowerCase()
+  const id = String(item.id ?? "").trim().toLowerCase()
+  const hasPayloadChildren = [
+    ...getChildArrayFromRecord(item, CHILD_SERVICE_KEYS),
+    ...getJsonChildArrayFromRecord(item, CHILD_SERVICE_JSON_KEYS)
+  ].length > 0
+
+  return type === "bundle" ||
+    type === "service-bundle" ||
+    type === "service_bundle" ||
+    id.startsWith("bundle-") ||
+    id.startsWith("package-bundle-") ||
+    id.startsWith("service-bundle-") ||
+    (hasPayloadChildren && Boolean(getBundleRecord(item)))
 }
 
 const getIndexedArrayValue = (
@@ -939,6 +992,82 @@ const parseJsonArray = (
   }
 }
 
+const parseMaybeJsonArray = (value: unknown): unknown[] => {
+  if (Array.isArray(value)) return value
+  if (typeof value !== "string" || !value.trim()) return []
+
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+const normalizeIdArray = (value: unknown, prefix: string): string[] =>
+  parseMaybeJsonArray(value)
+    .map(item => typeof item === "object" && item !== null
+      ? (item as Record<string, unknown>).id ?? (item as Record<string, unknown>).item_id ?? (item as Record<string, unknown>).service_id
+      : item
+    )
+    .map(item => String(item ?? "").trim())
+    .filter(Boolean)
+    .map(id => id.includes("-") ? id : `${prefix}${id}`)
+
+const normalizeCatalogName = (value?: string): string =>
+  String(value ?? "")
+    .trim()
+    .replace(/^[-\s]*(?:\d+(?:\.\d+)?|x\d+)\s+/i, "")
+    .replace(/\s+\(LGU\s+.*?\)\s*$/i, "")
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+
+const catalogNamesMatch = (left?: string, right?: string): boolean => {
+  const normalizedLeft = normalizeCatalogName(left)
+  const normalizedRight = normalizeCatalogName(right)
+
+  return Boolean(normalizedLeft && normalizedRight) && (
+    normalizedLeft === normalizedRight ||
+    normalizedLeft.includes(normalizedRight) ||
+    normalizedRight.includes(normalizedLeft)
+  )
+}
+
+const normalizeBundleLookupId = (value: unknown): string =>
+  String(value ?? "")
+    .trim()
+    .replace(/^(?:bundle-|package-bundle-|service-bundle-|lgu-)/i, "")
+
+const getBundleRecord = (item: InvoiceLineItem): LocalBundle | undefined => {
+  const rawId = String(item.id ?? "").trim()
+  const normalizedId = normalizeBundleLookupId(rawId)
+  const itemName = getServiceName(item)
+
+  return localBundles.value.find(bundle =>
+    bundle.id === rawId ||
+    bundle.id === normalizedId ||
+    `bundle-${bundle.id}` === rawId ||
+    `package-bundle-${bundle.id}` === rawId ||
+    `lgu-${bundle.id}` === rawId ||
+    catalogNamesMatch(bundle.name, itemName)
+  )
+}
+
+const getCatalogBundleChildren = (item: InvoiceLineItem): InvoiceLineItem[] => {
+  const bundle = getBundleRecord(item)
+  if (!bundle) return []
+
+  return [
+    ...bundle.machineIds,
+    ...bundle.techniqueIds,
+    ...bundle.evaluationIds,
+    ...bundle.addOnIds
+  ].flatMap(id => {
+    const service = localServices.value.find(service => service.id === id)
+    return service?.name ? [{ id, name: service.name, type: "included-service" }] : []
+  })
+}
+
 const getChildArrayFromRecord = (
   record: unknown,
   keys: string[]
@@ -977,10 +1106,17 @@ const getJsonChildArrayFromRecord = (
   })
 }
 
-const getChildren = (item: InvoiceLineItem): InvoiceLineItem[] => [
-  ...getChildArrayFromRecord(item, CHILD_SERVICE_KEYS),
-  ...getJsonChildArrayFromRecord(item, CHILD_SERVICE_JSON_KEYS)
-]
+const getChildren = (item: InvoiceLineItem): InvoiceLineItem[] => {
+  const payloadChildren = [
+    ...getChildArrayFromRecord(item, CHILD_SERVICE_KEYS),
+    ...getJsonChildArrayFromRecord(item, CHILD_SERVICE_JSON_KEYS)
+  ]
+
+  if (!isBundleLine(item)) return payloadChildren
+
+  const catalogChildren = getCatalogBundleChildren(item)
+  return catalogChildren.length ? catalogChildren : payloadChildren
+}
 
 const getArrayLineItems = (item: unknown): InvoiceLineItem[] => [
   ...getChildArrayFromRecord(item, CHILD_SERVICE_KEYS),
@@ -1010,12 +1146,22 @@ const isSameAsParentPackage = (
   return !!parentName && serviceName === parentName
 }
 
-const getRenderableServiceLines = (item: InvoiceLineItem): InvoiceLineItem[] => {
-  const children = getChildren(item)
-  const renderedChildren = children.flatMap(child => getRenderableServiceLines(child))
+const withPrintLevel = (item: InvoiceLineItem, level: number): InvoiceLineItem => ({
+  ...item,
+  __printLevel: level
+})
 
-  if (hasRenderableServiceLine(item) || isPackageLine(item)) {
-    return [item, ...renderedChildren]
+const getRenderableServiceLines = (item: InvoiceLineItem, level = 0): InvoiceLineItem[] => {
+  const children = getChildren(item)
+  const childLevel = isBundleLine(item) ? level + 1 : level
+  const renderedChildren = children.flatMap(child => getRenderableServiceLines(child, childLevel))
+
+  if (isPackageLine(item)) {
+    return renderedChildren
+  }
+
+  if (isBundleLine(item) || hasRenderableServiceLine(item)) {
+    return [withPrintLevel(item, level), ...renderedChildren]
   }
 
   return renderedChildren
@@ -1268,14 +1414,18 @@ const buildStatementRows = (
 
         serviceLines.forEach((lineItem, lineIndex) => {
           const isDirectSoaServiceRow = lineItem === item
-          const price = getContractPrice(lineItem, item, !isDirectSoaServiceRow, isDropoutPatient)
-          const configuredQuantity = getQuantity(lineItem)
-          const quantity = getServiceQuantity(
-            lineItem,
-            item,
-            isDropoutPatient,
-            completedSessionSequences.length
-          )
+          const printLevel = Math.max(0, Math.floor(Number(lineItem.__printLevel ?? 0)))
+          const isChildLine = printLevel > 0
+          const price = isChildLine ? null : getContractPrice(lineItem, item, !isDirectSoaServiceRow, isDropoutPatient)
+          const configuredQuantity = isBundleLine(lineItem) ? 1 : getQuantity(lineItem)
+          const quantity = isChildLine || isBundleLine(lineItem)
+            ? 1
+            : getServiceQuantity(
+                lineItem,
+                item,
+                isDropoutPatient,
+                completedSessionSequences.length
+              )
 
           patientHasServiceRows = true
 
@@ -1293,16 +1443,19 @@ const buildStatementRows = (
               programStatus: isFirstPatientRow ? formatProgramStatus(patientProgramStatus) : "",
               treatmentDate: getTreatmentDate(lineItem, item, patientContext),
               serviceName: getServiceName(lineItem, item),
-              sessionSequence: getOccurrenceSessionSequence(
-                lineItem,
-                item,
-                occurrence,
-                quantity,
-                isDropoutPatient,
-                completedSessionSequence,
-                configuredQuantity
-              ),
-              price
+              sessionSequence: isChildLine
+                ? getSessionSequence(lineItem, item)
+                : getOccurrenceSessionSequence(
+                    lineItem,
+                    item,
+                    occurrence,
+                    quantity,
+                    isDropoutPatient,
+                    completedSessionSequence,
+                    configuredQuantity
+                  ),
+              price,
+              level: printLevel
             })
 
             isFirstPatientRow = false
@@ -1326,6 +1479,44 @@ const buildStatementRows = (
   return outputRows
 }
 
+const enrichHmoSoaItems = async (
+  items: HmoRecentHistoryItem[]
+): Promise<HmoSoaHistoryItem[]> => {
+  const detailedItems = await Promise.all(
+    items.map(async item => {
+      try {
+        const context = item.id > 0
+          ? await billingContextTanstackService.fetchContext(queryClient, item.id)
+          : undefined
+
+        const detail = context?.billing
+
+        return detail
+          ? {
+              ...item,
+              public_id: detail.public_id,
+              phase1_billing_public_id: detail.public_id,
+              line_items_json: detail.line_items_json,
+              lineItemsJson: detail.line_items_json,
+              diagnosis: detail.diagnosis,
+              hmo_loa_number: detail.hmo_loa_number,
+              hmo_loa_date: detail.hmo_loa_date,
+              loa_date: detail.loa_date,
+              hmo_approval_code: detail.hmo_approval_code,
+              receipt_number: detail.receipt_number,
+              service_name: detail.service_name ?? item.service_name,
+              total_amount: detail.total_amount ?? item.total_amount
+            }
+          : item
+      } catch {
+        return item
+      }
+    })
+  )
+
+  return detailedItems as HmoSoaHistoryItem[]
+}
+
 const fetchLguSoa = async (
   from: string,
   to: string,
@@ -1343,6 +1534,79 @@ const fetchLguSoa = async (
 
   const response = await lguBillingService.getSoa(params)
   return response ?? []
+}
+
+const loadLguInvoiceCatalog = async (): Promise<void> => {
+  const requestParams = { page: 1, size: 1000, status: "ACTIVE" }
+
+  try {
+    const [
+      machineResponse,
+      techniqueResponse,
+      evaluationResponse,
+      addOnMachineResponse,
+      addOnTechniqueResponse,
+      addOnHomeServiceResponse,
+      bundleResponse,
+      globalMachineResponse,
+      globalTechniqueResponse,
+      globalEvaluationResponse,
+      globalAddOnMachineResponse,
+      globalAddOnTechniqueResponse,
+      globalAddOnHomeServiceResponse,
+      globalBundleResponse
+    ] = await Promise.all([
+      pamsAPI.get<{ content?: Record<string, unknown>[] }>("/lgu-machines", { params: requestParams }),
+      pamsAPI.get<{ content?: Record<string, unknown>[] }>("/lgu-techniques", { params: requestParams }),
+      pamsAPI.get<{ content?: Record<string, unknown>[] }>("/lgu-evaluations", { params: requestParams }),
+      pamsAPI.get<{ content?: Record<string, unknown>[] }>("/lgu-add-on-machines", { params: requestParams }),
+      pamsAPI.get<{ content?: Record<string, unknown>[] }>("/lgu-add-on-techniques", { params: requestParams }),
+      pamsAPI.get<{ content?: Record<string, unknown>[] }>("/lgu-add-on-home-services", { params: requestParams }),
+      pamsAPI.get<{ content?: Record<string, unknown>[] }>("/lgu-service-bundles", { params: requestParams }),
+      pamsAPI.get<{ content?: Record<string, unknown>[] }>("/machines", { params: requestParams }),
+      pamsAPI.get<{ content?: Record<string, unknown>[] }>("/techniques", { params: requestParams }),
+      pamsAPI.get<{ content?: Record<string, unknown>[] }>("/evaluations", { params: requestParams }),
+      pamsAPI.get<{ content?: Record<string, unknown>[] }>("/add-on-machines", { params: requestParams }),
+      pamsAPI.get<{ content?: Record<string, unknown>[] }>("/add-on-techniques", { params: requestParams }),
+      pamsAPI.get<{ content?: Record<string, unknown>[] }>("/add-on-home-services", { params: requestParams }),
+      pamsAPI.get<{ content?: Record<string, unknown>[] }>("/service-bundles", { params: requestParams })
+    ])
+
+    localServices.value = [
+      ...(machineResponse.data.content ?? []).map(item => ({ id: `machine-${item.id}`, name: String(item.name ?? "") })),
+      ...(techniqueResponse.data.content ?? []).map(item => ({ id: `technique-${item.id}`, name: String(item.name ?? "") })),
+      ...(evaluationResponse.data.content ?? []).map(item => ({ id: `evaluation-${item.id}`, name: String(item.name ?? "") })),
+      ...(addOnMachineResponse.data.content ?? []).map(item => ({ id: `add-on-machine-${item.id}`, name: String(item.name ?? item.machine_name ?? `Add-on Machine ${item.id}`) })),
+      ...(addOnTechniqueResponse.data.content ?? []).map(item => ({ id: `add-on-technique-${item.id}`, name: String(item.name ?? item.technique_name ?? `Add-on Technique ${item.id}`) })),
+      ...(addOnHomeServiceResponse.data.content ?? []).map(item => ({ id: `add-on-home-service-${item.id}`, name: String(item.name ?? item.label ?? `Home Service - ${item.start ?? ""} km`) })),
+      ...(globalMachineResponse.data.content ?? []).map(item => ({ id: `machine-${item.id}`, name: String(item.name ?? "") })),
+      ...(globalTechniqueResponse.data.content ?? []).map(item => ({ id: `technique-${item.id}`, name: String(item.name ?? "") })),
+      ...(globalEvaluationResponse.data.content ?? []).map(item => ({ id: `evaluation-${item.id}`, name: String(item.name ?? "") })),
+      ...(globalAddOnMachineResponse.data.content ?? []).map(item => ({ id: `add-on-machine-${item.id}`, name: String(item.name ?? item.machine_name ?? `Add-on Machine ${item.id}`) })),
+      ...(globalAddOnTechniqueResponse.data.content ?? []).map(item => ({ id: `add-on-technique-${item.id}`, name: String(item.name ?? item.technique_name ?? `Add-on Technique ${item.id}`) })),
+      ...(globalAddOnHomeServiceResponse.data.content ?? []).map(item => ({ id: `add-on-home-service-${item.id}`, name: String(item.name ?? item.label ?? `Home Service - ${item.start ?? ""} km`) }))
+    ].filter(service => service.id && service.name)
+
+    localBundles.value = [
+      ...(bundleResponse.data.content ?? []),
+      ...(globalBundleResponse.data.content ?? [])
+    ].map(row => ({
+      id: String(row.id ?? ""),
+      name: String(row.name ?? ""),
+      machineIds: normalizeIdArray(row.machine_ids ?? row.machine_ids_json, "machine-"),
+      techniqueIds: normalizeIdArray(row.technique_ids ?? row.technique_ids_json, "technique-"),
+      evaluationIds: normalizeIdArray(row.evaluation_ids ?? row.evaluation_ids_json, "evaluation-"),
+      addOnIds: [
+        ...normalizeIdArray(row.add_on_machine_ids ?? row.add_on_machine_ids_json, "add-on-machine-"),
+        ...normalizeIdArray(row.add_on_technique_ids ?? row.add_on_technique_ids_json, "add-on-technique-"),
+        ...normalizeIdArray(row.add_on_home_service_ids ?? row.add_on_home_service_ids_json, "add-on-home-service-"),
+        ...normalizeIdArray(row.add_on_ids ?? row.add_on_ids_json, "add-on-machine-")
+      ]
+    })).filter(bundle => bundle.id && bundle.name)
+  } catch {
+    localServices.value = []
+    localBundles.value = []
+  }
 }
 
 const load = async (): Promise<void> => {
@@ -1364,11 +1628,13 @@ const load = async (): Promise<void> => {
           hmo_id: hmoId.value
         }) ?? []
 
-      rows.value = buildStatementRows(data as HmoSoaHistoryItem[], "hmo")
+      const detailedData = await enrichHmoSoaItems(data)
+      rows.value = buildStatementRows(detailedData as HmoSoaHistoryItem[], "hmo")
       return
     }
 
     try {
+      await loadLguInvoiceCatalog()
       const data = await fetchLguSoa(dateFrom.value, dateTo.value, programId.value)
       const patientContextById = await buildPatientSoaContextMap(data)
       rows.value = buildStatementRows(data as LguSoaHistoryItem[], "lgu", patientContextById)
@@ -1377,6 +1643,7 @@ const load = async (): Promise<void> => {
         throw programFilteredError
       }
 
+      await loadLguInvoiceCatalog()
       const data = await fetchLguSoa(dateFrom.value, dateTo.value)
       const patientContextById = await buildPatientSoaContextMap(data)
       rows.value = buildStatementRows(data as LguSoaHistoryItem[], "lgu", patientContextById)

@@ -68,6 +68,7 @@ export interface LguPatientBilling {
   service_name?: string | null
   package_name?: string | null
   line_items_json?: string | null
+  consumed_services_json?: string | null
   amount_due: number
   billing_status: string
   pricing_source?: string | null
@@ -140,6 +141,7 @@ export interface LguDashboardHistoryItem {
   service_name?: string | null
   package_name?: string | null
   line_items_json?: string | null
+  consumed_services_json?: string | null
   receipt_number?: string | null
   entry_type: string
   usage_status: string
@@ -155,6 +157,22 @@ export interface LguMonthlyClaimResult {
   billing_public_id: string
   consumed_count: number
   billing_month: string
+}
+
+export interface LguPackageCredit {
+  id: number
+  package_group_id: number
+  service_id?: number | string | null
+  service_type?: string | null
+  service_name: string
+  total_quantity: number
+  consumed_quantity: number
+  remaining_quantity: number
+}
+
+export interface LguPackageCreditsResult {
+  package_group_id: number
+  credits: LguPackageCredit[]
 }
 
 export const lguBillingService = {
@@ -227,6 +245,10 @@ export const lguBillingService = {
   },
   async createPatientClaim(payload: { patient_id: number; billing_month: string }): Promise<LguMonthlyClaimResult | undefined> {
     const { data } = await pamsAPI.post<LguMonthlyClaimResult>("/lgu-billing/patient-claims", payload)
+    return data
+  },
+  async getPackageGroupCredits(packageGroupId: number | string): Promise<LguPackageCreditsResult | undefined> {
+    const { data } = await pamsAPI.get<LguPackageCreditsResult>(`/lgu/package-groups/${packageGroupId}/credits`)
     return data
   }
 }
