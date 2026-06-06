@@ -415,6 +415,9 @@ const selectedAppointmentSessionSequences = computed(() => {
 })
 
 const invoiceRows = computed<TableRow[]>(() => {
+  const consumedAppointmentRows = buildSelectedAppointmentRowsFromConsumption()
+  if (consumedAppointmentRows.length) return consumedAppointmentRows
+
   const consumedLineItems = parseInvoiceLineItems(getConsumedServicesJson(billingDetail.value))
   const billingLineItems = parseInvoiceLineItems(billingDetail.value?.line_items_json)
 
@@ -448,6 +451,95 @@ function pickBestInvoiceLineItems(
   return billingHasPrintableChildren && !consumedHasPrintableChildren
     ? billingLineItems
     : consumedLineItems
+}
+
+function buildSelectedAppointmentRowsFromConsumption(): TableRow[] {
+  const appointment = selectedAppointment.value
+  const availedServices = appointment?.availed_services ?? []
+  if (!appointment || !availedServices.length) return []
+
+  const appointmentDate = getAppointmentDate()
+  const fallbackSessionLabel = getSelectedSessionLabel([])
+  const rows: TableRow[] = []
+  const seen = new Set<string>()
+
+  const addMainRow = (serviceName: string, unitTotal: number | null): void => {
+    const isFirstMainRow = rows.every(row => row.level && row.level > 0)
+
+    rows.push({
+      key: `consumed-main-${rows.length}-${serviceName}`,
+      itemNo: isFirstMainRow ? 1 : 0,
+      treatmentDate: appointmentDate,
+      serviceName,
+      sessionSequence: fallbackSessionLabel,
+      unitTotal: isFirstMainRow ? unitTotal : null,
+      level: 0,
+      isParent: false
+    })
+  }
+
+  for (const service of availedServices) {
+    const serviceName = String(service ?? "").trim()
+    if (!serviceName) continue
+
+    const isGenericPackageSession = isGenericConsumedPackageSessionName(serviceName, appointment.package_name)
+    if (isGenericPackageSession) continue
+
+    const key = normalizeCatalogName(serviceName)
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+
+    const consumedLine: InvoiceLineNode = {
+      id: `consumed-${rows.length + 1}`,
+      name: serviceName,
+      quantity: 1
+    }
+    const bundle = getBundleRecord(consumedLine)
+
+    if (bundle) {
+      const bundleLine: InvoiceLineNode = {
+        id: `bundle-${bundle.id}`,
+        type: "bundle",
+        name: bundle.name,
+        quantity: 1
+      }
+      addMainRow(stripPackageSessionSuffix(bundle.name), getBundleContractPrice(bundleLine))
+
+      for (const child of getBundleChildren(bundleLine)) {
+        rows.push({
+          key: `consumed-bundle-child-${rows.length}-${String(child.id ?? child.name ?? "item")}`,
+          itemNo: 0,
+          treatmentDate: appointmentDate,
+          serviceName: `- ${stripPackageSessionSuffix(getServiceName(child))}`,
+          sessionSequence: fallbackSessionLabel,
+          unitTotal: null,
+          level: 1,
+          isParent: false
+        })
+      }
+
+      continue
+    }
+
+    addMainRow(stripPackageSessionSuffix(serviceName), Number(billingDetail.value?.total_amount ?? billingDetail.value?.amount_due ?? 0))
+  }
+
+  return rows
+}
+
+function isGenericConsumedPackageSessionName(serviceName: string, packageName?: string | null): boolean {
+  const normalizedServiceName = normalizeCatalogName(stripPackageSessionSuffix(serviceName))
+  const normalizedPackageName = normalizeCatalogName(packageName ?? "")
+
+  return /\bsession\b/i.test(serviceName) && (
+    normalizedServiceName === "session" ||
+    normalizedServiceName === "lgu package session" ||
+    normalizedServiceName === "package session" ||
+    Boolean(normalizedPackageName && (
+      normalizedServiceName === normalizedPackageName ||
+      normalizedServiceName === `${normalizedPackageName} session`
+    ))
+  )
 }
 
 function parsePositiveNumber(value: unknown): number {
@@ -710,6 +802,55 @@ function getBundleChildren(item: InvoiceLineNode): InvoiceLineNode[] {
   return dedupeInvoiceChildren([...catalogChildren, ...payloadChildren])
 }
 
+function getLineStartSession(item: InvoiceLineNode): number {
+  const parsed = Number(
+    item.sessionSequence ??
+    item.session_sequence ??
+    item.appliesOnSession ??
+    item.applies_on_session ??
+    item.startSession ??
+    item.start_session ??
+    1
+  )
+
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1
+}
+
+function filterLinesForSession(
+  items: InvoiceLineNode[],
+  sessionSequence: number,
+  parentOccurrences = 1
+): InvoiceLineNode[] {
+  return items.flatMap(item => {
+    const quantity = getQuantity(item)
+    const startSession = getLineStartSession(item)
+    const occurrences = Math.max(1, quantity * parentOccurrences)
+    const isAllocatedToSession =
+      sessionSequence >= startSession &&
+      sessionSequence < startSession + occurrences
+    const children = getBundleChildren(item)
+
+    if (children.length) {
+      const allocatedChildren = filterLinesForSession(children, sessionSequence, occurrences)
+
+      return allocatedChildren.length
+        ? [{
+            ...item,
+            quantity: 1,
+            children: allocatedChildren
+          }]
+        : []
+    }
+
+    return isAllocatedToSession
+      ? [{
+          ...item,
+          quantity: 1
+        }]
+      : []
+  })
+}
+
 function getSelectedSessionLabel(lineItems: InvoiceLineNode[]): string {
   const sequence =
     selectedAppointmentSessionSequences.value[0] ||
@@ -780,6 +921,7 @@ function getPrintablePackageChildren(lineItems: InvoiceLineNode[]): InvoiceLineN
 
 function buildSelectedAppointmentRowsFromBillingLines(lineItems: InvoiceLineNode[]): TableRow[] {
   const appointmentDate = getAppointmentDate()
+  const sessionSequence = selectedAppointmentSessionSequences.value[0] || Number(billingDetail.value?.session_sequence ?? 1)
   const fallbackSessionLabel = getSelectedSessionLabel(lineItems)
   const packageChildren = getPrintablePackageChildren(lineItems)
   const hasPackageSource = lineItems.some(isPackageLine)
@@ -824,7 +966,8 @@ function buildSelectedAppointmentRowsFromBillingLines(lineItems: InvoiceLineNode
       const contractPrice = getBundleContractPrice(item)
       addMainRow(getBundleDisplayName(item), contractPrice)
 
-      for (const child of getBundleChildren(item)) {
+      const bundleChildren = filterLinesForSession(getBundleChildren(item), sessionSequence)
+      for (const child of bundleChildren) {
         rows.push({
           key: `bundle-child-${rows.length}-${String(child.id ?? child.name ?? "item")}`,
           itemNo: 0,
