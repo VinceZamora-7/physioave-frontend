@@ -1159,8 +1159,12 @@ async function load(): Promise<void> {
 
     const [detailResult, sponsorResult] = await Promise.all([
       loadLguInvoiceCatalog().then(() => null),
-      lguBillingService.getPatientCreditDetail(selectedPatientId, periodYear, periodMonth),
-      patientTanstackService.fetchContext(queryClient, selectedPatientId)
+      lguBillingService
+        .getPatientCreditDetail(selectedPatientId, periodYear, periodMonth)
+        .catch(() => null),
+      patientTanstackService
+        .fetchContext(queryClient, selectedPatientId)
+        .catch(() => null)
     ]).then(([_, detailResult, sponsorResult]) => [detailResult, sponsorResult] as const)
 
     detail.value = detailResult ?? null
