@@ -1,4165 +1,2281 @@
-﻿<template>
+<template>
   <main class="app-page-shell space-y-5">
     <section class="app-appointment-card app-appointment-card-accent p-4 sm:p-5">
       <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-<div class="space-y-2">
-  <div class="app-appointment-title text-xl">
-    Appointments Overview
-  </div>
+        <div class="space-y-2">
+          <h2 class="app-appointment-title text-xl">Appointments Overview</h2>
+          <p class="app-appointment-muted max-w-2xl text-sm leading-6">
+            Manage clinic appointments, filter schedules, and review booking status from one view.
+          </p>
+          <div class="flex flex-wrap gap-2 text-xs">
+            <span class="app-appointment-chip">Date: {{ selectedDateLabel }}</span>
+            <span class="app-appointment-chip">Clinic Branch: {{ selectedClinic?.label || "All branches" }}</span>
+          </div>
+        </div>
 
-  <p class="app-appointment-muted max-w-2xl text-sm leading-6">
-    Manage daily clinic appointments, filter schedules, export records, and review reports from one view.
-  </p>
-
-  <div class="flex flex-wrap gap-2 text-xs">
-    <span
-      class="app-appointment-chip"
-    >
-      Date: {{ selectedDateLabel }}
-    </span>
-
-    <span
-      class="app-appointment-chip"
-    >
-      Clinic: {{ selectedClinic?.name || "No clinic selected" }}
-    </span>
-  </div>
-</div>
-
-<div class="flex flex-col gap-4 lg:items-end">
-  <Button
-    label="Add Appointment"
-    icon="pi pi-plus"
-    :pt="ptPrimaryBtn"
-    class="w-full sm:w-auto"
-    @click="openCreateDialog"
-  />
-
-  <div class="grid w-full grid-cols-2 gap-3 sm:grid-cols-4 lg:w-auto">
-    <article
-      class="app-appointment-summary-card"
-    >
-      <p class="app-appointment-muted text-xs font-medium uppercase tracking-wide">
-        Visible Appointments
-      </p>
-      <Skeleton v-if="isClinicSwitchLoading" width="4rem" height="2rem" class="mt-2" />
-      <p v-else class="app-appointment-value mt-1 text-2xl font-semibold">
-        {{ dayBookings.length }}
-      </p>
-    </article>
-
-    <article
-      class="app-appointment-summary-card"
-    >
-      <p class="app-appointment-muted text-xs font-medium uppercase tracking-wide">
-        Filtered Table
-      </p>
-      <Skeleton v-if="isClinicSwitchLoading" width="4rem" height="2rem" class="mt-2" />
-      <p v-else class="app-appointment-value mt-1 text-2xl font-semibold">
-        {{ tableTotalElements }}
-      </p>
-    </article>
-
-    <article
-      class="app-appointment-summary-card"
-    >
-      <p class="app-appointment-muted text-xs font-medium uppercase tracking-wide">
-        Rescheduled Today
-      </p>
-      <Skeleton v-if="isClinicSwitchLoading" width="4rem" height="2rem" class="mt-2" />
-      <p v-else class="app-appointment-value mt-1 text-2xl font-semibold">
-        {{ rescheduledAppointmentsCount }}
-      </p>
-    </article>
-
-    <article
-      class="app-appointment-summary-card"
-    >
-      <p class="app-appointment-muted text-xs font-medium uppercase tracking-wide">
-        Needs Billing
-      </p>
-      <Skeleton v-if="isClinicSwitchLoading" width="4rem" height="2rem" class="mt-2" />
-      <p v-else class="app-appointment-value mt-1 text-2xl font-semibold">
-        {{ billingAttentionCount }}
-      </p>
-    </article>
-  </div>
-</div>
+        <div class="flex flex-col gap-4 lg:items-end">
+          <Button
+            v-if="canCreateAppointment"
+            label="Add Appointment"
+            icon="pi pi-plus"
+            :pt="ptPrimaryBtn"
+            class="w-full sm:w-auto"
+            @click="openCreateDialog"
+          />
+          <div class="grid w-full grid-cols-1 gap-3 sm:grid-cols-3 lg:w-auto">
+            <article class="app-appointment-summary-card">
+              <p class="app-appointment-muted text-xs font-medium uppercase tracking-wide">Total Appointments</p>
+              <p class="app-appointment-value mt-1 text-2xl font-semibold">{{ totalAppointmentsCount }}</p>
+            </article>
+            <article class="app-appointment-summary-card">
+              <p class="app-appointment-muted text-xs font-medium uppercase tracking-wide">Rescheduled / Canceled</p>
+              <p class="app-appointment-value mt-1 text-2xl font-semibold">{{ rescheduledOrCanceledAppointmentsCount }}</p>
+            </article>
+            <article class="app-appointment-summary-card">
+              <p class="app-appointment-muted text-xs font-medium uppercase tracking-wide">Unbilled Appointments</p>
+              <p class="app-appointment-value mt-1 text-2xl font-semibold">{{ unbilledAppointmentsCount }}</p>
+            </article>
+          </div>
+        </div>
       </div>
     </section>
 
-<AppointmentCalendarSection
-      v-model:calendar-date="calendarDate"
-      ref="calendarSectionRef"
-      @appointment-click="selectAppointment"
-      @add-appointment="openCreateDialog"
+    <AppointmentScheduleCalendar
+      :appointments="calendarAppointments"
+      :loading="isCalendarLoading"
+      :can-add-appointment="canCreateAppointment"
+      :can-view-appointment="canViewAppointmentDetails"
+      @addAppointment="openCreateDialog"
+      @selectAppointment="openDetailsDialog"
+      @selectDate="selectCalendarDate"
+      @visible-range-change="loadCalendarAppointmentsForRange"
     />
 
-<AppointmentTableSection
-  :calendar-date="calendarDate"
-  ref="tableSectionRef"
-  @appointment-click="selectAppointment"
-  @reschedule="openReschedule"
-  @delete="confirmDeleteAppointment"
-  @data-updated="onTableDataUpdated"
-/>
-
-<AppointmentCheckoutPanel
-  v-model:visible="detailPanelVisible"
-  :selected-detail="selectedDetail"
-  :sponsor-wallet-summary="sponsorWalletSummary"
-  :has-patient-wallet-amount-to-collect="hasPatientWalletAmountToCollect"
-  :patient-wallet-amount-to-collect="patientWalletAmountToCollect"
-  :selected-encounter-ticket="selectedEncounterTicket"
-  :selected-encounter-ticket-has-pt-signature="selectedEncounterTicketHasPtSignature"
-  :selected-encounter-ticket-summary-label="selectedEncounterTicketSummaryLabel"
-  :selected-encounter-ticket-package-label="selectedEncounterTicketPackageLabel"
-  :selected-encounter-ticket-package-source-label="selectedEncounterTicketPackageSourceLabel"
-  :selected-encounter-ticket-pt-confirmed-by-label="selectedEncounterTicketPtConfirmedByLabel"
-  :selected-encounter-ticket-pt-completion-tag="selectedEncounterTicketPtCompletionTag"
-  :encounter-ticket-button-label="encounterTicketButtonLabel"
-  :encounter-ticket-record-label="encounterTicketRecordLabel"
-  :encounter-attendance-label="encounterAttendanceLabel"
-  :can-process-encounter-ticket="canProcessEncounterTicket"
-  :is-selected-encounter-ticket-locked="isSelectedEncounterTicketLocked"
-  :is-lgu-billing="isLguBilling"
-  :dropout-status-label="dropoutStatusLabel"
-  :dropout-status-severity="dropoutStatusSeverity"
-  :dropout-status-value="dropoutStatusValue"
-  :dropout-toggle-label="dropoutToggleLabel"
-  :dropout-toggle-icon="dropoutToggleIcon"
-  :dropout-toggle-severity="dropoutToggleSeverity"
-  :dropout-loading="dropoutLoading"
-  :dropout-status-description="dropoutStatusDescription"
-  :pt-primary-btn="ptPrimaryBtn"
-  :pt-outlined-btn="ptOutlinedBtn"
-  :detail-card-class="detailCardClass"
-  :format-date-time="formatDateTime"
-  :as-currency="asCurrency"
-  :display-appointment-phase="displayAppointmentPhase"
-  :appointment-phase-severity="appointmentPhaseSeverity"
-  :display-location-context="displayLocationContext"
-  :appointment-location-context-severity="appointmentLocationContextSeverity"
-  :display-appointment-status="displayAppointmentStatus"
-  :appointment-severity="appointmentSeverity"
-  :display-billing-status="displayBillingStatus"
-  :billing-severity="billingSeverity"
-  @close="closeDetailPanel"
-  @open-patient-record="goToPatients"
-  @open-tender-payment="openTenderPaymentDrawer"
-  @create-billing="goToBilling"
-  @open-encounter-ticket="openEncounterTicketDialog"
-  @export-ticket-pdf="exportSelectedEncounterTicketPdf"
-  @toggle-dropout-status="toggleDropoutStatus"
-  @open-lgu-monthly-claim="openLguMonthlyClaimDialog"
-/>
-
-    <Dialog
-      v-model:visible="lguMonthlyClaimVisible"
-      modal
-      header="Create Month-End LGU Claim"
-      :style="{ width: '540px' }"
-      :breakpoints="{ '1024px': '92vw', '768px': '100vw' }"
-    >
-      <div v-if="selectedDetail?.lgu_credit_summary" class="space-y-4">
-        <div class="app-appointment-card">
-          <div class="app-appointment-title text-sm">Appointment & Package Summary</div>
-          <div class="mt-4 grid gap-3 md:grid-cols-2 text-sm">
-            <div>
-              <div class="app-appointment-muted text-xs uppercase tracking-wide">Patient</div>
-              <div class="app-appointment-value mt-1 font-medium">{{ selectedDetail.patient_name }}</div>
-              <div class="text-xs opacity-65">{{ selectedDetail.patient_public_id }}</div>
-            </div>
-            <div>
-              <div class="app-appointment-muted text-xs uppercase tracking-wide">Package</div>
-              <div class="app-appointment-value mt-1 font-medium">{{ selectedDetail.lgu_credit_summary.package_name }}</div>
-            </div>
-            <div>
-              <div class="app-appointment-muted text-xs uppercase tracking-wide">Consumed Credits</div>
-              <div class="mt-1">
-                <span class="app-appointment-value text-xl font-semibold">{{ selectedDetail.lgu_credit_summary.consumed_sessions }}</span>
-                <span class="text-xs opacity-65"> of {{ selectedDetail.lgu_credit_summary.total_sessions }} total</span>
-              </div>
-            </div>
-            <div>
-              <div class="app-appointment-muted text-xs uppercase tracking-wide">Status</div>
-              <div class="mt-1">
-                <Tag :value="selectedDetail.lgu_credit_summary.authorization_status" :severity="selectedDetail.lgu_credit_summary.authorization_status === 'ACTIVE' ? 'success' : 'danger'" />
-              </div>
-            </div>
-          </div>
+    <section class="app-appointment-card space-y-4 p-4 sm:p-5">
+      <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <h3 class="app-appointment-title text-lg">Appointment Records</h3>
+          <p class="app-appointment-muted text-sm">Search, filter, and manage appointment rows.</p>
         </div>
-
-        <div class="app-appointment-card app-appointment-card-secondary">
-          <div class="app-appointment-muted text-xs uppercase tracking-wide">Billing Month</div>
-          <div class="app-appointment-muted mt-2 text-sm">
-            Select the month to bill these consumed LGU credits. Format: YYYY-MM (e.g., 2026-04 for April 2026).
-          </div>
-          <IftaLabel class="mt-4">
-            <InputText
-              v-model="lguMonthlyClaimMonth"
-              fluid
-              placeholder="2026-04"
-              @input="sanitizeLguMonthInput"
-            />
-            <label>Billing Month</label>
-          </IftaLabel>
-          <small class="mt-2 block text-[11px] opacity-65">
-            Only consumed credits from this month will be included in the claim.
-          </small>
-        </div>
-
-        <Message
-          v-if="lguMonthlyClaimSummary"
-          severity="info"
-          :closable="false"
-          class="text-sm"
-        >
-          <div class="font-medium">{{ lguMonthlyClaimSummary.consumed_count }} credits from consumed items</div>
-          <div class="text-xs opacity-75 mt-1">will be billed as individual pricing</div>
-        </Message>
+        <Button label="Refresh" icon="pi pi-refresh" severity="secondary" outlined :loading="isLoading || isCalendarLoading" @click="refreshAppointmentViews" />
       </div>
 
-      <template #footer>
-        <Button label="Cancel" text @click="lguMonthlyClaimVisible = false" />
-        <Button
-          label="Create Claim"
-          icon="pi pi-check"
-          :loading="isLguMonthlyClaimSaving"
-          :pt="ptPrimaryBtn"
-          :disabled="!lguMonthlyClaimMonth?.trim()"
-          @click="submitLguMonthlyClaim"
+      <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <InputText v-model="filters.search" placeholder="Search patient" />
+        <Select
+          v-model="filters.ptId"
+          :options="ptFilterOptions"
+          optionLabel="label"
+          optionValue="value"
+          placeholder="PT"
+          showClear
+          filter
         />
-      </template>
-    </Dialog>
+        <Select v-model="filters.payerType" :options="payerOptionsWithAll" optionLabel="label" optionValue="value" placeholder="Billing Type" showClear />
+        <Select v-model="filters.billingStatus" :options="billingStatusOptions" optionLabel="label" optionValue="value" placeholder="Billing Status" showClear />
+        <Select v-model="filters.attendanceStatus" :options="attendanceStatusOptions" optionLabel="label" optionValue="value" placeholder="Attendance Status" showClear />
+      </div>
 
-  <AppointmentEncounterTicketDialog
-  v-model:visible="encounterTicketVisible"
-  v-model:signature-data-url="encounterTicketSignatureDataUrl"
-  v-model:loa-number="encounterTicketLoaNumber"
-  v-model:loa-date="encounterTicketLoaDate"
-  :selected-detail="selectedDetail"
-  :selected-encounter-ticket="selectedEncounterTicket"
-  :selected-encounter-ticket-has-pt-signature="selectedEncounterTicketHasPtSignature"
-  :selected-encounter-ticket-pt-confirmed-by-label="selectedEncounterTicketPtConfirmedByLabel"
-  :selected-encounter-ticket-pt-completion-tag="selectedEncounterTicketPtCompletionTag"
-  :encounter-service-rendered-label="encounterServiceRenderedLabel"
-  :encounter-session-deduction-label="encounterSessionDeductionLabel"
-  :encounter-ticket-record-label="encounterTicketRecordLabel"
-  :selected-encounter-ticket-package-label="selectedEncounterTicketPackageLabel"
-  :selected-encounter-ticket-package-source-label="selectedEncounterTicketPackageSourceLabel"
-  :is-selected-encounter-ticket-locked="isSelectedEncounterTicketLocked"
-  :is-encounter-ticket-saving="isEncounterTicketSaving"
-  :pt-primary-btn="ptPrimaryBtn"
-  :format-date-time="formatDateTime"
-  @submit="submitEncounterTicket"
+      <DataTable
+        class="app-data-table"
+        :value="appointments"
+        :loading="isLoading"
+        size="small"
+        paginator
+        :rows="pageSize"
+        :totalRecords="totalRecords"
+        lazy
+        @page="onPage"
+      >
+        <template #empty>
+          <div class="py-10 text-center text-sm opacity-70">No appointments found.</div>
+        </template>
+
+        <Column field="patient_name" header="Patient Details" style="min-width: 240px">
+          <template #body="{ data }">
+            <button
+              v-if="canViewAppointmentDetails"
+              type="button"
+              class="text-left"
+              @click="openDetailsDialog(data)"
+            >
+              <div class="font-semibold text-[rgb(var(--app-fg))] hover:underline">{{ data.patient_name || "Unnamed patient" }}</div>
+              <div class="mt-0.5 text-xs opacity-60">Details include planned services</div>
+            </button>
+            <div v-else>
+              <div class="font-semibold text-[rgb(var(--app-fg))]">{{ data.patient_name || "Unnamed patient" }}</div>
+              <div class="mt-0.5 text-xs opacity-60">Details restricted</div>
+            </div>
+          </template>
+        </Column>
+        <Column field="starts_at" header="Schedule" style="min-width: 210px">
+          <template #body="{ data }">
+            <div class="space-y-1">
+              <div class="font-medium">{{ formatDate(data.starts_at) }}</div>
+              <div class="text-xs opacity-60">{{ formatTime(data.starts_at) }} - {{ formatTime(data.ends_at) }}</div>
+            </div>
+          </template>
+        </Column>
+        <Column header="Session" style="width: 110px">
+          <template #body="{ data }">
+            <Tag
+              :value="`${data.session_sequence || 1}/${data.total_sessions || 1}`"
+              severity="secondary"
+            />
+          </template>
+        </Column>
+        <Column field="provider_name" header="PT" style="min-width: 180px">
+          <template #body="{ data }">{{ data.provider_name || "Unassigned" }}</template>
+        </Column>
+        <Column field="clinic_name" header="Clinic" style="min-width: 160px" />
+        <Column field="payer_type" header="Billing Type" style="min-width: 150px">
+          <template #body="{ data }">
+            <Tag :value="formatPayer(data.payer_type)" severity="info" />
+          </template>
+        </Column>
+        <Column header="Billing Status" style="min-width: 150px">
+          <template #body="{ data }">
+            <Tag :value="displayBillingStatus(data)" :severity="billingStatusSeverity(data)" />
+          </template>
+        </Column>
+        <Column header="Attendance Status" style="min-width: 180px">
+          <template #body="{ data }">
+            <div class="flex flex-col items-start gap-1">
+              <Tag :value="displayAttendanceStatus(data)" :severity="attendanceStatusSeverity(data)" />
+              <Tag
+                v-if="isRescheduledAppointment(data)"
+                value="Rescheduled"
+                severity="warn"
+                class="text-[10px]"
+              />
+            </div>
+          </template>
+        </Column>
+        <Column header="Actions" style="min-width: 190px">
+          <template #body="{ data }">
+            <div class="flex gap-1">
+              <Button v-if="canViewAppointmentDetails" icon="pi pi-eye" text rounded severity="secondary" aria-label="Details" @click="openDetailsDialog(data)" />
+              <Button v-if="canMarkAttendance" icon="pi pi-check-square" text rounded severity="success" aria-label="Attendance" @click="openAttendanceDialog(data)" />
+              <Button v-if="canEditAppointment" icon="pi pi-pencil" text rounded severity="secondary" aria-label="Edit" @click="openEditDialog(data)" />
+              <Button
+                v-if="canCancelAppointment"
+                icon="pi pi-ban"
+                text
+                rounded
+                severity="danger"
+                aria-label="Cancel Appointment"
+                :disabled="normalizeAttendanceStatus(data) === 'CANCELED'"
+                @click="cancelAppointment(data)"
+              />
+            </div>
+          </template>
+        </Column>
+      </DataTable>
+    </section>
+
+<AppointmentDetailsModal
+  v-model:visible="detailsVisible"
+  :appointment="detailAppointment"
+  :planned-services="detailPlannedServices"
+  :billing-preparation="detailBillingPreparation"
+  :format-date="formatDate"
+  :format-time="formatTime"
+  :format-payer="formatPayer"
+  :status-severity="statusSeverity"
+  :display-appointment-phase="displayAppointmentPhase"
+  :display-location-context="displayLocationContext"
+  :display-laterality="displayLaterality"
+  :format-optional-number="formatOptionalNumber"
+  :can-edit="canEditAppointment"
+  :can-mark-attendance="canMarkAttendance"
+  :is-billing-action-loading="isBillingActionLoading"
+  @edit="editFromDetails"
+  @attendance="openAttendanceFromDetails"
+  @open-billing="openAppointmentBillingDialog"
+  @create-self-pay-appointment-bill="createSelfPayAppointmentBillFromDetails"
+  @create-self-pay-package-bill="createSelfPayPackageBillFromDetails"
+  @create-session-documentation-invoice="createSessionDocumentationInvoiceFromDetails"
 />
 
-    <Dialog v-model:visible="rescheduleVisible" modal header="Reschedule Appointment" :style="{width:'520px'}">
-      <div class="space-y-3">
-        <p v-if="activeAppointment">Current reschedules: <strong>{{ activeAppointment.reschedule_count }}</strong> / 3</p>
-        <Message v-if="needsOverrideReason" severity="warn" :closable="false">
-          Max reschedule reached. Owner override is required and a reason is mandatory.
-        </Message>
-        <IftaLabel>
-          <SelectButton
-            v-model="rescheduleSlotDuration"
-            :options="slotDurationOptions"
-            optionLabel="label"
-            optionValue="value"
-            class="w-full"
-          />
-          <label>Slot Length</label>
-        </IftaLabel>
-        <IftaLabel>
-          <DatePicker
-            v-model="rescheduleStart"
-            showTime
-            fluid
-            :manualInput="true"
-            :stepMinute="slotMinuteStep"
-            :disabledDays="calendarDisabledDays"
-            hourFormat="24"
-          />
-          <label>New Start</label>
-        </IftaLabel>
-        <IftaLabel>
-          <InputText :modelValue="formatDateTime(rescheduleEnd)" fluid readonly />
-          <label>New End</label>
-        </IftaLabel>
-        <IftaLabel>
-          <InputText v-model="overrideReason" fluid :disabled="!needsOverrideReason" />
-          <label>Owner override reason (required after 3)</label>
-        </IftaLabel>
-        <small class="opacity-70">Slots start every 15 minutes and must be 30, 60, or 75 minutes long.</small>
-        <small class="opacity-70">If max reschedule reached, only Owner override is accepted.</small>
-      </div>
-      <template #footer>
-        <Button label="Cancel" text @click="rescheduleVisible = false" />
-        <Button label="Submit Reschedule" icon="pi pi-check" :pt="ptModalPrimaryBtn" @click="submitReschedule" />
-      </template>
-    </Dialog>
-
     <Dialog
-      v-model:visible="createVisible"
+      v-model:visible="appointmentBillingVisible"
       modal
-      header="Create Appointment"
-      :style="{width:'980px'}"
-      :breakpoints="{'1280px':'96vw','768px':'100vw'}"
+      header="Appointment Billing"
+      :style="{ width: '48rem', maxWidth: '96vw' }"
+      :draggable="false"
     >
-<div class="space-y-5">
-  <!-- Header Card -->
-  <section class="app-appointment-card app-appointment-card-accent">
-    <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_220px_160px] lg:items-center">
-      <div>
-        <h3 class="app-appointment-title text-lg">New appointment</h3>
-        <p class="app-appointment-muted mt-1 text-sm leading-6">
-          Fill in the essentials, add at least one service, then save.
-        </p>
-      </div>
-      <div class="app-appointment-card px-4 py-3">
-        <div class="app-appointment-muted text-xs uppercase tracking-wide">Date</div>
-        <div class="app-appointment-value mt-1 font-medium">{{ selectedDateLabel }}</div>
-      </div>
-      <div class="app-appointment-card px-4 py-3">
-        <div class="app-appointment-muted text-xs uppercase tracking-wide">Clinic</div>
-        <div class="app-appointment-value mt-1 font-medium">{{ selectedClinic?.name || "No clinic selected" }}</div>
-      </div>
-      <div class="app-appointment-card px-4 py-3">
-        <div class="app-appointment-muted text-xs uppercase tracking-wide">Total</div>
-        <div class="app-appointment-value mt-1 font-semibold">{{ asCurrency(subtotalFromServiceLines) }}</div>
-      </div>
-    </div>
-  </section>
-
-  <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-    <div class="space-y-4">
-
-      <!-- -- Essentials -- -->
-      <section :class="createModalEssentialsClass">
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <h4 :class="createModalSectionTitleClass">Essentials</h4>
-            <p class="mt-1 text-sm leading-6 text-[rgb(var(--app-fg))]/65">
-              Patient, billing type, and the basic booking setup.
-            </p>
-          </div>
-          <Tag :value="displayLocationContext(createLocationContext)" severity="secondary" />
-        </div>
-
-        <!-- Main fields -->
-        <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-          <!-- Patient -->
-          <div class="md:col-span-2 flex flex-col gap-1.5">
-            <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Patient</label>
-            <Select
-              v-model="createPatient"
-              :options="patientOptions"
-              optionLabel="name"
-              optionValue="id"
-              filter fluid
-              placeholder="Search patient…"
-              :pt="ptSelect"
+      <div v-if="detailBillingPreparation" class="space-y-4">
+        <section class="app-appointment-card app-appointment-card-accent space-y-3">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p class="app-appointment-muted text-xs font-semibold uppercase tracking-wide">Billing Path</p>
+              <h4 class="app-appointment-title mt-1 text-base">
+                {{ formatBillingPreparationStatus(detailBillingPreparation.billing_path.next_document_type) }}
+              </h4>
+              <p class="app-appointment-muted mt-1 text-sm">
+                {{ detailBillingPreparation.billing_path.message }}
+              </p>
+            </div>
+            <Tag
+              :value="formatBillingPreparationStatus(detailBillingPreparation.billing_path.status)"
+              :severity="billingPreparationSeverity"
             />
           </div>
 
-          <!-- Billing Type -->
-          <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Billing Type</label>
-            <Select
-              v-model="createBillingType"
-              :options="billingTypeOptions"
-              optionLabel="label"
-              optionValue="value"
-              fluid :pt="ptSelect"
-            />
-          </div>
-
-          <!-- Phase -->
-          <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Phase</label>
-            <div class="flex rounded-xl bg-[rgb(var(--app-bg))] border border-[rgb(var(--app-border))] p-1 gap-1">
-              <button
-                v-for="option in appointmentPhaseOptions"
-                :key="option.value"
-                @click="createPhase = option.value"
-                :class="[
-                  'flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all duration-200',
-                  createPhase === option.value
-                    ? 'bg-[rgb(var(--app-card))] text-[rgb(var(--app-fg))] shadow-sm ring-1 ring-[rgb(var(--app-border))]'
-                    : 'text-[rgb(var(--app-fg))]/50 hover:text-[rgb(var(--app-fg))]/80 hover:bg-[rgb(var(--app-card))]'
-                ]"
-              >
-                {{ option.label }}
-              </button>
+          <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div class="app-appointment-summary-card">
+              <p class="app-appointment-muted text-xs uppercase tracking-wide">Charge Scope</p>
+              <p class="app-appointment-value mt-1 text-sm font-semibold">{{ formatBillingPreparationStatus(detailBillingPreparation.billing_path.charge_scope) }}</p>
+            </div>
+            <div class="app-appointment-summary-card">
+              <p class="app-appointment-muted text-xs uppercase tracking-wide">Tendering</p>
+              <p class="app-appointment-value mt-1 text-sm font-semibold">{{ detailBillingPreparation.billing_path.requires_tendering ? "Required" : "Not required" }}</p>
+            </div>
+            <div class="app-appointment-summary-card">
+              <p class="app-appointment-muted text-xs uppercase tracking-wide">Consumed</p>
+              <p class="app-appointment-value mt-1 text-sm font-semibold">{{ detailBillingPreparation.consumed_services.count }}</p>
+            </div>
+            <div class="app-appointment-summary-card">
+              <p class="app-appointment-muted text-xs uppercase tracking-wide">Prepared Amount</p>
+              <p class="app-appointment-value mt-1 text-sm font-semibold">{{ formatCurrency(detailBillingPreparation.consumed_services.subtotal) }}</p>
             </div>
           </div>
-        </div>
+        </section>
 
-        <!-- HMO message -->
-<template v-if="createBillingType === 'HMO_BILLING'">
-  <div
-    v-if="createPatientHmoInfo"
-    class="mt-4 flex items-center gap-2.5 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-sm text-blue-800 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-400"
-  >
-    <i class="pi pi-info-circle shrink-0 text-blue-500 dark:text-blue-400" />
-    <span>
-      <span class="font-medium">{{ createPatientHmoInfo.hmo_name }}</span>
-      <span class="mx-1 opacity-40">·</span>{{ createPatientHmoInfo.hmo_type_name }}
-      <span class="mx-1 opacity-40">·</span>{{ createPatientHmoInfo.company_name }}
-    </span>
-  </div>
+        <section class="app-appointment-card space-y-3">
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h4 class="app-appointment-title text-base">Billing Actions</h4>
+              <p class="app-appointment-muted mt-1 text-sm">Create, tender, or print the appointment invoice.</p>
+            </div>
+          </div>
 
-  <div
-    v-else-if="createPatient && !syncingCreateHmoRates"
-    class="mt-4 flex items-center gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400"
-  >
-    <i class="pi pi-exclamation-triangle shrink-0 text-amber-500 dark:text-amber-400" />
-    <span>No HMO information on file for this patient. Please register HMO via the Patients module first.</span>
-  </div>
-</template>
-
-        <!-- LGU Program picker -->
-        <div v-if="createBillingType === 'LGU_BILLING'" class="mt-4 flex flex-col gap-1.5">
-          <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">LGU Program</label>
-          <Select
-            v-model="createLguProgramId"
-            :options="lguProgramOptions"
-            optionLabel="name"
-            optionValue="id"
-            fluid
-            placeholder="Select LGU program…"
-            :pt="ptSelect"
-          />
-        </div>
-
-        <template v-if="createBillingType === 'LGU_BILLING'">
           <div
-            v-if="createPatientLguInfo"
-            class="mt-4 flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300"
+            v-if="detailBillingPreparation.billing_path.action === 'CREATE_HMO_CLAIM'"
+            class="grid grid-cols-1 gap-3 rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3 sm:grid-cols-2"
           >
-            <i class="pi pi-check-circle shrink-0 text-emerald-500 dark:text-emerald-300" />
-            <span>
-              <span class="font-medium">{{ createPatientLguInfo.lgu_program_name || "LGU program" }}</span>
-              <span v-if="createPatientLguInfo.referral_form_no" class="ml-1 opacity-75">· Referral {{ createPatientLguInfo.referral_form_no }}</span>
+            <div class="space-y-1">
+              <label class="app-appointment-muted text-xs font-semibold uppercase tracking-wide">LOA Number</label>
+              <InputText v-model="hmoClaimForm.loa_number" class="w-full" placeholder="Enter LOA number" />
+            </div>
+            <div class="space-y-1">
+              <label class="app-appointment-muted text-xs font-semibold uppercase tracking-wide">Approval Code</label>
+              <InputText v-model="hmoClaimForm.approval_code" class="w-full" placeholder="Optional approval code" />
+            </div>
+            <div class="space-y-1 sm:col-span-2">
+              <label class="app-appointment-muted text-xs font-semibold uppercase tracking-wide">Claim Notes</label>
+              <Textarea v-model="hmoClaimForm.notes" class="w-full" rows="2" autoResize placeholder="Optional HMO claim notes" />
+            </div>
+          </div>
+
+          <div
+            v-if="detailBillingPreparation.billing_path.action === 'CREATE_LGU_CLAIM'"
+            class="grid grid-cols-1 gap-3 rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3 sm:grid-cols-2"
+          >
+            <div class="space-y-1">
+              <label class="app-appointment-muted text-xs font-semibold uppercase tracking-wide">Referral Form No.</label>
+              <InputText v-model="lguClaimForm.referral_form_no" class="w-full" placeholder="Enter referral form no." />
+            </div>
+            <div class="space-y-1">
+              <label class="app-appointment-muted text-xs font-semibold uppercase tracking-wide">Approval Code</label>
+              <InputText v-model="lguClaimForm.approval_code" class="w-full" placeholder="Optional approval code" />
+            </div>
+            <div class="space-y-1 sm:col-span-2">
+              <label class="app-appointment-muted text-xs font-semibold uppercase tracking-wide">Claim Notes</label>
+              <Textarea v-model="lguClaimForm.notes" class="w-full" rows="2" autoResize placeholder="Optional LGU claim notes" />
+            </div>
+          </div>
+
+          <div class="flex flex-wrap gap-2">
+            <Button
+              v-if="tenderableBillingDocument"
+              label="Tender Payment"
+              icon="pi pi-credit-card"
+              size="small"
+              severity="success"
+              :loading="isBillingActionLoading"
+              @click="openTenderFromBillingDialog"
+            />
+            <Button
+              v-if="detailBillingPreparation.billing_path.action === 'CREATE_SELF_PAY_APPOINTMENT_BILL'"
+              label="Create Bill / Tender"
+              icon="pi pi-wallet"
+              size="small"
+              :loading="isBillingActionLoading"
+              :pt="ptPrimaryBtn"
+              @click="createSelfPayAppointmentBillFromDetails"
+            />
+            <Button
+              v-if="detailBillingPreparation.billing_path.action === 'CREATE_SELF_PAY_PACKAGE_BILL'"
+              label="Create Package Bill"
+              icon="pi pi-box"
+              size="small"
+              :loading="isBillingActionLoading"
+              :pt="ptPrimaryBtn"
+              @click="createSelfPayPackageBillFromDetails"
+            />
+            <Button
+              v-if="detailBillingPreparation.billing_path.action === 'CREATE_DOCUMENTATION_INVOICE'"
+              label="Create Session Invoice"
+              icon="pi pi-file"
+              size="small"
+              :loading="isBillingActionLoading"
+              :pt="ptPrimaryBtn"
+              @click="createSessionDocumentationInvoiceFromDetails"
+            />
+            <Button
+              v-if="detailBillingPreparation.billing_path.action === 'CREATE_HMO_CLAIM'"
+              label="Create HMO Claim"
+              icon="pi pi-file-check"
+              size="small"
+              :loading="isBillingActionLoading"
+              :pt="ptPrimaryBtn"
+              @click="createHmoClaimFromDetails"
+            />
+            <Button
+              v-if="detailBillingPreparation.billing_path.action === 'CREATE_LGU_CLAIM'"
+              label="Create LGU Claim"
+              icon="pi pi-file-check"
+              size="small"
+              :loading="isBillingActionLoading"
+              :pt="ptPrimaryBtn"
+              @click="createLguClaimFromDetails"
+            />
+            <Button
+              label="Print Invoice"
+              icon="pi pi-print"
+              size="small"
+              severity="secondary"
+              outlined
+              :loading="isBillingActionLoading"
+              @click="printAppointmentInvoiceFromBillingDialog"
+            />
+          </div>
+
+          <div
+            v-if="tenderableBillingDocument"
+            class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] px-3 py-2 text-sm"
+          >
+            <span class="app-appointment-muted">Open balance:</span>
+            <strong class="ml-1">{{ formatCurrency(tenderableBillingDocument.totals.balance) }}</strong>
+            <span class="ml-2 text-[rgb(var(--app-fg))]/50">
+              {{ tenderableBillingDocument.document_number || `Document #${tenderableBillingDocument.id}` }}
             </span>
           </div>
+        </section>
+      </div>
 
-          <div
-            v-else-if="createPatient && !syncingCreateLguProgram"
-            class="mt-4 flex items-center gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400"
-          >
-            <i class="pi pi-exclamation-triangle shrink-0 text-amber-500 dark:text-amber-400" />
-            <span>No LGU program is linked to this patient. Add LGU sponsor information in the Patients module first.</span>
-          </div>
-        </template>
+      <div v-else class="app-appointment-card py-8 text-center text-sm text-[rgb(var(--app-fg))]/60">
+        Billing preparation is not available for this appointment yet.
+      </div>
 
-        <!-- Care team and session setup (collapsible) -->
-<section
-  class="mt-4 overflow-hidden rounded-2xl border border-[#A3D9E8] bg-[#EEF8FB] shadow-sm"
->
-  <!-- Section Header -->
-  <div class="flex items-start gap-3 border-b border-[#A3D9E8] bg-[#E8F6FB] px-4 py-4">
-    <div
-      class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#3C88B1] text-white shadow-sm"
+      <template #footer>
+        <Button label="Close" severity="secondary" outlined @click="appointmentBillingVisible = false" />
+      </template>
+    </Dialog>
+
+    <Dialog
+      v-model:visible="tenderVisible"
+      modal
+      header="Tender Payment"
+      :style="{ width: '34rem', maxWidth: '94vw' }"
+      :draggable="false"
     >
-      <i class="pi pi-users text-base"></i>
-    </div>
-
-    <div class="min-w-0">
-      <h3 class="m-0 text-sm font-bold uppercase tracking-wide text-[#242757]">
-        Care Team and Session Setup
-      </h3>
-      <p class="m-0 mt-1 text-xs text-[#276C91]">
-        Assign the PT, session location, specialty, room, and billing notes.
-      </p>
-    </div>
-  </div>
-
-  <div class="grid grid-cols-1 gap-4 p-4 md:grid-cols-2">
-    <!-- Referring Doctor -->
-    <div class="md:col-span-2 flex flex-col gap-1.5">
-      <label class="px-1 text-xs font-semibold uppercase tracking-widest text-[#276C91]">
-        Referring Doctor
-      </label>
-
-      <Select
-        v-model="createReferringDoctor"
-        :options="referringDoctorOptions"
-        optionLabel="label"
-        optionValue="id"
-        filter
-        showClear
-        fluid
-        placeholder="Select referring doctor (optional)"
-        :pt="ptSelect"
-      />
-    </div>
-
-    <!-- Assigned PT -->
-    <div
-      class="rounded-2xl border border-[#7EC8DD] bg-white/80 p-3 shadow-sm"
-    >
-      <div class="mb-2 flex items-center justify-between gap-2">
-        <label class="px-1 text-xs font-bold uppercase tracking-widest text-[#242757]">
-          Assigned PT
-        </label>
-
-        <span class="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold uppercase text-rose-600">
-          Required
-        </span>
-      </div>
-
-      <Select
-        v-model="createDoctor"
-        :options="doctorOptions"
-        optionLabel="label"
-        optionValue="id"
-        filter
-        showClear
-        fluid
-        placeholder="Select assigned PT"
-        :pt="ptSelect"
-      />
-    </div>
-
-    <!-- Supporting PT / Intern -->
-    <div class="flex flex-col gap-1.5">
-      <label class="px-1 text-xs font-semibold uppercase tracking-widest text-[#276C91]">
-        PT Assistant / Intern
-      </label>
-
-      <Select
-        v-model="createSupportStaff"
-        :options="supportStaffOptions"
-        optionLabel="label"
-        optionValue="id"
-        filter
-        showClear
-        fluid
-        placeholder="Select PT assistant or intern (optional)"
-        :pt="ptSelect"
-      />
-    </div>
-
-    <!-- Location Context -->
-    <div
-      class="rounded-2xl border border-[#A3D9E8] bg-white/80 p-3 shadow-sm"
-    >
-      <label class="mb-2 block px-1 text-xs font-bold uppercase tracking-widest text-[#242757]">
-        Location Context
-      </label>
-
-      <div class="flex gap-1 rounded-xl border border-[#A3D9E8] bg-[#F8FCFE] p-1">
-        <button
-          v-for="option in appointmentLocationContextOptions"
-          :key="option.value"
-          type="button"
-          @click="createLocationContext = option.value"
-          :class="[
-            'flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-200',
-            createLocationContext === option.value
-              ? 'bg-[#3C88B1] text-white shadow-sm'
-              : 'text-[#276C91] hover:bg-[#E8F6FB] hover:text-[#242757]'
-          ]"
-        >
-          {{ option.label }}
-        </button>
-      </div>
-    </div>
-
-    <!-- Specialty -->
-    <div
-      class="rounded-2xl border border-[#A3D9E8] bg-white/80 p-3 shadow-sm"
-    >
-      <label class="mb-2 block px-1 text-xs font-bold uppercase tracking-widest text-[#242757]">
-        Specialty
-      </label>
-
-      <Select
-        v-model="createSpecialtyTag"
-        :options="specialtyTagOptions"
-        optionLabel="name"
-        optionValue="id"
-        showClear
-        filter
-        fluid
-        :disabled="isCreateSpecialtyLockedByProvider"
-        :placeholder="isCreateSpecialtyLockedByProvider ? 'Assigned PT specialty applied automatically' : 'Select specialty (optional)'"
-        :pt="ptSelect"
-      />
-
-      <p
-        v-if="selectedCreateProviderHasSpecialty || selectedCreateProviderRequiresSpecialty"
-        class="m-0 mt-2 px-1 text-xs leading-relaxed text-[#276C91]"
-      >
-        {{
-          selectedCreateProviderSpecialtyLabel
-            ? (selectedCreateProviderRequiresSpecialty
-              ? `This assigned PT role requires a specialty, so ${selectedCreateProviderSpecialtyLabel} is applied automatically.`
-              : `${selectedCreateProviderSpecialtyLabel} is suggested from the selected PT and can still be changed.`)
-            : 'This assigned PT role requires a specialty. Assign it on Staffs or choose one here before saving.'
-        }}
-      </p>
-    </div>
-
-    <!-- Clinic Room -->
-    <div class="md:col-span-2 rounded-2xl border border-[#A3D9E8] bg-white/80 p-3 shadow-sm">
-      <label class="mb-2 block px-1 text-xs font-bold uppercase tracking-widest text-[#242757]">
-        Clinic Room
-      </label>
-
-      <Select
-        v-model="createTreatmentArea"
-        :options="treatmentAreaOptions"
-        optionLabel="name"
-        optionValue="id"
-        showClear
-        filter
-        fluid
-        :disabled="createLocationContext === 'HOME_CARE'"
-        :placeholder="createLocationContext === 'HOME_CARE' ? 'Not used for Home Care' : 'Select clinic room (optional)'"
-        :pt="ptSelect"
-      >
-        <template #option="{ option }">
-          <div class="flex items-center gap-2">
-            <TreatmentAreaChip :name="option.name" :color="option.color" />
-          </div>
-        </template>
-
-        <template #value="{ value, placeholder }">
-          <span v-if="value && selectedTreatmentAreaOption">
-            <TreatmentAreaChip
-              :name="selectedTreatmentAreaOption.name"
-              :color="selectedTreatmentAreaOption.color"
-            />
-          </span>
-          <span v-else class="opacity-70">{{ placeholder }}</span>
-        </template>
-      </Select>
-
-      <p class="m-0 mt-2 px-1 text-xs leading-relaxed text-[#276C91]">
-        {{
-          createLocationContext === 'HOME_CARE'
-            ? 'Clinic rooms are skipped for Home Care appointments.'
-            : 'Clinic rooms are managed from the Clinics page and applied per selected clinic.'
-        }}
-      </p>
-    </div>
-
-    <!-- Billing Notes -->
-    <div class="md:col-span-2 flex flex-col gap-1.5">
-      <label class="px-1 text-xs font-semibold uppercase tracking-widest text-[#276C91]">
-        Billing Notes
-      </label>
-
-      <InputText
-        v-model="createBillingNotes"
-        fluid
-        placeholder="Optional billing notes"
-        :pt="ptInputText"
-      />
-    </div>
-  </div>
-</section>
-      </section>
-
-      <!-- -- Services -- -->
-      <section :class="createModalServicesClass">
-        <div class="flex items-center justify-between gap-3">
-          <div>
-            <h4 :class="createModalSectionTitleClass">Services</h4>
-            <p class="mt-1 text-sm leading-6 text-[rgb(var(--app-fg))]/65">
-              Add at least one service for this appointment.
-            </p>
-          </div>
-          <span class="text-sm text-[rgb(var(--app-fg))]/60">{{ selectedServiceLines.length }} selected</span>
-        </div>
-
-        <div class="mt-4 space-y-4">
-          <!-- HMO info banner -->
-<template v-if="createBillingType === 'HMO_BILLING'">
-  <div
-    v-if="createPatientHmoInfo"
-    class="mt-4 flex items-center gap-2.5 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-sm text-blue-800 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-400"
-  >
-    <i class="pi pi-info-circle shrink-0 text-blue-500 dark:text-blue-400" />
-    <span>
-      <span class="font-medium">{{ createPatientHmoInfo.hmo_name }}</span>
-      <span class="mx-1 opacity-40">·</span>{{ createPatientHmoInfo.hmo_type_name }}
-      <span class="mx-1 opacity-40">·</span>{{ createPatientHmoInfo.company_name }}
-    </span>
-  </div>
-
-  <div
-    v-else-if="createPatient && !syncingCreateHmoRates"
-    class="mt-4 flex items-center gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400"
-  >
-    <i class="pi pi-exclamation-triangle shrink-0 text-amber-500 dark:text-amber-400" />
-    <span>No HMO information on file for this patient. Please register HMO via the Patients module first.</span>
-  </div>
-</template>
-
-          <!-- Service Mode Toggle -->
-          <div v-if="!isCreatePackageServiceFlow" class="flex flex-col gap-1.5">
-            <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Service Mode</label>
-            <div class="flex rounded-xl bg-[rgb(var(--app-bg))] border border-[rgb(var(--app-border))] p-1 gap-1">
-              <button
-                v-for="option in visibleServiceModeOptions"
-                :key="option.value"
-                @click="serviceMode = option.value"
-                :class="[
-                  'flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all duration-200',
-                  serviceMode === option.value
-                    ? 'bg-[rgb(var(--app-card))] text-[rgb(var(--app-fg))] shadow-sm ring-1 ring-[rgb(var(--app-border))]'
-                    : 'text-[rgb(var(--app-fg))]/50 hover:text-[rgb(var(--app-fg))]/80 hover:bg-[rgb(var(--app-card))]'
-                ]"
-              >
-                {{ option.label }}
-              </button>
-            </div>
-          </div>
-
-          <!-- Package -->
-          <div v-if="isCreatePackageServiceFlow" class="space-y-3">
-            <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Package Offer</label>
-              <Select
-                v-model="selectedPackageOfferId"
-                :options="activePackageServiceOffers"
-                optionLabel="name"
-                optionValue="id"
-                filter fluid
-                placeholder="Select package offer"
-                :pt="ptSelect"
-                @update:modelValue="selectPackageOffer"
-              />
-              <p v-if="activePackageServiceOffers.length === 0" class="px-1 text-xs text-[rgb(var(--app-fg))]/50">
-                No package offers available. Add them in Self Pay: Package Service Management.
-              </p>
-            </div>
-            <div v-if="createBillingType === 'LGU_BILLING'" class="flex flex-col gap-1.5">
-              <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Bundle</label>
-              <div class="flex flex-col gap-2 md:flex-row md:items-end">
-                <Select
-                  v-model="selectedBundleId"
-                  :options="activeBundledServices"
-                  optionLabel="name"
-                  optionValue="id"
-                  filter
-                  fluid
-                  placeholder="Select a bundle"
-                  :pt="ptSelect"
-                />
-                <Button
-                  label="Add Bundle"
-                  icon="pi pi-box"
-                  outlined
-                  :disabled="!selectedBundleId"
-                  @click="addSelectedBundle"
-                />
-              </div>
-              <p v-if="activeBundledServices.length === 0" class="px-1 text-xs text-[rgb(var(--app-fg))]/50">
-                No bundles available. Add them in Single Pay: Single Service Management.
-              </p>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div class="flex flex-col gap-1.5">
-                <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Machine</label>
-                <Select v-model="selectedMachineId" :options="machineServices" optionLabel="name" optionValue="id" filter fluid placeholder="Select machine" :pt="ptSelect" @update:modelValue="addServiceLine('machine')" />
-              </div>
-              <div class="flex flex-col gap-1.5">
-                <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Technique</label>
-                <Select v-model="selectedTechniqueId" :options="techniqueServices" optionLabel="name" optionValue="id" filter fluid placeholder="Select technique" :pt="ptSelect" @update:modelValue="addServiceLine('technique')" />
-              </div>
-              <div class="flex flex-col gap-1.5">
-                <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Evaluation</label>
-                <Select v-model="selectedEvaluationId" :options="evaluationServices" optionLabel="name" optionValue="id" filter fluid placeholder="Select evaluation" :pt="ptSelect" @update:modelValue="addServiceLine('evaluation')" />
-              </div>
-              <div class="grid grid-cols-2 gap-2">
-                <div class="flex flex-col gap-1.5">
-                  <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Add-on Type</label>
-                  <Select v-model="selectedAddOnType" :options="addOnTypeOptions" optionLabel="label" optionValue="value" fluid placeholder="Type" :pt="ptSelect" />
-                </div>
-                <div class="flex flex-col gap-1.5">
-                  <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Add-on</label>
-                  <Select v-model="selectedAddOnId" :options="currentAddOnServices" optionLabel="name" optionValue="id" filter fluid placeholder="Select" :pt="ptSelect" @update:modelValue="addServiceLine(selectedAddOnType)" />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Individual -->
-          <div v-else-if="serviceMode === 'individual'" class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Machine</label>
-              <Select v-model="selectedMachineId" :options="machineServices" optionLabel="name" optionValue="id" filter fluid placeholder="Select machine" :pt="ptSelect" @update:modelValue="addServiceLine('machine')" />
-            </div>
-            <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Technique</label>
-              <Select v-model="selectedTechniqueId" :options="techniqueServices" optionLabel="name" optionValue="id" filter fluid placeholder="Select technique" :pt="ptSelect" @update:modelValue="addServiceLine('technique')" />
-            </div>
-            <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Evaluation</label>
-              <Select v-model="selectedEvaluationId" :options="evaluationServices" optionLabel="name" optionValue="id" filter fluid placeholder="Select evaluation" :pt="ptSelect" @update:modelValue="addServiceLine('evaluation')" />
-            </div>
-            <div class="grid grid-cols-2 gap-2">
-              <div class="flex flex-col gap-1.5">
-                <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Add-on Type</label>
-                <Select v-model="selectedAddOnType" :options="addOnTypeOptions" optionLabel="label" optionValue="value" fluid placeholder="Type" :pt="ptSelect" />
-              </div>
-              <div class="flex flex-col gap-1.5">
-                <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Add-on</label>
-                <Select v-model="selectedAddOnId" :options="currentAddOnServices" optionLabel="name" optionValue="id" filter fluid placeholder="Select" :pt="ptSelect" @update:modelValue="addServiceLine(selectedAddOnType)" />
-              </div>
-            </div>
-          </div>
-
-          <!-- Bundled -->
-          <div v-else-if="serviceMode === 'bundled'" class="flex flex-col gap-1.5">
-            <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">Bundle</label>
-            <Select
-              v-model="selectedBundleId"
-              :options="activeBundledServices"
-              optionLabel="name"
-              optionValue="id"
-              filter fluid
-              placeholder="Select a bundle"
-              :pt="ptSelect"
-              @update:modelValue="selectBundle"
-            />
-            <p v-if="activeBundledServices.length === 0" class="px-1 text-xs text-[rgb(var(--app-fg))]/50">
-              No bundles available. Add them in Single Pay: Single Service Management.
-            </p>
-          </div>
-
-          <!-- Selected Services Summary -->
-          <div
-            v-if="selectedServiceLines.length > 0"
-            class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4"
-          >
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <div class="font-semibold text-[rgb(var(--app-fg))]">Selected Services</div>
-                <div class="mt-1 text-sm text-[rgb(var(--app-fg))]/65">
-                  {{ selectedServiceLines.length }} item{{ selectedServiceLines.length === 1 ? '' : 's' }} will be attached to billing.
-                </div>
-              </div>
-              <div class="text-right">
-                <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Amount Due</div>
-                <div class="mt-1 text-lg font-semibold text-[rgb(var(--app-fg))]">{{ asCurrency(subtotalFromServiceLines) }}</div>
-              </div>
-            </div>
-            <div class="mt-4 grid gap-2 max-h-60 overflow-y-auto pr-1">
-              <article
-                v-for="(line, idx) in selectedServiceLines"
-                :key="`${line.type}-${line.id}-${idx}`"
-                class="flex items-start justify-between gap-3 rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3"
-              >
-                <div class="min-w-0 space-y-1">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <Tag :value="formatCreateLineType(line.type)" :severity="createLineSeverity(line.type)" class="text-xs" />
-                    <span class="font-medium text-[rgb(var(--app-fg))]">{{ line.name }}</span>
-                  </div>
-                  <div class="text-xs text-[rgb(var(--app-fg))]/60">
-                    <span v-if="getCreateLineOriginalPrice(line) > getEffectiveCreateLinePrice(line)" class="mr-2 line-through">
-                      {{ asCurrency(getCreateLineOriginalPrice(line)) }}
-                    </span>
-                    <span>{{ asCurrency(getEffectiveCreateLinePrice(line)) }}</span>
-                  </div>
-                </div>
-                <Button size="small" text severity="danger" icon="pi pi-trash" @click="removeServiceLine(idx)" />
-              </article>
-            </div>
-          </div>
-
-          <!-- Empty state -->
-          <div
-            v-else
-            class="rounded-2xl border border-dashed border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-5 py-8 text-center"
-          >
-            <div class="font-semibold text-[rgb(var(--app-fg))]">No services selected yet</div>
-            <p class="mt-2 text-sm leading-6 text-[rgb(var(--app-fg))]/65">
-              Add the service lines for this booking. A Home Service add-on from Promos and Offers will automatically tag this booking as Home Care.
-            </p>
-          </div>
-
-<div
-  v-if="hasHomeServiceAddOn"
-  class="flex items-center gap-2.5 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-sm text-blue-800 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-400"
->
-  <i class="pi pi-info-circle shrink-0 text-blue-500 dark:text-blue-400" />
-  <span>Home Service add-on detected. This appointment is tagged as Home Care automatically.</span>
-</div>
-
-<div
-  v-else-if="createLocationContext === 'HOME_CARE'"
-  class="flex items-center gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400"
->
-  <i class="pi pi-exclamation-triangle shrink-0 text-amber-500 dark:text-amber-400" />
-  <span>Select a Home Service add-on from Add-ons before saving this Home Care appointment.</span>
-</div>
-        </div>
-      </section>
-
-    </div>
-
-    <!-- -- Schedule (sidebar) -- -->
-<section :class="createModalScheduleClass">
-  <div>
-    <h4 :class="createModalSectionTitleClass">Schedule</h4>
-    <p class="mt-1 text-sm leading-6 text-[rgb(var(--app-fg))]/65">
-      Appointment time follows the selected clinic schedule.
-    </p>
-  </div>
-
-  <div class="mt-4 space-y-4">
-
-            <!-- Clinic Schedule info — integrated, not orphaned -->
-    <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] px-4 py-3 space-y-1">
-      <div class="flex items-center justify-between gap-2">
-        <span class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Clinic Schedule</span>
-        <span class="text-xs text-[rgb(var(--app-fg))]/40">30 · 60 · 75 min slots</span>
-      </div>
-      <div class="text-sm font-medium text-[rgb(var(--app-fg))]">
-        {{ selectedClinicScheduleLabel || "No clinic resolved yet" }}
-      </div>
-    </div>
-
-    <!-- Slot Length -->
-    <div class="flex flex-col gap-1.5">
-      <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">
-        Slot Length
-      </label>
-      <div class="flex rounded-xl bg-[rgb(var(--app-bg))] border border-[rgb(var(--app-border))] p-1 gap-1">
-        <button
-          v-for="option in slotDurationOptions"
-          :key="option.value"
-          @click="createSlotDuration = option.value"
-          :class="[
-            'flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all duration-200',
-            createSlotDuration === option.value
-              ? 'bg-[rgb(var(--app-card))] text-[rgb(var(--app-fg))] shadow-sm ring-1 ring-[rgb(var(--app-border))]'
-              : 'text-[rgb(var(--app-fg))]/50 hover:text-[rgb(var(--app-fg))]/80 hover:bg-[rgb(var(--app-card))]'
-          ]"
-        >
-          {{ option.label }}
-        </button>
-      </div>
-    </div>
-
-        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-4 py-3">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <div class="text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/55">Time Slots</div>
-          <div class="mt-1 text-sm font-medium text-[rgb(var(--app-fg))]">
-            {{ createSlotAvailabilityTitle }}
-          </div>
-        </div>
-        <Button
-          icon="pi pi-refresh"
-          size="small"
-          text
-          rounded
-          aria-label="Refresh time slots"
-          @click="loadCreateDayAppointments"
-        />
-      </div>
-
-      <div
-        v-if="selectedPackageHasSessionSchedules && packageSessionSchedules.length"
-        class="mt-3 flex gap-2 overflow-x-auto pb-1"
-      >
-        <button
-          v-for="(schedule, index) in packageSessionSchedules"
-          :key="`slot-target-${schedule.key}`"
-          type="button"
-          :class="[
-            'shrink-0 rounded-xl border px-3 py-2 text-left text-xs transition-all',
-            createActiveScheduleIndex === index
-              ? 'border-blue-400 bg-blue-50 text-blue-900 ring-2 ring-blue-200 dark:border-blue-300 dark:bg-blue-400/20 dark:text-blue-50'
-              : 'border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] text-[rgb(var(--app-fg))]/70 hover:bg-[rgb(var(--app-card))]'
-          ]"
-          @click="setCreateActiveScheduleIndex(index)"
-        >
-          <span class="block font-semibold">#{{ index + 1 }} {{ schedule.sessionName }}</span>
-          <span class="mt-1 block opacity-75">{{ formatDateTime(schedule.startsAt) }}</span>
-        </button>
-      </div>
-
-      <div class="mt-3 flex flex-wrap gap-2 text-xs">
-        <span class="inline-flex items-center gap-1.5 text-[rgb(var(--app-fg))]/60">
-          <span class="h-2 w-2 rounded-full bg-emerald-500" />
-          Available
-        </span>
-        <span class="inline-flex items-center gap-1.5 text-[rgb(var(--app-fg))]/60">
-          <span class="h-2 w-2 rounded-full bg-rose-500" />
-          Taken
-        </span>
-      </div>
-
-      <div v-if="isCreateSlotsLoading" class="mt-3 text-sm text-[rgb(var(--app-fg))]/60">
-        Loading slots...
-      </div>
-
-      <div
-        v-else-if="createSlotOptions.length"
-        class="mt-3 grid max-h-72 grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3"
-      >
-        <button
-          v-for="slot in createSlotOptions"
-          :key="slot.key"
-          type="button"
-          :disabled="slot.isTaken"
-          :title="slot.tooltip"
-          :class="[
-            'rounded-xl border px-3 py-2 text-left text-xs transition-all',
-            slot.isSelected
-              ? 'border-blue-400 bg-blue-50 text-blue-900 ring-2 ring-blue-200 dark:border-blue-300 dark:bg-blue-400/20 dark:text-blue-50'
-              : slot.isTaken
-                ? 'cursor-not-allowed border-rose-200 bg-rose-50 text-rose-700 opacity-75 dark:border-rose-400/30 dark:bg-rose-500/10 dark:text-rose-200'
-                : 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:border-emerald-400 hover:bg-emerald-100 dark:border-emerald-400/25 dark:bg-emerald-500/10 dark:text-emerald-100 dark:hover:bg-emerald-500/20'
-          ]"
-          @click="selectCreateSlot(slot)"
-        >
-          <span class="block font-semibold">{{ slot.label }}</span>
-          <span class="mt-1 block truncate opacity-75">{{ slot.statusLabel }}</span>
-        </button>
-      </div>
-
-      <div v-else class="mt-3 rounded-xl border border-dashed border-[rgb(var(--app-border))] px-3 py-4 text-sm text-[rgb(var(--app-fg))]/60">
-        No valid slots for this clinic schedule and slot length.
-      </div>
-    </div>
-
-
-
-
-    <template v-if="selectedPackageHasSessionSchedules">
-      <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-4 py-3">
-        <div class="text-sm font-medium text-[rgb(var(--app-fg))]">
-          {{ selectedPackageOfferDetail?.name || "This package" }} includes {{ packageSessionSchedules.length }} schedulable session{{ packageSessionSchedules.length === 1 ? "" : "s" }}.
-        </div>
-        <p class="mt-1 text-xs text-[rgb(var(--app-fg))]/60">
-          Each schedule creates its own appointment and its own billing record. They still share the same package tracker.
-        </p>
-      </div>
-
-      <div class="space-y-3">
-        <article
-          v-for="(schedule, index) in packageSessionSchedules"
-          :key="schedule.key"
-          class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3"
-        >
+      <div v-if="tenderBillingDocument" class="space-y-4">
+        <section class="app-appointment-card app-appointment-card-accent space-y-2">
           <div class="flex items-start justify-between gap-3">
             <div>
-              <div class="font-medium text-[rgb(var(--app-fg))]">{{ schedule.sessionName }}</div>
-              <div class="mt-1 text-xs text-[rgb(var(--app-fg))]/60">
-                Session {{ schedule.occurrence }} of {{ schedule.totalOccurrences }}
-              </div>
+              <p class="app-appointment-muted text-xs font-semibold uppercase tracking-wide">Billing Document</p>
+              <h4 class="app-appointment-title mt-1 text-base">
+                {{ tenderBillingDocument.document_number || `Document #${tenderBillingDocument.id}` }}
+              </h4>
             </div>
-            <Tag :value="`#${index + 1}`" severity="contrast" />
+            <Tag :value="tenderBillingDocument.document_status" severity="warn" />
+          </div>
+          <div class="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <p class="app-appointment-muted text-xs uppercase tracking-wide">Total</p>
+              <p class="app-appointment-value font-semibold">{{ formatCurrency(tenderBillingDocument.totals.total) }}</p>
+            </div>
+            <div>
+              <p class="app-appointment-muted text-xs uppercase tracking-wide">Balance</p>
+              <p class="app-appointment-value font-semibold">{{ formatCurrency(tenderBillingDocument.totals.balance) }}</p>
+            </div>
+          </div>
+        </section>
+
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div class="space-y-1">
+            <label class="app-appointment-muted text-xs font-semibold uppercase tracking-wide">Amount Tendered</label>
+            <InputNumber
+              v-model="tenderForm.amount_tendered"
+              mode="currency"
+              currency="PHP"
+              locale="en-PH"
+              class="w-full"
+              :min="0"
+            />
+          </div>
+          <div class="space-y-1">
+            <label class="app-appointment-muted text-xs font-semibold uppercase tracking-wide">Payment Method</label>
+            <Select
+              v-model="tenderForm.payment_method_id"
+              :options="paymentMethodOptions"
+              optionLabel="label"
+              optionValue="value"
+              placeholder="Select method"
+              class="w-full"
+              :loading="isPaymentMethodsLoading"
+            />
+          </div>
+        </div>
+
+        <section class="app-appointment-card space-y-3">
+          <div class="flex items-start gap-2">
+            <input
+              id="tender-senior-pwd"
+              v-model="tenderForm.senior_pwd_id_presented"
+              type="checkbox"
+              class="mt-1"
+            />
+            <label for="tender-senior-pwd" class="text-sm font-semibold text-[rgb(var(--app-fg))]">
+              Senior / PWD ID presented
+              <span class="block text-xs font-normal text-[rgb(var(--app-fg))]/60">Applies 20% privilege discount before custom discount.</span>
+            </label>
           </div>
 
-          <div class="mt-3 grid grid-cols-2 gap-3">
-            <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">
-                Start
-              </label>
-              <DatePicker
-                :modelValue="schedule.startsAt"
-                showTime
-                fluid
-                :manualInput="true"
-                :stepMinute="slotMinuteStep"
-                :disabledDays="calendarDisabledDays"
-                hourFormat="24"
-                @update:modelValue="value => updatePackageSessionStart(index, value)"
+          <InputText
+            v-if="tenderForm.senior_pwd_id_presented"
+            v-model="tenderForm.senior_pwd_id_reference"
+            class="w-full"
+            placeholder="Senior/PWD ID reference"
+          />
+
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div class="space-y-1">
+              <label class="app-appointment-muted text-xs font-semibold uppercase tracking-wide">Custom Discount</label>
+              <Select
+                v-model="tenderForm.custom_discount_type"
+                :options="discountTypeOptions"
+                optionLabel="label"
+                optionValue="value"
+                placeholder="No custom discount"
+                showClear
+                class="w-full"
               />
             </div>
-
-            <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">
-                End
-              </label>
-              <div class="flex h-full items-center rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-3 py-2 text-sm text-[rgb(var(--app-fg))]/70">
-                {{ formatDateTime(getPackageSessionEnd(schedule.startsAt)) }}
-              </div>
+            <div class="space-y-1">
+              <label class="app-appointment-muted text-xs font-semibold uppercase tracking-wide">Discount Value</label>
+              <InputNumber
+                v-model="tenderForm.custom_discount_value"
+                class="w-full"
+                :min="0"
+                :suffix="tenderForm.custom_discount_type === 'PERCENTAGE' ? '%' : undefined"
+                mode="decimal"
+              />
             </div>
           </div>
-        </article>
-      </div>
-    </template>
 
-    <div v-else class="grid grid-cols-2 gap-3">
-      <div class="flex flex-col gap-1.5">
-        <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">
-          Start
-        </label>
-        <DatePicker
-          v-model="createStart"
-          showTime fluid
-          :manualInput="true"
-          :stepMinute="slotMinuteStep"
-          :disabledDays="calendarDisabledDays"
-          hourFormat="24"
-        />
-      </div>
+          <div class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
+            <div>
+              <p class="app-appointment-muted text-xs uppercase tracking-wide">Estimated Discount</p>
+              <p class="font-semibold text-orange-500">{{ formatCurrency(tenderDiscountSummary.discount) }}</p>
+            </div>
+            <div>
+              <p class="app-appointment-muted text-xs uppercase tracking-wide">Amount Due</p>
+              <p class="app-appointment-value font-semibold">{{ formatCurrency(tenderDiscountSummary.amountDue) }}</p>
+            </div>
+            <div>
+              <p class="app-appointment-muted text-xs uppercase tracking-wide">Change</p>
+              <p class="font-semibold text-green-600">{{ formatCurrency(tenderDiscountSummary.change) }}</p>
+            </div>
+          </div>
+        </section>
 
-      <div class="flex flex-col gap-1.5">
-        <label class="text-xs font-semibold tracking-widest uppercase text-[rgb(var(--app-fg))]/50 px-1">
-          End
-        </label>
-        <div class="flex h-full items-center rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] px-3 py-2 text-sm text-[rgb(var(--app-fg))]/70">
-          {{ formatDateTime(createEnd) }}
+        <div class="space-y-1">
+          <label class="app-appointment-muted text-xs font-semibold uppercase tracking-wide">Reference</label>
+          <InputText v-model="tenderForm.payment_reference" class="w-full" placeholder="Optional reference number" />
+        </div>
+
+        <div class="space-y-1">
+          <label class="app-appointment-muted text-xs font-semibold uppercase tracking-wide">Notes</label>
+          <Textarea v-model="tenderForm.notes" class="w-full" rows="3" autoResize />
         </div>
       </div>
-    </div>
 
-
-
-
-  </div>
-
-</section>
-
-  </div>
-</div>
       <template #footer>
-        <Button label="Cancel" text @click="createVisible = false" />
+        <Button label="Cancel" severity="secondary" outlined :disabled="isTenderSaving" @click="tenderVisible = false" />
         <Button
-          label="Create Appointment"
+          label="Save Payment"
           icon="pi pi-check"
+          :loading="isTenderSaving"
           :pt="ptPrimaryBtn"
-          :loading="isCreatingAppointment"
-          :disabled="isCreatingAppointment"
-          @click="submitCreateAppointment"
+          @click="submitTenderPayment"
         />
       </template>
     </Dialog>
 
-    <BillingModule
-      v-if="billingOverlayVisible"
-      :embedded="true"
-      :overlay-only="true"
-      :initial-view="billingOverlayMode"
-      @close-overlay="onBillingOverlayClose"
-      @billing-updated="onBillingUpdated"
+    <AppointmentForm
+      v-model:visible="formVisible"
+      :editing-id="editingId"
+      :is-saving="isSaving"
+      :form="form"
+      :session-count="sessionCountPreview"
+      :selected-clinic="selectedClinic"
+      :selected-services="selectedServices"
+      :patient-options="patientOptions"
+      :clinic-options="clinicOptions"
+      :active-branch-id="activeBranchId"
+      :pt-options="ptOptions"
+      :doctor-options="doctorOptions"
+      :payer-options="payerOptions"
+      :appointment-type-options="appointmentTypeOptions"
+      :appointment-status-label="appointmentStatusLabel"
+      :phase-options="phaseOptions"
+      :specialty-options="specialtyOptions"
+      :clinic-area-options="clinicAreaOptions"
+      :medical-diagnose-options="medicalDiagnoseOptions"
+      :laterality-options="lateralityOptions"
+      :service-type-options="serviceTypeOptions"
+      :service-picker="servicePicker"
+      :current-service-options="currentServiceOptions"
+      :schedule-appointments="availabilityAppointments"
+      :is-availability-loading="isAvailabilityLoading"
+      @generate-session-dates="generateSessionDates"
+      @add-picked-service="addPickedService"
+      @remove-selected-service="removeSelectedService"
+      @save="saveAppointment"
     />
 
+    <PlannedServicesModal
+      v-model:visible="servicesVisible"
+      :appointment="activeAppointment"
+      :selected-services="selectedServices"
+      :planned-services="servicesModalPlannedServices"
+      :service-type-options="serviceTypeOptions"
+      :service-picker="servicePicker"
+      :current-service-options="currentServiceOptions"
+      :is-saving="isSavingServices"
+      :format-date="formatDate"
+      :format-time="formatTime"
+      :format-currency="formatCurrency"
+      @add-picked-service="addPickedService"
+      @remove-selected-service="removeSelectedService"
+      @save="saveServices"
+    />
+
+    <AttendanceModal
+      v-model:visible="attendanceVisible"
+      :appointment="activeAppointment"
+      :attendance-items="attendanceItems"
+      :is-saving="isSavingAttendance"
+      :format-date="formatDate"
+      :format-time="formatTime"
+      @save="saveAttendance"
+    />
   </main>
 </template>
 
 <script setup lang="ts">
-import AppointmentEncounterTicketDialog from "@/features/appointments/components/AppointmentEncounterTicketDialog.vue";
-import {computed, defineAsyncComponent, onMounted, ref, watch} from "vue";
-import {storeToRefs} from "pinia";
-import {useQueryClient} from "@tanstack/vue-query";
-import {useRouter} from "vue-router";
-import axios from "axios";
-import {useConfirm} from "primevue/useconfirm";
-import {useToast} from "primevue/usetoast";
-import Button from "primevue/button";
-import DatePicker from "primevue/datepicker";
-import Dialog from "primevue/dialog";
-import IftaLabel from "primevue/iftalabel";
-import InputText from "primevue/inputtext";
-import Message from "primevue/message";
-import Skeleton from "primevue/skeleton";
-import Select from "primevue/select";
-import SelectButton from "primevue/selectbutton";
-import Tag from "primevue/tag";
-import TreatmentAreaChip from "@/features/appointments/components/TreatmentAreaChip.vue";
-import {lguBillingService} from "@/features/lgu-billing/api/lgu-billing.service";
+import { computed, onMounted, reactive, ref, watch } from "vue"
+import Button from "primevue/button"
+import Column from "primevue/column"
+import DataTable, { type DataTablePageEvent } from "primevue/datatable"
+import Dialog from "primevue/dialog"
+import InputNumber from "primevue/inputnumber"
+import InputText from "primevue/inputtext"
+import Select from "primevue/select"
+import Tag from "primevue/tag"
+import Textarea from "primevue/textarea"
+import { useToast } from "primevue/usetoast"
+import { useRouter } from "vue-router"
+import AppointmentScheduleCalendar from "@/features/appointments/components/AppointmentScheduleCalendar.vue"
+import AppointmentDetailsModal from "@/features/appointments/components/AppointmentDetailsModal.vue"
+import AppointmentForm from "@/features/appointments/components/AppointmentForm.vue"
+import PlannedServicesModal from "@/features/appointments/components/PlannedServicesModal.vue"
+import AttendanceModal from "@/features/appointments/components/AttendanceModal.vue"
+import {
+  appointmentBillingService,
+  type AppointmentBillingDocument,
+  type PaymentMethodLookup,
+  type AppointmentBillingPreparation
+} from "@/features/appointments/api/appointment-billing.service"
 import {
   appointmentPhase1Service,
-  type AppointmentEncounterTicket,
-  type AppointmentEncounterTicketPayload,
-  type AppointmentDetail,
   type AppointmentListItem,
+  type AppointmentPlannedService,
   type AppointmentLocationContext,
-  type AppointmentPhase
-} from "@/features/appointments/api/appointment-phase1.service";
-import {
-  openEncounterTicketPdfWindow,
-  renderEncounterTicketPdfWindow
-} from "@/utils/encounter-ticket-pdf.util";
-import {getApiErrorMessage, type ApiErrorMessageOptions} from "@/utils/actionable-error.util";
-import {errorToast, successToast} from "@/utils/toast.util";
-import {patientService} from "@/features/patients/api/patient.service";
-import {defaultPage} from "@/models/paging";
-import {Status} from "@/utils/global.type";
-import type {Patient} from "@/features/patients/types/patient";
-import type {Staff} from "@/features/staff/types/staff";
-import {pamsAPI} from "@/utils/axios-interceptor";
-import type {Pageable} from "@/models/paging";
-import type {PatientHMOInformation} from "@/models/hmo-information";
-import {patientTanstackService} from "@/features/patients/queries/patient.tanstack.service";
-import {createReferenceService} from "@/services/reference.service";
-import {AppointmentTanstackKey, ReferenceTanstackKey, ServiceCatalogTanstackKey} from "@/utils/keys/tanstack-key";
-import type {AppointmentProviderType, SpecialtyTag, TreatmentArea} from "@/models/reference";
-import { ptInputText, ptModalPrimaryBtn, ptOutlinedBtn, ptPrimaryBtn, ptSelect } from "@/features/shared/table-header.styles";
-import {clinicStore} from "@/stores/clinic.store"
-import {useAuthSessionStore} from "@/stores/auth-session.store"
-import AppointmentCheckoutPanel from "@/features/appointments/components/AppointmentCheckoutPanel.vue"
-import AppointmentCalendarSection from "@/features/appointments/components/AppointmentCalendarSection.vue"
-import AppointmentTableSection from "@/features/appointments/components/AppointmentTableSection.vue"
-import {appointmentContextTanstackService} from "@/features/appointments/queries/appointment-context.tanstack.service"
-import {serviceCatalogContextTanstackService} from "@/features/services/queries/service-catalog-context.tanstack.service"
-import type {
-  ServiceCatalogBundle,
-  ServiceCatalogContext,
-  ServiceCatalogItem,
-  ServiceCatalogScope
-} from "@/features/services/api/service-catalog-context.service"
+  type AppointmentPhase,
+  type AppointmentServiceSelectionType,
+  type AppointmentCreatePayload,
+  type AppointmentSessionSchedulePayload
+} from "@/features/appointments/api/appointment-phase1.service"
+import { clinicService } from "@/features/clinics/api/clinic.service"
+import { patientService } from "@/features/patients/api/patient.service"
+import { staffService } from "@/features/staff/api/staff.service"
+import { ptPrimaryBtn } from "@/features/shared/table-header.styles"
+import { useAuthSessionStore } from "@/stores/auth-session.store"
+import { clinicStore } from "@/stores/clinic.store"
+import { pamsAPI } from "@/utils/axios-interceptor"
+import { Status } from "@/utils/global.type"
+import { errorToast, successToast } from "@/utils/toast.util"
 
+type SelectOption = { label: string; value: number | string | null }
+type PayerType = "SELF_PAY_SINGLE" | "SELF_PAY_PACKAGE" | "HMO" | "LGU"
+type Laterality = "LEFT" | "RIGHT" | "BOTH" | "BILATERAL" | "NA"
+type ServiceOption = { label: string; value: number; price: number; type: AppointmentServiceSelectionType }
+type SelectedService = ServiceOption & { name: string; quantity: number; typeLabel: string }
+type AttendanceItem = AppointmentPlannedService & { selected: boolean; quantity: number; remaining: number; appointmentConsumed: number }
+type TreatmentAreaOption = SelectOption & { clinicId: number | null; color?: string | null }
+type CalendarVisibleRange = { from: Date; to: Date }
 
-const BillingModule = defineAsyncComponent(() => import("@/features/billing/components/BillingModule.vue"))
-
-interface BillingPickerLookup {
-  id: string | number
-  name: string
-  price: number
-}
-
-const router = useRouter()
 const toast = useToast()
-const confirm = useConfirm()
-const queryClient = useQueryClient()
-const globalClinicStore = clinicStore()
-const {clinicOptions, selectedClinicId} = storeToRefs(globalClinicStore)
+const router = useRouter()
+const branchStore = clinicStore()
 const authSession = useAuthSessionStore()
 
-const tableAppointments = ref<AppointmentListItem[]>([])
-const tableTotalElements = ref(0)
-const tableSectionRef = ref<InstanceType<typeof AppointmentTableSection>>()
-const selectedDetail = ref<AppointmentDetail>()
-const detailPanelVisible = ref(false)
-const billingOverlayVisible = ref(false)
-
-const fetchAppointmentDetail = async (appointmentId: number): Promise<AppointmentDetail> => {
-  const context = await appointmentContextTanstackService.fetchContext(queryClient, appointmentId)
-  return context.appointment
+const normalizeDateOnly = (value: Date): Date => {
+  const date = new Date(value)
+  date.setHours(0, 0, 0, 0)
+  return date
 }
 
-const invalidateAppointmentContext = async (appointmentId?: number): Promise<void> => {
-  if (!appointmentId) return
-  await queryClient.invalidateQueries({queryKey: [AppointmentTanstackKey.APPOINTMENT_CONTEXT, appointmentId]})
+const initialSelectedDate = normalizeDateOnly(new Date())
+
+const addDays = (value: Date, days: number): Date => {
+  const date = normalizeDateOnly(value)
+  date.setDate(date.getDate() + days)
+  return date
 }
-const billingOverlayMode = ref<'detail' | 'edit'>('detail')
-const encounterTicketVisible = ref(false)
-const isEncounterTicketSaving = ref(false)
-const encounterTicketAttendedAt = ref<Date>(new Date())
-const encounterTicketSignatureDataUrl = ref("")
-const encounterTicketLoaNumber = ref("")
-const encounterTicketLoaDate = ref("")
-const lguMonthlyClaimVisible = ref(false)
-const lguMonthlyClaimMonth = ref("")
-const isLguMonthlyClaimSaving = ref(false)
-const lguMonthlyClaimSummary = ref<{ consumed_count: number; billing_month: string } | null>(null)
-const isClinicSwitchLoading = ref(false)
-const slotMinuteStep = 15
-type SlotDurationMinutes = 30 | 60 | 75
-const slotDurationOptions: Array<{label: string; value: SlotDurationMinutes}> = [
-  {label: "30 min", value: 30},
-  {label: "60 min", value: 60},
-  {label: "75 min", value: 75},
+
+const startOfMonth = (value: Date): Date =>
+  new Date(value.getFullYear(), value.getMonth(), 1)
+
+const endOfMonth = (value: Date): Date =>
+  new Date(value.getFullYear(), value.getMonth() + 1, 0)
+
+const defaultCalendarRange = (value: Date): CalendarVisibleRange => ({
+  from: addDays(startOfMonth(value), -7),
+  to: addDays(endOfMonth(value), 7)
+})
+
+const activeCalendarRange = ref<CalendarVisibleRange>(defaultCalendarRange(initialSelectedDate))
+const DEFAULT_APPOINTMENT_DURATION_MS = 60 * 60 * 1000
+
+const appointments = ref<AppointmentListItem[]>([])
+const tableAppointmentSource = ref<AppointmentListItem[]>([])
+const calendarAppointments = ref<AppointmentListItem[]>([])
+const availabilityAppointments = ref<AppointmentListItem[]>([])
+const totalRecords = ref(0)
+const page = ref(1)
+const pageSize = ref(20)
+
+const isLoading = ref(false)
+const isCalendarLoading = ref(false)
+const isAvailabilityLoading = ref(false)
+const isSaving = ref(false)
+const isSavingServices = ref(false)
+const isSavingAttendance = ref(false)
+const isBillingActionLoading = ref(false)
+const isTenderSaving = ref(false)
+const isPaymentMethodsLoading = ref(false)
+
+const formVisible = ref(false)
+const detailsVisible = ref(false)
+const servicesVisible = ref(false)
+const attendanceVisible = ref(false)
+const appointmentBillingVisible = ref(false)
+const tenderVisible = ref(false)
+
+const editingId = ref<number | null>(null)
+const activeAppointment = ref<AppointmentListItem | null>(null)
+const detailAppointment = ref<AppointmentListItem | null>(null)
+
+const patientOptions = ref<SelectOption[]>([])
+const clinicOptions = ref<SelectOption[]>([])
+const staffOptions = ref<Array<SelectOption & {
+  providerType?: string
+  secondaryProviderType?: string | null
+  specialtyTagId?: number | null
+}>>([])
+const appointmentTypeOptions = ref<SelectOption[]>([])
+const appointmentStatusOptions = ref<SelectOption[]>([])
+const specialtyOptions = ref<SelectOption[]>([])
+const treatmentAreaOptions = ref<TreatmentAreaOption[]>([])
+const medicalDiagnoseOptions = ref<SelectOption[]>([])
+
+const serviceCatalog = ref<Record<AppointmentServiceSelectionType, ServiceOption[]>>({
+  PACKAGE: [],
+  BUNDLE: [],
+  MACHINE: [],
+  TECHNIQUE: [],
+  EVALUATION: [],
+  ADD_ON_MACHINE: [],
+  ADD_ON_TECHNIQUE: [],
+  ADD_ON_HOME_SERVICE: []
+})
+
+const selectedServices = ref<SelectedService[]>([])
+const detailPlannedServices = ref<AppointmentPlannedService[]>([])
+const detailBillingPreparation = ref<AppointmentBillingPreparation | null>(null)
+const tenderBillingDocument = ref<AppointmentBillingDocument | null>(null)
+const paymentMethods = ref<PaymentMethodLookup[]>([])
+const servicesModalPlannedServices = ref<AppointmentPlannedService[]>([])
+const attendancePlannedServices = ref<AppointmentPlannedService[]>([])
+const attendanceItems = ref<AttendanceItem[]>([])
+const sessionCountPreview = ref(1)
+
+type AttendanceStatusFilter = "PENDING" | "COMPLETED" | "CANCELED"
+
+type BillingStatusFilter = "UNBILLED" | "BILLED" | "PAID" | "PARTIALLY_PAID"
+
+const filters = reactive({
+  search: "",
+  fromDate: initialSelectedDate,
+  toDate: initialSelectedDate,
+  ptId: null as number | null,
+  payerType: null as PayerType | null,
+  billingStatus: null as BillingStatusFilter | null,
+  attendanceStatus: null as AttendanceStatusFilter | null
+})
+
+const form = reactive({
+  patient_id: null as number | null,
+  clinic_id: null as number | null,
+  primary_provider_staff_id: null as number | null,
+  referring_staff_id: null as number | null,
+  appointment_type_id: null as number | null,
+  appointment_status_id: null as number | null,
+  starts_at: null as Date | null,
+  ends_at: null as Date | null,
+  appointment_phase: "SESSION" as AppointmentPhase,
+  location_context: "IN_CLINIC" as AppointmentLocationContext,
+  specialty_tag_id: null as number | null,
+  treatment_area_id: null as number | null,
+  medical_diagnose_id: null as number | null,
+  diagnosis_laterality: null as Laterality | null,
+  payer_type: null as PayerType | null,
+  notes: "",
+  create_all_sessions: true,
+  session_dates: [] as Date[]
+})
+
+const tenderForm = reactive({
+  amount_tendered: null as number | null,
+  payment_method_id: null as number | null,
+  payment_reference: "",
+  notes: "",
+  senior_pwd_id_presented: false,
+  senior_pwd_id_reference: "",
+  custom_discount_type: null as "PERCENTAGE" | "FIXED" | null,
+  custom_discount_value: null as number | null
+})
+
+const hmoClaimForm = reactive({
+  loa_number: "",
+  approval_code: "",
+  notes: ""
+})
+
+const lguClaimForm = reactive({
+  referral_form_no: "",
+  approval_code: "",
+  notes: ""
+})
+
+const servicePicker = reactive({
+  type: "TECHNIQUE" as AppointmentServiceSelectionType,
+  id: null as number | null,
+  quantity: 1
+})
+
+const phaseOptions: Array<{ label: string; value: AppointmentPhase }> = [
+  { label: "Evaluation", value: "EVAL" },
+  { label: "Session", value: "SESSION" },
+  { label: "Re-evaluation", value: "RE_EVAL" }
 ]
 
-const calendarDate = ref<Date>(new Date())
-const rescheduleVisible = ref(false)
-const activeAppointment = ref<AppointmentListItem>()
-const rescheduleStart = ref<Date>(new Date())
-const rescheduleEnd = ref<Date>(new Date())
-const rescheduleSlotDuration = ref<SlotDurationMinutes>(60)
-const overrideReason = ref("")
+const locationOptions: Array<{ label: string; value: AppointmentLocationContext }> = [
+  { label: "Clinic Branch", value: "IN_CLINIC" },
+  { label: "Home Care", value: "HOME_CARE" }
+]
 
-const createVisible = ref(false)
-const calendarSectionRef = ref<InstanceType<typeof AppointmentCalendarSection>>()
-type AppointmentPersonOption = {
-  id: number
-  name: string
-  label: string
-  clinic_id: number
-  role_name?: string
-  appointment_provider_type?: AppointmentProviderType
-  requires_specialty_tag?: boolean
-  specialty_tag_id?: number
-  specialty_tag_name?: string
-}
-type BillingType = "SELF_PAY_SINGLE" | "SELF_PAY_PACKAGE" | "HMO_BILLING" | "LGU_BILLING"
-type SingleService = {
-  id: string
-  type: "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service"
-  name: string
-  price: number
-  status: string
-}
-type BundledService = {
-  id: string
-  name: string
-  machineIds: string[]
-  techniqueIds: string[]
-  evaluationIds: string[]
-  addOnIds: string[]
-  bundledPrice: number
-  status: string
-}
-type PackageServiceOffer = {
-  id: string
-  name: string
-  offerScope?: "GLOBAL" | "LGU"
-  bundleId?: string
-  bundleQty: number
-  machineIds?: string[]
-  machineQty?: number
-  machineItems?: Array<{id: string; qty: number}>
-  techniqueIds?: string[]
-  techniqueQty?: number
-  techniqueItems?: Array<{id: string; qty: number}>
-  evaluationIds: string[]
-  evaluationItems?: Array<{id: string; qty: number}>
-  addOnIds?: string[]
-  addOnQty?: number
-  addOnItems?: Array<{id: string; qty: number}>
-  sessionIds?: string[]
-  sessionQty?: number
-  sessionItems?: Array<{id: string; qty: number}>
-  invoiceSubItems?: PackageInvoicePrintSubItem[]
-  evaluationQty: number
-  packagePrice: number
-  status: string
-}
-type PackageInvoicePrintSubItem = {
-  name: string
-  quantity: number
-  unitPrice?: number
-  dropoutUnitPrice?: number
-  children?: PackageInvoicePrintSubItem[]
-}
-type SelectedServiceLine = {
-  type: string
-  id: string
-  name: string
-  price: number
-  originalPrice?: number
-}
-type PackageSessionSchedule = {
-  key: string
-  sessionId?: string
-  sessionName: string
-  occurrence: number
-  totalOccurrences: number
-  startsAt: Date
-}
-type PackageSessionTemplate = Omit<PackageSessionSchedule, "startsAt">
-const patientOptions = ref<AppointmentPersonOption[]>([])
-const createLookupsClinicId = ref<number>()
-const doctorOptions = ref<AppointmentPersonOption[]>([])
-const referringDoctorOptions = ref<AppointmentPersonOption[]>([])
-const supportStaffOptions = ref<AppointmentPersonOption[]>([])
-const specialtyTagOptions = ref<SpecialtyTag[]>([])
-const treatmentAreaOptions = ref<TreatmentArea[]>([])
-const sessionServices = ref<BillingPickerLookup[]>([])
-const billingTypeOptions = [
-  {label: "Self Pay: Single Service", value: "SELF_PAY_SINGLE"},
-  {label: "Self Pay: Package Service", value: "SELF_PAY_PACKAGE"},
-  {label: "HMO", value: "HMO_BILLING"},
-  {label: "LGU", value: "LGU_BILLING"},
+const payerOptions: Array<{ label: string; value: PayerType }> = [
+  { label: "Self Pay: Single", value: "SELF_PAY_SINGLE" },
+  { label: "Self Pay: Package", value: "SELF_PAY_PACKAGE" },
+  { label: "HMO", value: "HMO" },
+  { label: "LGU", value: "LGU" }
 ]
-const appointmentPhaseOptions: Array<{label: string; value: AppointmentPhase}> = [
-  {label: "Eval", value: "EVAL"},
-  {label: "Session", value: "SESSION"},
-  {label: "Re-Eval", value: "RE_EVAL"},
-]
-const appointmentLocationContextOptions: Array<{label: string; value: AppointmentLocationContext}> = [
-  {label: "In-Clinic", value: "IN_CLINIC"},
-  {label: "Home Care", value: "HOME_CARE"},
-]
-const createPatient = ref<number>()
-const createDoctor = ref<number>()
-const createReferringDoctor = ref<number>()
-const createSupportStaff = ref<number>()
-const createPhase = ref<AppointmentPhase>("SESSION")
-const createLocationContext = ref<AppointmentLocationContext>("IN_CLINIC")
-const isCreateLocationContextAuto = ref(false)
-const createSpecialtyTag = ref<number>()
-const createTreatmentArea = ref<number>()
-const createBillingType = ref<BillingType>("SELF_PAY_SINGLE")
-const createBillingNotes = ref("")
-const createLguProgramId = ref<number>()
-const lguProgramOptions = ref<Array<{id: number; name: string}>>([])
-const createStart = ref<Date>(new Date())
-const createEnd = ref<Date>(new Date(Date.now() + 60 * 60 * 1000))
-const createSlotDuration = ref<SlotDurationMinutes>(60)
-const allSinglePayServices = ref<SingleService[]>([])
-const allBundledServices = ref<BundledService[]>([])
-const allPackageServiceOffers = ref<PackageServiceOffer[]>([])
-const lguSinglePayServices = ref<SingleService[]>([])
-const lguBundledServices = ref<BundledService[]>([])
-const lguPackageServiceOffers = ref<PackageServiceOffer[]>([])
 
-// Service selection state
-type ServiceMode = "individual" | "bundled"
-const serviceMode = ref<ServiceMode>("individual")
-const serviceModeOptions: Array<{label: string; value: ServiceMode}> = [
-  {label: "Individual", value: "individual"},
-  {label: "Bundled", value: "bundled"},
+const discountTypeOptions: Array<{ label: string; value: "PERCENTAGE" | "FIXED" }> = [
+  { label: "Percentage", value: "PERCENTAGE" },
+  { label: "Fixed Amount", value: "FIXED" }
 ]
-const isPackageServiceFlowBillingType = (billingType: BillingType): boolean =>
-  billingType === "SELF_PAY_PACKAGE" || billingType === "LGU_BILLING"
-const isCreatePackageServiceFlow = computed(() => isPackageServiceFlowBillingType(createBillingType.value))
-const visibleServiceModeOptions = computed(() =>
-  createBillingType.value === "HMO_BILLING"
-    ? serviceModeOptions.filter(option => option.value === "individual")
-    : serviceModeOptions
+
+const lateralityOptions: Array<{ label: string; value: Laterality }> = [
+  { label: "Left", value: "LEFT" },
+  { label: "Right", value: "RIGHT" },
+  { label: "Both", value: "BOTH" },
+  { label: "N/A", value: "NA" }
+]
+
+const allServiceTypeOptions: Array<{ label: string; value: AppointmentServiceSelectionType }> = [
+  { label: "Package", value: "PACKAGE" },
+  { label: "Bundle", value: "BUNDLE" },
+  { label: "Single Service: Machine", value: "MACHINE" },
+  { label: "Single Service: Technique", value: "TECHNIQUE" },
+  { label: "Single Service: Evaluation", value: "EVALUATION" },
+  { label: "Service Add-on: Machine", value: "ADD_ON_MACHINE" },
+  { label: "Service Add-on: Technique", value: "ADD_ON_TECHNIQUE" },
+  { label: "Home Care Add-on", value: "ADD_ON_HOME_SERVICE" }
+]
+
+const allowedServiceTypesByBillingType: Record<PayerType, AppointmentServiceSelectionType[]> = {
+  SELF_PAY_SINGLE: ["BUNDLE", "MACHINE", "TECHNIQUE", "EVALUATION", "ADD_ON_MACHINE", "ADD_ON_TECHNIQUE", "ADD_ON_HOME_SERVICE"],
+  SELF_PAY_PACKAGE: ["PACKAGE", "BUNDLE", "MACHINE", "TECHNIQUE", "EVALUATION", "ADD_ON_MACHINE", "ADD_ON_TECHNIQUE", "ADD_ON_HOME_SERVICE"],
+  HMO: ["MACHINE", "TECHNIQUE", "EVALUATION", "ADD_ON_MACHINE", "ADD_ON_TECHNIQUE", "ADD_ON_HOME_SERVICE"],
+  LGU: ["PACKAGE", "ADD_ON_MACHINE", "ADD_ON_TECHNIQUE", "ADD_ON_HOME_SERVICE"]
+}
+
+const homeCareAddOnTypes = new Set<AppointmentServiceSelectionType>(["ADD_ON_HOME_SERVICE"])
+
+const getAllowedServiceTypes = (billingType?: PayerType | null): AppointmentServiceSelectionType[] =>
+  billingType
+    ? allowedServiceTypesByBillingType[billingType]
+    : ["MACHINE", "TECHNIQUE", "EVALUATION", "ADD_ON_MACHINE", "ADD_ON_TECHNIQUE", "ADD_ON_HOME_SERVICE"]
+
+const payerOptionsWithAll = computed(() => [{ label: "All Billing Types", value: null }, ...payerOptions])
+
+const billingStatusOptions: Array<{ label: string; value: BillingStatusFilter | null }> = [
+  { label: "All Billing Status", value: null },
+  { label: "Unbilled", value: "UNBILLED" },
+  { label: "Billed", value: "BILLED" },
+  { label: "Paid", value: "PAID" },
+  { label: "Partially Paid", value: "PARTIALLY_PAID" }
+]
+
+const attendanceStatusOptions: Array<{ label: string; value: AttendanceStatusFilter | null }> = [
+  { label: "All Attendance Status", value: null },
+  { label: "Pending", value: "PENDING" },
+  { label: "Completed", value: "COMPLETED" },
+  { label: "Canceled", value: "CANCELED" }
+]
+
+const ptOptions = computed(() =>
+  staffOptions.value.filter(option =>
+    option.providerType === "PHYSICAL_THERAPIST"
+    || option.providerType === "PT_ASSISTANT"
+    || option.providerType === "INTERN"
+    || option.secondaryProviderType === "PHYSICAL_THERAPIST"
+    || option.secondaryProviderType === "PT_ASSISTANT"
+    || option.secondaryProviderType === "INTERN"
+  )
 )
-const selectedMachineId = ref<string>()
-const selectedTechniqueId = ref<string>()
-const selectedEvaluationId = ref<string>()
-const selectedAddOnType = ref<"add-on-machine" | "add-on-technique" | "add-on-home-service">("add-on-machine")
-const selectedAddOnId = ref<string>()
-const selectedBundleId = ref<string>()
-const selectedPackageOfferId = ref<string>()
-const selectedServiceLines = ref<SelectedServiceLine[]>([])
-const selectedPackageOfferDetail = ref<PackageServiceOffer | null>(null)
-const packageSessionSchedules = ref<PackageSessionSchedule[]>([])
-const isCreatingAppointment = ref(false)
-const createPatientHmoId = ref<number | null>(null)
-const createPatientHmoInfo = ref<PatientHMOInformation | null>(null)
-const createPatientLguInfo = ref<PatientHMOInformation | null>(null)
-const syncingCreateHmoRates = ref(false)
-const syncingCreateLguProgram = ref(false)
-const createPatientMachineRateMap = ref<Map<number, number>>(new Map())
-const createPatientTechniqueRateMap = ref<Map<number, number>>(new Map())
-const createPatientEvaluationRateMap = ref<Map<number, number>>(new Map())
-const createPatientAddOnMachineRateMap = ref<Map<number, number>>(new Map())
-const createPatientAddOnTechniqueRateMap = ref<Map<number, number>>(new Map())
-const createPatientAddOnHomeServiceRateMap = ref<Map<number, number>>(new Map())
-const createDayAppointments = ref<AppointmentListItem[]>([])
-const createDayAppointmentsKey = ref("")
-const isCreateSlotsLoading = ref(false)
-const createActiveScheduleIndex = ref(0)
 
-const needsOverrideReason = computed(() => (activeAppointment.value?.reschedule_count ?? 0) >= 3)
-const specialtyTagReferenceService = createReferenceService<SpecialtyTag>(ReferenceTanstackKey.SPECIALTY_TAGS)
-const treatmentAreaReferenceService = createReferenceService<TreatmentArea>(ReferenceTanstackKey.TREATMENT_AREAS)
+const doctorOptions = computed(() =>
+  staffOptions.value.filter(option =>
+    option.providerType === "DOCTOR_CONSULTANT" || option.secondaryProviderType === "DOCTOR_CONSULTANT"
+  )
+)
 
-const asCurrency = (value: number): string =>
-  Number(value ?? 0).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
+const ptFilterOptions = computed<Array<SelectOption>>(() => [
+  { label: "All PT", value: null },
+  ...ptOptions.value
+])
 
-const addMinutes = (date: Date, minutes: number): Date => new Date(date.getTime() + minutes * 60 * 1000)
+const currentServiceBillingType = computed(() =>
+  servicesVisible.value ? activeAppointment.value?.payer_type as PayerType | null : form.payer_type
+)
 
-const snapToSlotBoundary = (date: Date): Date => {
-  const result = new Date(date)
-  const snappedMinutes = Math.floor(result.getMinutes() / slotMinuteStep) * slotMinuteStep
-  result.setMinutes(snappedMinutes, 0, 0)
-  return result
-}
+const serviceTypeOptions = computed(() => {
+  const allowed = new Set(getAllowedServiceTypes(currentServiceBillingType.value))
+  return allServiceTypeOptions.filter(option => allowed.has(option.value))
+})
 
-const normalizeSlotDuration = (minutes: number): SlotDurationMinutes => {
-  if (minutes <= 30) return 30
-  if (minutes <= 60) return 60
-  return 75
-}
+const currentServiceOptions = computed(() => serviceCatalog.value[servicePicker.type] ?? [])
 
-const inferSlotDuration = (start: Date, end: Date): SlotDurationMinutes => {
-  const durationMinutes = Math.round((end.getTime() - start.getTime()) / 60000)
-  return slotDurationOptions.some(option => option.value === durationMinutes)
-    ? durationMinutes as SlotDurationMinutes
-    : normalizeSlotDuration(durationMinutes)
-}
+const clinicAreaOptions = computed(() =>
+  treatmentAreaOptions.value.filter(option => !form.clinic_id || option.clinicId === form.clinic_id)
+)
 
-const addOnTypeOptions = [
-  { label: "Add-ons", value: "add-on-machine" as const },
-  { label: "Add-on (Home Service)", value: "add-on-home-service" as const },
-]
+const activeBranchId = computed(() => branchStore.selectedClinicId ?? null)
 
-const normalizeAppointmentProviderType = (
-  providerType?: AppointmentProviderType | null
-): AppointmentProviderType => {
-  if (providerType === "DOCTOR_CONSULTANT" || providerType === "PHYSICAL_THERAPIST" || providerType === "PT_ASSISTANT" || providerType === "INTERN") return providerType
-  return "NONE"
-}
-const isPhysicalTherapistProviderType = (providerType?: AppointmentProviderType | null): boolean =>
-  normalizeAppointmentProviderType(providerType) === "PHYSICAL_THERAPIST"
-const isDoctorConsultantProviderType = (providerType?: AppointmentProviderType | null): boolean =>
-  normalizeAppointmentProviderType(providerType) === "DOCTOR_CONSULTANT"
-const isSupportStaffProviderType = (providerType?: AppointmentProviderType | null): boolean =>
-  normalizeAppointmentProviderType(providerType) === "PT_ASSISTANT"
-  || normalizeAppointmentProviderType(providerType) === "INTERN"
-const resolveAppointmentStaffProviderType = (staff: Staff): AppointmentProviderType => {
-  const primaryProviderType = normalizeAppointmentProviderType(staff.appointment_provider_type)
-  if (primaryProviderType !== "NONE") {
-    return primaryProviderType
-  }
-  return normalizeAppointmentProviderType(staff.secondary_appointment_provider_type)
-}
-const resolveAppointmentStaffRoleName = (staff: Staff): string => {
-  const primaryProviderType = normalizeAppointmentProviderType(staff.appointment_provider_type)
-  if (primaryProviderType !== "NONE") {
-    return staff.role_name
-  }
-  return staff.secondary_role_name || staff.role_name
-}
-const formatAppointmentProviderLabel = (staff: {
-  name: string
-  role_name?: string
-  specialty_tag_name?: string
-}): string =>
-  [staff.name, staff.role_name, staff.specialty_tag_name].filter(Boolean).join(" · ")
+const selectedClinic = computed(() =>
+  clinicOptions.value.find(option => option.value === form.clinic_id)
+  ?? clinicOptions.value.find(option => option.value === activeBranchId.value)
+  ?? clinicOptions.value.find(option => option.value === appointments.value[0]?.clinic_id)
+  ?? clinicOptions.value.find(option => option.value === calendarAppointments.value[0]?.clinic_id)
+  ?? null
+)
 
-const resolveCreateServiceType = (billingType: BillingType): NonNullable<Parameters<typeof appointmentPhase1Service.create>[0]["service_type"]> => {
-  if (billingType === "SELF_PAY_PACKAGE") return "PACKAGE"
-  if (billingType === "HMO_BILLING") return "HMO"
-  if (billingType === "LGU_BILLING") return "LGU"
-  return "SINGLE"
-}
+const paymentMethodOptions = computed<SelectOption[]>(() =>
+  paymentMethods.value.map(method => ({ label: method.name, value: method.id }))
+)
 
-const resolveAppointmentsErrorOptions = (fallback: string): ApiErrorMessageOptions => {
-  const normalized = fallback.trim().toLowerCase()
+const largestTenderLineTotal = (lines: AppointmentBillingDocument["lines"] = []): number =>
+  lines.reduce((max, line) => Math.max(max, Number(line.line_total ?? 0), largestTenderLineTotal(line.children)), 0)
 
-  if (normalized.includes("create appointment")) {
-    return {
-      baseMessage: fallback,
-      permissionHint: "Appointment::CREATE and Patient::READ permissions for this clinic",
-      notFoundHint: "The selected patient, provider, room, or service is no longer available. Re-select those fields and submit again.",
-      invalidInputHint: "Check required fields in order: Patient -> Assigned PT -> Services -> Schedule (date/time within clinic hours).",
-      retryHint: "Review the form and submit again."
-    }
-  }
-
-  if (normalized.includes("reschedule")) {
-    return {
-      baseMessage: fallback,
-      permissionHint: "Appointment::UPDATE permission for this clinic",
-      notFoundHint: "This appointment may have been updated or removed. Refresh the table and retry.",
-      invalidInputHint: "Check new schedule: within clinic days/hours, 15-minute increments, no overlap, and provide owner reason after 3 reschedules.",
-      retryHint: "Pick a new valid slot and submit again."
-    }
-  }
-
-  if (normalized.includes("time slots")) {
-    return {
-      baseMessage: fallback,
-      permissionHint: "Appointment::READ permission for this clinic",
-      notFoundHint: "No schedule configuration was found for this clinic/date. Verify clinic setup and operating hours.",
-      invalidInputHint: "Check selected clinic and date, then reload available slots.",
-      retryHint: "Reopen the Create Appointment dialog or change date and back."
-    }
-  }
-
-  if (normalized.includes("dropout status")) {
-    return {
-      baseMessage: fallback,
-      permissionHint: "Appointment::UPDATE and LGU-related permissions in Role Access",
-      notFoundHint: "The LGU-linked appointment or billing record was not found. Refresh appointment details and retry.",
-      invalidInputHint: "Check LGU billing linkage and patient status before updating dropout state.",
-      retryHint: "Refresh the appointment detail panel and try again."
-    }
-  }
-
-  if (normalized.includes("month-end lgu claim")) {
-    return {
-      baseMessage: fallback,
-      permissionHint: "LGU claim permissions and Appointment::UPDATE",
-      notFoundHint: "LGU claim source records were not found. Reopen appointment details and verify LGU credit summary.",
-      invalidInputHint: "Check billing month format (YYYY-MM), consumed sessions, and LGU authorization status.",
-      retryHint: "Correct billing month/details and create claim again."
-    }
-  }
-
-  if (normalized.includes("encounter ticket")) {
-    return {
-      baseMessage: fallback,
-      permissionHint: "Encounter ticket and Appointment::UPDATE permissions",
-      notFoundHint: "The encounter ticket or billing snapshot is no longer available. Refresh appointment details.",
-      invalidInputHint: "Check that billing exists, patient signature is provided, and the ticket is not already locked.",
-      retryHint: "Refresh details and retry the encounter action."
-    }
-  }
-
-  if (normalized.includes("appointment detail")) {
-    return {
-      baseMessage: fallback,
-      permissionHint: "Appointment::READ permission for this clinic",
-      notFoundHint: "The selected appointment is no longer available. Refresh the table and select another record.",
-      invalidInputHint: "Check table filters and selected clinic/date before opening details.",
-      retryHint: "Click Refresh and try opening the detail again."
-    }
-  }
-
-  if (normalized.includes("delete appointment")) {
-    return {
-      baseMessage: fallback,
-      permissionHint: "Appointment::DELETE permission for this clinic",
-      notFoundHint: "This appointment may have already been deleted. Refresh the table.",
-      invalidInputHint: "Check whether the appointment is linked to a locked billing or encounter ticket.",
-      retryHint: "Refresh records and retry deletion."
-    }
-  }
-
+const tenderDiscountSummary = computed(() => {
+  const document = tenderBillingDocument.value
+  const subtotal = Number(document?.totals.subtotal ?? document?.totals.total ?? 0)
+  const paid = Number(document?.totals.paid ?? 0)
+  const existingDiscount = Number(document?.totals.discount ?? 0)
+  const seniorTargetAmount = largestTenderLineTotal(document?.lines) || subtotal
+  const seniorDiscount = tenderForm.senior_pwd_id_presented ? Math.max(0, seniorTargetAmount * 0.2) : 0
+  const remainingAfterSenior = Math.max(0, subtotal - seniorDiscount)
+  const customValue = Number(tenderForm.custom_discount_value ?? 0)
+  const customDiscount = tenderForm.custom_discount_type && customValue > 0
+    ? tenderForm.custom_discount_type === "PERCENTAGE"
+      ? remainingAfterSenior * (customValue / 100)
+      : customValue
+    : 0
+  const requestedDiscount = Math.min(subtotal, seniorDiscount + customDiscount)
+  const discount = requestedDiscount > 0 ? requestedDiscount : existingDiscount
+  const totalAfterDiscount = Math.max(0, subtotal - discount + Number(document?.totals.tax ?? 0))
   return {
-    baseMessage: fallback,
-    permissionHint: "Appointment or Patient permissions in Role Access",
-    notFoundHint: "The selected record was not found. Refresh the page and try again.",
-    invalidInputHint: "Some inputs are invalid. Check required fields and schedule values, then retry.",
-    retryHint: "Please try again."
+    discount,
+    amountDue: Math.max(0, totalAfterDiscount - paid),
+    change: Math.max(0, Number(tenderForm.amount_tendered ?? 0) - Math.max(0, totalAfterDiscount - paid))
   }
+})
+
+const pendingStatusOption = computed(() =>
+  appointmentStatusOptions.value.find(option => String(option.label).toLowerCase() === "pending")
+  ?? appointmentStatusOptions.value.find(option => String(option.label).toLowerCase().includes("pending"))
+  ?? appointmentStatusOptions.value[0]
+  ?? null
+)
+
+const appointmentStatusLabel = computed(() =>
+  editingId.value
+    ? appointmentStatusOptions.value.find(option => option.value === form.appointment_status_id)?.label ?? "Updated by attendance"
+    : pendingStatusOption.value?.label ?? "Pending"
+)
+
+const selectedDateLabel = computed(() => {
+  const date = filters.fromDate ?? form.starts_at ?? new Date()
+  return date.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })
+})
+
+const totalAppointmentsCount = computed(() => totalRecords.value)
+
+const rescheduledOrCanceledAppointmentsCount = computed(() =>
+  tableAppointmentSource.value.filter(appointment =>
+    normalizeAttendanceStatus(appointment) === "CANCELED" || isRescheduledAppointment(appointment)
+  ).length
+)
+
+const unbilledAppointmentsCount = computed(() =>
+  tableAppointmentSource.value.filter(appointment => normalizeBillingStatus(appointment) === "UNBILLED").length
+)
+
+const canUseAppointmentPermission = (...permissions: string[]): boolean =>
+  authSession.isOwnerEquivalent || authSession.hasAnyPermission(...permissions)
+
+const canViewAppointmentDetails = computed(() =>
+  canUseAppointmentPermission("Appointment::READ", "Appointment::LOOKUP")
+)
+
+const canCreateAppointment = computed(() =>
+  canUseAppointmentPermission("Appointment::CREATE")
+)
+
+const canEditAppointment = computed(() =>
+  canUseAppointmentPermission("Appointment::UPDATE")
+)
+
+const canCancelAppointment = computed(() =>
+  canUseAppointmentPermission("Appointment::DELETE", "Appointment::MANAGE_STATUS")
+)
+
+const canMarkAttendance = computed(() =>
+  canUseAppointmentPermission("Appointment::UPDATE", "Appointment::MANAGE_STATUS")
+)
+
+const canManageAppointmentBilling = computed(() =>
+  canUseAppointmentPermission("Appointment::MANAGE_BILL", "Patient::MANAGE_BILLS")
+)
+
+const toDateParam = (date: Date | null): string | undefined => {
+  if (!date) return undefined
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
 }
 
-const resolveSpecificAppointmentsErrorMessage = (error: unknown, fallback: string): string | undefined => {
-  if (!axios.isAxiosError(error)) return undefined
-
-  const status = Number(error.response?.status ?? 0)
-  const apiMessage = String(error.response?.data?.message ?? error.response?.data?.detail ?? "").trim()
-  const normalizedFallback = fallback.trim().toLowerCase()
-  const normalizedApi = apiMessage.toLowerCase()
-
-  const isCreateAppointment = normalizedFallback.includes("create appointment")
-  const isReschedule = normalizedFallback.includes("reschedule")
-
-  if (
-    isCreateAppointment
-    && /patient is marked as dropped out|cannot avail lgu billing|dropped out.*lgu/i.test(normalizedApi)
-  ) {
-    return "Cannot create LGU appointment: the patient is marked as Dropped Out. Ask an Owner-equivalent account to return the patient to Active first, then create the appointment again."
-  }
-
-  if (
-    (isCreateAppointment || isReschedule)
-    && (status === 409 || /conflict|overlap|already booked|double\s*book|time\s*slot.*taken|occupied/i.test(normalizedApi))
-    && /conflict|overlap|already booked|double\s*book|time\s*slot|occupied/i.test(normalizedApi)
-  ) {
-    return "Schedule conflict: the selected PT or room already has an appointment at that time. Check Calendar availability, then choose a different time slot, PT, or room."
-  }
-
-  if (
-    (isCreateAppointment || isReschedule)
-    && /outside clinic operating days|outside clinic operating hours|outside clinic operating/i.test(normalizedApi)
-  ) {
-    return "Schedule is outside clinic operating schedule. Pick a date within clinic operating days and a time within clinic operating hours."
-  }
-
-  if (isCreateAppointment && /lgu program.*required|select lgu program|missing lgu program/i.test(normalizedApi)) {
-    return "LGU Program is required for LGU Billing. Select an LGU Program in the appointment form, then submit again."
-  }
-
-  if (isCreateAppointment && /specialty.*required|requires specialty/i.test(normalizedApi)) {
-    return "Specialty is required for the selected provider role. Select a specialty in Care Team and Session Setup, then submit again."
-  }
-
-  if (isCreateAppointment && /assigned pt is required|doctor_id.*required|provider.*required/i.test(normalizedApi)) {
-    return "Assigned PT is required. Choose an Assigned PT in Care Team and Session Setup, then create the appointment again."
-  }
-
-  if (isCreateAppointment && /patient.*required|patient_id.*required/i.test(normalizedApi)) {
-    return "Patient is required. Select a patient first, then create the appointment again."
-  }
-
-  return undefined
+const toDateTimePayload = (date: Date | null): string | undefined => {
+  if (!date) return undefined
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  const hours = String(date.getHours()).padStart(2, "0")
+  const minutes = String(date.getMinutes()).padStart(2, "0")
+  return `${year}-${month}-${day}T${hours}:${minutes}:00`
 }
 
-const extractApiErrorMessage = (error: unknown, fallback: string): string => {
-  const specificMessage = resolveSpecificAppointmentsErrorMessage(error, fallback)
-  if (specificMessage) return specificMessage
-  return getApiErrorMessage(error, resolveAppointmentsErrorOptions(fallback))
+const formatDate = (value: string): string =>
+  new Date(value).toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" })
+
+const formatTime = (value: string): string =>
+  new Date(value).toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })
+
+const formatPayer = (value?: string | null): string => value ? value.split("_").join(" ") : "Unassigned"
+
+const formatCurrency = (value: number): string =>
+  new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(Number(value ?? 0))
+
+const formatBillingPreparationStatus = (value?: string | null): string =>
+  String(value ?? "N/A")
+    .split("_")
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ")
+
+const billingPreparationSeverity = computed<"success" | "warn" | "danger" | "info">(() => {
+  const preparation = detailBillingPreparation.value
+  if (!preparation) return "info"
+  if (preparation.billing_path.documentation_only) return "info"
+  if (preparation.billing_path.requires_tendering || preparation.billing_path.requires_loa) return "warn"
+  return "success"
+})
+
+const tenderableBillingDocument = computed<AppointmentBillingDocument | null>(() => {
+  const preparation = detailBillingPreparation.value
+  if (!preparation) return null
+  if (preparation.billing_path.payer_type !== "SELF_PAY_SINGLE" && preparation.billing_path.payer_type !== "SELF_PAY_PACKAGE") return null
+
+  const document = preparation.existing_documents.find(existing =>
+    ["APPOINTMENT_INVOICE", "PACKAGE_INVOICE"].includes(existing.document_type)
+    && !["PAID", "VOID", "CANCELLED"].includes(String(existing.document_status).toUpperCase())
+    && Number(existing.totals?.balance ?? 0) > 0
+  )
+
+  return document
+    ? {
+        id: document.id,
+        document_number: document.document_number,
+        document_type: document.document_type,
+        document_status: document.document_status,
+        payer_type: preparation.billing_path.payer_type,
+        document_date: document.document_date,
+        totals: document.totals
+      }
+    : null
+})
+
+const formatOptionalNumber = (value?: number | null): string | undefined =>
+  value === undefined || value === null ? undefined : String(value)
+
+const serviceTypeLabel = (value: AppointmentServiceSelectionType): string =>
+  allServiceTypeOptions.find(option => option.value === value)?.label ?? value
+
+const displayAppointmentPhase = (value?: AppointmentPhase | string): string =>
+  phaseOptions.find(option => option.value === value)?.label ?? String(value ?? "Unassigned")
+
+const displayLocationContext = (value?: AppointmentLocationContext | string): string =>
+  locationOptions.find(option => option.value === value)?.label ?? String(value ?? "Unassigned")
+
+const displayLaterality = (value?: string | null): string => {
+  if (!value) return "Not recorded"
+  if (value === "BILATERAL") return "Both"
+  return lateralityOptions.find(option => option.value === value)?.label ?? value
 }
 
-const toOptionalStringId = (value: unknown): string | undefined => {
-  const normalized = String(value ?? "").trim()
-  return normalized || undefined
+const normalizeTextToken = (value?: string | null): string =>
+  String(value ?? "").trim().toUpperCase().replace(/[\s-]+/g, "_")
+
+const normalizeBillingStatus = (appointment: AppointmentListItem): BillingStatusFilter | string => {
+  const normalized = normalizeTextToken((appointment as any).billing_status)
+  if (normalized.includes("PARTIAL")) return "PARTIALLY_PAID"
+  if (normalized.includes("UNBILLED") || normalized.includes("NEEDS_BILLING")) return "UNBILLED"
+  if (normalized.includes("PAID")) return "PAID"
+  if (normalized.includes("BILLED")) return "BILLED"
+  return normalized || "UNBILLED"
 }
 
-const normalizePositiveInt = (value: unknown, fallback = 1): number => {
-  const normalized = Math.trunc(Number(value))
-  return Number.isFinite(normalized) && normalized > 0 ? normalized : fallback
+const displayBillingStatus = (appointment: AppointmentListItem): string => {
+  const status = normalizeBillingStatus(appointment)
+  if (status === "PARTIALLY_PAID") return "Partially Paid"
+  return String(status).split("_").map(part => part.charAt(0) + part.slice(1).toLowerCase()).join(" ")
 }
 
-const normalizeNonNegativeNumber = (value: unknown): number => {
-  const normalized = Number(value)
-  return Number.isFinite(normalized) && normalized >= 0 ? normalized : 0
+const billingStatusSeverity = (appointment: AppointmentListItem): "success" | "warn" | "danger" | "info" => {
+  const status = normalizeBillingStatus(appointment)
+  if (status === "PAID") return "success"
+  if (status === "UNBILLED") return "danger"
+  if (status === "PARTIALLY_PAID") return "warn"
+  return "info"
 }
 
-const parseMaybeJsonArray = (value: unknown): unknown[] => {
-  if (Array.isArray(value)) return value
-  if (typeof value !== "string") return []
+const getAppointmentNumberField = (appointment: AppointmentListItem, keys: string[]): number | null => {
+  for (const key of keys) {
+    const value = Number((appointment as any)[key])
+    if (Number.isFinite(value)) return value
+  }
+  return null
+}
 
-  const trimmed = value.trim()
-  if (!trimmed) return []
+const hasAllCreditsConsumed = (appointment: AppointmentListItem): boolean => {
+  const consumed = getAppointmentNumberField(appointment, [
+    "consumed_credits",
+    "consumed_credit_count",
+    "consumed_quantity",
+    "finished_services_count",
+    "completed_services_count"
+  ])
+  const total = getAppointmentNumberField(appointment, [
+    "total_credits",
+    "total_credit_count",
+    "planned_quantity",
+    "planned_services_count",
+    "total_services_count"
+  ])
+  return consumed !== null && total !== null && total > 0 && consumed >= total
+}
+
+const normalizeAttendanceStatus = (appointment: AppointmentListItem): AttendanceStatusFilter => {
+  const rawStatus = normalizeTextToken(
+    (appointment as any).attendance_status
+    ?? (appointment as any).attendanceStatus
+    ?? (appointment as any).appointment_status
+  )
+
+  if (rawStatus.includes("CANCEL") || rawStatus.includes("NO_SHOW")) return "CANCELED"
+  if (rawStatus.includes("COMPLETE") || rawStatus.includes("ATTENDED") || rawStatus.includes("PRESENT")) return "COMPLETED"
+  if (hasAllCreditsConsumed(appointment)) return "COMPLETED"
+  return "PENDING"
+}
+
+const displayAttendanceStatus = (appointment: AppointmentListItem): string => {
+  const status = normalizeAttendanceStatus(appointment)
+  if (status === "COMPLETED") return "Completed"
+  if (status === "CANCELED") return "Canceled"
+  return "Pending"
+}
+
+const attendanceStatusSeverity = (appointment: AppointmentListItem): "success" | "warn" | "danger" | "info" => {
+  const status = normalizeAttendanceStatus(appointment)
+  if (status === "COMPLETED") return "success"
+  if (status === "CANCELED") return "danger"
+  return "warn"
+}
+
+const statusSeverity = (value?: string): "success" | "warn" | "danger" | "info" => {
+  const normalized = normalizeTextToken(value)
+  if (normalized.includes("CANCEL") || normalized.includes("NO_SHOW")) return "danger"
+  if (normalized.includes("COMPLETE") || normalized.includes("ATTENDED") || normalized.includes("PRESENT")) return "success"
+  return "warn"
+}
+
+const isRescheduledAppointment = (appointment: AppointmentListItem): boolean => {
+  const rawStatus = normalizeTextToken((appointment as any).appointment_status)
+  return rawStatus.includes("RESCHEDULE")
+    || Boolean((appointment as any).reschedule_flag)
+    || Number((appointment as any).reschedule_count ?? 0) > 0
+}
+
+const getAppointmentDurationMs = (): number => {
+  if (!form.starts_at || !form.ends_at) return DEFAULT_APPOINTMENT_DURATION_MS
+  return Math.max(15 * 60 * 1000, form.ends_at.getTime() - form.starts_at.getTime())
+}
+
+const getDefaultAppointmentEnd = (start: Date): Date =>
+  new Date(start.getTime() + DEFAULT_APPOINTMENT_DURATION_MS)
+
+const isWithinOneMinute = (left: Date, right: Date): boolean =>
+  Math.abs(left.getTime() - right.getTime()) < 60 * 1000
+
+const fallbackSessionCountFromSelectedServices = (): number => {
+  const packageOrBundle = selectedServices.value.find(service => service.type === "PACKAGE" || service.type === "BUNDLE")
+  if (packageOrBundle) return Math.max(1, Number(packageOrBundle.quantity ?? 1))
+  return Math.max(1, ...selectedServices.value.map(service => Number(service.quantity ?? 1)))
+}
+
+const estimateSessionCountFromSelectedServices = (): number =>
+  Math.max(1, Number(sessionCountPreview.value || fallbackSessionCountFromSelectedServices()))
+
+const refreshSessionPreview = async (): Promise<void> => {
+  if (!selectedServices.value.length) {
+    sessionCountPreview.value = 1
+    syncSessionDateCountFromSelectedServices()
+    return
+  }
 
   try {
-    const parsed = JSON.parse(trimmed) as unknown
-    return Array.isArray(parsed) ? parsed : []
+    const preview = await appointmentPhase1Service.previewSessions({
+      payer_type: form.payer_type,
+      services: selectedServices.value.map(service => ({
+        type: service.type,
+        id: service.value,
+        quantity: service.quantity
+      }))
+    })
+    sessionCountPreview.value = Math.max(1, Number(preview.total_sessions ?? 1))
   } catch {
-    return []
+    sessionCountPreview.value = fallbackSessionCountFromSelectedServices()
   }
+
+  syncSessionDateCountFromSelectedServices()
 }
 
-const normalizeStringIdArray = (value: unknown): string[] =>
-  parseMaybeJsonArray(value)
-    .map(entry => toOptionalStringId(entry))
-    .filter((entry): entry is string => !!entry)
+const syncSessionDateCountFromSelectedServices = (): void => {
+  const targetCount = estimateSessionCountFromSelectedServices()
+  if (!form.starts_at) return
 
-const normalizePrefixedStringIdArray = (value: unknown, prefix: string): string[] =>
-  normalizeStringIdArray(value).map(id => id.startsWith(prefix) ? id : `${prefix}${id}`)
+  const current = form.session_dates.slice(0, targetCount)
+  while (current.length < targetCount) {
+    const next = new Date(form.starts_at)
+    next.setDate(next.getDate() + current.length * 7)
+    current.push(next)
+  }
 
-const normalizeQtyItems = (value: unknown): Array<{id: string; qty: number}> =>
-  parseMaybeJsonArray(value).flatMap(entry => {
-    if (!entry || typeof entry !== "object") return []
-    const raw = entry as Record<string, unknown>
-    const id = toOptionalStringId(raw.id ?? raw.session_id ?? raw.item_id ?? raw.service_id)
-    if (!id) return []
-    return [{
-      id,
-      qty: normalizePositiveInt(raw.qty ?? raw.quantity, 1)
-    }]
+  form.session_dates = current
+}
+
+const generateSessionDates = (mode: "DAILY" | "EVERY_OTHER_DAY" | "WEEKLY"): void => {
+  if (!form.starts_at) {
+    errorToast(toast, "Set the first appointment start time first")
+    return
+  }
+
+  const count = estimateSessionCountFromSelectedServices()
+  const dayStep = mode === "DAILY" ? 1 : mode === "EVERY_OTHER_DAY" ? 2 : 7
+
+  form.session_dates = Array.from({ length: count }, (_, index) => {
+    const date = new Date(form.starts_at as Date)
+    date.setDate(date.getDate() + index * dayStep)
+    return date
   })
+}
 
-const normalizeInvoiceSubItems = (value: unknown): PackageInvoicePrintSubItem[] =>
-  parseMaybeJsonArray(value).flatMap(entry => {
-    if (!entry || typeof entry !== "object") return []
-    const raw = entry as Record<string, unknown>
-    const name = String(raw.name ?? "").trim()
-    if (!name) return []
+const buildSessionSchedules = (): AppointmentSessionSchedulePayload[] => {
+  const durationMs = getAppointmentDurationMs()
+  const targetCount = estimateSessionCountFromSelectedServices()
 
-    const rawUnitPrice = raw.unitPrice ?? raw.unit_price ?? raw.price
-    const unitPrice = rawUnitPrice === undefined || rawUnitPrice === null || String(rawUnitPrice).trim() === ""
-      ? undefined
-      : normalizeNonNegativeNumber(rawUnitPrice)
-    const rawDropoutUnitPrice = raw.dropoutUnitPrice ?? raw.dropout_unit_price ?? raw.dropoutPrice ?? raw.dropout_price
-    const dropoutUnitPrice = rawDropoutUnitPrice === undefined || rawDropoutUnitPrice === null || String(rawDropoutUnitPrice).trim() === ""
-      ? undefined
-      : normalizeNonNegativeNumber(rawDropoutUnitPrice)
+  if (!form.starts_at || !form.ends_at) return []
+  if (form.session_dates.length < targetCount) syncSessionDateCountFromSelectedServices()
 
-    return [{
-      name,
-      quantity: normalizePositiveInt(raw.quantity ?? raw.qty, 1),
-      ...(unitPrice === undefined ? {} : { unitPrice }),
-      ...(dropoutUnitPrice === undefined ? {} : { dropoutUnitPrice }),
-      children: normalizeInvoiceSubItems(raw.children)
-    }]
+  return form.session_dates.slice(0, targetCount).map(date => {
+    const endDate = new Date(date.getTime() + durationMs)
+    return {
+      starts_at: toDateTimePayload(date) as string,
+      ends_at: toDateTimePayload(endDate) as string
+    }
   })
+}
 
-const normalizeBundledService = (value: unknown): BundledService | null => {
-  if (!value || typeof value !== "object") return null
-
-  const raw = value as Record<string, unknown>
-  const id = toOptionalStringId(raw.id)
-  const name = typeof raw.name === "string" ? raw.name.trim() : ""
-  if (!id || !name) return null
+const buildAppointmentPayload = (date: Date): AppointmentCreatePayload => {
+  const endDate = new Date(date.getTime() + getAppointmentDurationMs())
+  const clinicId = activeBranchId.value ?? form.clinic_id
 
   return {
-    id,
-    name,
-    machineIds: normalizePrefixedStringIdArray(raw.machineIds ?? raw.machine_ids, "machine-"),
-    techniqueIds: normalizePrefixedStringIdArray(raw.techniqueIds ?? raw.technique_ids, "technique-"),
-    evaluationIds: normalizePrefixedStringIdArray(raw.evaluationIds ?? raw.evaluation_ids, "evaluation-"),
-    addOnIds: [
-      ...normalizePrefixedStringIdArray(raw.addOnMachineIds ?? raw.add_on_machine_ids, "add-on-machine-"),
-      ...normalizePrefixedStringIdArray(raw.addOnTechniqueIds ?? raw.add_on_technique_ids, "add-on-technique-"),
-      ...normalizePrefixedStringIdArray(raw.addOnHomeServiceIds ?? raw.add_on_home_service_ids, "add-on-home-service-"),
-      ...normalizeStringIdArray(raw.addOnIds ?? raw.add_on_ids),
-    ],
-    bundledPrice: normalizeNonNegativeNumber(raw.bundledPrice ?? raw.bundled_price),
-    status: normalizePackageStatus(raw)
+    patient_id: form.patient_id,
+    clinic_id: clinicId,
+    primary_provider_staff_id: form.primary_provider_staff_id,
+    referring_staff_id: form.referring_staff_id,
+    appointment_type_id: form.appointment_type_id,
+    appointment_status_id: form.appointment_status_id ?? pendingStatusOption.value?.value,
+    specialty_tag_id: form.specialty_tag_id,
+    treatment_area_id: form.treatment_area_id,
+    medical_category_id: null,
+    medical_diagnose_id: form.medical_diagnose_id,
+    diagnosis_laterality: form.diagnosis_laterality,
+    pt_case_impression_id: null,
+    pt_case_laterality: null,
+    starts_at: toDateTimePayload(date),
+    ends_at: toDateTimePayload(endDate),
+    appointment_phase: form.appointment_phase,
+    location_context: form.location_context,
+    payer_type: form.payer_type,
+    notes: form.notes.trim() || undefined,
+    services: selectedServices.value.map(service => ({
+      type: service.type,
+      id: service.value,
+      quantity: service.quantity
+    })),
+    session_schedules: buildSessionSchedules()
   }
 }
 
-const normalizePackageStatus = (raw: Record<string, unknown>): string => {
-  if (typeof raw.status === "string" && raw.status.trim()) {
-    return raw.status.trim()
-  }
-  if (typeof raw.is_active === "boolean") {
-    return raw.is_active ? "Active" : "Inactive"
-  }
-  if (typeof raw.is_active === "number") {
-    return raw.is_active > 0 ? "Active" : "Inactive"
-  }
-  return "Active"
+const resetServicePicker = (billingType: PayerType | string | null = form.payer_type): void => {
+  const allowedTypes = getAllowedServiceTypes(billingType as PayerType | null)
+  servicePicker.type = allowedTypes.includes(servicePicker.type) ? servicePicker.type : allowedTypes[0] ?? "TECHNIQUE"
+  servicePicker.id = null
+  servicePicker.quantity = 1
 }
 
-const normalizeSingleService = (value: unknown): SingleService | null => {
-  if (!value || typeof value !== "object") return null
+const resetForm = (): void => {
+  const start = new Date()
+  start.setMinutes(0, 0, 0)
+  const end = getDefaultAppointmentEnd(start)
 
-  const raw = value as Record<string, unknown>
-  const id = toOptionalStringId(raw.id)
-  const name = typeof raw.name === "string" ? raw.name.trim() : ""
-  const type = String(raw.type ?? "").trim() as SingleService["type"]
+  editingId.value = null
+  form.patient_id = null
+  form.clinic_id = activeBranchId.value ?? (clinicOptions.value[0]?.value as number | null) ?? null
+  form.primary_provider_staff_id = null
+  form.referring_staff_id = null
+  form.appointment_type_id = appointmentTypeOptions.value[0]?.value as number | null ?? null
+  form.appointment_status_id = (pendingStatusOption.value?.value as number | null) ?? null
+  form.starts_at = start
+  form.ends_at = end
+  form.appointment_phase = "SESSION"
+  form.location_context = "IN_CLINIC"
+  form.specialty_tag_id = null
+  form.treatment_area_id = null
+  form.medical_diagnose_id = null
+  form.diagnosis_laterality = null
+  form.payer_type = null
+  form.notes = ""
+  form.create_all_sessions = true
+  form.session_dates = [start]
+  sessionCountPreview.value = 1
 
-  if (
-    !id ||
-    !name ||
-    !["machine", "technique", "evaluation", "add-on-machine", "add-on-technique", "add-on-home-service"].includes(type)
-  ) {
+  selectedServices.value = []
+  resetServicePicker()
+}
+
+const loadLookups = async (): Promise<void> => {
+  const [patients, clinics, staff, appointmentTypes, appointmentStatuses, specialties, treatmentAreas, medicalDiagnoses] = await Promise.all([
+    patientService.getAll({
+      clinic_id: undefined,
+      pageable_request: { page: 1, size: 500, name: undefined, status: Status.ACTIVE }
+    }),
+    clinicService.getAll({ page: 1, size: 200, name: undefined, status: Status.ACTIVE }),
+    staffService.getAll({
+      clinic_id: undefined,
+      pageable_request: { page: 1, size: 500, name: undefined, status: Status.ACTIVE },
+      staff_scope: "ALL"
+    }),
+    pamsAPI.get("/references/appointment-types", { params: { page: 1, size: 100, status: "ACTIVE" } }),
+    pamsAPI.get("/references/appointment-statuses", { params: { page: 1, size: 100, status: "ACTIVE" } }),
+    pamsAPI.get("/references/specialty-tags", { params: { page: 1, size: 500, status: "ACTIVE" } }),
+    pamsAPI.get("/references/treatment-areas", { params: { page: 1, size: 500, status: "ACTIVE" } }),
+    pamsAPI.get("/references/medical-diagnoses", { params: { page: 1, size: 500, status: "ACTIVE" } })
+  ])
+
+  patientOptions.value = (patients?.content ?? []).map(patient => ({ label: patient.full_name, value: patient.id }))
+  clinicOptions.value = (clinics?.content ?? []).map(clinic => ({ label: clinic.name, value: clinic.id }))
+  staffOptions.value = (staff?.content ?? []).map(row => ({
+    label: row.name,
+    value: row.id,
+    providerType: row.appointment_provider_type,
+    secondaryProviderType: row.secondary_appointment_provider_type,
+    specialtyTagId: row.specialty_tag_id == null ? null : Number(row.specialty_tag_id)
+  }))
+  appointmentTypeOptions.value = (appointmentTypes.data?.content ?? []).map((row: { id: number; name: string }) => ({ label: row.name, value: row.id }))
+  appointmentStatusOptions.value = (appointmentStatuses.data?.content ?? []).map((row: { id: number; name: string }) => ({ label: row.name, value: row.id }))
+  specialtyOptions.value = (specialties.data?.content ?? []).map((row: { id: number; name: string }) => ({ label: row.name, value: row.id }))
+  treatmentAreaOptions.value = (treatmentAreas.data?.content ?? []).map((row: { id: number; name: string; clinic_id?: number | null; color?: string | null }) => ({
+    label: row.name,
+    value: row.id,
+    clinicId: row.clinic_id == null ? null : Number(row.clinic_id),
+    color: row.color
+  }))
+  medicalDiagnoseOptions.value = (medicalDiagnoses.data?.content ?? []).map((row: { id: number; name: string }) => ({ label: row.name, value: row.id }))
+
+  await loadServiceCatalog()
+}
+
+const normalizeServiceRows = (
+  rows: Array<Record<string, unknown>>,
+  type: AppointmentServiceSelectionType,
+  priceKeys: string[]
+): ServiceOption[] =>
+  rows
+    .map(row => ({
+      label: String(row.name ?? row.machine_name ?? row.technique_name ?? `Service ${row.id}`),
+      value: Number(row.id),
+      price: Number(priceKeys.map(key => row[key]).find(value => value !== undefined && value !== null) ?? 0),
+      type
+    }))
+    .filter(row => Number.isFinite(row.value) && row.value > 0)
+
+const loadCatalogPage = async (url: string): Promise<Array<Record<string, unknown>>> => {
+  const { data } = await pamsAPI.get(url, { params: { page: 1, size: 500, status: "ACTIVE" } })
+  return data?.content ?? []
+}
+
+const loadServiceCatalog = async (): Promise<void> => {
+  const [packages, bundles, machines, techniques, evaluations, addOnMachines, addOnTechniques, addOnHome] = await Promise.all([
+    loadCatalogPage("/package-service-offers"),
+    loadCatalogPage("/service-bundles"),
+    loadCatalogPage("/machines"),
+    loadCatalogPage("/techniques"),
+    loadCatalogPage("/evaluations"),
+    loadCatalogPage("/add-on-machines"),
+    loadCatalogPage("/add-on-techniques"),
+    loadCatalogPage("/add-on-home-services")
+  ])
+
+  serviceCatalog.value = {
+    PACKAGE: normalizeServiceRows(packages, "PACKAGE", ["package_price", "price"]),
+    BUNDLE: normalizeServiceRows(bundles, "BUNDLE", ["bundled_price", "price"]),
+    MACHINE: normalizeServiceRows(machines, "MACHINE", ["price"]),
+    TECHNIQUE: normalizeServiceRows(techniques, "TECHNIQUE", ["price"]),
+    EVALUATION: normalizeServiceRows(evaluations, "EVALUATION", ["price"]),
+    ADD_ON_MACHINE: normalizeServiceRows(addOnMachines, "ADD_ON_MACHINE", ["add_on_price", "price"]),
+    ADD_ON_TECHNIQUE: normalizeServiceRows(addOnTechniques, "ADD_ON_TECHNIQUE", ["add_on_price", "price"]),
+    ADD_ON_HOME_SERVICE: normalizeServiceRows(addOnHome, "ADD_ON_HOME_SERVICE", ["add_on_price", "price"])
+  }
+}
+
+let liveFilterTimer: number | undefined
+
+const queueLiveFilterLoad = (): void => {
+  if (liveFilterTimer) window.clearTimeout(liveFilterTimer)
+
+  liveFilterTimer = window.setTimeout(() => {
+    void loadAppointments()
+  }, 350)
+}
+
+const appointmentProviderIdForFilter = (appointment: AppointmentListItem): number | null => {
+  const value = (appointment as any).primary_provider_staff_id ?? (appointment as any).provider_staff_id ?? (appointment as any).doctor_id
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? numeric : null
+}
+
+const appointmentMatchesSearch = (appointment: AppointmentListItem, query: string): boolean => {
+  if (!query) return true
+  const haystack = [
+    (appointment as any).patient_name,
+    (appointment as any).provider_name,
+    (appointment as any).doctor_name,
+    (appointment as any).clinic_name,
+    (appointment as any).payer_type,
+    (appointment as any).billing_status,
+    (appointment as any).attendance_status,
+    (appointment as any).appointment_status
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+
+  return haystack.includes(query.toLowerCase())
+}
+
+const applyTableFilters = (items: AppointmentListItem[]): AppointmentListItem[] => {
+  const query = filters.search.trim()
+  return items.filter(appointment => {
+    if (!appointmentMatchesSearch(appointment, query)) return false
+    if (filters.ptId && appointmentProviderIdForFilter(appointment) !== Number(filters.ptId)) return false
+    if (filters.payerType && (appointment as any).payer_type !== filters.payerType) return false
+    if (filters.billingStatus && normalizeBillingStatus(appointment) !== filters.billingStatus) return false
+    if (filters.attendanceStatus && normalizeAttendanceStatus(appointment) !== filters.attendanceStatus) return false
+    return true
+  })
+}
+
+const refreshDisplayedAppointmentRows = (): void => {
+  const filtered = applyTableFilters(tableAppointmentSource.value)
+  totalRecords.value = filtered.length
+
+  const start = (page.value - 1) * pageSize.value
+  appointments.value = filtered.slice(start, start + pageSize.value)
+}
+
+const loadAppointments = async (): Promise<void> => {
+  try {
+    isLoading.value = true
+    const result = await appointmentPhase1Service.getAll({
+      page: 1,
+      size: 1000,
+      from_date: toDateParam(filters.fromDate),
+      to_date: toDateParam(filters.toDate),
+      clinic_id: activeBranchId.value ?? undefined
+    })
+
+    tableAppointmentSource.value = result.content
+    refreshDisplayedAppointmentRows()
+  } catch {
+    errorToast(toast, "Failed to load appointments")
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const loadCalendarAppointmentsForRange = async (range?: CalendarVisibleRange): Promise<void> => {
+  if (range) {
+    activeCalendarRange.value = {
+      from: normalizeDateOnly(range.from),
+      to: normalizeDateOnly(range.to)
+    }
+  }
+
+  try {
+    isCalendarLoading.value = true
+    const result = await appointmentPhase1Service.getAll({
+      page: 1,
+      size: 1000,
+      from_date: toDateParam(activeCalendarRange.value.from),
+      to_date: toDateParam(activeCalendarRange.value.to),
+      clinic_id: activeBranchId.value ?? undefined
+    })
+
+    calendarAppointments.value = result.content
+  } catch {
+    errorToast(toast, "Failed to load calendar appointments")
+  } finally {
+    isCalendarLoading.value = false
+  }
+}
+
+const getFormScheduleRange = (): CalendarVisibleRange => {
+  const dates = [form.starts_at, ...form.session_dates]
+    .map(value => value ? normalizeDateOnly(new Date(value)) : null)
+    .filter((value): value is Date => Boolean(value))
+
+  if (!dates.length) return { from: initialSelectedDate, to: initialSelectedDate }
+
+  const from = dates.reduce((earliest, date) => date.getTime() < earliest.getTime() ? date : earliest, dates[0])
+  const to = dates.reduce((latest, date) => date.getTime() > latest.getTime() ? date : latest, dates[0])
+
+  return {
+    from: addDays(from, -1),
+    to: addDays(to, 1)
+  }
+}
+
+const loadAvailabilityAppointmentsForRange = async (range: CalendarVisibleRange = getFormScheduleRange()): Promise<void> => {
+  try {
+    isAvailabilityLoading.value = true
+    const result = await appointmentPhase1Service.getAll({
+      page: 1,
+      size: 1000,
+      from_date: toDateParam(range.from),
+      to_date: toDateParam(range.to),
+      clinic_id: form.clinic_id ?? activeBranchId.value ?? undefined
+    })
+
+    availabilityAppointments.value = result.content
+  } catch {
+    errorToast(toast, "Failed to load schedule availability")
+  } finally {
+    isAvailabilityLoading.value = false
+  }
+}
+
+let availabilityTimer: number | undefined
+
+const queueAvailabilityLoad = (): void => {
+  if (!formVisible.value) return
+  if (availabilityTimer) window.clearTimeout(availabilityTimer)
+
+  availabilityTimer = window.setTimeout(() => {
+    void loadAvailabilityAppointmentsForRange()
+  }, 250)
+}
+
+const refreshAppointmentViews = async (): Promise<void> => {
+  const jobs: Promise<void>[] = [
+    loadAppointments(),
+    loadCalendarAppointmentsForRange()
+  ]
+
+  if (formVisible.value) jobs.push(loadAvailabilityAppointmentsForRange())
+
+  await Promise.all(jobs)
+}
+
+const onPage = (event: DataTablePageEvent): void => {
+  page.value = Number(event.page ?? 0) + 1
+  pageSize.value = Number(event.rows ?? 20)
+  refreshDisplayedAppointmentRows()
+}
+
+const selectCalendarDate = (date: Date): void => {
+  const selectedDate = normalizeDateOnly(date)
+  filters.fromDate = selectedDate
+  filters.toDate = selectedDate
+  page.value = 1
+}
+
+const openCreateDialog = (): void => {
+  if (!canCreateAppointment.value) {
+    errorToast(toast, "You do not have permission to create appointments")
+    return
+  }
+
+  resetForm()
+  formVisible.value = true
+  void loadAvailabilityAppointmentsForRange()
+}
+
+const applyAppointmentToForm = (appointment: AppointmentListItem): void => {
+  editingId.value = appointment.id
+  form.patient_id = appointment.patient_id
+  form.clinic_id = appointment.clinic_id
+  form.primary_provider_staff_id = appointment.primary_provider_staff_id ?? appointment.doctor_id ?? null
+  form.referring_staff_id = appointment.referring_staff_id ?? null
+  form.appointment_type_id = appointment.appointment_type_id
+  form.appointment_status_id = appointment.appointment_status_id
+  form.starts_at = new Date(appointment.starts_at)
+  form.ends_at = new Date(appointment.ends_at)
+  form.appointment_phase = appointment.appointment_phase
+  form.location_context = appointment.location_context
+  form.specialty_tag_id = appointment.specialty_tag_id ?? null
+  form.treatment_area_id = appointment.treatment_area_id ?? null
+  form.medical_diagnose_id = appointment.medical_diagnose_id ?? null
+  form.diagnosis_laterality = appointment.diagnosis_laterality as Laterality | null
+  form.payer_type = appointment.payer_type as PayerType | null
+  form.notes = appointment.notes ?? ""
+  form.create_all_sessions = false
+  form.session_dates = [new Date(appointment.starts_at)]
+  selectedServices.value = []
+}
+
+const openEditDialog = (appointment: AppointmentListItem): void => {
+  if (!canEditAppointment.value) {
+    errorToast(toast, "You do not have permission to edit appointments")
+    return
+  }
+
+  applyAppointmentToForm(appointment)
+  formVisible.value = true
+  void loadAvailabilityAppointmentsForRange()
+}
+
+const openDetailsDialog = async (appointment: AppointmentListItem): Promise<void> => {
+  if (!canViewAppointmentDetails.value) {
+    errorToast(toast, "You do not have permission to view appointment details")
+    return
+  }
+
+  detailAppointment.value = appointment
+  activeAppointment.value = appointment
+  detailPlannedServices.value = []
+  detailBillingPreparation.value = null
+  detailsVisible.value = true
+
+  const plannedServicesPromise = appointmentPhase1Service
+    .getPlannedServices(appointment.id)
+    .then((plannedServices) => {
+      detailPlannedServices.value = plannedServices
+    })
+    .catch(() => {
+      detailPlannedServices.value = []
+    })
+
+  const billingPreparationPromise = canManageAppointmentBilling.value
+    ? appointmentBillingService
+      .getPreparation(appointment.id)
+      .then((preparation) => {
+        detailBillingPreparation.value = preparation
+      })
+      .catch(() => {
+        detailBillingPreparation.value = null
+      })
+    : Promise.resolve()
+
+  await Promise.all([plannedServicesPromise, billingPreparationPromise])
+}
+
+const editFromDetails = (): void => {
+  if (!detailAppointment.value) return
+  detailsVisible.value = false
+  openEditDialog(detailAppointment.value)
+}
+
+const openAttendanceFromDetails = (): void => {
+  if (!detailAppointment.value) return
+
+  const appointment = detailAppointment.value
+  detailsVisible.value = false
+
+  void openAttendanceDialog(appointment)
+}
+
+const refreshDetailBillingPreparation = async (): Promise<void> => {
+  if (!detailAppointment.value || !canManageAppointmentBilling.value) return
+
+  try {
+    detailBillingPreparation.value = await appointmentBillingService.getPreparation(detailAppointment.value.id)
+  } catch {
+    detailBillingPreparation.value = null
+  }
+}
+
+const openAppointmentBillingDialog = async (): Promise<void> => {
+  if (!detailAppointment.value || !canManageAppointmentBilling.value) return
+  appointmentBillingVisible.value = true
+  await refreshDetailBillingPreparation()
+}
+
+const openTenderFromBillingDialog = async (): Promise<void> => {
+  const document = tenderableBillingDocument.value
+  if (!document) {
+    errorToast(toast, "Create a Self Pay bill before tendering.")
+    return
+  }
+  await openTenderDialog(document)
+}
+
+const openInvoicePrintWindow = (document: AppointmentBillingDocument): void => {
+  const patientId = detailAppointment.value?.patient_id ?? detailBillingPreparation.value?.appointment.patient_id
+  const appointmentId = detailAppointment.value?.id ?? detailBillingPreparation.value?.appointment.id
+  const routeName = document.payer_type === "HMO"
+    ? "hmo-patient-billing-summary-print"
+    : document.payer_type === "LGU"
+      ? "lgu-patient-billing-summary-print"
+      : "self-pay-patient-billing-summary-print"
+  const routeLocation = router.resolve({
+    name: routeName,
+    query: {
+      billing_id: String(document.id),
+      ...(patientId ? { patient_id: String(patientId) } : {}),
+      ...(appointmentId ? { appointment_id: String(appointmentId) } : {}),
+      autoprint: "1"
+    }
+  })
+  window.open(routeLocation.href, "_blank", "noopener,noreferrer")
+}
+
+const buildHmoClaimPayload = () => {
+  const loaNumber = hmoClaimForm.loa_number.trim()
+  if (!loaNumber) {
+    errorToast(toast, "Enter the HMO LOA number before creating the claim.")
     return null
   }
 
   return {
-    id,
-    type,
-    name,
-    price: normalizeNonNegativeNumber(raw.price ?? raw.effective_price ?? raw.base_price),
-    status: normalizePackageStatus(raw)
+    loa_number: loaNumber,
+    approval_code: hmoClaimForm.approval_code.trim() || null,
+    notes: hmoClaimForm.notes.trim() || null
   }
 }
 
-const parseStoredCatalogArray = (key: string): unknown[] => {
+const buildLguClaimPayload = () => ({
+  referral_form_no: lguClaimForm.referral_form_no.trim() || null,
+  approval_code: lguClaimForm.approval_code.trim() || null,
+  notes: lguClaimForm.notes.trim() || null
+})
+
+const createInvoiceDocumentForCurrentBillingPath = async (): Promise<AppointmentBillingDocument | null> => {
+  if (!detailAppointment.value || !detailBillingPreparation.value) return null
+
+  const action = detailBillingPreparation.value.billing_path.action
+  if (action === "CREATE_SELF_PAY_APPOINTMENT_BILL") {
+    return appointmentBillingService.createSelfPayAppointmentBill(detailAppointment.value.id)
+  }
+  if (action === "CREATE_SELF_PAY_PACKAGE_BILL") {
+    return appointmentBillingService.createSelfPayPackageBill(detailAppointment.value.id)
+  }
+  if (action === "CREATE_DOCUMENTATION_INVOICE") {
+    return appointmentBillingService.createSessionDocumentationInvoice(detailAppointment.value.id)
+  }
+  if (action === "CREATE_HMO_CLAIM") {
+    const payload = buildHmoClaimPayload()
+    return payload ? appointmentBillingService.createHmoClaim(detailAppointment.value.id, payload) : null
+  }
+  if (action === "CREATE_LGU_CLAIM") {
+    return appointmentBillingService.createLguClaim(detailAppointment.value.id, buildLguClaimPayload())
+  }
+
+  errorToast(toast, "Invoice printing for this billing type is not wired yet.")
+  return null
+}
+
+const printAppointmentInvoiceFromBillingDialog = async (): Promise<void> => {
   try {
-    const stored = localStorage.getItem(key)
-    const parsed = stored ? JSON.parse(stored) : []
-    return Array.isArray(parsed) ? parsed : []
+    isBillingActionLoading.value = true
+    const document = await createInvoiceDocumentForCurrentBillingPath()
+    if (!document) return
+    successToast(toast, "Invoice ready")
+    await refreshDetailBillingPreparation()
+    await refreshAppointmentViews()
+    openInvoicePrintWindow(document)
+  } catch (error) {
+    const message = (error as any)?.response?.data?.message
+    errorToast(toast, message ? String(message) : "Unable to print invoice")
+  } finally {
+    isBillingActionLoading.value = false
+  }
+}
+
+const loadPaymentMethods = async (): Promise<void> => {
+  if (paymentMethods.value.length) return
+
+  try {
+    isPaymentMethodsLoading.value = true
+    paymentMethods.value = await appointmentBillingService.getPaymentMethods()
+  } catch (error) {
+    const message = (error as any)?.response?.data?.message
+    errorToast(toast, message ? String(message) : "Unable to load payment methods")
+  } finally {
+    isPaymentMethodsLoading.value = false
+  }
+}
+
+const openTenderDialog = async (document: AppointmentBillingDocument): Promise<void> => {
+  tenderBillingDocument.value = document
+  tenderForm.amount_tendered = Number(document.totals.balance ?? 0)
+  tenderForm.payment_method_id = paymentMethods.value[0]?.id ?? null
+  tenderForm.payment_reference = ""
+  tenderForm.notes = ""
+  tenderForm.senior_pwd_id_presented = false
+  tenderForm.senior_pwd_id_reference = ""
+  tenderForm.custom_discount_type = null
+  tenderForm.custom_discount_value = null
+  tenderVisible.value = true
+  await loadPaymentMethods()
+  tenderForm.payment_method_id = tenderForm.payment_method_id ?? paymentMethods.value[0]?.id ?? null
+}
+
+const submitTenderPayment = async (): Promise<void> => {
+  if (!tenderBillingDocument.value) return
+
+  const amountTendered = Number(tenderForm.amount_tendered ?? 0)
+  if (!Number.isFinite(amountTendered) || amountTendered <= 0) {
+    errorToast(toast, "Enter a valid tendered amount.")
+    return
+  }
+
+  if (!tenderForm.payment_method_id) {
+    errorToast(toast, "Select a payment method.")
+    return
+  }
+
+  try {
+    isTenderSaving.value = true
+    const result = await appointmentBillingService.tenderSelfPayBillingDocument(tenderBillingDocument.value.id, {
+      amount_tendered: amountTendered,
+      payment_method_id: tenderForm.payment_method_id,
+      payment_reference: tenderForm.payment_reference.trim() || null,
+      notes: tenderForm.notes.trim() || null,
+      senior_pwd_id_presented: tenderForm.senior_pwd_id_presented,
+      senior_pwd_id_reference: tenderForm.senior_pwd_id_reference.trim() || null,
+      custom_discount_type: tenderForm.custom_discount_type,
+      custom_discount_value: tenderForm.custom_discount_value
+    })
+    tenderBillingDocument.value = result.billing_document
+    tenderVisible.value = false
+    successToast(toast, `Payment saved${result.receipt.receipt_number ? `: ${result.receipt.receipt_number}` : ""}`)
+    await refreshDetailBillingPreparation()
+    await refreshAppointmentViews()
+  } catch (error) {
+    const message = (error as any)?.response?.data?.message
+    errorToast(toast, message ? String(message) : "Unable to save payment")
+  } finally {
+    isTenderSaving.value = false
+  }
+}
+
+watch(
+  () => [
+    tenderVisible.value,
+    tenderForm.senior_pwd_id_presented,
+    tenderForm.custom_discount_type,
+    tenderForm.custom_discount_value,
+    tenderBillingDocument.value?.id
+  ],
+  () => {
+    if (!tenderVisible.value || !tenderBillingDocument.value) return
+    tenderForm.amount_tendered = Number(tenderDiscountSummary.value.amountDue.toFixed(2))
+  }
+)
+
+const runBillingActionFromDetails = async (
+  action: (appointmentId: number) => Promise<AppointmentBillingDocument>,
+  successMessage: string,
+  shouldOfferTender = false
+): Promise<void> => {
+  if (!detailAppointment.value) return
+
+  try {
+    isBillingActionLoading.value = true
+    const document = await action(detailAppointment.value.id)
+    successToast(toast, successMessage)
+    await refreshDetailBillingPreparation()
+    await refreshAppointmentViews()
+    if (shouldOfferTender && Number(document.totals.balance ?? 0) > 0) {
+      await openTenderDialog(document)
+    }
+  } catch (error) {
+    const message = (error as any)?.response?.data?.message
+    errorToast(toast, message ? String(message) : "Billing action failed")
+  } finally {
+    isBillingActionLoading.value = false
+  }
+}
+
+const createSelfPayAppointmentBillFromDetails = (): void => {
+  void runBillingActionFromDetails(
+    appointmentBillingService.createSelfPayAppointmentBill,
+    "Self Pay appointment bill created",
+    true
+  )
+}
+
+const createSelfPayPackageBillFromDetails = (): void => {
+  void runBillingActionFromDetails(
+    appointmentBillingService.createSelfPayPackageBill,
+    "Self Pay package bill created",
+    true
+  )
+}
+
+const createSessionDocumentationInvoiceFromDetails = (): void => {
+  void runBillingActionFromDetails(
+    appointmentBillingService.createSessionDocumentationInvoice,
+    "Session documentation invoice created"
+  )
+}
+
+const createHmoClaimFromDetails = (): void => {
+  const payload = buildHmoClaimPayload()
+  if (!payload) return
+
+  void runBillingActionFromDetails(
+    (appointmentId) => appointmentBillingService.createHmoClaim(appointmentId, payload),
+    "HMO claim created"
+  )
+}
+
+const createLguClaimFromDetails = (): void => {
+  void runBillingActionFromDetails(
+    (appointmentId) => appointmentBillingService.createLguClaim(appointmentId, buildLguClaimPayload()),
+    "LGU claim created"
+  )
+}
+
+const saveAppointment = async (): Promise<void> => {
+  form.appointment_status_id = form.appointment_status_id ?? (pendingStatusOption.value?.value as number | null) ?? null
+  form.clinic_id = activeBranchId.value ?? form.clinic_id
+
+  if (!form.patient_id || !form.clinic_id || !form.appointment_type_id || !form.appointment_status_id || !form.starts_at || !form.ends_at) {
+    errorToast(toast, "Complete patient, clinic branch, type, start, and end.")
+    return
+  }
+
+  if (!editingId.value && !selectedServices.value.length) {
+    errorToast(toast, "Add at least one planned service.")
+    return
+  }
+
+  try {
+    isSaving.value = true
+    await refreshSessionPreview()
+    const payload = buildAppointmentPayload(form.starts_at)
+
+    if (editingId.value) {
+      await appointmentPhase1Service.update(editingId.value, payload)
+      successToast(toast, "Appointment updated")
+    } else {
+      const created = await appointmentPhase1Service.create(payload)
+      const totalCreated = created.appointment_ids?.length ?? created.total_sessions ?? 1
+      successToast(toast, `Appointment created with ${totalCreated} session${totalCreated > 1 ? "s" : ""}`)
+    }
+
+    formVisible.value = false
+    await refreshAppointmentViews()
   } catch {
-    return []
+    errorToast(toast, "Failed to save appointment")
+  } finally {
+    isSaving.value = false
   }
 }
 
-const normalizePackageServiceOffer = (value: unknown): PackageServiceOffer | null => {
-  if (!value || typeof value !== "object") return null
-
-  const raw = value as Record<string, unknown>
-  const id = toOptionalStringId(raw.id)
-  const name = typeof raw.name === "string" ? raw.name.trim() : ""
-
-  if (!id || !name) return null
-
-  return {
-    id,
-    name,
-    offerScope: String(raw.offerScope ?? raw.offer_scope ?? "GLOBAL").trim().toUpperCase() === "LGU" ? "LGU" : "GLOBAL",
-    bundleId: toOptionalStringId(raw.bundleId ?? raw.bundle_template_id),
-    bundleQty: normalizePositiveInt(raw.bundleQty ?? raw.bundle_qty, 1),
-    machineIds: normalizeStringIdArray(raw.machineIds ?? raw.machine_ids ?? raw.machine_ids_json),
-    machineQty: normalizePositiveInt(raw.machineQty ?? raw.machine_qty, 1),
-    machineItems: normalizeQtyItems(raw.machineItems ?? raw.machine_items ?? raw.machine_items_json),
-    techniqueIds: normalizeStringIdArray(raw.techniqueIds ?? raw.technique_ids ?? raw.technique_ids_json),
-    techniqueQty: normalizePositiveInt(raw.techniqueQty ?? raw.technique_qty, 1),
-    techniqueItems: normalizeQtyItems(raw.techniqueItems ?? raw.technique_items ?? raw.technique_items_json),
-    evaluationIds: normalizeStringIdArray(raw.evaluationIds ?? raw.evaluation_ids ?? raw.evaluation_ids_json),
-    evaluationQty: normalizePositiveInt(raw.evaluationQty ?? raw.evaluation_qty, 1),
-    evaluationItems: normalizeQtyItems(raw.evaluationItems ?? raw.evaluation_items ?? raw.evaluation_items_json),
-    addOnIds: normalizeStringIdArray(raw.addOnIds ?? raw.add_on_ids ?? raw.add_on_ids_json),
-    addOnQty: normalizePositiveInt(raw.addOnQty ?? raw.add_on_qty, 1),
-    addOnItems: normalizeQtyItems(raw.addOnItems ?? raw.add_on_items ?? raw.add_on_items_json),
-    sessionIds: normalizeStringIdArray(raw.sessionIds ?? raw.session_ids ?? raw.session_ids_json),
-    sessionQty: normalizePositiveInt(raw.sessionQty ?? raw.session_qty, 1),
-    sessionItems: normalizeQtyItems(raw.sessionItems ?? raw.session_items ?? raw.session_items_json),
-    invoiceSubItems: normalizeInvoiceSubItems(raw.invoiceSubItems ?? raw.invoice_sub_items),
-    packagePrice: normalizeNonNegativeNumber(raw.packagePrice ?? raw.package_price),
-    status: normalizePackageStatus(raw)
-  }
-}
-
-const createModalCardClass = "app-create-modal-section"
-const createModalEssentialsClass = `${createModalCardClass} app-create-modal-section-care`
-const createModalServicesClass = `${createModalCardClass} app-create-modal-section-services`
-const createModalScheduleClass = `${createModalCardClass} app-create-modal-section-schedule`
-const createModalSectionTitleClass = "app-appointment-title text-base"
-
-const formatCreateLineType = (type: string): string => {
-  switch (type) {
-    case "machine":
-      return "Machine"
-    case "technique":
-      return "Technique"
-    case "evaluation":
-      return "Evaluation"
-    case "add-on-machine":
-      return "Add-on"
-    case "add-on-technique":
-      return "Add-on"
-    case "add-on-home-service":
-      return "Home Service"
-    case "bundle":
-      return "Bundle"
-    case "package":
-      return "Package"
-    default:
-      return "Service"
-  }
-}
-
-const catalogServiceId = (type: SingleService["type"], itemId: number | string, scope: ServiceCatalogScope): string =>
-  scope === "LGU" ? `lgu-${type}-${itemId}` : String(itemId)
-
-const catalogItemToSingleService = (
-  type: SingleService["type"],
-  item: ServiceCatalogItem,
-  scope: ServiceCatalogScope
-): SingleService => ({
-  id: catalogServiceId(type, item.id, scope),
-  type,
-  name: item.name,
-  price: Number(item.effective_price ?? item.price ?? 0),
-  status: item.is_active ? "Active" : "Inactive"
-})
-
-const catalogBundleTypeMap: Record<string, SingleService["type"]> = {
-  MACHINE: "machine",
-  TECHNIQUE: "technique",
-  EVALUATION: "evaluation",
-  ADD_ON_MACHINE: "add-on-machine",
-  ADD_ON_TECHNIQUE: "add-on-technique",
-  ADD_ON_HOME_SERVICE: "add-on-home-service",
-}
-
-const catalogBundleToBundledService = (bundle: ServiceCatalogBundle, scope: ServiceCatalogScope): BundledService => {
-  const collect = (itemType: string): string[] =>
-    bundle.items
-      .filter(item => item.item_type === itemType && item.item_id != null)
-      .map(item => catalogServiceId(catalogBundleTypeMap[itemType], Number(item.item_id), scope))
-
-  return {
-    id: scope === "LGU" ? `lgu-${bundle.id}` : String(bundle.id),
-    name: bundle.name,
-    machineIds: collect("MACHINE"),
-    techniqueIds: collect("TECHNIQUE"),
-    evaluationIds: collect("EVALUATION"),
-    addOnIds: [
-      ...collect("ADD_ON_MACHINE"),
-      ...collect("ADD_ON_TECHNIQUE"),
-      ...collect("ADD_ON_HOME_SERVICE"),
-    ],
-    bundledPrice: Number(bundle.bundled_price ?? 0),
-    status: bundle.is_active ? "Active" : "Inactive"
-  }
-}
-
-const catalogPackageItemId = (
-  type: SingleService["type"],
-  id: string | number,
-  scope: ServiceCatalogScope
-): string => catalogServiceId(type, id, scope)
-
-const mapCatalogPackageItems = (
-  items: Array<{id: number | string; qty?: number}> | undefined,
-  type: SingleService["type"],
-  scope: ServiceCatalogScope
-): Array<{id: string; qty: number}> =>
-  (items ?? []).map(item => ({
-    id: catalogPackageItemId(type, item.id, scope),
-    qty: Math.max(1, Number(item.qty ?? 1))
-  }))
-
-const catalogContextToServices = (context: ServiceCatalogContext): SingleService[] => [
-  ...context.services.machines.map(item => catalogItemToSingleService("machine", item, context.scope)),
-  ...context.services.techniques.map(item => catalogItemToSingleService("technique", item, context.scope)),
-  ...context.services.evaluations.map(item => catalogItemToSingleService("evaluation", item, context.scope)),
-  ...context.services.add_on_machines.map(item => catalogItemToSingleService("add-on-machine", item, context.scope)),
-  ...context.services.add_on_techniques.map(item => catalogItemToSingleService("add-on-technique", item, context.scope)),
-  ...context.services.add_on_home_services.map(item => catalogItemToSingleService("add-on-home-service", item, context.scope)),
-]
-
-const catalogContextToPackageOffers = (context: ServiceCatalogContext): PackageServiceOffer[] =>
-  context.package_offers.map(item => {
-    const raw = item as typeof item & {
-      invoiceSubItems?: unknown
-      invoice_sub_items?: unknown
-    }
-
-    return {
-      id: context.scope === "LGU" ? `lgu-${item.id}` : String(item.id),
-      name: item.name,
-      offerScope: item.offer_scope,
-      bundleId: item.bundle_template_id == null ? undefined : context.scope === "LGU" ? `lgu-${item.bundle_template_id}` : String(item.bundle_template_id),
-      bundleQty: Number(item.bundle_qty ?? 1),
-      bundleItems: item.bundle_items?.map(entry => ({id: String(entry.id), qty: Math.max(1, Number(entry.qty ?? 1))})),
-      machineIds: item.machine_ids?.map(id => catalogPackageItemId("machine", id, context.scope)),
-      machineQty: Number(item.machine_qty ?? 1),
-      machineItems: mapCatalogPackageItems(item.machine_items, "machine", context.scope),
-      techniqueIds: item.technique_ids?.map(id => catalogPackageItemId("technique", id, context.scope)),
-      techniqueQty: Number(item.technique_qty ?? 1),
-      techniqueItems: mapCatalogPackageItems(item.technique_items, "technique", context.scope),
-      evaluationIds: item.evaluation_ids?.map(id => catalogPackageItemId("evaluation", id, context.scope)) ?? [],
-      evaluationItems: mapCatalogPackageItems(item.evaluation_items, "evaluation", context.scope),
-      addOnIds: [
-        ...mapCatalogPackageItems(item.add_on_items, "add-on-machine", context.scope).map(entry => entry.id),
-      ],
-      addOnQty: 1,
-      addOnItems: mapCatalogPackageItems(item.add_on_items, "add-on-machine", context.scope),
-      sessionIds: item.session_ids?.map(String),
-      sessionQty: Number(item.session_qty ?? 1),
-      sessionItems: item.session_items?.map(entry => ({id: String(entry.id), qty: Math.max(1, Number(entry.qty ?? 1))})),
-      invoiceSubItems: normalizeInvoiceSubItems(raw.invoiceSubItems ?? raw.invoice_sub_items),
-      evaluationQty: Number(item.evaluation_qty ?? 1),
-      packagePrice: Number(item.package_price ?? 0),
-      status: item.is_active ? "Active" : "Inactive"
-    }
-  })
-
-const createLineSeverity = (type: string): "info" | "success" | "warning" | "secondary" | "contrast" => {
-  switch (type) {
-    case "machine":
-      return "info"
-    case "technique":
-      return "success"
-    case "evaluation":
-      return "warning"
-    case "bundle":
-      return "contrast"
-    case "package":
-      return "info"
-    case "add-on-home-service":
-      return "warning"
-    default:
-      return "secondary"
-  }
-}
-
-const activeSinglePayServices = computed(() =>
-  createBillingType.value === "LGU_BILLING" ? lguSinglePayServices.value : allSinglePayServices.value
-)
-
-const activeBundledServiceCatalog = computed(() =>
-  createBillingType.value === "LGU_BILLING" ? lguBundledServices.value : allBundledServices.value
-)
-
-const activePackageServiceCatalog = computed(() =>
-  createBillingType.value === "LGU_BILLING" ? lguPackageServiceOffers.value : allPackageServiceOffers.value
-)
-
-const machineServices = computed(() =>
-  activeSinglePayServices.value.filter(s => s.type === "machine")
-)
-
-const techniqueServices = computed(() =>
-  activeSinglePayServices.value.filter(s => s.type === "technique")
-)
-
-const evaluationServices = computed(() =>
-  activeSinglePayServices.value.filter(s => s.type === "evaluation")
-)
-
-const currentAddOnServices = computed(() => {
-  const type = selectedAddOnType.value
-  if (type === "add-on-machine") {
-    return [
-      ...activeSinglePayServices.value.filter(s => s.type === "add-on-machine"),
-      ...activeSinglePayServices.value.filter(s => s.type === "add-on-technique")
-    ]
-  }
-  return activeSinglePayServices.value.filter(s => s.type === "add-on-home-service")
-})
-
-const hasHomeServiceAddOn = computed(() =>
-  selectedServiceLines.value.some(line => line.type === "add-on-home-service")
-)
-
-const getEffectiveCreateLinePrice = (line: {type: string; id: string; price: number}): number => {
-  if (createBillingType.value !== "HMO_BILLING") return Number(line.price ?? 0)
-  const itemId = Number(line.id)
-  if (!Number.isFinite(itemId) || itemId <= 0) return Number(line.price ?? 0)
-
-  let hmoRate: number | undefined
-  if (line.type === "machine")             hmoRate = createPatientMachineRateMap.value.get(itemId)
-  else if (line.type === "technique")      hmoRate = createPatientTechniqueRateMap.value.get(itemId)
-  else if (line.type === "evaluation")     hmoRate = createPatientEvaluationRateMap.value.get(itemId)
-  else if (line.type === "add-on-machine") hmoRate = createPatientAddOnMachineRateMap.value.get(itemId)
-  else if (line.type === "add-on-technique") hmoRate = createPatientAddOnTechniqueRateMap.value.get(itemId)
-  else if (line.type === "add-on-home-service") hmoRate = createPatientAddOnHomeServiceRateMap.value.get(itemId)
-  return hmoRate ?? Number(line.price ?? 0)
-}
-
-const getCreateLineOriginalPrice = (line: {price: number; originalPrice?: number}): number =>
-  Number(line.originalPrice ?? line.price ?? 0)
-
-const subtotalFromServiceLines = computed(() =>
-  selectedServiceLines.value.reduce((sum, line) => sum + getEffectiveCreateLinePrice(line), 0)
-)
-
-const resolveSessionServiceName = (sessionId?: string): string => {
-  if (!sessionId) return "Recurring PT Session"
-  const matched = sessionServices.value.find(service => String(service.id) === String(sessionId))
-  return matched?.name || `Session ${sessionId}`
-}
-
-const expandQtyItems = (
-  items: Array<{id: string; qty: number}> | undefined,
-  ids: string[] | undefined,
-  fallbackQty: number | undefined
-): Array<{id?: string; qty: number}> =>
-  items?.length
-    ? items.map(entry => ({id: entry.id, qty: Number(entry.qty ?? 1)}))
-    : (ids ?? []).map(id => ({id, qty: Number(fallbackQty ?? 1)}))
-
-const resolvePackageSessionFallbackCount = (pkg: PackageServiceOffer): number => {
-  const quantityCandidates = [
-    Number(pkg.bundleQty ?? 1),
-    ...expandQtyItems(pkg.machineItems, pkg.machineIds, pkg.machineQty).map(item => Number(item.qty ?? 1)),
-    ...expandQtyItems(pkg.techniqueItems, pkg.techniqueIds, pkg.techniqueQty).map(item => Number(item.qty ?? 1)),
-    ...expandQtyItems(pkg.evaluationItems, pkg.evaluationIds, pkg.evaluationQty).map(item => Number(item.qty ?? 1)),
-    ...expandQtyItems(pkg.addOnItems, pkg.addOnIds, pkg.addOnQty).map(item => Number(item.qty ?? 1)),
-  ].filter(value => Number.isFinite(value) && value > 1)
-
-  return quantityCandidates.length ? Math.max(...quantityCandidates) : 0
-}
-
-const getPackageSessionItems = (pkg: PackageServiceOffer): Array<{id?: string; qty: number}> =>
-  (() => {
-    const explicitSessionItems = expandQtyItems(pkg.sessionItems, pkg.sessionIds, pkg.sessionQty)
-    if (explicitSessionItems.length) return explicitSessionItems
-
-    const fallbackCount = resolvePackageSessionFallbackCount(pkg)
-    return fallbackCount > 1 ? [{id: undefined, qty: fallbackCount}] : []
-  })()
-
-const buildPackageSessionTemplates = (pkg: PackageServiceOffer): PackageSessionTemplate[] => {
-  const sessionItems = getPackageSessionItems(pkg)
-  const templates: PackageSessionTemplate[] = []
-
-  for (const item of sessionItems) {
-    const totalOccurrences = Math.max(1, Number(item.qty ?? 1))
-    for (let occurrence = 1; occurrence <= totalOccurrences; occurrence++) {
-      templates.push({
-        key: `${pkg.id}-${item.id ?? "session"}-${occurrence}`,
-        sessionId: item.id,
-        sessionName: item.id ? resolveSessionServiceName(item.id) : `${pkg.name} Session`,
-        occurrence,
-        totalOccurrences
-      })
-    }
-  }
-
-  return templates
-}
-
-const seedPackageSessionStart = (baseStart: Date, candidate: Date): Date => {
-  const nextAllowed = findNextAllowedDate(new Date(candidate))
-  nextAllowed.setHours(baseStart.getHours(), baseStart.getMinutes(), 0, 0)
-  return snapToSlotBoundary(nextAllowed)
-}
-
-const buildPackageSessionSchedules = (
-  pkg: PackageServiceOffer,
-  existingSchedules: PackageSessionSchedule[] = []
-): PackageSessionSchedule[] => {
-  const templates = buildPackageSessionTemplates(pkg)
-  const baseStart = snapToSlotBoundary(new Date(createStart.value))
-  let nextCandidate = new Date(baseStart)
-
-  return templates.map((template, index) => {
-    const existingSchedule = existingSchedules.find(schedule => schedule.key === template.key) ?? existingSchedules[index]
-    const startsAt = existingSchedule?.startsAt instanceof Date && !Number.isNaN(existingSchedule.startsAt.getTime())
-      ? snapToSlotBoundary(new Date(existingSchedule.startsAt))
-      : seedPackageSessionStart(baseStart, nextCandidate)
-
-    nextCandidate = new Date(startsAt)
-    nextCandidate.setDate(nextCandidate.getDate() + 1)
-
-    return {
-      ...template,
-      startsAt
-    }
-  })
-}
-
-const selectedPackageSessionExpectedCount = computed(() =>
-  selectedPackageOfferDetail.value ? buildPackageSessionTemplates(selectedPackageOfferDetail.value).length : 0
-)
-
-const selectedPackageHasSessionSchedules = computed(() =>
-  selectedPackageSessionExpectedCount.value > 0 || packageSessionSchedules.value.length > 0
-)
-
-const syncSelectedPackageSessionSchedules = (): void => {
-  if (!selectedPackageOfferDetail.value) {
-    packageSessionSchedules.value = []
-    return
-  }
-
-  packageSessionSchedules.value = buildPackageSessionSchedules(
-    selectedPackageOfferDetail.value,
-    packageSessionSchedules.value
-  )
-  if (createActiveScheduleIndex.value >= packageSessionSchedules.value.length) {
-    createActiveScheduleIndex.value = 0
-  }
-}
-
-const getPackageSessionEnd = (startsAt: Date): Date =>
-  addMinutes(snapToSlotBoundary(new Date(startsAt)), createSlotDuration.value)
-
-const hasOverlappingAppointmentSchedules = (
-  schedules: Array<{startsAt: Date; endsAt: Date}>
-): boolean => {
-  const sortedSchedules = [...schedules]
-    .map(schedule => ({
-      startsAt: new Date(schedule.startsAt),
-      endsAt: new Date(schedule.endsAt)
+const savePlannedServicesForAppointment = async (appointmentId: number, payerType?: string | null) =>
+  appointmentPhase1Service.savePlannedServices(appointmentId, {
+    payer_type: payerType,
+    services: selectedServices.value.map(service => ({
+      type: service.type,
+      id: service.value,
+      quantity: service.quantity
     }))
-    .sort((left, right) => left.startsAt.getTime() - right.startsAt.getTime())
-
-  for (let index = 1; index < sortedSchedules.length; index++) {
-    if (sortedSchedules[index].startsAt.getTime() < sortedSchedules[index - 1].endsAt.getTime()) {
-      return true
-    }
-  }
-
-  return false
-}
-
-const cascadePackageSessionStarts = (anchorIndex: number): void => {
-  if (anchorIndex < 0 || anchorIndex >= packageSessionSchedules.value.length) return
-
-  const nextSchedules = packageSessionSchedules.value.map(schedule => ({
-    ...schedule,
-    startsAt: new Date(schedule.startsAt)
-  }))
-  const anchorStart = snapToSlotBoundary(new Date(nextSchedules[anchorIndex].startsAt))
-  nextSchedules[anchorIndex].startsAt = anchorStart
-
-  let nextCandidate = new Date(anchorStart)
-  nextCandidate.setDate(nextCandidate.getDate() + 1)
-
-  for (let index = anchorIndex + 1; index < nextSchedules.length; index++) {
-    const startsAt = seedPackageSessionStart(anchorStart, nextCandidate)
-    nextSchedules[index].startsAt = startsAt
-    nextCandidate = new Date(startsAt)
-    nextCandidate.setDate(nextCandidate.getDate() + 1)
-  }
-
-  packageSessionSchedules.value = nextSchedules
-}
-
-const updatePackageSessionStart = (
-  index: number,
-  value: Date | Date[] | Array<Date | null> | null | undefined
-): void => {
-  if (!(value instanceof Date) || Number.isNaN(value.getTime())) return
-  if (!packageSessionSchedules.value[index]) return
-
-  const nextStart = snapToSlotBoundary(new Date(value))
-  createActiveScheduleIndex.value = index
-  packageSessionSchedules.value[index].startsAt = nextStart
-
-  if (index === 0) {
-    createStart.value = nextStart
-  }
-
-  cascadePackageSessionStarts(index)
-}
-
-const buildCreateHmoRateMap = (items: ServiceCatalogItem[]): {map: Map<number, number>; ids: Set<number>} => {
-  const map = new Map<number, number>()
-  const ids = new Set<number>()
-  for (const item of items) {
-    const id = Number(item.id)
-    const price = Number(item.hmo_rate)
-    if (Number.isFinite(id) && id > 0 && Number.isFinite(price) && price >= 0) {
-      map.set(id, price)
-      ids.add(id)
-    }
-  }
-  return {map, ids}
-}
-
-const syncCreatePatientHmoRates = async (): Promise<void> => {
-  createPatientHmoId.value = null
-  createPatientHmoInfo.value = null
-  createPatientMachineRateMap.value = new Map()
-  createPatientTechniqueRateMap.value = new Map()
-  createPatientEvaluationRateMap.value = new Map()
-  createPatientAddOnMachineRateMap.value = new Map()
-  createPatientAddOnTechniqueRateMap.value = new Map()
-  createPatientAddOnHomeServiceRateMap.value = new Map()
-
-  if (createBillingType.value !== "HMO_BILLING") return
-  const patientId = Number(createPatient.value)
-  if (!Number.isFinite(patientId) || patientId <= 0) return
-
-  syncingCreateHmoRates.value = true
-  try {
-  const patientContext = await patientTanstackService.fetchContext(queryClient, patientId)
-  const sponsorEntries = patientContext?.sponsor_information ?? []
-  const hmoInfo = sponsorEntries.find(entry => entry.sponsor_context === 'HMO' && Number(entry.hmo_id) > 0) ?? null
-  createPatientHmoInfo.value = hmoInfo
-  const hmoId = Number(hmoInfo?.hmo_id)
-  if (!Number.isFinite(hmoId) || hmoId <= 0) return
-
-  createPatientHmoId.value = hmoId
-
-  const catalogContext = await serviceCatalogContextTanstackService.fetchContext(queryClient, {scope: "HMO", hmo_id: hmoId})
-  const machines = buildCreateHmoRateMap(catalogContext?.services.machines ?? [])
-  const techniques = buildCreateHmoRateMap(catalogContext?.services.techniques ?? [])
-  const evaluations = buildCreateHmoRateMap(catalogContext?.services.evaluations ?? [])
-  const addOnMachines = buildCreateHmoRateMap(catalogContext?.services.add_on_machines ?? [])
-  const addOnTechniques = buildCreateHmoRateMap(catalogContext?.services.add_on_techniques ?? [])
-  const addOnHomeServices = buildCreateHmoRateMap(catalogContext?.services.add_on_home_services ?? [])
-
-  createPatientMachineRateMap.value = machines.map
-  createPatientTechniqueRateMap.value = techniques.map
-  createPatientEvaluationRateMap.value = evaluations.map
-  createPatientAddOnMachineRateMap.value = addOnMachines.map
-  createPatientAddOnTechniqueRateMap.value = addOnTechniques.map
-  createPatientAddOnHomeServiceRateMap.value = addOnHomeServices.map
-  } finally {
-    syncingCreateHmoRates.value = false
-  }
-}
-
-const syncCreatePatientLguProgram = async (): Promise<void> => {
-  createPatientLguInfo.value = null
-
-  if (createBillingType.value !== "LGU_BILLING") return
-  const patientId = Number(createPatient.value)
-  if (!Number.isFinite(patientId) || patientId <= 0) return
-
-  syncingCreateLguProgram.value = true
-  try {
-    if (lguProgramOptions.value.length === 0) {
-      lguProgramOptions.value = (await lguBillingService.getPrograms()) ?? []
-    }
-
-    const patientContext = await patientTanstackService.fetchContext(queryClient, patientId)
-    const sponsorEntries = patientContext?.sponsor_information ?? []
-    const lguInfo = sponsorEntries.find(entry =>
-      entry.sponsor_context === "LGU" && Number(entry.lgu_program_id) > 0
-    ) ?? null
-    createPatientLguInfo.value = lguInfo
-
-    const lguProgramId = Number(lguInfo?.lgu_program_id)
-    if (Number.isFinite(lguProgramId) && lguProgramId > 0) {
-      createLguProgramId.value = lguProgramId
-    } else {
-      createLguProgramId.value = undefined
-    }
-  } finally {
-    syncingCreateLguProgram.value = false
-  }
-}
-
-const activeBundledServices = computed(() =>
-  activeBundledServiceCatalog.value.filter(b => b.status !== "Inactive")
-)
-
-const activePackageServiceOffers = computed(() =>
-  activePackageServiceCatalog.value.filter(p => p.status !== "Inactive")
-)
-
-const formatLocalDateKey = (date: Date): string => {
-  const yyyy = String(date.getFullYear())
-  const mm = String(date.getMonth() + 1).padStart(2, "0")
-  const dd = String(date.getDate()).padStart(2, "0")
-  return `${yyyy}-${mm}-${dd}`
-}
-
-const detailCardClass = "app-appointment-card p-3"
-const selectedCheckoutSummary = computed(() => selectedDetail.value?.checkout_summary)
-const patientWalletAmountToCollect = computed(() =>
-  Number(selectedCheckoutSummary.value?.patient_wallet.amount_to_collect ?? 0)
-)
-const hasPatientWalletAmountToCollect = computed(() => patientWalletAmountToCollect.value > 0)
-const sponsorWalletSummary = computed(() => selectedCheckoutSummary.value?.sponsor_wallet)
-const selectedLguCreditSummary = computed(() => selectedDetail.value?.lgu_credit_summary)
-const selectedEncounterTicket = computed(() => selectedDetail.value?.encounter_ticket)
-const selectedEncounterTicketHasPatientSignature = computed(() =>
-  Boolean(selectedEncounterTicket.value?.patient_signature_data_url?.trim())
-)
-const selectedEncounterTicketHasPtSignature = computed(() =>
-  Boolean(selectedEncounterTicket.value?.pt_signature_data_url?.trim())
-)
-const isSelectedEncounterTicketLocked = computed(() => Boolean(selectedEncounterTicket.value?.record_locked))
-const encounterAttendanceLabel = computed(() =>
-  selectedEncounterTicketHasPatientSignature.value
-    ? "Patient Attendance Confirmed"
-    : selectedEncounterTicketHasPtSignature.value
-      ? "PT Attendance Confirmed"
-      : "Attendance Pending"
-)
-const canProcessEncounterTicket = computed(() =>
-  Boolean(selectedDetail.value?.billing_id || selectedEncounterTicket.value?.phase1_billing_id)
-)
-const selectedEncounterTicketPtConfirmedByLabel = computed(() =>
-  selectedEncounterTicket.value?.pt_confirmed_by_name?.trim()
-    || selectedDetail.value?.doctor_name?.trim()
-    || "Assigned Physical Therapist"
-)
-const selectedEncounterTicketPtCompletionTag = computed(() =>
-  selectedEncounterTicket.value?.pt_completion_tag?.trim() || ""
-)
-const selectedEncounterTicketSummaryLabel = computed(() => {
-  if (selectedEncounterTicketHasPatientSignature.value && selectedEncounterTicket.value?.signed_off_at) {
-    return `Patient signed on ${formatDateTime(selectedEncounterTicket.value.signed_off_at)}`
-  }
-  if (selectedEncounterTicketHasPtSignature.value && selectedEncounterTicket.value?.pt_confirmed_at) {
-    return `PT signed on ${formatDateTime(selectedEncounterTicket.value.pt_confirmed_at)}`
-  }
-  return "Attendance and sign-off still need to be processed."
-})
-const formatEncounterTicketPackageSource = (value?: string): string => {
-  const normalized = String(value ?? "").trim().toUpperCase()
-  if (normalized === "PATIENT_PACKAGE_SERVICE_PURCHASE") return "Linked from patient package service purchase"
-  if (normalized === "PATIENT_PACKAGE_PURCHASE") return "Linked from patient package purchase"
-  if (normalized === "PHASE1_BILLING_PACKAGE") return "Linked from the billing package record"
-  if (normalized === "BILLING_LINE_ITEM_PACKAGE") return "Linked from the saved billing package line item"
-  return value?.trim() || "Linked billing package"
-}
-const displayEncounterBillingRoute = (value?: string): string => {
-  const normalized = String(value ?? "").trim().toUpperCase()
-  if (normalized === "SELF_PAY_SINGLE") return "Self Pay: Single Service"
-  if (normalized === "SELF_PAY_PACKAGE") return "Self Pay: Package Service"
-  if (normalized === "HMO_BILLING" || normalized === "HMO") return "HMO"
-  if (normalized === "LGU_BILLING" || normalized === "LGU") return "LGU"
-  return value?.trim() || "N/A"
-}
-const encounterTicketRecordLabel = computed(() =>
-  selectedEncounterTicket.value ? `ET-${selectedEncounterTicket.value.id}` : "Will be generated on sign-off"
-)
-const selectedEncounterTicketPackageId = computed(() =>
-  selectedEncounterTicket.value?.active_billing_package_id?.trim()
-    || selectedEncounterTicket.value?.billing_snapshot?.active_billing_package_id?.trim()
-    || ""
-)
-const selectedEncounterTicketPackageName = computed(() =>
-  selectedEncounterTicket.value?.active_billing_package_name?.trim()
-    || selectedEncounterTicket.value?.billing_snapshot?.active_billing_package_name?.trim()
-    || ""
-)
-const selectedEncounterTicketPackageLabel = computed(() => {
-  const packageName = selectedEncounterTicketPackageName.value
-  const packageId = selectedEncounterTicketPackageId.value
-  if (packageName && packageId && packageName !== packageId) return `${packageName} (${packageId})`
-  if (packageName) return packageName
-  if (packageId) return packageId
-  return "No active billing package linked"
-})
-const selectedEncounterTicketPackageSourceLabel = computed(() => {
-  const source = selectedEncounterTicket.value?.active_billing_package_source?.trim()
-    || selectedEncounterTicket.value?.billing_snapshot?.active_billing_package_source?.trim()
-    || ""
-  if (!source) return undefined
-  return selectedEncounterTicketPackageId.value
-    ? `${formatEncounterTicketPackageSource(source)} · Linked ID ${selectedEncounterTicketPackageId.value}`
-    : formatEncounterTicketPackageSource(source)
-})
-const encounterTicketButtonLabel = computed(() =>
-  isSelectedEncounterTicketLocked.value
-    ? "View Locked Encounter Ticket"
-    : selectedEncounterTicket.value
-      ? "Continue Encounter Ticket"
-      : "Process Encounter Ticket"
-)
-const encounterServiceRenderedLabel = computed(() => {
-  if (selectedDetail.value?.service_name?.trim()) return selectedDetail.value.service_name.trim()
-  const phase = selectedDetail.value?.appointment_phase
-  if (phase === "EVAL") return "Evaluation Session"
-  if (phase === "RE_EVAL") return "Re-Evaluation Session"
-  return "Therapy Session"
-})
-const encounterSessionDeductionLabel = computed(() => {
-  const normalizedBillingType = String(selectedDetail.value?.billing_type ?? "")
-    .trim()
-    .toUpperCase()
-    .replace(/:/g, "")
-    .replace(/-/g, "_")
-    .replace(/ /g, "_")
-
-  if (normalizedBillingType === "HMO" || normalizedBillingType === "HMO_BILLING") {
-    return `Deducting 1 Session from ${sponsorWalletSummary.value?.sponsor_name || "HMO"} Allocation`
-  }
-  if (normalizedBillingType === "LGU" || normalizedBillingType === "LGU_BILLING") {
-    return `Deducting 1 Session from ${sponsorWalletSummary.value?.sponsor_name || "LGU"} Authorization`
-  }
-  if (normalizedBillingType === "SELF_PAY_PACKAGE") {
-    return "Recording 1 Attended Package Session"
-  }
-  return "Attendance will be recorded. No session deduction applies."
-})
-
-const isLguBilling = computed(() => {
-  const bt = String(selectedDetail.value?.billing_type ?? "").trim().toUpperCase().replace(/[:\- ]/g, "_")
-  return bt === "LGU" || bt === "LGU_BILLING"
-})
-const dropoutLoading = ref(false)
-const dropoutStatusValue = computed(() => {
-  return (selectedDetail.value as Record<string, unknown> | undefined)?.dropout_status as string ?? "ACTIVE"
-})
-const dropoutStatusLabel = computed(() => {
-  const status = dropoutStatusValue.value
-  if (status === "DROPPED_OUT") return "Dropped Out"
-  if (status === "RETURNED") return "Returned"
-  return "Active"
-})
-const dropoutStatusSeverity = computed(() => {
-  const status = dropoutStatusValue.value
-  if (status === "DROPPED_OUT") return "danger"
-  if (status === "RETURNED") return "warn"
-  return "success"
-})
-const dropoutToggleLabel = computed(() =>
-  dropoutStatusValue.value === "DROPPED_OUT" ? "Mark as Returned" : "Mark as Drop-out"
-)
-const dropoutToggleIcon = computed(() =>
-  dropoutStatusValue.value === "DROPPED_OUT" ? "pi pi-undo" : "pi pi-times-circle"
-)
-const dropoutToggleSeverity = computed(() =>
-  dropoutStatusValue.value === "DROPPED_OUT" ? "success" : "danger"
-)
-const dropoutStatusDescription = computed(() => {
-  const status = dropoutStatusValue.value
-  if (status === "DROPPED_OUT") return "Consumed LGU credits are converted into an individual-pricing dropout claim. Month-end package claims are blocked until the patient returns."
-  if (status === "RETURNED") return "Patient returned after previously dropping out."
-  return selectedLguCreditSummary.value
-    ? "Patient is active. Month-end LGU claims can only be created from consumed credits with both PT and patient signatures."
-    : "Patient is actively participating in the LGU program."
-})
-const toggleDropoutStatus = async () => {
-  if (!selectedDetail.value?.id) return
-  const nextStatus = dropoutStatusValue.value === "DROPPED_OUT" ? "RETURNED" : "DROPPED_OUT"
-  dropoutLoading.value = true
-  try {
-    const result = await appointmentPhase1Service.updateDropoutStatus(selectedDetail.value.id, nextStatus)
-    const baseMessage = `Status updated to ${nextStatus === "DROPPED_OUT" ? "Dropped Out" : "Returned"}`
-    const clearedCount = result?.cleared_appointment_ids?.length ?? 0
-    if (result?.dropout_billing_public_id) {
-      successToast(
-        toast,
-        `${baseMessage}. Dropout claim ${result.dropout_billing_public_id} was created.${clearedCount ? ` ${clearedCount} future appointment${clearedCount === 1 ? "" : "s"} cleared.` : ""}`
-      )
-    } else {
-      successToast(
-        toast,
-        `${baseMessage}.${clearedCount ? ` ${clearedCount} future appointment${clearedCount === 1 ? "" : "s"} cleared.` : ""}`
-      )
-    }
-    await invalidateAppointmentContext(selectedDetail.value.id)
-    selectedDetail.value = await fetchAppointmentDetail(selectedDetail.value.id)
-  } catch (error: unknown) {
-    errorToast(toast, extractApiErrorMessage(error, "Failed to update dropout status"))
-  } finally {
-    dropoutLoading.value = false
-  }
-}
-
-const openLguMonthlyClaimDialog = (): void => {
-  if (!selectedDetail.value) return
-  const today = new Date()
-  const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`
-  lguMonthlyClaimMonth.value = currentMonth
-  lguMonthlyClaimSummary.value = {
-    consumed_count: selectedDetail.value.lgu_credit_summary?.consumed_sessions ?? 0,
-    billing_month: currentMonth
-  }
-  lguMonthlyClaimVisible.value = true
-}
-
-const sanitizeLguMonthInput = (): void => {
-  // Allow only YYYY-MM format: accept digits and hyphens, enforce format
-  const value = lguMonthlyClaimMonth.value
-  const sanitized = value.replace(/[^\d-]/g, "").substring(0, 7)
-  lguMonthlyClaimMonth.value = sanitized
-
-  // Auto-format as user types
-  if (sanitized.length >= 4 && sanitized[4] !== "-") {
-    lguMonthlyClaimMonth.value = `${sanitized.substring(0, 4)}-${sanitized.substring(4)}`
-  }
-}
-
-const submitLguMonthlyClaim = async (): Promise<void> => {
-  if (!selectedDetail.value?.id || !lguMonthlyClaimMonth.value?.trim()) return
-
-  // Validate month format YYYY-MM
-  const monthRegex = /^\d{4}-\d{2}$/
-  if (!monthRegex.test(lguMonthlyClaimMonth.value)) {
-    errorToast(toast, "Billing month must be in YYYY-MM format (e.g., 2026-04)")
-    return
-  }
-
-  try {
-    isLguMonthlyClaimSaving.value = true
-    const result = await lguBillingService.createMonthlyClaim({
-      appointment_id: selectedDetail.value.id,
-      billing_month: lguMonthlyClaimMonth.value
-    })
-
-    if (result) {
-      lguMonthlyClaimVisible.value = false
-      await invalidateAppointmentContext(selectedDetail.value.id)
-      selectedDetail.value = await fetchAppointmentDetail(selectedDetail.value.id)
-      successToast(
-        toast,
-        `Month-end LGU claim created successfully. Billing ID: ${result.billing_public_id} (${result.consumed_count} credits)`
-      )
-    }
-  } catch (error: unknown) {
-    const errorMsg = extractApiErrorMessage(error, "Failed to create month-end LGU claim")
-    errorToast(toast, errorMsg)
-  } finally {
-    isLguMonthlyClaimSaving.value = false
-  }
-}
-
-const dayBookings = computed<AppointmentListItem[]>(() => tableAppointments.value)
-const rescheduledAppointmentsCount = computed(() => dayBookings.value.filter(item => Number(item.reschedule_count ?? 0) > 0).length)
-const billingAttentionCount = computed(() =>
-  dayBookings.value.filter(item => {
-    return needsBillingAttention(item.billing_status)
-  }).length
-)
-const selectedClinic = computed(() => clinicOptions.value.find(clinic => clinic.id === selectedClinicId.value))
-const selectedCreateProvider = computed(() =>
-  doctorOptions.value.find(option => option.id === createDoctor.value)
-)
-const selectedCreateProviderHasSpecialty = computed(() =>
-  Boolean(selectedCreateProvider.value?.specialty_tag_id)
-)
-const selectedCreateProviderRequiresSpecialty = computed(() =>
-  Boolean(selectedCreateProvider.value?.requires_specialty_tag)
-)
-const isCreateSpecialtyLockedByProvider = computed(() =>
-  Boolean(selectedCreateProvider.value?.requires_specialty_tag && selectedCreateProvider.value?.specialty_tag_id)
-)
-const selectedCreateProviderSpecialtyLabel = computed(() =>
-  selectedCreateProvider.value?.specialty_tag_name || ""
-)
-const selectedTreatmentAreaOption = computed(() =>
-  treatmentAreaOptions.value.find(option => option.id === createTreatmentArea.value)
-)
-const selectedDateLabel = computed(() =>
-  calendarDate.value.toLocaleDateString("en-PH", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric"
-  })
-)
-const selectedClinicScheduleLabel = computed(() => {
-  if (!selectedClinic.value) return ""
-  return `${selectedClinic.value.name}: ${selectedClinic.value.start_day_name} to ${selectedClinic.value.end_day_name}, ${selectedClinic.value.start_time_formatted} - ${selectedClinic.value.end_time_formatted}`
-})
-const calendarDisabledDays = computed<number[]>(() => {
-  if (!selectedClinic.value) return []
-  const disabled: number[] = []
-  for (let jsDay = 0; jsDay < 7; jsDay++) {
-    const clinicDay = jsDay === 0 ? 7 : jsDay
-    if (!isClinicDayAllowed(clinicDay)) disabled.push(jsDay)
-  }
-  return disabled
-})
-
-const billingSeverity = (status?: string, billingType?: string): "success" | "warn" | "danger" | "info" => {
-  const normalized = (status || "UNBILLED").trim().toUpperCase()
-  const normalizedBillingType = normalizeBillingTypeForCalendar(billingType)
-
-  if (normalized === "PAID") return "success"
-  if (normalized === "BILLED") {
-    return normalizedBillingType === "HMO_BILLING" || normalizedBillingType === "LGU_BILLING"
-      ? "success"
-      : "info"
-  }
-  if (normalized === "PARTIAL" || normalized === "PENDING" || normalized === "UNBILLED") return "warn"
-  if (normalized === "VOID") return "danger"
-  return "info"
-}
-const normalizeAppointmentStatus = (status?: string): string =>
-  (status || "PENDING").trim().toUpperCase().split(" ").join("_")
-const appointmentSeverity = (status?: string): "success" | "warn" | "danger" | "info" => {
-  const normalized = normalizeAppointmentStatus(status)
-  if (normalized === "COMPLETED") return "success"
-  if (normalized === "RESCHEDULED") return "warn"
-  if (normalized === "CANCELLED" || normalized === "NO_SHOW") return "danger"
-  return "info"
-}
-const appointmentPhaseSeverity = (phase?: AppointmentPhase): "info" | "contrast" | "warn" => {
-  if (phase === "EVAL") return "info"
-  if (phase === "RE_EVAL") return "warn"
-  return "contrast"
-}
-const appointmentLocationContextSeverity = (locationContext?: AppointmentLocationContext): "success" | "warn" => {
-  if (locationContext === "HOME_CARE") return "warn"
-  return "success"
-}
-const displayAppointmentPhase = (phase?: AppointmentPhase): string => {
-  if (phase === "RE_EVAL") return "RE-EVAL"
-  return phase ?? "SESSION"
-}
-const displayLocationContext = (locationContext?: AppointmentLocationContext): string => {
-  if (locationContext === "HOME_CARE") return "HOME CARE"
-  return "IN-CLINIC"
-}
-const displayAppointmentStatus = (status?: string): string => normalizeAppointmentStatus(status).split("_").join(" ")
-const normalizeBillingTypeForCalendar = (value?: string): string =>
-  String(value ?? "")
-    .trim()
-    .toUpperCase()
-    .replace(/:/g, "")
-    .replace(/-/g, "_")
-    .replace(/ /g, "_")
-const displayBillingStatus = (status?: string, billingType?: string): string => {
-  const normalized = (status?.trim() || "UNBILLED").toUpperCase()
-  const normalizedBillingType = normalizeBillingTypeForCalendar(billingType)
-  const isHmoOrLgu = normalizedBillingType === "HMO_BILLING" || normalizedBillingType === "LGU_BILLING"
-
-  if (normalized === "PAID") return "Paid"
-  if (normalized === "BILLED") return isHmoOrLgu ? "Paid" : "Paid"
-  if (normalized === "PARTIAL") {
-    return isHmoOrLgu ? "Pending" : "Partial (The patient payed some of current balance)"
-  }
-  if (normalized === "PENDING" || normalized === "UNBILLED") {
-    return isHmoOrLgu ? "Pending" : "Pending (Not yet Billed)"
-  }
-  if (normalized === "VOID") return "Void"
-  return normalized
-}
-const needsBillingAttention = (status?: string): boolean => {
-  const normalized = displayBillingStatus(status)
-  return normalized !== "PAID" && normalized !== "BILLED"
-}
-const isFinishedAppointmentStatus = (status?: string): boolean => {
-  const normalized = normalizeAppointmentStatus(status)
-  return normalized === "COMPLETED" || normalized === "CANCELLED" || normalized === "NO_SHOW"
-}
-
-const formatDateTime = (value: string | Date): string => new Date(value).toLocaleString()
-
-const loadTreatmentAreaOptions = async (): Promise<void> => {
-  if (!selectedClinicId.value) {
-    treatmentAreaOptions.value = []
-    createTreatmentArea.value = undefined
-    return
-  }
-
-  const treatmentAreas = await treatmentAreaReferenceService.getAll({
-    page: defaultPage,
-    size: 100,
-    status: Status.ACTIVE,
-    name: undefined,
-    clinic_id: selectedClinicId.value
-  })
-  treatmentAreaOptions.value = treatmentAreas?.content ?? []
-  if (createTreatmentArea.value && !treatmentAreaOptions.value.some(option => option.id === createTreatmentArea.value)) {
-    createTreatmentArea.value = undefined
-  }
-}
-
-const loadCachedServiceCatalogFallback = (): void => {
-  const storedGlobalServices = parseStoredCatalogArray("singlePayServices")
-    .map(normalizeSingleService)
-    .filter((item): item is SingleService => item !== null)
-  const storedLguServices = parseStoredCatalogArray("lguSinglePayServices")
-    .map(normalizeSingleService)
-    .filter((item): item is SingleService => item !== null)
-  const storedBundles = parseStoredCatalogArray("bundledServices")
-    .map(normalizeBundledService)
-    .filter((item): item is BundledService => item !== null)
-  const storedLguBundles = parseStoredCatalogArray("lguBundledServices")
-    .map(normalizeBundledService)
-    .filter((item): item is BundledService => item !== null)
-  const storedPackageOffers = parseStoredCatalogArray("packageServiceOffers")
-    .map(normalizePackageServiceOffer)
-    .filter((item): item is PackageServiceOffer => item !== null)
-  const storedLguPackageOffers = parseStoredCatalogArray("lguPackageServiceOffers")
-    .map(normalizePackageServiceOffer)
-    .filter((item): item is PackageServiceOffer => item !== null)
-
-  allSinglePayServices.value = storedGlobalServices
-  lguSinglePayServices.value = storedLguServices
-  allBundledServices.value = storedBundles.filter(item => !item.id.startsWith("lgu-"))
-  lguBundledServices.value = [
-    ...storedLguBundles,
-    ...storedBundles.filter(item => item.id.startsWith("lgu-")),
-  ]
-  allPackageServiceOffers.value = storedPackageOffers.filter(item => item.offerScope !== "LGU" && !item.id.startsWith("lgu-"))
-  lguPackageServiceOffers.value = [
-    ...storedLguPackageOffers,
-    ...storedPackageOffers.filter(item => item.offerScope === "LGU" || item.id.startsWith("lgu-")),
-  ]
-}
-
-const applyCatalogContext = (context?: ServiceCatalogContext): void => {
-  if (!context) return
-  const services = catalogContextToServices(context)
-  const bundles = context.bundles.map(bundle => catalogBundleToBundledService(bundle, context.scope))
-  const packageOffers = catalogContextToPackageOffers(context)
-
-  if (context.scope === "LGU") {
-    lguSinglePayServices.value = services
-    lguBundledServices.value = bundles
-    lguPackageServiceOffers.value = packageOffers
-    return
-  }
-
-  allSinglePayServices.value = services
-  allBundledServices.value = bundles
-  allPackageServiceOffers.value = packageOffers
-}
-
-const loadSinglePayServices = async (): Promise<void> => {
-  loadCachedServiceCatalogFallback()
-  await queryClient.invalidateQueries({queryKey: [ServiceCatalogTanstackKey.SERVICE_CATALOG_CONTEXT]})
-  const catalogResults = await Promise.allSettled([
-    serviceCatalogContextTanstackService.fetchContext(queryClient, {scope: "GLOBAL"}),
-    serviceCatalogContextTanstackService.fetchContext(queryClient, {scope: "LGU"}),
-  ])
-
-  for (const result of catalogResults) {
-    if (result.status === "fulfilled") {
-      applyCatalogContext(result.value)
-    }
-  }
-}
-const removeHomeServiceAddOn = (): void => {
-  selectedServiceLines.value = selectedServiceLines.value.filter(line => line.type !== "add-on-home-service")
-  if (isCreateLocationContextAuto.value && createLocationContext.value === "HOME_CARE") {
-    createLocationContext.value = "IN_CLINIC"
-    isCreateLocationContextAuto.value = false
-  }
-}
-
-const setHomeServiceAddOn = (serviceId?: string): void => {
-  if (!serviceId) {
-    removeHomeServiceAddOn()
-    return
-  }
-
-  const service = activeSinglePayServices.value.find(item => item.id === serviceId && item.type === "add-on-home-service")
-
-  if (!service) return
-
-  const nextLine = {
-    type: service.type,
-    id: service.id,
-    name: service.name,
-    price: service.price,
-    originalPrice: service.price
-  }
-
-  if (createLocationContext.value !== "HOME_CARE") {
-    createLocationContext.value = "HOME_CARE"
-    isCreateLocationContextAuto.value = true
-  }
-  createTreatmentArea.value = undefined
-
-  const existingIndex = selectedServiceLines.value.findIndex(line => line.type === "add-on-home-service")
-  if (existingIndex >= 0) {
-    selectedServiceLines.value.splice(existingIndex, 1, nextLine)
-    return
-  }
-
-  selectedServiceLines.value.push(nextLine)
-}
-
-const calculatePackageOfferRegularTotal = (item: PackageServiceOffer): number => {
-  const bundle = item.bundleId ? activeBundledServiceCatalog.value.find(entry => entry.id === item.bundleId) : undefined
-  const bundlePortion = Number(bundle?.bundledPrice ?? 0) * Number(item.bundleQty ?? 1)
-  const machineItems = item.machineItems?.length
-    ? item.machineItems
-    : (item.machineIds ?? []).map(id => ({id, qty: Number(item.machineQty ?? 1)}))
-  const techniqueItems = item.techniqueItems?.length
-    ? item.techniqueItems
-    : (item.techniqueIds ?? []).map(id => ({id, qty: Number(item.techniqueQty ?? 1)}))
-  const evaluationItems = item.evaluationItems?.length
-    ? item.evaluationItems
-    : (item.evaluationIds ?? []).map(id => ({id, qty: Number(item.evaluationQty ?? 1)}))
-  const addOnItems = item.addOnItems?.length
-    ? item.addOnItems
-    : (item.addOnIds ?? []).map(id => ({id, qty: Number(item.addOnQty ?? 1)}))
-
-  const machinePortion = machineItems.reduce((sum, entry) => {
-    const unitPrice = activeSinglePayServices.value.find(service => service.id === entry.id)?.price ?? 0
-    return sum + unitPrice * Number(entry.qty ?? 1)
-  }, 0)
-  const techniquePortion = techniqueItems.reduce((sum, entry) => {
-    const unitPrice = activeSinglePayServices.value.find(service => service.id === entry.id)?.price ?? 0
-    return sum + unitPrice * Number(entry.qty ?? 1)
-  }, 0)
-  const evaluationPortion = evaluationItems.reduce((sum, entry) => {
-    const unitPrice = activeSinglePayServices.value.find(service => service.id === entry.id)?.price ?? 0
-    return sum + unitPrice * Number(entry.qty ?? 1)
-  }, 0)
-  const addOnPortion = addOnItems.reduce((sum, entry) => {
-    const unitPrice = activeSinglePayServices.value.find(service => service.id === entry.id)?.price ?? 0
-    return sum + unitPrice * Number(entry.qty ?? 1)
-  }, 0)
-  return bundlePortion + machinePortion + techniquePortion + evaluationPortion + addOnPortion
-}
-
-const selectPackageOffer = (packageId: string): void => {
-  const pkg = activePackageServiceCatalog.value.find(item => item.id === packageId)
-  if (!pkg) return
-
-  selectedServiceLines.value = selectedServiceLines.value.filter(line => line.type !== "package")
-  selectedServiceLines.value.push({
-    type: "package",
-    id: pkg.id,
-    name: pkg.name,
-    price: Number(pkg.packagePrice ?? 0),
-    originalPrice: calculatePackageOfferRegularTotal(pkg)
-  })
-  selectedPackageOfferDetail.value = pkg
-  packageSessionSchedules.value = buildPackageSessionSchedules(pkg, packageSessionSchedules.value)
-  selectedPackageOfferId.value = undefined
-}
-
-const selectBundle = (bundleId: string): void => {
-  if (createBillingType.value === "HMO_BILLING" || createBillingType.value === "SELF_PAY_PACKAGE") {
-    selectedBundleId.value = undefined
-    return
-  }
-
-  const bundle = activeBundledServiceCatalog.value.find(b => b.id === bundleId)
-  if (!bundle) return
-
-  // Calculate original price from individual services
-  const allIds = [...bundle.machineIds, ...bundle.techniqueIds, ...bundle.evaluationIds, ...bundle.addOnIds]
-  const originalPrice = allIds.reduce((sum, id) => {
-    return sum + (activeSinglePayServices.value.find(s => s.id === id)?.price ?? 0)
-  }, 0)
-
-  // Prevent adding the same bundle twice
-  if (selectedServiceLines.value.find(l => l.id === bundle.id && l.type === "bundle")) {
-    selectedBundleId.value = undefined
-    return
-  }
-
-  selectedServiceLines.value.push({
-    type: "bundle",
-    id: bundle.id,
-    name: bundle.name,
-    price: bundle.bundledPrice,
-    originalPrice
-  })
-  selectedBundleId.value = undefined
-}
-
-const addSelectedBundle = (): void => {
-  if (!selectedBundleId.value) return
-  selectBundle(selectedBundleId.value)
-}
-
-const addServiceLine = (type: string): void => {
-  let serviceId: string | undefined
-
-  if (type === "machine") {
-    serviceId = selectedMachineId.value
-  } else if (type === "technique") {
-    serviceId = selectedTechniqueId.value
-  } else if (type === "evaluation") {
-    serviceId = selectedEvaluationId.value
-  } else if (type === "add-on-machine" || type === "add-on-technique" || type === "add-on-home-service") {
-    serviceId = selectedAddOnId.value
-  }
-
-  if (!serviceId) return
-
-  const service = activeSinglePayServices.value.find(s => {
-    if (s.id !== serviceId) return false
-    if (type === "add-on-machine") return s.type === "add-on-machine" || s.type === "add-on-technique"
-    return s.type === type
-  })
-  if (!service) return
-
-  if (service.type === "add-on-home-service") {
-    setHomeServiceAddOn(service.id)
-    selectedAddOnId.value = undefined
-    return
-  }
-
-  const resolvedLineType = service.type
-
-  // Check if service already in selected lines
-  const exists = selectedServiceLines.value.find(line => line.id === serviceId && line.type === resolvedLineType)
-  if (!exists) {
-    selectedServiceLines.value.push({
-      type: resolvedLineType,
-      id: service.id,
-      name: service.name,
-      price: service.price,
-      originalPrice: service.price
-    })
-  }
-
-  // Reset the dropdown
-  if (type === "machine") selectedMachineId.value = undefined
-  else if (type === "technique") selectedTechniqueId.value = undefined
-  else if (type === "evaluation") selectedEvaluationId.value = undefined
-  else if (type.startsWith("add-on")) selectedAddOnId.value = undefined
-}
-
-const removeServiceLine = (index: number): void => {
-  const [removedLine] = selectedServiceLines.value.splice(index, 1)
-  if (removedLine?.type === "package") {
-    selectedPackageOfferDetail.value = null
-    packageSessionSchedules.value = []
-  }
-}
-
-type CreateScheduleSlot = {
-  key: string
-  startsAt: Date
-  endsAt: Date
-  label: string
-  statusLabel: string
-  tooltip: string
-  isTaken: boolean
-  isSelected: boolean
-  conflicts: AppointmentListItem[]
-}
-
-const toMinutesFromTime = (value: unknown): number | undefined => {
-  if (value instanceof Date) return value.getHours() * 60 + value.getMinutes()
-  if (typeof value !== "string") return undefined
-  const hhmmss = value.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/)
-  if (hhmmss) return Number(hhmmss[1]) * 60 + Number(hhmmss[2])
-  const ampm = value.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
-  if (ampm) {
-    let hour = Number(ampm[1]) % 12
-    if (ampm[3].toUpperCase() === "PM") hour += 12
-    return hour * 60 + Number(ampm[2])
-  }
-  return undefined
-}
-
-const getClinicStartMinutes = (): number | undefined => {
-  const clinic = selectedClinic.value
-  if (!clinic) return undefined
-  return toMinutesFromTime((clinic as {start_time_formatted?: string}).start_time_formatted) ??
-    toMinutesFromTime(clinic.start_time)
-}
-
-const getClinicEndMinutes = (): number | undefined => {
-  const clinic = selectedClinic.value
-  if (!clinic) return undefined
-  return toMinutesFromTime((clinic as {end_time_formatted?: string}).end_time_formatted) ??
-    toMinutesFromTime(clinic.end_time)
-}
-
-const isClinicDayAllowed = (clinicDay: number): boolean => {
-  const clinic = selectedClinic.value
-  if (!clinic) return true
-  if (clinic.start_day <= clinic.end_day) {
-    return clinicDay >= clinic.start_day && clinicDay <= clinic.end_day
-  }
-  return clinicDay >= clinic.start_day || clinicDay <= clinic.end_day
-}
-
-const isWithinClinicTime = (date: Date): boolean => {
-  if (!selectedClinic.value) return true
-  const startMinutes = getClinicStartMinutes()
-  const endMinutes = getClinicEndMinutes()
-  if (startMinutes == null || endMinutes == null) return true
-  const minutes = date.getHours() * 60 + date.getMinutes()
-  if (endMinutes >= startMinutes) {
-    return minutes >= startMinutes && minutes <= endMinutes
-  }
-  // Overnight schedule support (e.g. 8:00 AM to 5:00 AM next day).
-  return minutes >= startMinutes || minutes <= endMinutes
-}
-
-const isSlotBoundaryAligned = (date: Date): boolean => {
-  return date.getMinutes() % slotMinuteStep === 0 && date.getSeconds() === 0
-}
-
-const hasAllowedSlotDuration = (start: Date, end: Date): boolean => {
-  const durationMinutes = (end.getTime() - start.getTime()) / 60000
-  return Number.isInteger(durationMinutes) && slotDurationOptions.some(option => option.value === durationMinutes)
-}
-
-const validateClinicSchedule = (start: Date, end: Date): boolean => {
-  if (end <= start) {
-    errorToast(toast, "End time must be after start time")
-    return false
-  }
-
-  const startClinicDay = start.getDay() === 0 ? 7 : start.getDay()
-  const endClinicDay = end.getDay() === 0 ? 7 : end.getDay()
-
-  if (!isClinicDayAllowed(startClinicDay) || !isClinicDayAllowed(endClinicDay)) {
-    errorToast(toast, "Selected date is outside clinic operating days")
-    return false
-  }
-
-  if (!isWithinClinicTime(start) || !isWithinClinicTime(end)) {
-    errorToast(toast, "Selected time is outside clinic operating hours")
-    return false
-  }
-
-  if (!isSlotBoundaryAligned(start) || !isSlotBoundaryAligned(end)) {
-    errorToast(toast, "Time must be in 15-minute increments")
-    return false
-  }
-
-  if (!hasAllowedSlotDuration(start, end)) {
-    errorToast(toast, "Appointment length must be 30, 60, or 75 minutes")
-    return false
-  }
-  return true
-}
-
-const findNextAllowedDate = (baseDate: Date): Date => {
-  const next = new Date(baseDate)
-  for (let i = 0; i < 14; i++) {
-    const clinicDay = next.getDay() === 0 ? 7 : next.getDay()
-    if (isClinicDayAllowed(clinicDay)) return next
-    next.setDate(next.getDate() + 1)
-  }
-  return baseDate
-}
-
-const alignToClinicStart = (date: Date): Date => {
-  const result = new Date(date)
-  result.setSeconds(0, 0)
-  const clinicStart = getClinicStartMinutes()
-  if (clinicStart != null) {
-    result.setHours(Math.floor(clinicStart / 60), clinicStart % 60, 0, 0)
-  } else {
-    return snapToSlotBoundary(result)
-  }
-  return snapToSlotBoundary(result)
-}
-
-const createSlotBaseDate = computed(() => {
-  if (selectedPackageHasSessionSchedules.value) {
-    return packageSessionSchedules.value[createActiveScheduleIndex.value]?.startsAt ?? createStart.value
-  }
-  return createStart.value
-})
-const createSlotDateKey = computed(() => formatLocalDateKey(createSlotBaseDate.value))
-const createSlotAvailabilityTitle = computed(() => {
-  const dateLabel = createSlotBaseDate.value.toLocaleDateString("en-PH", {month: "short", day: "numeric", year: "numeric"})
-  const sessionLabel = selectedPackageHasSessionSchedules.value
-    ? `Session ${createActiveScheduleIndex.value + 1}`
-    : "Appointment"
-  if (selectedCreateProvider.value) return `${sessionLabel}: ${selectedCreateProvider.value.name} on ${dateLabel}`
-  return `${sessionLabel}: all scheduled bookings on ${dateLabel}`
-})
-
-const formatTimeOnly = (value: Date): string =>
-  value.toLocaleTimeString("en-PH", {hour: "2-digit", minute: "2-digit"})
-
-const buildDateAtClinicMinute = (baseDate: Date, minuteOfDay: number): Date => {
-  const result = new Date(baseDate)
-  result.setHours(0, 0, 0, 0)
-  result.setMinutes(minuteOfDay)
-  return result
-}
-
-const doAppointmentsOverlap = (start: Date, end: Date, appointment: AppointmentListItem): boolean => {
-  const appointmentStart = new Date(appointment.starts_at)
-  const appointmentEnd = new Date(appointment.ends_at)
-  return appointmentStart < end && appointmentEnd > start
-}
-
-const isCreateSlotRelevantAppointment = (appointment: AppointmentListItem): boolean => {
-  if (isFinishedAppointmentStatus(appointment.appointment_status)) return false
-
-  const hasSpecificResource = Boolean(createDoctor.value || createPatient.value || createSupportStaff.value)
-  if (!hasSpecificResource) return true
-  if (createDoctor.value && appointment.doctor_id === createDoctor.value) return true
-  if (createPatient.value && appointment.patient_id === createPatient.value) return true
-  if (createSupportStaff.value && appointment.support_staff_id === createSupportStaff.value) return true
-  return false
-}
-
-const getCreateSlotConflicts = (start: Date, end: Date): AppointmentListItem[] =>
-  createDayAppointments.value.filter(appointment =>
-    isCreateSlotRelevantAppointment(appointment) && doAppointmentsOverlap(start, end, appointment)
-  )
-
-const getCreateSlotConflictLabel = (conflicts: AppointmentListItem[]): string => {
-  const first = conflicts[0]
-  if (!first) return "Available"
-  if (createDoctor.value && first.doctor_id === createDoctor.value) {
-    return `Taken by ${first.patient_name}`
-  }
-  if (createPatient.value && first.patient_id === createPatient.value) {
-    return "Patient already booked"
-  }
-  if (createSupportStaff.value && first.support_staff_id === createSupportStaff.value) {
-    return "Assistant already booked"
-  }
-  return `${conflicts.length} booking${conflicts.length === 1 ? "" : "s"} scheduled`
-}
-
-const createSlotOptions = computed<CreateScheduleSlot[]>(() => {
-  const clinicStart = getClinicStartMinutes()
-  const clinicEnd = getClinicEndMinutes()
-  if (clinicStart == null || clinicEnd == null) return []
-
-  const endMinute = clinicEnd >= clinicStart ? clinicEnd : clinicEnd + 24 * 60
-  const options: CreateScheduleSlot[] = []
-  const baseDate = createSlotBaseDate.value
-
-  for (let minute = clinicStart; minute + createSlotDuration.value <= endMinute; minute += slotMinuteStep) {
-    const startsAt = buildDateAtClinicMinute(baseDate, minute)
-    const endsAt = addMinutes(startsAt, createSlotDuration.value)
-    const conflicts = getCreateSlotConflicts(startsAt, endsAt)
-    const isTaken = conflicts.length > 0
-    const label = `${formatTimeOnly(startsAt)} - ${formatTimeOnly(endsAt)}`
-    const statusLabel = getCreateSlotConflictLabel(conflicts)
-
-    options.push({
-      key: startsAt.toISOString(),
-      startsAt,
-      endsAt,
-      label,
-      statusLabel,
-      tooltip: isTaken ? `${label}: ${statusLabel}` : `Select ${label}`,
-      isTaken,
-      isSelected: createSlotBaseDate.value.getTime() === startsAt.getTime(),
-      conflicts
-    })
-  }
-
-  return options
-})
-
-const loadCreateDayAppointments = async (): Promise<void> => {
-  const clinicId = selectedClinicId.value
-  const dateKey = createSlotDateKey.value
-  if (!clinicId || !dateKey) {
-    createDayAppointments.value = []
-    createDayAppointmentsKey.value = ""
-    return
-  }
-
-  const cacheKey = `${dateKey}::${clinicId}`
-  isCreateSlotsLoading.value = true
-  createDayAppointments.value = []
-  try {
-    createDayAppointments.value = await appointmentPhase1Service.getDay(dateKey, {clinic_id: clinicId})
-    createDayAppointmentsKey.value = cacheKey
-  } catch (error: unknown) {
-    createDayAppointments.value = []
-    createDayAppointmentsKey.value = ""
-    errorToast(toast, extractApiErrorMessage(error, "Could not load appointment time slots"))
-  } finally {
-    isCreateSlotsLoading.value = false
-  }
-}
-
-const ensureCreateDayAppointmentsLoaded = (): void => {
-  if (!createVisible.value || !selectedClinicId.value) return
-  const cacheKey = `${createSlotDateKey.value}::${selectedClinicId.value}`
-  if (createDayAppointmentsKey.value !== cacheKey) {
-    void loadCreateDayAppointments()
-  }
-}
-
-const selectCreateSlot = (slot: CreateScheduleSlot): void => {
-  if (slot.isTaken) return
-  if (selectedPackageHasSessionSchedules.value && packageSessionSchedules.value.length > 0) {
-    updatePackageSessionStart(createActiveScheduleIndex.value, slot.startsAt)
-    return
-  }
-  createStart.value = new Date(slot.startsAt)
-  createEnd.value = new Date(slot.endsAt)
-}
-
-const setCreateActiveScheduleIndex = (index: number): void => {
-  if (index < 0 || index >= packageSessionSchedules.value.length) return
-  createActiveScheduleIndex.value = index
-  ensureCreateDayAppointmentsLoaded()
-}
-
-const refreshAll = async (): Promise<void> => {
-  await tableSectionRef.value?.refresh()
-}
-
-const onTableDataUpdated = (data: { appointments: AppointmentListItem[]; totalElements: number }): void => {
-  tableAppointments.value = data.appointments
-  tableTotalElements.value = data.totalElements
-}
-
-const loadCreateLookups = async (): Promise<void> => {
-  await globalClinicStore.loadClinics()
-  if (!selectedClinicId.value && clinicOptions.value.length) {
-    globalClinicStore.setSelectedClinicId(clinicOptions.value[0].id)
-  }
-
-  const lookupClinicId = selectedClinicId.value
-  const [patientsPage, staffLookupPage, specialtyTags, sessionLookupPage] = await Promise.all([
-    patientService.getAll({
-      clinic_id: lookupClinicId,
-      pageable_request: {
-        page: defaultPage,
-        size: 100,
-        status: Status.ACTIVE,
-        name: undefined
-      }
-    }),
-    pamsAPI.get<Pageable<Staff>>("/staffs/lookup", {
-      params: {
-        page: defaultPage,
-        size: 100,
-        status: Status.ACTIVE,
-        name: undefined,
-        clinic_id: lookupClinicId
-      }
-    }),
-    specialtyTagReferenceService.getAll({
-      page: defaultPage,
-      size: 100,
-      status: Status.ACTIVE,
-      name: undefined
-    }),
-    pamsAPI.get<Pageable<BillingPickerLookup>>("/sessions/lookup", {
-      params: {page: 1, size: 500, status: Status.ACTIVE}
-    })
-  ])
-
-  patientOptions.value = (patientsPage?.content ?? []).map((patient: Patient) => ({
-    id: patient.id,
-    name: [patient.first_name, patient.middle_name, patient.last_name]
-      .filter((part): part is string => !!part && part.toLowerCase() !== "null")
-      .join(" "),
-    label: [patient.first_name, patient.middle_name, patient.last_name]
-      .filter((part): part is string => !!part && part.toLowerCase() !== "null")
-      .join(" "),
-    clinic_id: patient.clinic_id
-  }))
-  const allStaffMapped = (staffLookupPage.data?.content ?? []).map((doctor: Staff) => ({
-    id: doctor.id,
-    name: doctor.name,
-    label: formatAppointmentProviderLabel({
-      name: doctor.name,
-      role_name: resolveAppointmentStaffRoleName(doctor),
-      specialty_tag_name: doctor.specialty_tag_name
-    }),
-    clinic_id: doctor.clinic_id,
-    role_name: resolveAppointmentStaffRoleName(doctor),
-    appointment_provider_type: resolveAppointmentStaffProviderType(doctor),
-    requires_specialty_tag: isPhysicalTherapistProviderType(resolveAppointmentStaffProviderType(doctor))
-      ? Boolean(doctor.requires_specialty_tag || doctor.secondary_appointment_provider_type === "PHYSICAL_THERAPIST")
-      : doctor.requires_specialty_tag,
-    specialty_tag_id: doctor.specialty_tag_id,
-    specialty_tag_name: doctor.specialty_tag_name
-  }))
-  doctorOptions.value = allStaffMapped.filter((staff) => isPhysicalTherapistProviderType(staff.appointment_provider_type))
-  referringDoctorOptions.value = allStaffMapped.filter((staff) => isDoctorConsultantProviderType(staff.appointment_provider_type))
-  supportStaffOptions.value = allStaffMapped.filter((staff) => isSupportStaffProviderType(staff.appointment_provider_type))
-  specialtyTagOptions.value = specialtyTags?.content ?? []
-  sessionServices.value = sessionLookupPage.data?.content ?? []
-  createLookupsClinicId.value = lookupClinicId
-  await loadTreatmentAreaOptions()
-
-  await loadSinglePayServices()
-}
-
-const openCreateDialog = async (): Promise<void> => {
-  if (
-    !patientOptions.value.length ||
-    !doctorOptions.value.length ||
-    !clinicOptions.value.length ||
-    !specialtyTagOptions.value.length ||
-    createLookupsClinicId.value !== selectedClinicId.value
-  ) {
-    await loadCreateLookups()
-  } else {
-    await loadSinglePayServices()
-  }
-  createPatient.value = undefined
-  createDoctor.value = undefined
-    createReferringDoctor.value = undefined
-    createSupportStaff.value = undefined
-  createPhase.value = "SESSION"
-  createLocationContext.value = "IN_CLINIC"
-  isCreateLocationContextAuto.value = false
-  createSpecialtyTag.value = undefined
-  createTreatmentArea.value = undefined
-  createBillingType.value = "SELF_PAY_SINGLE"
-  createBillingNotes.value = ""
-  createLguProgramId.value = undefined
-  selectedMachineId.value = undefined
-  selectedTechniqueId.value = undefined
-  selectedEvaluationId.value = undefined
-  selectedAddOnType.value = "add-on-machine"
-  selectedAddOnId.value = undefined
-  selectedBundleId.value = undefined
-  selectedPackageOfferId.value = undefined
-  selectedPackageOfferDetail.value = null
-  packageSessionSchedules.value = []
-  createActiveScheduleIndex.value = 0
-  serviceMode.value = "individual"
-  selectedServiceLines.value = []
-  createPatientHmoId.value = null
-  createPatientHmoInfo.value = null
-  createPatientLguInfo.value = null
-  syncingCreateHmoRates.value = false
-  syncingCreateLguProgram.value = false
-  createPatientMachineRateMap.value = new Map()
-  createPatientTechniqueRateMap.value = new Map()
-  createPatientEvaluationRateMap.value = new Map()
-  createPatientAddOnMachineRateMap.value = new Map()
-  createPatientAddOnTechniqueRateMap.value = new Map()
-  createPatientAddOnHomeServiceRateMap.value = new Map()
-  await loadSinglePayServices()
-  const base = alignToClinicStart(findNextAllowedDate(new Date(calendarDate.value)))
-  createSlotDuration.value = 60
-  createStart.value = base
-  createEnd.value = addMinutes(base, createSlotDuration.value)
-  createVisible.value = true
-  await loadCreateDayAppointments()
-}
-
-
-type CreateAppointmentSchedulePayload = {
-  startsAt: Date
-  endsAt: Date
-  label?: string
-  sessionId?: string
-  sessionName?: string
-  occurrence?: number
-  totalOccurrences?: number
-}
-
-type CreateBillingLineItemPayload = {
-  id: string
-  type: string
-  name: string
-  quantity: number
-  price: number
-  originalPrice: number
-  children?: CreateBillingLineItemPayload[]
-}
-
-const buildPackageInvoiceChildren = (items: PackageInvoicePrintSubItem[] | undefined): CreateBillingLineItemPayload[] =>
-  (items ?? []).map((item, index) => ({
-    id: `package-included-${index + 1}`,
-    type: "included-service",
-    name: item.name,
-    quantity: item.quantity,
-    price: Number(item.unitPrice ?? 0),
-    originalPrice: Number(item.unitPrice ?? 0),
-    children: buildPackageInvoiceChildren(item.children)
-  }))
-
-const toIncludedBillingLine = (
-  id: string,
-  name: string,
-  quantity: number,
-  price = 0
-): CreateBillingLineItemPayload => ({
-  id,
-  type: "included-service",
-  name,
-  quantity: Math.max(1, Number(quantity ?? 1)),
-  price: Math.max(0, Number(price ?? 0)),
-  originalPrice: Math.max(0, Number(price ?? 0))
-})
-
-const buildPackageComponentChildren = (pkg: PackageServiceOffer): CreateBillingLineItemPayload[] => {
-  const serviceById = new Map(activeSinglePayServices.value.map(service => [service.id, service]))
-  const children: CreateBillingLineItemPayload[] = []
-
-  const appendServiceItems = (
-    items: Array<{id?: string; qty: number}>,
-    path: string
-  ): void => {
-    items.forEach((item, index) => {
-      if (!item.id) return
-      const service = serviceById.get(item.id)
-      if (!service) return
-      children.push(toIncludedBillingLine(
-        `${path}-${index + 1}`,
-        service.name,
-        item.qty,
-        service.price
-      ))
-    })
-  }
-
-  appendServiceItems(expandQtyItems(pkg.machineItems, pkg.machineIds, pkg.machineQty), "package-machine")
-  appendServiceItems(expandQtyItems(pkg.techniqueItems, pkg.techniqueIds, pkg.techniqueQty), "package-technique")
-  appendServiceItems(expandQtyItems(pkg.evaluationItems, pkg.evaluationIds, pkg.evaluationQty), "package-evaluation")
-  appendServiceItems(expandQtyItems(pkg.addOnItems, pkg.addOnIds, pkg.addOnQty), "package-addon")
-
-  expandQtyItems(pkg.sessionItems, pkg.sessionIds, pkg.sessionQty).forEach((item, index) => {
-    children.push(toIncludedBillingLine(
-      `package-session-${index + 1}`,
-      item.id ? resolveSessionServiceName(item.id) : `${pkg.name} Session`,
-      item.qty,
-      0
-    ))
   })
 
-  return children
-}
+const canceledStatusOption = computed(() =>
+  appointmentStatusOptions.value.find(option => String(option.label).toLowerCase().includes("cancel"))
+  ?? null
+)
 
-const buildPackageBillingChildren = (pkg: PackageServiceOffer | null): CreateBillingLineItemPayload[] => {
-  if (!pkg) return []
-  const invoiceChildren = buildPackageInvoiceChildren(pkg.invoiceSubItems)
-  return invoiceChildren.length ? invoiceChildren : buildPackageComponentChildren(pkg)
-}
+const cancelAppointment = async (appointment: AppointmentListItem): Promise<void> => {
+  if (!canCancelAppointment.value) {
+    errorToast(toast, "You do not have permission to cancel appointments")
+    return
+  }
 
-const buildCreateBillingLineItems = (): CreateBillingLineItemPayload[] =>
-  selectedServiceLines.value.map(line => {
-    const packageChildren = line.type === "package" && selectedPackageOfferDetail.value?.id === line.id
-      ? buildPackageBillingChildren(selectedPackageOfferDetail.value)
-      : []
+  if (!window.confirm(`Cancel appointment for ${appointment.patient_name}?`)) return
 
-    return {
-      id: line.id,
-      type: line.type,
-      name: line.name,
-      quantity: 1,
-      price: getEffectiveCreateLinePrice(line),
-      originalPrice: getCreateLineOriginalPrice(line),
-      ...(packageChildren.length ? { children: packageChildren } : {})
+  const canceledStatusId = canceledStatusOption.value?.value
+  if (!canceledStatusId) {
+    errorToast(toast, "Cancelled appointment status was not found in references")
+    return
+  }
+
+  try {
+    const start = new Date(appointment.starts_at)
+    const end = new Date(appointment.ends_at)
+    const payload: AppointmentCreatePayload = {
+      patient_id: (appointment as any).patient_id,
+      clinic_id: (appointment as any).clinic_id,
+      primary_provider_staff_id: (appointment as any).primary_provider_staff_id ?? (appointment as any).doctor_id ?? null,
+      referring_staff_id: (appointment as any).referring_staff_id ?? null,
+      appointment_type_id: (appointment as any).appointment_type_id,
+      appointment_status_id: Number(canceledStatusId),
+      specialty_tag_id: (appointment as any).specialty_tag_id ?? null,
+      treatment_area_id: (appointment as any).treatment_area_id ?? null,
+      medical_category_id: null,
+      medical_diagnose_id: (appointment as any).medical_diagnose_id ?? null,
+      diagnosis_laterality: (appointment as any).diagnosis_laterality ?? null,
+      pt_case_impression_id: null,
+      pt_case_laterality: null,
+      starts_at: toDateTimePayload(start),
+      ends_at: toDateTimePayload(end),
+      appointment_phase: (appointment as any).appointment_phase,
+      location_context: (appointment as any).location_context,
+      payer_type: (appointment as any).payer_type,
+      notes: (appointment as any).notes ?? undefined,
+      services: [],
+      session_schedules: []
     }
-  })
 
-const buildCreateBillingLineItemsJson = (): string =>
-  JSON.stringify(buildCreateBillingLineItems())
-
-const getPerAppointmentBillingAmount = (scheduleCount: number): number => {
-  const count = Math.max(1, scheduleCount)
-
-  if (!selectedPackageHasSessionSchedules.value || count <= 1) {
-    return subtotalFromServiceLines.value
-  }
-
-  return Number((subtotalFromServiceLines.value / count).toFixed(2))
-}
-
-const buildPerAppointmentServiceName = (
-  schedule: CreateAppointmentSchedulePayload,
-  index: number,
-  scheduleCount: number
-): string => {
-  const sequenceLabel = `Session ${schedule.occurrence ?? index + 1} of ${schedule.totalOccurrences ?? scheduleCount}`
-
-  if (schedule.sessionName) {
-    return `${schedule.sessionName} - ${sequenceLabel}`
-  }
-
-  if (selectedPackageOfferDetail.value?.name) {
-    return `${selectedPackageOfferDetail.value.name} - ${sequenceLabel}`
-  }
-
-  return `${createBillingType.value.replace(/_/g, " ")} - ${sequenceLabel}`
-}
-
-const buildPerAppointmentBillingLineItemsJson = (
-  schedule: CreateAppointmentSchedulePayload,
-  index: number,
-  scheduleCount: number
-): string => {
-  const sequenceLabel = `Session ${schedule.occurrence ?? index + 1} of ${schedule.totalOccurrences ?? scheduleCount}`
-
-  return JSON.stringify([
-    ...buildCreateBillingLineItems().map(line => ({
-      ...line,
-      session_sequence: schedule.occurrence ?? index + 1,
-      total_sessions: schedule.totalOccurrences ?? scheduleCount,
-      session_sequence_label: sequenceLabel,
-      appointment_phase: createPhase.value
-    }))
-  ])
-}
-
-const selectedPackageOfferNumericId = computed(() => {
-  const rawId = selectedPackageOfferDetail.value?.id
-  if (!rawId) return undefined
-  const parsed = Number(String(rawId).replace(/^lgu-/i, ""))
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
-})
-
-const submitCreateAppointment = async (): Promise<void> => {
-  if (isCreatingAppointment.value) return
-  if (!createPatient.value) {
-    errorToast(toast, "Patient is required")
-    return
-  }
-  if (!selectedClinicId.value) {
-    errorToast(toast, "Clinic schedule is required")
-    return
-  }
-  if (!createDoctor.value) {
-    errorToast(toast, "Assigned PT is required")
-    return
-  }
-  if (selectedServiceLines.value.length === 0) {
-    errorToast(toast, "At least one service is required")
-    return
-  }
-  if (createLocationContext.value === "HOME_CARE" && !hasHomeServiceAddOn.value) {
-    errorToast(toast, "Home Care appointments require a Home Service add-on from Promos and Offers")
-    return
-  }
-  if (selectedCreateProviderRequiresSpecialty.value && !createSpecialtyTag.value) {
-    errorToast(toast, "The selected provider role requires a specialty for this appointment")
-    return
-  }
-  if (createBillingType.value === "LGU_BILLING" && !createLguProgramId.value) {
-    errorToast(toast, "This patient is not linked to an LGU program. Add LGU sponsor information in Patients before creating an LGU appointment.")
-    return
-  }
-
-  const appointmentSchedules: CreateAppointmentSchedulePayload[] = selectedPackageHasSessionSchedules.value
-    ? packageSessionSchedules.value.map(schedule => ({
-        startsAt: snapToSlotBoundary(new Date(schedule.startsAt)),
-        endsAt: getPackageSessionEnd(schedule.startsAt),
-        label: `${schedule.sessionName} ${schedule.occurrence}/${schedule.totalOccurrences}`,
-        sessionId: schedule.sessionId,
-        sessionName: schedule.sessionName,
-        occurrence: schedule.occurrence,
-        totalOccurrences: schedule.totalOccurrences
-      }))
-    : [{
-        startsAt: createStart.value,
-        endsAt: createEnd.value,
-        label: undefined
-      }]
-
-  if (!appointmentSchedules.length) {
-    errorToast(toast, "At least one schedule is required")
-    return
-  }
-
-  if (hasOverlappingAppointmentSchedules(appointmentSchedules)) {
-    errorToast(
-      toast,
-      createDoctor.value
-        ? "The selected PT cannot have overlapping appointment schedules."
-        : "Session schedules cannot overlap."
-    )
-    return
-  }
-
-  for (const schedule of appointmentSchedules) {
-    if (!validateClinicSchedule(schedule.startsAt, schedule.endsAt)) return
-  }
-
-  const primarySchedule = appointmentSchedules[0]
-  const scheduleCount = appointmentSchedules.length
-  const perAppointmentAmountDue = getPerAppointmentBillingAmount(scheduleCount)
-  const sessionSchedulesPayload = selectedPackageHasSessionSchedules.value
-    ? appointmentSchedules.map((schedule, index) => ({
-        starts_at: schedule.startsAt.toISOString(),
-        ends_at: schedule.endsAt.toISOString(),
-        label: schedule.label,
-        appointment_phase: createPhase.value,
-        session_id: schedule.sessionId,
-        session_name: schedule.sessionName,
-        session_sequence: schedule.occurrence ?? index + 1,
-        session_occurrence: schedule.occurrence ?? index + 1,
-        total_sessions: schedule.totalOccurrences ?? scheduleCount,
-        session_sequence_label: `Session ${schedule.occurrence ?? index + 1} of ${schedule.totalOccurrences ?? scheduleCount}`,
-        create_billing: true,
-        billing_strategy: "PER_APPOINTMENT",
-        billing_type: createBillingType.value,
-        service_type: resolveCreateServiceType(createBillingType.value),
-        amount_due: perAppointmentAmountDue,
-        service_name: buildPerAppointmentServiceName(schedule, index, scheduleCount),
-        line_items_json: buildPerAppointmentBillingLineItemsJson(schedule, index, scheduleCount)
-      })) as unknown as NonNullable<Parameters<typeof appointmentPhase1Service.create>[0]["session_schedules"]>
-    : undefined
-
-  const appointmentPayload = {
-    patient_id: createPatient.value,
-    clinic_id: selectedClinicId.value,
-    location_context: createLocationContext.value,
-    specialty_tag_id: createSpecialtyTag.value,
-    treatment_area_id: createTreatmentArea.value,
-    doctor_id: createDoctor.value,
-    starts_at: primarySchedule.startsAt.toISOString(),
-      referring_doctor_id: createReferringDoctor.value,
-      support_staff_id: createSupportStaff.value,
-    ends_at: primarySchedule.endsAt.toISOString(),
-    session_schedules: sessionSchedulesPayload,
-
-    amount_due: selectedPackageHasSessionSchedules.value ? perAppointmentAmountDue : subtotalFromServiceLines.value,
-    total_package_amount_due: selectedPackageHasSessionSchedules.value ? subtotalFromServiceLines.value : undefined,
-    package_id: selectedPackageOfferNumericId.value,
-    package_name: selectedPackageOfferDetail.value?.name,
-    service_name: selectedPackageHasSessionSchedules.value
-      ? buildPerAppointmentServiceName(primarySchedule, 0, scheduleCount)
-      : `${createBillingType.value.replace(/_/g, " ")} - ${selectedServiceLines.value.length} items`,
-    billing_type: createBillingType.value,
-    service_type: resolveCreateServiceType(createBillingType.value),
-    billing_strategy: "PER_APPOINTMENT",
-    package_billing_mode: "PER_APPOINTMENT",
-    create_billing_per_appointment: true,
-    line_items_json: selectedPackageHasSessionSchedules.value
-      ? buildPerAppointmentBillingLineItemsJson(primarySchedule, 0, scheduleCount)
-      : buildCreateBillingLineItemsJson(),
-    notes: createBillingNotes.value.trim() || undefined,
-    lgu_program_id: createBillingType.value === "LGU_BILLING" ? createLguProgramId.value : undefined,
-  } as Parameters<typeof appointmentPhase1Service.create>[0] & {
-    billing_strategy?: "PER_APPOINTMENT"
-    package_billing_mode?: "PER_APPOINTMENT"
-    create_billing_per_appointment?: boolean
-    total_package_amount_due?: number
-    package_name?: string
-  }
-
-  try {
-    isCreatingAppointment.value = true
-    const created = await appointmentPhase1Service.create(appointmentPayload)
-    const createdCount = created?.appointment_ids?.length ?? appointmentSchedules.length
-    successToast(
-      toast,
-      createdCount > 1
-        ? `Package scheduled across ${createdCount} appointments with separate billing per appointment`
-        : "Appointment created with services"
-    )
-    createVisible.value = false
-    await refreshAll()
-    await calendarSectionRef.value?.refreshDots()
-  } catch (error: unknown) {
-    errorToast(
-      toast,
-      extractApiErrorMessage(
-        error,
-        "Could not create appointment. Verify patient, PT, services, and schedule, then try again."
-      )
-    )
-  } finally {
-    isCreatingAppointment.value = false
+    await appointmentPhase1Service.update(appointment.id, payload)
+    successToast(toast, "Appointment canceled")
+    await refreshAppointmentViews()
+  } catch {
+    errorToast(toast, "Failed to cancel appointment")
   }
 }
 
-const seedEncounterTicketForm = (ticket?: AppointmentEncounterTicket): void => {
-  encounterTicketAttendedAt.value = ticket?.attended_at ? new Date(ticket.attended_at) : new Date()
-  encounterTicketSignatureDataUrl.value = ticket?.patient_signature_data_url ?? ""
-  encounterTicketLoaNumber.value = selectedDetail.value?.hmo_loa_number ?? ""
-  encounterTicketLoaDate.value = selectedDetail.value?.hmo_loa_date?.slice(0, 10) ?? ""
-}
-
-const openEncounterTicketDialog = (): void => {
-  if (!selectedDetail.value) return
-  if (!canProcessEncounterTicket.value) {
-    errorToast(toast, "A billing record is required before generating a locked encounter ticket")
-    return
-  }
-  seedEncounterTicketForm(selectedEncounterTicket.value)
-  encounterTicketVisible.value = true
-}
-
-const exportSelectedEncounterTicketPdf = (): void => {
-  if (!selectedDetail.value || !selectedEncounterTicket.value || !isSelectedEncounterTicketLocked.value) {
-    errorToast(toast, "No locked encounter ticket is available to export")
-    return
-  }
-
-  const snapshot = selectedEncounterTicket.value.billing_snapshot
-  const slipNumber = selectedEncounterTicket.value.slip_number || `ETS-${selectedEncounterTicket.value.id}`
-  const popup = openEncounterTicketPdfWindow(slipNumber)
-
-  try {
-    renderEncounterTicketPdfWindow(popup, [{
-      slipNumber,
-      patientName: snapshot?.patient_name || selectedDetail.value.patient_name || "Patient",
-      providerName: snapshot?.provider_name || selectedDetail.value.doctor_name || "Unassigned",
-      serviceName: snapshot?.service_name || encounterServiceRenderedLabel.value,
-      specialtyName: snapshot?.specialty_tag_name || selectedDetail.value.specialty_tag_name,
-      specialtyIsActive: snapshot?.specialty_tag_is_active ?? selectedDetail.value.specialty_tag_is_active,
-      treatmentAreaName: snapshot?.treatment_area_name || selectedDetail.value.treatment_area_name,
-      treatmentAreaColor: snapshot?.treatment_area_color || selectedDetail.value.treatment_area_color,
-      treatmentAreaIsActive: snapshot?.treatment_area_is_active ?? selectedDetail.value.treatment_area_is_active,
-      billingRoute: displayEncounterBillingRoute(snapshot?.billing_type || selectedDetail.value.billing_type),
-      attendanceStatus: selectedEncounterTicket.value.attendance_status === "ATTENDED" ? "Attended" : "No Show",
-      attendedAt: selectedEncounterTicket.value.attended_at,
-      signedOffAt: selectedEncounterTicket.value.signed_off_at,
-      lockedAt: selectedEncounterTicket.value.locked_at,
-      encounterTicketId: selectedEncounterTicket.value.id,
-      appointmentId: snapshot?.appointment_public_id || selectedDetail.value.public_id || snapshot?.appointment_id || selectedDetail.value.id,
-      billingId: selectedEncounterTicket.value.phase1_billing_public_id || selectedDetail.value.billing_public_id || selectedEncounterTicket.value.phase1_billing_id || selectedDetail.value.billing_id,
-      activeBillingPackageLabel: selectedEncounterTicketPackageLabel.value,
-      activeBillingPackageSource: selectedEncounterTicketPackageSourceLabel.value,
-      deductionSummary: encounterSessionDeductionLabel.value,
-      signatureDataUrl: selectedEncounterTicket.value.patient_signature_data_url,
-      sessionSequenceLabel: snapshot?.session_sequence_label
-    }], {
-      title: "Encounter Ticket PDF",
-      subtitle: "Single locked encounter ticket export",
-      fileName: slipNumber
-    })
-  } catch (error: unknown) {
-    popup.close()
-    errorToast(toast, extractApiErrorMessage(error, "Failed to export encounter ticket PDF"))
-  }
-}
-
-const closeDetailPanel = (): void => {
-  encounterTicketVisible.value = false
-  detailPanelVisible.value = false
-  selectedDetail.value = undefined
-}
-
-const selectAppointment = async (appointment: AppointmentListItem): Promise<void> => {
-  try {
-    selectedDetail.value = await fetchAppointmentDetail(appointment.id)
-    detailPanelVisible.value = true
-  } catch (error: unknown) {
-    errorToast(toast, extractApiErrorMessage(error, "Failed to load appointment detail"))
-  }
-}
-
-const submitEncounterTicket = async (): Promise<void> => {
-  if (!selectedDetail.value) return
-  const isHmoBilling = String(selectedDetail.value.billing_type ?? "")
-    .trim()
-    .toUpperCase()
-    .includes("HMO")
-  if (isSelectedEncounterTicketLocked.value) {
-    if (!isHmoBilling) {
-      errorToast(toast, "This signed encounter ticket is already locked")
-      return
-    }
-    if (!encounterTicketLoaNumber.value.trim() || !encounterTicketLoaDate.value) {
-      errorToast(toast, "LOA number and LOA date are required to update HMO invoice details")
-      return
-    }
-  }
-  const appointmentId = selectedDetail.value.id
-  if (!encounterTicketSignatureDataUrl.value.trim()) {
-    errorToast(toast, "Patient signature is required before saving the encounter ticket")
-    return
-  }
-  if (
-    isHmoBilling
-    && (Boolean(encounterTicketLoaNumber.value.trim()) || Boolean(encounterTicketLoaDate.value))
-    && (!encounterTicketLoaNumber.value.trim() || !encounterTicketLoaDate.value)
-  ) {
-    errorToast(toast, "LOA number and LOA date must be entered together")
-    return
-  }
-
-  const payload: AppointmentEncounterTicketPayload = {
-    attended_at: encounterTicketAttendedAt.value.toISOString(),
-    patient_signature_data_url: encounterTicketSignatureDataUrl.value,
-    loa_number: encounterTicketLoaNumber.value.trim() || undefined,
-    loa_date: encounterTicketLoaDate.value || undefined
-  }
-
-  try {
-    isEncounterTicketSaving.value = true
-    await appointmentPhase1Service.processEncounterTicket(appointmentId, payload)
-    successToast(toast, isSelectedEncounterTicketLocked.value ? "HMO LOA details updated" : "Digital sign-off slip saved and attendance marked complete")
-    encounterTicketVisible.value = false
-    await invalidateAppointmentContext(appointmentId)
-    await refreshAll()
-    selectedDetail.value = await fetchAppointmentDetail(appointmentId)
-    detailPanelVisible.value = true
-  } catch (error: unknown) {
-    errorToast(toast, extractApiErrorMessage(error, "Failed to process encounter ticket"))
-  } finally {
-    isEncounterTicketSaving.value = false
-  }
-}
-
-const openReschedule = (appointment: AppointmentListItem): void => {
+const openServicesDialog = async (appointment: AppointmentListItem): Promise<void> => {
   activeAppointment.value = appointment
-  const start = snapToSlotBoundary(new Date(appointment.starts_at))
-  const end = new Date(appointment.ends_at)
-  rescheduleSlotDuration.value = inferSlotDuration(start, end)
-  rescheduleStart.value = start
-  rescheduleEnd.value = addMinutes(start, rescheduleSlotDuration.value)
-  overrideReason.value = ""
-  rescheduleVisible.value = true
+  selectedServices.value = []
+  resetServicePicker(appointment.payer_type)
+  servicesVisible.value = true
+
+  try {
+    servicesModalPlannedServices.value = await appointmentPhase1Service.getPlannedServices(appointment.id)
+  } catch {
+    servicesModalPlannedServices.value = []
+  }
 }
 
-const submitReschedule = async (): Promise<void> => {
+const removeDisallowedSelectedServices = (billingType: PayerType | null): void => {
+  const allowed = new Set(getAllowedServiceTypes(billingType))
+  selectedServices.value = selectedServices.value.filter(service => allowed.has(service.type))
+}
+
+const addPickedService = (): void => {
+  const allowedTypes = new Set(getAllowedServiceTypes(currentServiceBillingType.value))
+  if (!allowedTypes.has(servicePicker.type)) {
+    errorToast(toast, "That service is not allowed for this billing type")
+    resetServicePicker()
+    return
+  }
+
+  const selected = currentServiceOptions.value.find(option => option.value === servicePicker.id)
+  if (!selected) {
+    errorToast(toast, "Select a service first")
+    return
+  }
+
+  if (homeCareAddOnTypes.has(selected.type)) {
+    form.location_context = "HOME_CARE"
+  }
+
+  selectedServices.value.push({
+    ...selected,
+    name: selected.label,
+    quantity: selected.type === "PACKAGE" ? 1 : Math.max(1, Number(servicePicker.quantity ?? 1)),
+    typeLabel: serviceTypeLabel(selected.type)
+  })
+
+  servicePicker.id = null
+  servicePicker.quantity = 1
+  void refreshSessionPreview()
+}
+
+const removeSelectedService = (index: number): void => {
+  selectedServices.value.splice(index, 1)
+  void refreshSessionPreview()
+}
+
+const saveServices = async (): Promise<void> => {
   if (!activeAppointment.value) return
-  if (needsOverrideReason.value && !overrideReason.value.trim()) {
-    errorToast(toast, "Owner override reason is required after 3 reschedules")
+
+  if (!selectedServices.value.length) {
+    errorToast(toast, "Add at least one service")
     return
   }
-  if (!validateClinicSchedule(rescheduleStart.value, rescheduleEnd.value)) return
+
   try {
-    await appointmentPhase1Service.reschedule(activeAppointment.value.id, {
-      starts_at: rescheduleStart.value.toISOString(),
-      ends_at: rescheduleEnd.value.toISOString(),
-      override_reason: overrideReason.value.trim() || undefined
-    })
-    successToast(toast, "Reschedule successful")
-    rescheduleVisible.value = false
-    await refreshAll()
-    await calendarSectionRef.value?.refreshDots()
-    if (selectedDetail.value?.id === activeAppointment.value.id) {
-      await invalidateAppointmentContext(activeAppointment.value.id)
-      selectedDetail.value = await fetchAppointmentDetail(activeAppointment.value.id)
-    }
-  } catch (error: unknown) {
-    errorToast(toast, extractApiErrorMessage(error, "Reschedule failed"))
-  }
-}
-
-const confirmDeleteAppointment = (appointment: AppointmentListItem): void => {
-  confirm.require({
-    message: `Delete appointment for ${appointment.patient_name}?`,
-    header: "Delete Appointment",
-    icon: "pi pi-exclamation-triangle",
-    rejectProps: {
-      label: "Cancel",
-      severity: "secondary",
-      outlined: true,
-    },
-    acceptProps: {
-      label: "Delete",
-      severity: "danger",
-      icon: "pi pi-trash",
-    },
-    accept: async () => {
-      try {
-        await appointmentPhase1Service.delete(appointment.id)
-        await invalidateAppointmentContext(appointment.id)
-        successToast(toast, "Appointment deleted")
-        if (selectedDetail.value?.id === appointment.id) {
-          closeDetailPanel()
-        }
-        await refreshAll()
-        await calendarSectionRef.value?.refreshDots()
-      } catch (error: unknown) {
-        errorToast(toast, extractApiErrorMessage(error, "Delete appointment failed"))
-      }
-    },
-  })
-}
-
-const goToPatients = async (): Promise<void> => {
-  if (!selectedDetail.value) return
-  await router.push({
-    name: "patients",
-    query: {
-      patientId: String(selectedDetail.value.patient_id),
-      name: selectedDetail.value.patient_name
-    }
-  })
-}
-
-const getSelectedAppointmentBillingId = (): number | undefined => {
-  const parsed = Number(selectedDetail.value?.billing_id ?? 0)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
-}
-
-const buildSelectedAppointmentBillingQuery = (openMode?: "detail" | "edit" | "tender"): Record<string, string> => {
-  if (!selectedDetail.value) return {}
-
-  const billingId = getSelectedAppointmentBillingId()
-  const query: Record<string, string> = {
-    patientId: String(selectedDetail.value.patient_id),
-    appointmentId: String(selectedDetail.value.id),
-    appointmentBillingMode: "PER_APPOINTMENT"
-  }
-
-  if (billingId) {
-    query.billingId = String(billingId)
-  }
-
-  if (openMode) {
-    query.openMode = openMode
-  }
-
-  return query
-}
-
-const goToBilling = async (): Promise<void> => {
-  if (!selectedDetail.value) return
-
-  await router.push({
-    name: "billing",
-    query: buildSelectedAppointmentBillingQuery(getSelectedAppointmentBillingId() ? "detail" : "edit")
-  })
-}
-
-const openTenderPaymentDrawer = async (): Promise<void> => {
-  if (!selectedDetail.value) return
-
-  const billingId = getSelectedAppointmentBillingId()
-  if (!billingId) {
-    errorToast(toast, "This appointment does not have its own billing record yet. Create or refresh the appointment billing first.")
-    await goToBilling()
-    return
-  }
-
-  billingOverlayMode.value = 'detail'
-  await router.replace({
-    query: buildSelectedAppointmentBillingQuery("tender")
-  })
-  billingOverlayVisible.value = true
-}
-
-const onBillingOverlayClose = (): void => {
-  billingOverlayVisible.value = false
-  void router.replace({query: {}})
-}
-
-const onBillingUpdated = async (payload: { billingId?: number; appointmentId?: number; billingStatus?: string }): Promise<void> => {
-  await refreshAll()
-  await calendarSectionRef.value?.refreshDots()
-
-  const appointmentId = payload.appointmentId ?? selectedDetail.value?.id
-  if (!appointmentId) return
-
-  await invalidateAppointmentContext(appointmentId)
-  selectedDetail.value = await fetchAppointmentDetail(appointmentId)
-}
-
-watch(createStart, (value) => {
-  const normalized = snapToSlotBoundary(new Date(value))
-  if (normalized.getTime() !== value.getTime()) {
-    createStart.value = normalized
-    return
-  }
-  createEnd.value = addMinutes(normalized, createSlotDuration.value)
-  if (selectedPackageOfferDetail.value && packageSessionSchedules.value.length === 0 && selectedPackageSessionExpectedCount.value > 0) {
-    syncSelectedPackageSessionSchedules()
-  }
-  ensureCreateDayAppointmentsLoaded()
-})
-
-watch(createSlotDuration, (duration) => {
-  createEnd.value = addMinutes(snapToSlotBoundary(new Date(createStart.value)), duration)
-})
-
-watch(selectedClinicId, () => {
-  createDayAppointments.value = []
-  createDayAppointmentsKey.value = ""
-  ensureCreateDayAppointmentsLoaded()
-})
-
-watch(createActiveScheduleIndex, () => {
-  ensureCreateDayAppointmentsLoaded()
-})
-
-watch(rescheduleStart, (value) => {
-  const normalized = snapToSlotBoundary(new Date(value))
-  if (normalized.getTime() !== value.getTime()) {
-    rescheduleStart.value = normalized
-    return
-  }
-  rescheduleEnd.value = addMinutes(normalized, rescheduleSlotDuration.value)
-})
-
-watch(rescheduleSlotDuration, (duration) => {
-  rescheduleEnd.value = addMinutes(snapToSlotBoundary(new Date(rescheduleStart.value)), duration)
-})
-
-watch(selectedClinicId, async () => {
-  isClinicSwitchLoading.value = true
-  try {
-    createLookupsClinicId.value = undefined
-    if (createPatient.value && !patientOptions.value.some(option => option.id === createPatient.value && option.clinic_id === selectedClinicId.value)) {
-      createPatient.value = undefined
-    }
-    if (createDoctor.value && !doctorOptions.value.some(option => option.id === createDoctor.value && option.clinic_id === selectedClinicId.value)) {
-      createDoctor.value = undefined
-    }
-    if (createReferringDoctor.value && !referringDoctorOptions.value.some(option => option.id === createReferringDoctor.value && option.clinic_id === selectedClinicId.value)) {
-      createReferringDoctor.value = undefined
-    }
-    if (createSupportStaff.value && !supportStaffOptions.value.some(option => option.id === createSupportStaff.value && option.clinic_id === selectedClinicId.value)) {
-      createSupportStaff.value = undefined
-    }
-    if (createVisible.value) {
-      await loadCreateLookups()
-    }
-
-    await loadTreatmentAreaOptions()
-    const normalizedDate = findNextAllowedDate(new Date(calendarDate.value))
-    if (normalizedDate.toDateString() !== calendarDate.value.toDateString()) {
-      calendarDate.value = normalizedDate
-      await calendarSectionRef.value?.refreshDots()
-      return
-    }
-
-    await calendarSectionRef.value?.refreshDots()
-    await refreshAll()
+    isSavingServices.value = true
+    await savePlannedServicesForAppointment(activeAppointment.value.id, activeAppointment.value.payer_type)
+    servicesModalPlannedServices.value = await appointmentPhase1Service.getPlannedServices(activeAppointment.value.id)
+    selectedServices.value = []
+    successToast(toast, "Planned services saved")
+    await refreshAppointmentViews()
+  } catch {
+    errorToast(toast, "Failed to save planned services")
   } finally {
-    isClinicSwitchLoading.value = false
+    isSavingServices.value = false
   }
-})
+}
 
-watch(createPatient, (patientId) => {
-  if (!patientId) return
-  const selectedPatientOption = patientOptions.value.find(option => option.id === patientId)
-  if (selectedPatientOption?.clinic_id && selectedPatientOption.clinic_id !== selectedClinicId.value) {
-    createPatient.value = undefined
-  }
-})
-
-watch(createDoctor, (doctorId, previousDoctorId) => {
-  const selectedDoctorOption = doctorOptions.value.find(option => option.id === doctorId)
-  const previousDoctorOption = doctorOptions.value.find(option => option.id === previousDoctorId)
-
-  if (selectedDoctorOption?.clinic_id && selectedDoctorOption.clinic_id !== selectedClinicId.value) {
-    createDoctor.value = undefined
+const openAttendanceDialog = async (appointment: AppointmentListItem): Promise<void> => {
+  if (!canMarkAttendance.value) {
+    errorToast(toast, "You do not have permission to mark attendance")
     return
   }
 
-  if (selectedDoctorOption?.specialty_tag_id) {
-    createSpecialtyTag.value = selectedDoctorOption.specialty_tag_id
+  activeAppointment.value = appointment
+  attendanceVisible.value = true
+
+  try {
+    const planned = await appointmentPhase1Service.getPlannedServices(appointment.id)
+    attendancePlannedServices.value = planned
+    attendanceItems.value = planned.map(item => {
+      const appointmentConsumed = Math.max(0, Number(item.appointment_consumed_quantity ?? 0))
+      const remaining = Math.max(0, Number(item.planned_quantity ?? 0) - Number(item.consumed_quantity ?? 0))
+      return { ...item, remaining, appointmentConsumed, selected: false, quantity: remaining > 0 && appointmentConsumed <= 0 ? 1 : 0 }
+    })
+  } catch {
+    attendancePlannedServices.value = []
+    attendanceItems.value = []
+    errorToast(toast, "Failed to load planned services")
+  }
+}
+
+const saveAttendance = async (): Promise<void> => {
+  if (!activeAppointment.value) return
+
+  const selectedBundleIds = new Set(
+    attendanceItems.value
+      .filter(item => item.selected && item.type === "BUNDLE")
+      .map(item => Number(item.id))
+  )
+
+  const items = attendanceItems.value
+    .filter(item => item.selected && item.remaining > 0 && item.appointmentConsumed <= 0 && item.type !== "PACKAGE")
+    .filter(item => !item.parent_credit_item_id || !selectedBundleIds.has(Number(item.parent_credit_item_id)))
+    .map(item => ({
+      credit_item_id: item.id,
+      quantity: Math.min(item.remaining, Math.max(1, Number(item.quantity ?? 1)))
+    }))
+
+  if (!items.length) {
+    errorToast(toast, "Select at least one finished service")
     return
   }
 
-  if (
-    previousDoctorOption?.specialty_tag_id &&
-    previousDoctorOption.specialty_tag_id &&
-    createSpecialtyTag.value === previousDoctorOption.specialty_tag_id
-  ) {
-    createSpecialtyTag.value = undefined
+  try {
+    isSavingAttendance.value = true
+    await appointmentPhase1Service.saveAttendance(activeAppointment.value.id, { items })
+    successToast(toast, "Attendance saved")
+    await openAttendanceDialog(activeAppointment.value)
+    await refreshAppointmentViews()
+  } catch (error) {
+    const message = (error as any)?.response?.data?.message
+    errorToast(toast, message ? String(message) : "Failed to save attendance")
+  } finally {
+    isSavingAttendance.value = false
   }
-})
-
-watch(createLocationContext, (locationContext) => {
-  if (locationContext === "HOME_CARE") {
-    createTreatmentArea.value = undefined
-    return
-  }
-
-  isCreateLocationContextAuto.value = false
-  if (hasHomeServiceAddOn.value) {
-    removeHomeServiceAddOn()
-  }
-})
-
-watch(createBillingType, (billingType, previousBillingType) => {
-  if (previousBillingType && billingType !== previousBillingType) {
-    selectedMachineId.value = undefined
-    selectedTechniqueId.value = undefined
-    selectedEvaluationId.value = undefined
-    selectedAddOnId.value = undefined
-    selectedBundleId.value = undefined
-    selectedPackageOfferId.value = undefined
-    selectedPackageOfferDetail.value = null
-    packageSessionSchedules.value = []
-    selectedServiceLines.value = []
-  }
-
-  if (billingType === "HMO_BILLING" || billingType === "SELF_PAY_PACKAGE") {
-    serviceMode.value = "individual"
-    selectedBundleId.value = undefined
-    selectedServiceLines.value = selectedServiceLines.value.filter(line => line.type !== "bundle")
-  }
-
-  if (!isPackageServiceFlowBillingType(billingType)) {
-    selectedPackageOfferDetail.value = null
-    packageSessionSchedules.value = []
-    selectedServiceLines.value = selectedServiceLines.value.filter(line => line.type !== "package")
-  }
-
-  if (billingType === "LGU_BILLING" && lguProgramOptions.value.length === 0) {
-    lguBillingService.getPrograms().then(programs => {
-      lguProgramOptions.value = programs ?? []
-      void syncCreatePatientLguProgram()
-    }).catch(() => { /* silently ignore */ })
-  }
-  if (billingType !== "LGU_BILLING") {
-    createLguProgramId.value = undefined
-    createPatientLguInfo.value = null
-  }
-})
-
-watch(selectedPackageOfferDetail, () => {
-  if (!selectedPackageOfferDetail.value) {
-    packageSessionSchedules.value = []
-    return
-  }
-
-  syncSelectedPackageSessionSchedules()
-})
-
-watch([createPatient, createBillingType], async () => {
-  await syncCreatePatientHmoRates()
-  await syncCreatePatientLguProgram()
-})
+}
 
 onMounted(async () => {
-  await authSession.ensureLoaded()
-  await globalClinicStore.loadClinics()
-  await tableSectionRef.value?.refresh()
+  try {
+    await branchStore.initializeFromAuthSession()
+    await loadLookups()
+    resetForm()
+    await refreshAppointmentViews()
+  } catch {
+    errorToast(toast, "Failed to load appointment setup data")
+  }
 })
+
+watch(
+  () => form.starts_at,
+  (date, previousDate) => {
+    if (!date) return
+
+    const previousStart = previousDate instanceof Date ? previousDate : null
+    const previousDefaultEnd = previousStart ? getDefaultAppointmentEnd(previousStart) : null
+    const shouldAutoSetEnd =
+      !form.ends_at ||
+      form.ends_at.getTime() <= date.getTime() ||
+      (previousDefaultEnd ? isWithinOneMinute(form.ends_at, previousDefaultEnd) : false)
+
+    if (shouldAutoSetEnd) {
+      form.ends_at = getDefaultAppointmentEnd(date)
+    }
+
+    if (!form.session_dates.length) {
+      form.session_dates = [new Date(date)]
+      return
+    }
+
+    const first = new Date(form.session_dates[0])
+    const updated = new Date(date)
+    updated.setSeconds(0, 0)
+
+    if (first.getTime() !== updated.getTime()) {
+      form.session_dates[0] = updated
+    }
+
+    syncSessionDateCountFromSelectedServices()
+  }
+)
+
+watch(
+  activeBranchId,
+  (clinicId) => {
+    if (clinicId && !editingId.value) {
+      form.clinic_id = clinicId
+    }
+
+    page.value = 1
+    void refreshAppointmentViews()
+  }
+)
+
+watch(
+  () => form.primary_provider_staff_id,
+  (staffId) => {
+    if (!staffId) return
+
+    const selectedPt = staffOptions.value.find(option => Number(option.value) === Number(staffId))
+    if (selectedPt?.specialtyTagId) {
+      form.specialty_tag_id = selectedPt.specialtyTagId
+    }
+  }
+)
+
+watch(
+  () => [
+    filters.search,
+    filters.ptId,
+    filters.payerType,
+    filters.billingStatus,
+    filters.attendanceStatus,
+    filters.fromDate?.getTime() ?? null,
+    filters.toDate?.getTime() ?? null
+  ],
+  () => {
+    page.value = 1
+    queueLiveFilterLoad()
+  }
+)
+
+watch(
+  () => [
+    formVisible.value,
+    form.clinic_id,
+    form.primary_provider_staff_id,
+    form.starts_at?.getTime() ?? null,
+    form.ends_at?.getTime() ?? null,
+    ...form.session_dates.map(date => date ? new Date(date).getTime() : null)
+  ],
+  () => {
+    queueAvailabilityLoad()
+  }
+)
+
+watch(
+  () => form.payer_type,
+  (billingType) => {
+    removeDisallowedSelectedServices(billingType)
+    resetServicePicker(billingType)
+    void refreshSessionPreview()
+  }
+)
 </script>

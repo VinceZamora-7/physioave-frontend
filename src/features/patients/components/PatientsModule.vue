@@ -459,16 +459,6 @@
       </template>
     </Dialog>
 
-    <PatientAppointmentsDialog
-      ref="patientAppointmentsDialog"
-      :patient="selectedPatient"
-    />
-
-    <PatientBillingsDialog
-      ref="patientBillingsDialog"
-      :patient="selectedPatient"
-    />
-
     </section>
   </main>
 </template>
@@ -588,8 +578,6 @@ const PatientMedicalImagingDialog = defineAsyncComponent(() => import("@/compone
 const PatientAttachmentDialog = defineAsyncComponent(() => import("@/components/PatientAttachmentDialog.vue"))
 const PatientProfileImageDialog = defineAsyncComponent(() => import("@/components/PatientProfileImageDialog.vue"))
 const PatientEvaluationVisitLogSection = defineAsyncComponent(() => import("@/features/patients/components/PatientEvaluationVisitLogSection.vue"))
-const PatientAppointmentsDialog = defineAsyncComponent(() => import("@/features/patients/components/PatientAppointmentsDialog.vue"))
-const PatientBillingsDialog = defineAsyncComponent(() => import("@/features/patients/components/PatientBillingsDialog.vue"))
 
 const patientMedicalCategoryDialog = useTemplateRef<ToggleDialogExpose>('patientMedicalCategoryDialog')
 const patientMedicalDiagnoseDialog = useTemplateRef<ToggleDialogExpose>('patientMedicalDiagnoseDialog')
@@ -599,8 +587,6 @@ const patientMedicalImagingDialog = useTemplateRef<ToggleDialogExpose>('patientM
 const patientValidIdAttachmentDialog = useTemplateRef<ToggleDialogExpose>('patientValidIdAttachmentDialog')
 const patientHMOValidIdAttachmentDialog = useTemplateRef<ToggleDialogExpose>('patientHMOValidIdAttachmentDialog')
 const patientProfileImageDialog = useTemplateRef<OpenDialogExpose>('patientProfileImageDialog')
-const patientAppointmentsDialog = useTemplateRef<OpenDialogExpose>('patientAppointmentsDialog')
-const patientBillingsDialog = useTemplateRef<OpenDialogExpose>('patientBillingsDialog')
 
 const patientForm = useTemplateRef<ToggleDialogExpose>('patientForm')
 const patientHMOInformationForm = useTemplateRef<ToggleDialogExpose>('patientHMOInformationForm')
@@ -1194,25 +1180,6 @@ const menuButtons = (patient: Patient): MenuItem[] => {
           },
         })
       }
-    },
-    {
-      separator: true
-    },
-    {
-      label: `View Appointments`,
-      icon: 'pi pi-calendar-clock',
-      command: () => {
-        selectedPatient.value = patient
-        patientAppointmentsDialog.value?.open()
-      }
-    },
-    {
-      label: `View Bills`,
-      icon: 'pi pi-receipt',
-      command: () => {
-        selectedPatient.value = patient
-        patientBillingsDialog.value?.open()
-      },
     },
     {
       label: 'View Sponsor Information',

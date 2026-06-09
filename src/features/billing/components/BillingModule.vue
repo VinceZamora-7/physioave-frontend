@@ -2317,7 +2317,7 @@ const getLguAppointmentInvoiceTooltip = (billing?: BillingListItem | null): stri
     : "Mark this LGU appointment billing as billed first"
 
 const selectedBillingPrintButtonLabel = computed(() =>
-  isLguBillingRow(selectedBillingDetail.value) ? "Print Invoice" : "Print Receipt"
+  "Print Invoice"
 )
 
 const canPrintSelectedBillingReceipt = computed<boolean>(() => {
@@ -2336,7 +2336,7 @@ const printReceiptTooltip = computed(() => {
   }
 
   if (canPrintSelectedBillingReceipt.value) {
-    return "Print the current billing receipt"
+    return "Print the current billing invoice"
   }
 
   if (["DROPPED_OUT", "CROSS_MONTH_DROPPED_OUT"].includes(normalizeBillingStatusLabel(resolveBillingRuntimeStatus(selectedBillingDetail.value)))) {

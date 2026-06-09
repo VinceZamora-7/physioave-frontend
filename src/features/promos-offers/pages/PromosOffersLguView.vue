@@ -8,16 +8,8 @@
             Monitor LGU fund usage, manage program budgets, and review patient credit details across all LGU programs.
           </p>
         </div>
-        <Button
-          label="Manage All LGU Billings"
-          icon="pi pi-list"
-          :pt="ptPrimaryBtn"
-          @click="router.push({ name: 'billing', query: buildLguBillingQuery() })"
-        />
       </div>
     </section>
-
-    <LguBudgetSummaryCard />
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
       <div class="app-section-card-comfy flex flex-col gap-3">
@@ -54,17 +46,12 @@
 <script setup lang="ts">
 
 import { onMounted, ref } from "vue"
-  import { useRouter } from "vue-router"
 import Button from "primevue/button"
-import LguBudgetSummaryCard from "@/features/lgu-billing/components/LguBudgetSummaryCard.vue"
 import LguPackagesModal from "@/features/promos-offers/components/LguPackagesModal.vue"
 import LguAvailableServicesModal from "@/features/promos-offers/components/LguAvailableServicesModal.vue"
 import LguBundledServicesModal from "@/features/promos-offers/components/LguBundledServicesModal.vue"
-import { buildLguBillingQuery } from "@/features/promos-offers/lgu/lgu-billing-type.module"
 import { LGU_TABLE_NAMES } from "@/features/promos-offers/lgu/lgu-module.config"
 import { ptPrimaryBtn } from "@/features/shared/table-header.styles"
-
-const router = useRouter()
 
 const showPackages = ref(false)
 const showServices = ref(false)

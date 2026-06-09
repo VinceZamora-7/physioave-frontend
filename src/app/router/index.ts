@@ -25,57 +25,21 @@ const router = createRouter({
       meta: { requiresAuth: false }
     },
     {
-      path: "/soa/:payer",
-      name: "soa-print",
-      component: () => import("@/features/lgu-billing/invoices/LguGeneralSoaPrintView.vue"),
-      meta: { requiresAuth: true }
-    },
-    {
-      path: "/hmo/invoices/soa",
-      name: "hmo-soa-print",
-      component: () => import("@/features/hmo-billing/invoices/HmoGeneralSoaPrintView.vue"),
-      meta: { requiresAuth: true }
-    },
-    {
-      path: "/self-pay/invoices/patient-billing-summary",
+      path: "/billing/print/self-pay-summary",
       name: "self-pay-patient-billing-summary-print",
       component: () => import("@/features/billing/invoices/SelfPayPatientBillingSummaryPrintView.vue"),
       meta: { requiresAuth: true }
     },
     {
-      path: "/hmo/invoices/patient-profile",
-      name: "hmo-patient-profile-print",
-      component: () => import("@/features/hmo-billing/invoices/HmoPatientProfilePrintView.vue"),
-      meta: { requiresAuth: true }
-    },
-    {
-      path: "/hmo/invoices/patient-billing-summary",
+      path: "/billing/print/hmo-summary",
       name: "hmo-patient-billing-summary-print",
       component: () => import("@/features/hmo-billing/invoices/HmoPatientBillingSummaryPrintView.vue"),
       meta: { requiresAuth: true }
     },
     {
-      path: "/hmo/invoices/attendance-treatment",
-      name: "hmo-attendance-treatment-print",
-      component: () => import("@/features/hmo-billing/invoices/HmoAttendanceTreatmentRecordPrintView.vue"),
-      meta: { requiresAuth: true }
-    },
-    {
-      path: "/lgu/invoices/patient-profile",
-      name: "lgu-patient-profile-print",
-      component: () => import("@/features/lgu-billing/invoices/LguPatientProfilePrintView.vue"),
-      meta: { requiresAuth: true }
-    },
-    {
-      path: "/lgu/invoices/patient-billing-summary",
+      path: "/billing/print/lgu-summary",
       name: "lgu-patient-billing-summary-print",
       component: () => import("@/features/lgu-billing/invoices/LguPatientBillingSummaryPrintView.vue"),
-      meta: { requiresAuth: true }
-    },
-    {
-      path: "/lgu/invoices/attendance-treatment",
-      name: "lgu-attendance-treatment-print",
-      component: () => import("@/features/lgu-billing/invoices/LguAttendanceTreatmentRecordPrintView.vue"),
       meta: { requiresAuth: true }
     },
     {
@@ -131,6 +95,18 @@ const router = createRouter({
           meta: { requiresAuth: true }
         },
         {
+          path: "appointments",
+          name: "appointments",
+          component: () => import("@/features/appointments/pages/AppointmentView.vue"),
+          meta: { requiresAuth: true }
+        },
+        {
+          path: "billing",
+          name: "billing",
+          component: () => import("@/features/billing/pages/BillingView.vue"),
+          meta: { requiresAuth: true }
+        },
+        {
           path: "promos-offers",
           name: "promos-offers",
           component: () => import("@/features/promos-offers/pages/PromosOffersView.vue"),
@@ -173,33 +149,9 @@ const router = createRouter({
           meta: { requiresAuth: true }
         },
         {
-          path: "appointments",
-          name: "appointments",
-          component: () => import("@/features/appointments/pages/AppointmentView.vue"),
-          meta: { requiresAuth: true }
-        },
-        {
-          path: "patient-daily-log",
-          name: "patient-daily-log",
-          component: () => import("@/features/patient-daily-log/pages/PatientDailyLogView.vue"),
-          meta: { requiresAuth: true }
-        },
-        {
           path: "my-schedule",
           name: "pt-schedule",
-          redirect: { name: "patient-daily-log" },
-          meta: { requiresAuth: true }
-        },
-        {
-          path: "billing",
-          name: "billing",
-          component: () => import("@/features/billing/pages/BillingView.vue"),
-          meta: { requiresAuth: true }
-        },
-        {
-          path: "reports",
-          name: "reports",
-          component: () => import("@/features/reports/pages/FinanceReportsView.vue"),
+          redirect: { name: "dashboard" },
           meta: { requiresAuth: true }
         }
       ]
@@ -220,10 +172,7 @@ const resolveFallbackRouteName = (
   const fallbackRouteNames = [
     "dashboard",
     "patients",
-    "appointments",
-    "patient-daily-log",
     "billing",
-    "reports",
     "promos-offers-single-service",
     "promos-offers-package-service",
     "promos-offers-hmo",

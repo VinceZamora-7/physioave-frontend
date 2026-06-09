@@ -164,27 +164,28 @@
                 title="Appointments"
               >
                 <span :class="iconWrapClass('appointments')">
-                  <i class="pi pi-calendar text-[16px]" />
+                  <i class="pi pi-calendar-plus text-[16px]" />
                 </span>
                 <span v-if="!collapsed" class="truncate">Appointments</span>
               </button>
             </li>
 
-            <li v-if="canAccessRoute('patient-daily-log')">
+            <li v-if="canAccessRoute('billing')">
               <button
                 type="button"
                 class="group relative w-full"
-                @click="goToAndClose('patient-daily-log')"
-                :class="itemClass('patient-daily-log')"
-                aria-label="Patient Daily Log"
-                title="Patient Daily Log"
+                @click="goToAndClose('billing')"
+                :class="itemClass('billing')"
+                aria-label="Billing"
+                title="Billing"
               >
-                <span :class="iconWrapClass('patient-daily-log')">
-                  <i class="pi pi-clipboard text-[16px]" />
+                <span :class="iconWrapClass('billing')">
+                  <i class="pi pi-wallet text-[16px]" />
                 </span>
-                <span v-if="!collapsed" class="truncate">Daily Log</span>
+                <span v-if="!collapsed" class="truncate">Billing</span>
               </button>
             </li>
+
           </ul>
         </div>
       </div>
@@ -266,50 +267,12 @@
                 title="Appointments"
               >
                 <span :class="iconWrapClass('appointments')">
-                  <i class="pi pi-calendar text-[16px]" />
+                  <i class="pi pi-calendar-plus text-[16px]" />
                 </span>
                 <span v-if="!collapsed" class="truncate">Appointments</span>
               </button>
             </li>
 
-            <li v-if="canAccessRoute('patient-daily-log')">
-              <button
-                type="button"
-                class="group relative w-full"
-                @click="goToAndClose('patient-daily-log')"
-                :class="itemClass('patient-daily-log')"
-                aria-label="Patient Daily Log"
-                title="Patient Daily Log"
-              >
-                <span :class="iconWrapClass('patient-daily-log')">
-                  <i class="pi pi-clipboard text-[16px]" />
-                </span>
-                <span v-if="!collapsed" class="truncate">Daily Log</span>
-              </button>
-            </li>
-          </ul>
-        </div>
-
-        <!-- Finance -->
-        <div>
-          <button
-            v-if="!collapsed"
-            type="button"
-            class="mb-2 flex w-full items-center justify-between rounded-xl px-2 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-[#5E1869] transition hover:bg-[#5E1869]/10"
-            @click="billingOpen = !billingOpen"
-          >
-            <span class="flex items-center gap-2">
-              <span class="h-1.5 w-1.5 rounded-full bg-[#5E1869]"></span>
-              Finance
-            </span>
-
-            <i
-              class="pi text-[11px] transition-transform"
-              :class="billingOpen ? 'pi-chevron-down' : 'pi-chevron-right'"
-            />
-          </button>
-
-          <ul v-show="collapsed || billingOpen" class="space-y-1.5">
             <li v-if="canAccessRoute('billing')">
               <button
                 type="button"
@@ -320,27 +283,12 @@
                 title="Billing"
               >
                 <span :class="iconWrapClass('billing')">
-                  <i class="pi pi-receipt text-[16px]" />
+                  <i class="pi pi-wallet text-[16px]" />
                 </span>
                 <span v-if="!collapsed" class="truncate">Billing</span>
               </button>
             </li>
 
-            <li v-if="canAccessRoute('reports')">
-              <button
-                type="button"
-                class="group relative w-full"
-                @click="goToAndClose('reports')"
-                :class="itemClass('reports')"
-                aria-label="Finance and Reports"
-                title="Finance and Reports"
-              >
-                <span :class="iconWrapClass('reports')">
-                  <i class="pi pi-chart-bar text-[16px]" />
-                </span>
-                <span v-if="!collapsed" class="truncate">Finance &amp; Reports</span>
-              </button>
-            </li>
           </ul>
         </div>
 
@@ -627,7 +575,6 @@ const { currentUser, permissionSet } = storeToRefs(authSession)
 const mobileOpen = ref(false)
 const operationsOpen = ref(true)
 const patientCareOpen = ref(true)
-const billingOpen = ref(true)
 const promosOffersOpen = ref(true)
 
 // v-model ready collapsed state
@@ -715,15 +662,12 @@ const ADMIN_NAV_ROUTE_NAMES = [
   "admin-setup",
   "clinics",
   "patients",
+  "billing",
   "promos-offers",
   "promos-offers-single-service",
   "promos-offers-package-service",
   "promos-offers-hmo",
-  "promos-offers-lgu",
-  "appointments",
-  "patient-daily-log",
-  "billing",
-  "reports"
+  "promos-offers-lgu"
 ]
 
 const hasAdminNavigationAccess = computed(() =>
