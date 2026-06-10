@@ -455,6 +455,13 @@
             Loading available and taken time slots...
           </div>
 
+          <div
+            v-else-if="!availabilitySlots.length"
+            class="py-8 text-sm font-semibold text-[rgb(var(--app-fg))]/60"
+          >
+            No slots are available for this branch schedule on the selected date.
+          </div>
+
           <div v-else class="time-slot-grid time-slot-grid-main">
             <article
               v-for="slot in availabilitySlots"
@@ -522,6 +529,12 @@ type SelectOption = { label: string; value: number | string | null }
 type Option<T extends string | number = string | number> = { label: string; value: T }
 type SessionMode = "DAILY" | "EVERY_OTHER_DAY" | "WEEKLY"
 type ScheduleAppointment = Record<string, any>
+type ClinicSchedule = {
+  startDay: number
+  endDay: number
+  startTime: string
+  endTime: string
+}
 type TimeSlot = {
   key: string
   start: Date
@@ -537,6 +550,7 @@ const props = defineProps<{
   form: Record<string, any>
   sessionCount: number
   selectedClinic: SelectOption | null
+  selectedClinicSchedule: ClinicSchedule | null
   selectedServices: Array<Record<string, any>>
   patientOptions: SelectOption[]
   clinicOptions: SelectOption[]
@@ -567,8 +581,6 @@ defineEmits<{
 }>()
 
 const activeSessionIndex = ref(0)
-const SLOT_START_HOUR = 7
-const SLOT_END_HOUR = 19
 const SLOT_STEP_MINUTES = 30
 
 const asDate = (value: unknown): Date | null => {
@@ -582,6 +594,17 @@ const dateKey = (date: Date): string =>
 
 const formatTime = (value: Date): string =>
   value.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })
+
+const timeToMinutes = (value?: string | null, fallback = 0): number => {
+  const [hours, minutes] = String(value ?? "").split(":").map(part => Number(part))
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return fallback
+  return hours * 60 + minutes
+}
+
+const dayNumber = (date: Date): number => {
+  const day = date.getDay()
+  return day === 0 ? 7 : day
+}
 
 const formatTimeValue = (value: unknown): string => {
   const date = asDate(value)
@@ -613,6 +636,15 @@ const availabilityScopeLabel = computed(() => {
   const selectedPt = props.ptOptions.find(option => Number(option.value) === Number(props.form.primary_provider_staff_id))
   if (selectedPt?.label) return `Checking PT: ${selectedPt.label}`
   return "Checking branch schedule"
+})
+
+const clinicStartMinute = computed(() => timeToMinutes(props.selectedClinicSchedule?.startTime, 7 * 60))
+const clinicEndMinute = computed(() => timeToMinutes(props.selectedClinicSchedule?.endTime, 19 * 60))
+
+const isSelectedSessionOnClinicDay = computed(() => {
+  if (!props.selectedClinicSchedule) return true
+  const day = dayNumber(selectedSessionDate.value)
+  return day >= Number(props.selectedClinicSchedule.startDay) && day <= Number(props.selectedClinicSchedule.endDay)
 })
 
 const matchesSelectedClinic = (appointment: ScheduleAppointment): boolean => {
@@ -651,14 +683,16 @@ const overlaps = (leftStart: Date, leftEnd: Date, rightStart: Date, rightEnd: Da
   leftStart.getTime() < rightEnd.getTime() && rightStart.getTime() < leftEnd.getTime()
 
 const availabilitySlots = computed<TimeSlot[]>(() => {
+  if (!isSelectedSessionOnClinicDay.value) return []
+
   const base = new Date(selectedSessionDate.value)
   base.setHours(0, 0, 0, 0)
 
   const closingTime = new Date(base)
-  closingTime.setHours(SLOT_END_HOUR, 0, 0, 0)
+  closingTime.setHours(Math.floor(clinicEndMinute.value / 60), clinicEndMinute.value % 60, 0, 0)
 
   const slots: TimeSlot[] = []
-  for (let minutes = SLOT_START_HOUR * 60; minutes < SLOT_END_HOUR * 60; minutes += SLOT_STEP_MINUTES) {
+  for (let minutes = clinicStartMinute.value; minutes < clinicEndMinute.value; minutes += SLOT_STEP_MINUTES) {
     const start = new Date(base)
     start.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0)
     const end = new Date(start.getTime() + slotDurationMs.value)

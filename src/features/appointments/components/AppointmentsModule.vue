@@ -522,8 +522,9 @@
       :form="form"
       :session-count="sessionCountPreview"
       :selected-clinic="selectedClinic"
+      :selected-clinic-schedule="selectedClinicSchedule"
       :selected-services="selectedServices"
-      :patient-options="patientOptions"
+      :patient-options="patientOptionsForClinic"
       :clinic-options="clinicOptions"
       :active-branch-id="activeBranchId"
       :pt-options="ptOptions"
@@ -625,6 +626,8 @@ type SelectOption = { label: string; value: number | string | null }
 type PayerType = "SELF_PAY_SINGLE" | "SELF_PAY_PACKAGE" | "HMO" | "LGU"
 type Laterality = "LEFT" | "RIGHT" | "BOTH" | "BILATERAL" | "NA"
 type ServiceOption = { label: string; value: number; price: number; type: AppointmentServiceSelectionType }
+type ClinicSelectOption = SelectOption & { startDay: number; endDay: number; startTime: string; endTime: string }
+type PatientSelectOption = SelectOption & { clinicId: number | null }
 type SelectedService = ServiceOption & { name: string; quantity: number; typeLabel: string }
 type AttendanceItem = AppointmentPlannedService & { selected: boolean; quantity: number; remaining: number; appointmentConsumed: number }
 type TreatmentAreaOption = SelectOption & { clinicId: number | null; color?: string | null }
@@ -692,9 +695,10 @@ const editingId = ref<number | null>(null)
 const activeAppointment = ref<AppointmentListItem | null>(null)
 const detailAppointment = ref<AppointmentListItem | null>(null)
 
-const patientOptions = ref<SelectOption[]>([])
-const clinicOptions = ref<SelectOption[]>([])
+const patientOptions = ref<PatientSelectOption[]>([])
+const clinicOptions = ref<ClinicSelectOption[]>([])
 const staffOptions = ref<Array<SelectOption & {
+  clinicId?: number | null
   providerType?: string
   secondaryProviderType?: string | null
   specialtyTagId?: number | null
@@ -862,20 +866,37 @@ const attendanceStatusOptions: Array<{ label: string; value: AttendanceStatusFil
   { label: "Canceled", value: "CANCELED" }
 ]
 
+const activeBranchId = computed(() => branchStore.selectedClinicId ?? null)
+
+const formBranchId = computed(() => form.clinic_id ?? activeBranchId.value ?? null)
+
+const patientOptionsForClinic = computed(() =>
+  formBranchId.value
+    ? patientOptions.value.filter(option => option.clinicId === null || option.clinicId === Number(formBranchId.value))
+    : patientOptions.value
+)
+
+const isOptionInFormBranch = (option: { clinicId?: number | null }): boolean =>
+  !formBranchId.value || option.clinicId === null || option.clinicId === undefined || option.clinicId === Number(formBranchId.value)
+
 const ptOptions = computed(() =>
   staffOptions.value.filter(option =>
-    option.providerType === "PHYSICAL_THERAPIST"
-    || option.providerType === "PT_ASSISTANT"
-    || option.providerType === "INTERN"
-    || option.secondaryProviderType === "PHYSICAL_THERAPIST"
-    || option.secondaryProviderType === "PT_ASSISTANT"
-    || option.secondaryProviderType === "INTERN"
+    isOptionInFormBranch(option)
+    && (
+      option.providerType === "PHYSICAL_THERAPIST"
+      || option.providerType === "PT_ASSISTANT"
+      || option.providerType === "INTERN"
+      || option.secondaryProviderType === "PHYSICAL_THERAPIST"
+      || option.secondaryProviderType === "PT_ASSISTANT"
+      || option.secondaryProviderType === "INTERN"
+    )
   )
 )
 
 const doctorOptions = computed(() =>
   staffOptions.value.filter(option =>
-    option.providerType === "DOCTOR_CONSULTANT" || option.secondaryProviderType === "DOCTOR_CONSULTANT"
+    isOptionInFormBranch(option)
+    && (option.providerType === "DOCTOR_CONSULTANT" || option.secondaryProviderType === "DOCTOR_CONSULTANT")
   )
 )
 
@@ -899,13 +920,17 @@ const clinicAreaOptions = computed(() =>
   treatmentAreaOptions.value.filter(option => !form.clinic_id || option.clinicId === form.clinic_id)
 )
 
-const activeBranchId = computed(() => branchStore.selectedClinicId ?? null)
-
 const selectedClinic = computed(() =>
   clinicOptions.value.find(option => option.value === form.clinic_id)
   ?? clinicOptions.value.find(option => option.value === activeBranchId.value)
   ?? clinicOptions.value.find(option => option.value === appointments.value[0]?.clinic_id)
   ?? clinicOptions.value.find(option => option.value === calendarAppointments.value[0]?.clinic_id)
+  ?? null
+)
+
+const selectedClinicSchedule = computed(() =>
+  clinicOptions.value.find(option => option.value === form.clinic_id)
+  ?? clinicOptions.value.find(option => option.value === activeBranchId.value)
   ?? null
 )
 
@@ -1352,11 +1377,23 @@ const loadLookups = async (): Promise<void> => {
     pamsAPI.get("/references/medical-diagnoses", { params: { page: 1, size: 500, status: "ACTIVE" } })
   ])
 
-  patientOptions.value = (patients?.content ?? []).map(patient => ({ label: patient.full_name, value: patient.id }))
-  clinicOptions.value = (clinics?.content ?? []).map(clinic => ({ label: clinic.name, value: clinic.id }))
+  patientOptions.value = (patients?.content ?? []).map(patient => ({
+    label: patient.full_name,
+    value: patient.id,
+    clinicId: patient.clinic_id == null ? null : Number(patient.clinic_id)
+  }))
+  clinicOptions.value = (clinics?.content ?? []).map(clinic => ({
+    label: clinic.name,
+    value: clinic.id,
+    startDay: Number(clinic.start_day),
+    endDay: Number(clinic.end_day),
+    startTime: String(clinic.start_time),
+    endTime: String(clinic.end_time)
+  }))
   staffOptions.value = (staff?.content ?? []).map(row => ({
     label: row.name,
     value: row.id,
+    clinicId: row.clinic_id == null ? null : Number(row.clinic_id),
     providerType: row.appointment_provider_type,
     secondaryProviderType: row.secondary_appointment_provider_type,
     specialtyTagId: row.specialty_tag_id == null ? null : Number(row.specialty_tag_id)
