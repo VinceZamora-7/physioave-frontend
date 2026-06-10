@@ -21,7 +21,6 @@
         <div class="lgu-invoice-toolbar print:hidden">
           <slot name="toolbar">
             <Button label="Print" icon="pi pi-print" @click="printPage()" />
-            <Button label="Print" icon="pi pi-print" @click="printPage()" />
             <Button label="Close" icon="pi pi-times" severity="secondary" outlined @click="goBack" />
           </slot>
         </div>
@@ -98,19 +97,16 @@ const { printPage, goBack } = useLguInvoicePrintActions()
   width: 100%;
   max-width: 210mm;
   min-height: auto;
-  min-height: auto;
   margin: 0 auto;
   padding: 12px 16px 10px;
   border: 1px solid #d1d5db;
   background: #ffffff;
   font-family: "Open Sans", "Segoe UI", Tahoma, Arial, sans-serif;
   color: #000000;
-  color: #000000;
 }
 
 /* HEADER */
 .lgu-invoice-top {
-  width: 100%;
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -156,7 +152,6 @@ const { printPage, goBack } = useLguInvoicePrintActions()
   text-decoration: underline;
   text-decoration-thickness: 1.5px;
   text-underline-offset: 3px;
-  text-underline-offset: 3px;
 }
 
 .lgu-invoice-subtitle {
@@ -165,7 +160,6 @@ const { printPage, goBack } = useLguInvoicePrintActions()
   font-size: 12px;
   line-height: 1.35;
   color: #374151;
-  text-align: center;
   text-align: center;
   text-transform: uppercase;
 }
@@ -218,7 +212,6 @@ const { printPage, goBack } = useLguInvoicePrintActions()
 
 .lgu-invoice-body tbody tr.item-group-start td {
   border-top: 1px solid #d31d6e;
-  border-top: 1px solid #d31d6e;
 }
 
 .lgu-invoice-body tbody tr.line-item-child td {
@@ -235,7 +228,6 @@ const { printPage, goBack } = useLguInvoicePrintActions()
 
 .lgu-invoice-bottom {
   width: 100%;
-  width: 100%;
   display: flex;
   gap: 10px;
   align-items: flex-start;
@@ -246,7 +238,6 @@ const { printPage, goBack } = useLguInvoicePrintActions()
   border: 1px solid #d1d5db;
   padding: 10px 12px;
   border-radius: 10px;
-  background: #ffffff;
   background: #ffffff;
   font-size: 12px;
 }

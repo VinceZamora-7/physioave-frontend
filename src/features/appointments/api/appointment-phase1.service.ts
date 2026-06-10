@@ -83,6 +83,11 @@ export interface AppointmentListItem {
   reschedule_flag: boolean
   reschedule_count: number
   dropout_status?: string
+  dropout_at?: string | null
+  dropout_reason?: string | null
+  dropout_by_staff_id?: number | null
+  dropout_by_staff_name?: string | null
+  dropout_appointment_id?: number | null
   notes?: string | null
 }
 
@@ -389,7 +394,11 @@ export interface ReschedulePayload extends Record<string, unknown> {}
 export interface AppointmentEncounterTicketPayload extends Record<string, unknown> {}
 export interface AppointmentPtCompletionPayload extends Record<string, unknown> {}
 export interface LguServiceConsumptionPayload extends Record<string, unknown> {}
-export interface DropoutStatusUpdatePayload extends Record<string, unknown> {}
+export interface DropoutStatusUpdatePayload extends Record<string, unknown> {
+  dropout_status?: "DROPPED_OUT"
+  reason?: string | null
+  dropout_reason?: string | null
+}
 
 export interface AppointmentCreateResult {
   id: number
@@ -415,7 +424,9 @@ export interface AppointmentServiceSelectionPayload {
 
 export interface AppointmentConsumedService {
   id: number
+  credit_item_id?: number
   type: AppointmentServiceSelectionType
+  source_type?: string
   service_name: string
   package_name?: string | null
   bundle_name?: string | null
@@ -429,20 +440,72 @@ export interface AppointmentConsumedService {
 
 export interface AppointmentPlannedService {
   id: number
+  appointment_id?: number
+  credit_item_id?: number
+  source_type?: string
+  line_type?: string
   type: AppointmentServiceSelectionType
+  service_id?: number | null
   service_name: string
+  service_category?: string
   package_name?: string | null
   bundle_name?: string | null
+  selected_quantity?: number
+  included_quantity?: number
   planned_quantity: number
   consumed_quantity: number
   appointment_consumed_quantity?: number
+  remaining_quantity?: number
   unit_price: number
+  total_price?: number
+  billing_visibility?: string
   parent_credit_item_id?: number | null
+}
+
+export interface AppointmentFlowSummary {
+  appointment: AppointmentListItem & {
+    billing_document_id?: number | null
+    invoice_id?: number | null
+    claim_id?: number | null
+  }
+  schedule: {
+    session_sequence: number
+    total_sessions: number
+    session_dates: Array<{
+      appointment_id: number
+      session_sequence: number
+      starts_at: string
+      ends_at: string
+    }>
+    clinic_schedule_status: string
+    has_conflict: boolean
+  }
+  planned_services: AppointmentPlannedService[]
+  consumed_services: AppointmentConsumedService[]
+  billing_preparation: Record<string, any> | null
+  billing_preparation_error?: string | null
+  billing_document: {
+    id: number
+    document_number?: string | null
+    document_type: string
+    document_status: string
+    document_date: string
+    totals: {
+      subtotal: number
+      discount: number
+      tax: number
+      total: number
+      paid: number
+      balance: number
+    }
+  } | null
+  print_routes: Record<string, string | null>
 }
 
 export interface DropoutStatusUpdateResult {
   appointment_id: number
   dropout_status: string
+  flow_summary?: AppointmentFlowSummary
   cleared_appointment_ids?: number[]
   dropout_billing_public_id?: string
 }
@@ -524,6 +587,11 @@ export const appointmentPhase1Service = {
     return data
   },
 
+  async getFlowSummary(id: number): Promise<AppointmentFlowSummary> {
+    const { data } = await pamsAPI.get<AppointmentFlowSummary>(`/appointments/${id}/flow-summary`)
+    return data
+  },
+
   getContext: (_id: number) => disabled<AppointmentContext>(),
 
   async create(payload: AppointmentCreatePayload): Promise<AppointmentCreateResult> {
@@ -596,8 +664,11 @@ export const appointmentPhase1Service = {
   getConsumedLguServices: (_id: number) =>
     disabled<LguServiceConsumptionResult>(),
 
-  updateDropoutStatus: (_id: number, _payload: string | DropoutStatusUpdatePayload) =>
-    disabled<DropoutStatusUpdateResult>(),
+  async updateDropoutStatus(id: number, payload: string | DropoutStatusUpdatePayload): Promise<AppointmentFlowSummary> {
+    const body = typeof payload === "string" ? { dropout_status: payload } : payload
+    const { data } = await pamsAPI.post<AppointmentFlowSummary>(`/appointments/${id}/drop-out`, body)
+    return data
+  },
 
   exportCsv: (_params: QueryParams) => emptyBlobResponse()
 }

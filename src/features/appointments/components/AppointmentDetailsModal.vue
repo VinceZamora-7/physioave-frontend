@@ -64,6 +64,11 @@
             <p class="app-appointment-muted mt-1 text-sm">
               {{ formatBillingPreparationStatus(billingPreparation.billing_path.status) }}
             </p>
+            <p v-if="billingDocument" class="app-appointment-muted mt-1 text-xs">
+              {{ billingDocument.document_number || `Document #${billingDocument.id}` }} ·
+              {{ formatBillingPreparationStatus(billingDocument.document_status) }} ·
+              Balance {{ formatMoney(billingDocument.totals.balance) }}
+            </p>
           </div>
 
           <Button
@@ -142,6 +147,49 @@
 </section>
 
       <section class="app-appointment-card space-y-3">
+        <div>
+          <h4 class="app-appointment-title text-base">Consumed Services</h4>
+          <p class="app-appointment-muted mt-1 text-sm">
+            Services already recorded for this appointment session.
+          </p>
+        </div>
+
+        <div
+          v-if="!consumedServicesList.length"
+          class="rounded-lg border border-dashed border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] px-4 py-4 text-center text-sm text-[rgb(var(--app-fg))]/60"
+        >
+          No consumed services recorded yet.
+        </div>
+
+        <div v-else class="space-y-2">
+          <article
+            v-for="service in consumedServicesList"
+            :key="consumedServiceKey(service)"
+            class="flex flex-col gap-2 rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div class="min-w-0">
+              <div class="break-words text-sm font-semibold text-[rgb(var(--app-fg))]">
+                {{ plannedServiceName(service) }}
+              </div>
+              <div class="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-[rgb(var(--app-fg))]/50">
+                {{ plannedServiceType(service) }}
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2 text-xs">
+              <span class="rounded-full bg-[rgb(var(--app-card))] px-2.5 py-1 font-semibold text-[rgb(var(--app-fg))]/70">
+                Qty: {{ numberValue(service.quantity, 0) }}
+              </span>
+              <span class="rounded-full bg-[rgb(var(--app-card))] px-2.5 py-1 font-semibold text-[rgb(var(--app-fg))]/70">
+                Total: {{ formatMoney(numberValue(service.line_total, 0)) }}
+              </span>
+              <Tag :value="String(service.status ?? 'Consumed')" severity="success" />
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="app-appointment-card space-y-3">
         <h4 class="app-appointment-title text-base">Doctor Diagnosis Details</h4>
         <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
           <DetailField label="Doctor Diagnosis" :value="appointment.medical_diagnose_name" />
@@ -198,7 +246,14 @@ const props = withDefaults(defineProps<{
   visible: boolean
   appointment: AppointmentListItem | null
   plannedServices?: PlannedServiceRecord[]
+  consumedServices?: PlannedServiceRecord[]
   billingPreparation?: AppointmentBillingPreparation | null
+  billingDocument?: {
+    id: number
+    document_number?: string | null
+    document_status: string
+    totals: { balance: number }
+  } | null
   isBillingActionLoading?: boolean
   formatDate: (value: string) => string
   formatTime: (value: string) => string
@@ -212,7 +267,9 @@ const props = withDefaults(defineProps<{
   canMarkAttendance?: boolean
 }>(), {
   plannedServices: () => [],
+  consumedServices: () => [],
   billingPreparation: null,
+  billingDocument: null,
   isBillingActionLoading: false,
   canEdit: true,
   canMarkAttendance: true
@@ -229,6 +286,7 @@ defineEmits<{
 }>()
 
 const plannedServicesList = computed(() => props.plannedServices ?? [])
+const consumedServicesList = computed(() => props.consumedServices ?? [])
 
 const formatBillingPreparationStatus = (value?: string | null): string =>
   String(value ?? "N/A")
@@ -245,8 +303,16 @@ const numberValue = (value: unknown, fallback = 0): number => {
   return Number.isFinite(numeric) ? numeric : fallback
 }
 
+const formatMoney = (value: number): string =>
+  new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(Number(value ?? 0))
+
 const plannedServiceKey = (service: PlannedServiceRecord): string => {
   const key = firstValue(service, ["id", "credit_item_id", "service_id", "name", "service_name"])
+  return `${String(key ?? Math.random())}-${plannedServiceName(service)}`
+}
+
+const consumedServiceKey = (service: PlannedServiceRecord): string => {
+  const key = firstValue(service, ["id", "credit_consumption_id", "credit_item_id", "service_id", "service_name"])
   return `${String(key ?? Math.random())}-${plannedServiceName(service)}`
 }
 

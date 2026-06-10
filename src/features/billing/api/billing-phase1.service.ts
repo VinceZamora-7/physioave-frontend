@@ -494,13 +494,25 @@ export const billingPhase1Service = {
     return lguBillingService.getDashboardHistory(limit, periodYear, periodMonth, programId)
   },
   async getHmoRecentHistory(limit = 25, hmoId?: number): Promise<HmoRecentHistoryItem[] | undefined> {
+    const params: Record<string, number> = { limit }
+    if (Number.isFinite(Number(hmoId)) && Number(hmoId) > 0) {
+      params.hmo_id = Number(hmoId)
+    }
+
     const { data } = await pamsAPI.get<HmoRecentHistoryItem[]>("/billings/hmo-recent-history", {
-      params: { limit, hmo_id: hmoId }
+      params
     })
     return data
   },
   async getHmoSoa(params: HmoSoaParams): Promise<HmoRecentHistoryItem[] | undefined> {
-    const { data } = await pamsAPI.get<HmoRecentHistoryItem[]>("/billings/hmo-recent-history", { params })
+    const cleanedParams = Object.fromEntries(
+      Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== "")
+    )
+    if (Number(cleanedParams.hmo_id) <= 0) {
+      delete cleanedParams.hmo_id
+    }
+
+    const { data } = await pamsAPI.get<HmoRecentHistoryItem[]>("/billings/hmo-recent-history", { params: cleanedParams })
     return data
   },
   async getLguSoa(params: { from: string; to: string; limit?: number; program_id?: number }): Promise<LguDashboardHistoryItem[] | undefined> {

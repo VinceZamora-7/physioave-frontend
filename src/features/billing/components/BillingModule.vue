@@ -2710,6 +2710,24 @@ const tableStatusOptions = computed(() => {
   return Array.from(values).sort().map(v => ({label: v, value: v}))
 })
 
+const isZeroValueSelfPayPackageSessionRecord = (billing: BillingListItem): boolean => {
+  const billingType = normalizeBillingTypeValue(billing.billing_type)
+  const serviceType = String(billing.service_type ?? "").trim().toUpperCase()
+  const status = normalizeBillingStatusLabel(billing.billing_status)
+  const amountDue = Number(billing.amount_due ?? billing.total_amount ?? 0)
+  const amountPaid = Number(billing.amount_paid ?? 0)
+  const receiptNumber = String(billing.receipt_number ?? "").trim()
+
+  return billingType === "SELF_PAY_PACKAGE" &&
+    serviceType === "SINGLE" &&
+    Number.isFinite(amountDue) &&
+    amountDue <= 0 &&
+    Number.isFinite(amountPaid) &&
+    amountPaid <= 0 &&
+    !receiptNumber &&
+    ["ISSUED", "BILLED", "UNBILLED"].includes(status)
+}
+
 const filteredBillings = computed(() => {
   const query   = tableFilterQuery.value.trim().toLowerCase()
   const fromDate = tableFilterDateFrom.value ? new Date(tableFilterDateFrom.value) : undefined
@@ -2717,6 +2735,7 @@ const filteredBillings = computed(() => {
   if (toDate) toDate.setHours(23, 59, 59, 999)
 
   return billings.value.filter(billing => {
+    if (isZeroValueSelfPayPackageSessionRecord(billing)) return false
     if (query) {
       const haystack = [String(billing.id ?? ""), String(billing.public_id ?? ""), String(billing.patient_id ?? ""),
         String(billing.patient_public_id ?? ""), billing.patient_name ?? "", billing.service_name ?? "",

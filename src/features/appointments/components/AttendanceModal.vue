@@ -40,6 +40,33 @@
           </template>
         </Column>
       </DataTable>
+
+      <section
+        v-if="canDropOutLgu"
+        class="app-appointment-card app-appointment-card-accent space-y-3"
+      >
+        <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div class="min-w-0 flex-1 space-y-1">
+            <label class="app-appointment-muted text-xs font-semibold uppercase tracking-wide">LGU Drop-out Reason</label>
+            <Textarea
+              v-model="dropoutReason"
+              class="w-full"
+              rows="2"
+              autoResize
+              :disabled="isDroppingOut || isAlreadyDroppedOut"
+              placeholder="Reason for dropping out"
+            />
+          </div>
+          <Button
+            label="Drop Out Patient"
+            icon="pi pi-user-minus"
+            severity="danger"
+            :loading="isDroppingOut"
+            :disabled="isAlreadyDroppedOut || !dropoutReason.trim()"
+            @click="$emit('drop-out', dropoutReason.trim())"
+          />
+        </div>
+      </section>
     </div>
 
     <template #footer>
@@ -50,13 +77,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue"
+import { computed, ref, watch } from "vue"
 import Button from "primevue/button"
 import Checkbox from "primevue/checkbox"
 import Column from "primevue/column"
 import DataTable from "primevue/datatable"
 import Dialog from "primevue/dialog"
 import InputNumber from "primevue/inputnumber"
+import Textarea from "primevue/textarea"
 import { ptPrimaryBtn } from "@/features/shared/table-header.styles"
 import type { AppointmentListItem, AppointmentPlannedService } from "@/features/appointments/api/appointment-phase1.service"
 
@@ -65,6 +93,7 @@ type AttendanceItem = AppointmentPlannedService & { selected: boolean; quantity:
 defineEmits<{
   "update:visible": [value: boolean]
   save: []
+  "drop-out": [reason: string]
 }>()
 
 const props = defineProps<{
@@ -72,9 +101,14 @@ const props = defineProps<{
   appointment: AppointmentListItem | null
   attendanceItems: AttendanceItem[]
   isSaving: boolean
+  isDroppingOut?: boolean
+  canDropOutLgu?: boolean
+  dropoutStatus?: string | null
   formatDate: (value: string) => string
   formatTime: (value: string) => string
 }>()
+
+const dropoutReason = ref("")
 
 const selectedBundleIds = computed(() =>
   new Set(
@@ -89,4 +123,15 @@ const isAttendanceItemDisabled = (item: AttendanceItem): boolean =>
   || item.type === "PACKAGE"
   || Number(item.appointmentConsumed ?? item.appointment_consumed_quantity ?? 0) > 0
   || Boolean(item.parent_credit_item_id && selectedBundleIds.value.has(Number(item.parent_credit_item_id)))
+
+const isAlreadyDroppedOut = computed(() =>
+  String(props.dropoutStatus ?? props.appointment?.dropout_status ?? "").toUpperCase() === "DROPPED_OUT"
+)
+
+watch(
+  () => props.visible,
+  (visible) => {
+    if (visible) dropoutReason.value = props.appointment?.dropout_reason ?? ""
+  }
+)
 </script>

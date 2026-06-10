@@ -128,6 +128,68 @@ export interface TenderSelfPayBillingResult {
   billing_document: AppointmentBillingDocument
 }
 
+export interface PrintableBillingDocumentLine {
+  id: number
+  parent_line_id: number | null
+  credit_account_id?: number | null
+  credit_item_id?: number | null
+  credit_consumption_id?: number | null
+  line_type: string
+  type?: string
+  service_name: string
+  name?: string
+  package_name?: string | null
+  bundle_name?: string | null
+  description?: string | null
+  quantity: number
+  unit_price: number
+  unitPrice?: number
+  discount_amount?: number
+  line_total: number
+  lineTotal?: number
+  display_order?: number
+  metadata?: unknown
+  children?: PrintableBillingDocumentLine[]
+}
+
+export interface PrintableBillingDocument {
+  header: {
+    id: number
+    document_number: string | null
+    document_type: string
+    document_status: string
+    payer_type: "SELF_PAY_SINGLE" | "SELF_PAY_PACKAGE" | "HMO" | "LGU"
+    document_date: string
+    due_date?: string | null
+    issued_at?: string | null
+    pricing_mode?: string | null
+    pricing_source?: string | null
+    source_reference?: string | null
+    notes?: string | null
+  }
+  patient: {
+    id: number
+    name: string
+    age?: number | null
+    address?: string | null
+    gender?: string | null
+  }
+  sponsor: Record<string, unknown>
+  clinic: { id: number; name: string | null } | null
+  appointment: Record<string, unknown> | null
+  credit_account: Record<string, unknown> | null
+  lines: PrintableBillingDocumentLine[]
+  totals: {
+    subtotal: number
+    discount: number
+    tax: number
+    total: number
+    paid: number
+    balance: number
+  }
+  print_flags: Record<string, boolean>
+}
+
 export const appointmentBillingService = {
   async getPaymentMethods(): Promise<PaymentMethodLookup[]> {
     const { data } = await pamsAPI.get<PaymentMethodLookup[]>("/printables/payment-methods")
@@ -185,6 +247,13 @@ export const appointmentBillingService = {
     const { data } = await pamsAPI.post<TenderSelfPayBillingResult>(
       `/printables/billing-documents/${billingDocumentId}/tender`,
       payload
+    )
+    return data
+  },
+
+  async getPrintableBillingDocument(billingDocumentId: number): Promise<PrintableBillingDocument> {
+    const { data } = await pamsAPI.get<PrintableBillingDocument>(
+      `/printables/billing-documents/${billingDocumentId}`
     )
     return data
   }

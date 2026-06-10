@@ -121,13 +121,7 @@
               </td>
 
               <td class="text-right">
-                {{
-                  row.isParent || row.unitTotal === null
-                    ? ""
-                    : row.unitTotal > 0
-                      ? formatCurrency(row.unitTotal)
-                      : "FREE"
-                }}
+                {{ row.isParent ? "" : formatUnitTotal(row.unitTotal) }}
               </td>
             </tr>
           </tbody>
@@ -147,31 +141,46 @@
     </template>
 
     <template #bottom>
-      <div class="approval-wrap">
-        <div class="approval-card">
-          <div class="approval-label">
-            Approved by:
+      <div class="approval-wrap-hmo">
+        <section class="payment-box">
+          <span class="self-pay-bottom-text-header">LGU DETAILS</span>
+
+          <div>
+            <span class="self-pay-bottom-text">Billing To:</span>
+            {{ lguBillingToLabel }}
           </div>
 
-          <div class="approval-name">
-            RENALOU B. CORDOVA, PTRP, UK-PT
+          <div>
+            <span class="self-pay-bottom-text">Patient Program Status:</span>
+            {{ patientProgramStatus }}
           </div>
 
-          <div class="approval-line"></div>
-
-          <div class="approval-title">
-            Chief Operations Officer
+          <div>
+            <span class="self-pay-bottom-text">Referral Form No.:</span>
+            {{ referralFormNumberLabel }}
           </div>
+
+          <div>
+            <span class="self-pay-bottom-text">Date Issued:</span>
+            {{ referralIssuedDateLabel }}
+          </div>
+        </section>
+
+        <section class="approval-card">
+          <div class="approval-label">Approved by:</div>
+          <div>&nbsp;</div>
+
+          <div class="approval-name">RENALOU B. CORDOVA, PTRP, UK-PT</div>
+          <div class="approval-title">Chief Operations Officer</div>
 
           <div class="approval-signed">
-            Date Signed: {{ dateSigned }}
+            <strong>Date Signed:</strong> {{ dateSigned }}
           </div>
-        </div>
+        </section>
       </div>
     </template>
   </LguInvoiceLayout>
 </template>
-
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue"
@@ -181,15 +190,17 @@ import Button from "primevue/button"
 import { lguBillingService, type LguPatientCreditDetail } from "@/features/lgu-billing/api/lgu-billing.service"
 import type { BillingListItem } from "@/features/billing/api/billing-phase1.service"
 import { billingContextTanstackService } from "@/features/billing/queries/billing-context.tanstack.service"
+import {
+  appointmentBillingService,
+  type PrintableBillingDocument
+} from "@/features/appointments/api/appointment-billing.service"
 import LguInvoiceLayout from "./LguInvoiceLayout.vue"
 import {
   formatLguPatientProgramStatus,
-  resolveLguPatientProgramStatus,
   useLguInvoicePrintActions
 } from "./lgu-invoice.shared"
 import { patientTanstackService } from "@/features/patients/queries/patient.tanstack.service"
 import type { PatientHMOInformation } from "@/models/hmo-information"
-import { pamsAPI } from "@/utils/axios-interceptor"
 
 type AnyRecord = Record<string, unknown>
 
@@ -204,21 +215,6 @@ type InvoiceLineNode = AnyRecord & {
   description?: string
   quantity?: number | string
   children?: InvoiceLineNode[]
-}
-
-type LocalService = {
-  id: string
-  name: string
-}
-
-type LocalBundle = {
-  id: string
-  name: string
-  lguContractPrice: number
-  machineIds: string[]
-  techniqueIds: string[]
-  evaluationIds: string[]
-  addOnIds: string[]
 }
 
 type TableRow = {
@@ -239,10 +235,8 @@ const { printPage, goBack } = useLguInvoicePrintActions()
 const detail = ref<LguPatientCreditDetail | null>(null)
 const sponsorInfo = ref<PatientHMOInformation | null>(null)
 const billingDetail = ref<BillingListItem | null>(null)
+const printableDocument = ref<PrintableBillingDocument | null>(null)
 const error = ref("")
-const localServices = ref<LocalService[]>([])
-const localBundles = ref<LocalBundle[]>([])
-const catalogLoaded = ref(false)
 
 const NOT_AVAILABLE_LABEL = "N/A"
 
@@ -266,6 +260,8 @@ const CHILD_KEYS = [
   "packageInclusions",
   "availed_services",
   "availedServices",
+  "consumed_services",
+  "consumedServices",
   "bundleItems",
   "bundle_items"
 ]
@@ -283,8 +279,36 @@ const CHILD_JSON_KEYS = [
   "serviceInclusionsJson",
   "package_inclusions_json",
   "packageInclusionsJson",
+  "availed_services_json",
+  "availedServicesJson",
+  "consumed_services_json",
+  "consumedServicesJson",
   "bundle_items_json",
   "bundleItemsJson"
+]
+
+const INVOICE_ARRAY_KEYS = [
+  "lines",
+  "lineItems",
+  "line_items",
+  "billingLines",
+  "billing_lines",
+  "items",
+  "services",
+  "packageItems",
+  "package_items",
+  "includedServices",
+  "included_services",
+  "packageServices",
+  "package_services",
+  "childServices",
+  "child_services",
+  "availedServices",
+  "availed_services",
+  "consumedServices",
+  "consumed_services",
+  "data",
+  "rows"
 ]
 
 const BUNDLE_ITEM_KEYS = ["bundleItems", "bundle_items"]
@@ -302,7 +326,61 @@ const CONTRACT_PRICE_KEYS = [
   "contract_unit_price_snapshot",
   "contractUnitPriceSnapshot",
   "package_unit_price_snapshot",
-  "packageUnitPriceSnapshot"
+  "packageUnitPriceSnapshot",
+  "lgu_package_price",
+  "lguPackagePrice",
+  "lgu_package_rate",
+  "lguPackageRate",
+  "lgu_unit_price",
+  "lguUnitPrice"
+]
+
+const DROPOUT_PRICE_KEYS = [
+  "dropout_rate",
+  "dropOutRate",
+  "drop_out_rate",
+  "dropout_price",
+  "dropoutPrice",
+  "drop_out_price",
+  "dropOutPrice",
+  "lgu_dropout_rate",
+  "lguDropoutRate",
+  "lgu_drop_out_rate",
+  "lguDropOutRate",
+  "lgu_dropout_price",
+  "lguDropoutPrice",
+  "lgu_drop_out_price",
+  "lguDropOutPrice",
+  "dropout_unit_price",
+  "dropoutUnitPrice",
+  "drop_out_unit_price",
+  "dropOutUnitPrice",
+  "dropout_unit_price_snapshot",
+  "dropoutUnitPriceSnapshot",
+  "drop_out_unit_price_snapshot",
+  "dropOutUnitPriceSnapshot",
+  "dropout_package_rate",
+  "dropoutPackageRate",
+  "drop_out_package_rate",
+  "dropOutPackageRate",
+  "lgu_dropout_package_rate",
+  "lguDropoutPackageRate",
+  "lgu_drop_out_package_rate",
+  "lguDropOutPackageRate"
+]
+
+const PRICE_FALLBACK_KEYS = [
+  "line_total",
+  "lineTotal",
+  "total",
+  "amount",
+  "line_total_snapshot",
+  "lineTotalSnapshot",
+  "totalPrice",
+  "total_price",
+  "price",
+  "unit_price",
+  "unitPrice"
 ]
 
 const dateSigned = computed(() => formatDate(new Date()))
@@ -317,6 +395,7 @@ const selectedAppointmentId = computed(() => {
     route.query.appt_id ??
     route.query.apptId
   )
+
   if (fromQuery > 0) return fromQuery
 
   return getNumberFromRecord(billingDetail.value, [
@@ -334,12 +413,31 @@ const transactionPeriodEndDate = computed(() => transactionToDate.value ?? trans
 const patientName = computed(() => detail.value?.patient_name || getBillingText("patient_name") || "Patient")
 const patientIdLabel = computed(() => patientId.value > 0 ? String(patientId.value) : String(billingDetail.value?.patient_id ?? NOT_AVAILABLE_LABEL))
 const lguSponsor = computed(() => sponsorInfo.value)
-const lguProgramLabel = computed(() => lguSponsor.value?.lgu_program_name || lguSponsor.value?.company_name || getBillingText("lgu_program_name") || "LGU")
-const patientAddress = computed(() => billingDetail.value?.patient_address || NOT_AVAILABLE_LABEL)
-const patientAge = computed(() => billingDetail.value?.patient_age || NOT_AVAILABLE_LABEL)
-const physicalTherapistName = computed(() => getBillingText("physical_therapist_name") || getBillingText("physical_therapist") || NOT_AVAILABLE_LABEL)
-const doctorName = computed(() => getBillingText("doctor_name") || getBillingText("doctor") || NOT_AVAILABLE_LABEL)
-const diagnosis = computed(() => billingDetail.value?.diagnosis || NOT_AVAILABLE_LABEL)
+
+const lguProgramLabel = computed(() =>
+  getSponsorText("lgu_program_name") || getSponsorText("company_name") || getBillingText("lgu_program_name") || "LGU"
+)
+
+const patientAddress = computed(() =>
+  getBillingText("patient_address") || getDetailText("patient_address") || NOT_AVAILABLE_LABEL
+)
+
+const patientAge = computed(() =>
+  getBillingText("patient_age") || getDetailText("patient_age") || NOT_AVAILABLE_LABEL
+)
+
+const physicalTherapistName = computed(() =>
+  getBillingText("physical_therapist_name") || getBillingText("physical_therapist") || NOT_AVAILABLE_LABEL
+)
+
+const doctorName = computed(() =>
+  getBillingText("doctor_name") || getBillingText("doctor") || NOT_AVAILABLE_LABEL
+)
+
+const diagnosis = computed(() =>
+  getBillingText("diagnosis") || getDetailText("diagnosis") || NOT_AVAILABLE_LABEL
+)
+
 const patientProgramStatus = computed(() =>
   formatLguPatientProgramStatus(
     billingDetail.value?.lgu_patient_program_status,
@@ -347,16 +445,53 @@ const patientProgramStatus = computed(() =>
   )
 )
 
+const lguBillingToLabel = computed(() =>
+  getBillingText("lgu_name") ||
+  getBillingText("sponsor_name") ||
+  getSponsorText("company_name") ||
+  getSponsorText("lgu_program_name") ||
+  lguProgramLabel.value ||
+  NOT_AVAILABLE_LABEL
+)
+
+const referralFormNumberLabel = computed(() =>
+  getBillingText("referral_form_no") ||
+  getBillingText("referralFormNo") ||
+  getBillingText("approval_code") ||
+  getSponsorText("approval_code") ||
+  getSponsorText("referral_form_no") ||
+  NOT_AVAILABLE_LABEL
+)
+
+const referralIssuedDateLabel = computed(() =>
+  formatDate(
+    getBillingText("referral_issued_date") ||
+    getBillingText("date_issued") ||
+    getSponsorText("referral_issued_date") ||
+    getSponsorText("validity_start_date") ||
+    null
+  )
+)
+
 const validityLabel = computed(() => {
-  const start = formatDate(lguSponsor.value?.validity_start_date)
-  const end = formatDate(lguSponsor.value?.validity_end_date ?? transactionPeriodEndDate.value)
-  return start === NOT_AVAILABLE_LABEL && end === NOT_AVAILABLE_LABEL ? NOT_AVAILABLE_LABEL : `${start} to ${end}`
+  const start = formatDate(getSponsorText("validity_start_date"))
+  const end = formatDate(getSponsorText("validity_end_date") || transactionPeriodEndDate.value)
+
+  return start === NOT_AVAILABLE_LABEL && end === NOT_AVAILABLE_LABEL
+    ? NOT_AVAILABLE_LABEL
+    : `${start} to ${end}`
 })
 
-const billing = computed(() => ({
-  grand_total: Number(billingDetail.value?.total_amount ?? billingDetail.value?.amount_due ?? 0),
-  total_amount: Number(billingDetail.value?.total_amount ?? billingDetail.value?.amount_due ?? 0)
-}))
+const billing = computed(() => {
+  const savedTotal = Number(billingDetail.value?.total_amount ?? billingDetail.value?.amount_due ?? 0)
+  const rowTotal = invoiceRows.value.reduce((sum, row) => sum + Number(row.unitTotal ?? 0), 0)
+  const total = savedTotal > 0 ? savedTotal : rowTotal
+
+  return {
+    grand_total: total,
+    total_amount: total
+  }
+})
 
 const selectedAppointment = computed(() => {
   const appointmentId = selectedAppointmentId.value
@@ -408,54 +543,40 @@ const selectedAppointmentSessionSequences = computed(() => {
 
   const appointmentIndex = (detail.value?.appointments ?? [])
     .filter(appointment => String(appointment.status ?? "").trim().toUpperCase() === "COMPLETED")
-    .sort((left, right) => (parseDate(left.appointment_date)?.getTime() ?? 0) - (parseDate(right.appointment_date)?.getTime() ?? 0))
+    .sort((left, right) =>
+      (parseDate(left.appointment_date)?.getTime() ?? 0) -
+      (parseDate(right.appointment_date)?.getTime() ?? 0)
+    )
     .findIndex(appointment => Number(appointment.appointment_id ?? 0) === appointmentId)
 
   return appointmentIndex >= 0 ? [appointmentIndex + 1] : []
 })
 
 const invoiceRows = computed<TableRow[]>(() => {
-  const consumedAppointmentRows = buildSelectedAppointmentRowsFromConsumption()
-  if (consumedAppointmentRows.length) return consumedAppointmentRows
-
-  const consumedLineItems = parseInvoiceLineItems(getConsumedServicesJson(billingDetail.value))
   const billingLineItems = parseInvoiceLineItems(billingDetail.value?.line_items_json)
 
-  const lineItems = pickBestInvoiceLineItems(consumedLineItems, billingLineItems)
-
-  if (lineItems.length) {
-    const selectedAppointmentRows = buildSelectedAppointmentRowsFromBillingLines(lineItems)
+  if (billingLineItems.length) {
+    const selectedAppointmentRows = buildSelectedAppointmentRowsFromBillingLines(billingLineItems)
     if (selectedAppointmentRows.length) return selectedAppointmentRows
   }
+
+  const consumedLineItems = parseInvoiceLineItems(getConsumedServicesPayload(billingDetail.value as AnyRecord | null))
+
+  if (consumedLineItems.length) {
+    const selectedAppointmentRows = buildSelectedAppointmentRowsFromBillingLines(consumedLineItems)
+    if (selectedAppointmentRows.length) return selectedAppointmentRows
+  }
+
+  const consumedAppointmentRows = buildSelectedAppointmentRowsFromConsumption()
+  if (consumedAppointmentRows.length) return consumedAppointmentRows
 
   return buildFallbackAppointmentRows()
 })
 
-function pickBestInvoiceLineItems(
-  consumedLineItems: InvoiceLineNode[],
-  billingLineItems: InvoiceLineNode[]
-): InvoiceLineNode[] {
-  if (!consumedLineItems.length) return billingLineItems
-  if (!billingLineItems.length) return consumedLineItems
-
-  const consumedHasPrintableChildren = consumedLineItems.some(item =>
-    getPayloadChildren(item).length > 0 ||
-    getPackageBundleMetadataLines(item).length > 0
-  )
-
-  const billingHasPrintableChildren = billingLineItems.some(item =>
-    getPayloadChildren(item).length > 0 ||
-    getPackageBundleMetadataLines(item).length > 0
-  )
-
-  return billingHasPrintableChildren && !consumedHasPrintableChildren
-    ? billingLineItems
-    : consumedLineItems
-}
-
 function buildSelectedAppointmentRowsFromConsumption(): TableRow[] {
   const appointment = selectedAppointment.value
   const availedServices = appointment?.availed_services ?? []
+
   if (!appointment || !availedServices.length) return []
 
   const appointmentDate = getAppointmentDate()
@@ -464,15 +585,13 @@ function buildSelectedAppointmentRowsFromConsumption(): TableRow[] {
   const seen = new Set<string>()
 
   const addMainRow = (serviceName: string, unitTotal: number | null): void => {
-    const isFirstMainRow = rows.every(row => row.level && row.level > 0)
-
     rows.push({
       key: `consumed-main-${rows.length}-${serviceName}`,
-      itemNo: isFirstMainRow ? 1 : 0,
+      itemNo: nextItemNo(rows),
       treatmentDate: appointmentDate,
       serviceName,
       sessionSequence: fallbackSessionLabel,
-      unitTotal: isFirstMainRow ? unitTotal : null,
+      unitTotal,
       level: 0,
       isParent: false
     })
@@ -487,41 +606,13 @@ function buildSelectedAppointmentRowsFromConsumption(): TableRow[] {
 
     const key = normalizeCatalogName(serviceName)
     if (!key || seen.has(key)) continue
+
     seen.add(key)
 
-    const consumedLine: InvoiceLineNode = {
-      id: `consumed-${rows.length + 1}`,
-      name: serviceName,
-      quantity: 1
-    }
-    const bundle = getBundleRecord(consumedLine)
-
-    if (bundle) {
-      const bundleLine: InvoiceLineNode = {
-        id: `bundle-${bundle.id}`,
-        type: "bundle",
-        name: bundle.name,
-        quantity: 1
-      }
-      addMainRow(stripPackageSessionSuffix(bundle.name), getBundleContractPrice(bundleLine))
-
-      for (const child of getBundleChildren(bundleLine)) {
-        rows.push({
-          key: `consumed-bundle-child-${rows.length}-${String(child.id ?? child.name ?? "item")}`,
-          itemNo: 0,
-          treatmentDate: appointmentDate,
-          serviceName: `- ${stripPackageSessionSuffix(getServiceName(child))}`,
-          sessionSequence: fallbackSessionLabel,
-          unitTotal: null,
-          level: 1,
-          isParent: false
-        })
-      }
-
-      continue
-    }
-
-    addMainRow(stripPackageSessionSuffix(serviceName), Number(billingDetail.value?.total_amount ?? billingDetail.value?.amount_due ?? 0))
+    addMainRow(
+      stripPackageSessionSuffix(serviceName),
+      Number(billingDetail.value?.total_amount ?? billingDetail.value?.amount_due ?? 0)
+    )
   }
 
   return rows
@@ -565,11 +656,32 @@ function formatDate(value?: string | Date | null): string {
 function formatCurrency(value?: number | null): string {
   return value === null || value === undefined
     ? ""
-    : Number(value).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
+    : Number(value).toLocaleString("en-PH", {
+        style: "currency",
+        currency: "PHP"
+      })
+}
+
+function formatUnitTotal(value: number | null): string {
+  if (value === null) return ""
+  if (value > 0) return formatCurrency(value)
+  return "-"
+}
+
+function nextItemNo(rows: TableRow[]): number {
+  return rows.filter(row => !row.isParent && Number(row.level ?? 0) === 0).length + 1
 }
 
 function getBillingText(key: string): string {
   return String((billingDetail.value as AnyRecord | null)?.[key] ?? "").trim()
+}
+
+function getDetailText(key: string): string {
+  return String((detail.value as AnyRecord | null)?.[key] ?? "").trim()
+}
+
+function getSponsorText(key: string): string {
+  return String((lguSponsor.value as AnyRecord | null)?.[key] ?? "").trim()
 }
 
 function getNumberFromRecord(record: unknown, keys: string[]): number {
@@ -583,19 +695,53 @@ function getNumberFromRecord(record: unknown, keys: string[]): number {
   return 0
 }
 
-function parseMaybeJsonArray(value: unknown): unknown[] {
-  if (Array.isArray(value)) return value
-  if (typeof value !== "string" || !value.trim()) return []
+function parseMaybeJsonValue(value: unknown): unknown {
+  if (typeof value !== "string") return value
+
+  const raw = value.trim()
+  if (!raw) return null
 
   try {
-    const parsed = JSON.parse(value) as unknown
-    return Array.isArray(parsed) ? parsed : []
+    return JSON.parse(raw) as unknown
   } catch {
-    return []
+    return null
   }
 }
 
-function parseInvoiceLineItems(value?: string | null): InvoiceLineNode[] {
+function normalizeInvoiceLineEntry(entry: unknown): InvoiceLineNode[] {
+  if (typeof entry === "string") {
+    const name = entry.trim()
+    return name ? [{ name }] : []
+  }
+
+  return isRecord(entry) ? [entry as InvoiceLineNode] : []
+}
+
+function parseMaybeJsonArray(value: unknown): unknown[] {
+  const parsed = parseMaybeJsonValue(value)
+
+  if (Array.isArray(parsed)) {
+    return parsed.flatMap(normalizeInvoiceLineEntry)
+  }
+
+  if (!isRecord(parsed)) {
+    return []
+  }
+
+  const nestedItems = INVOICE_ARRAY_KEYS.flatMap(key => {
+    const nested = parsed[key]
+    if (nested === undefined || nested === null || nested === "") return []
+    return parseMaybeJsonArray(nested)
+  })
+
+  if (nestedItems.length) {
+    return nestedItems
+  }
+
+  return [parsed]
+}
+
+function parseInvoiceLineItems(value?: unknown): InvoiceLineNode[] {
   return parseMaybeJsonArray(value).filter(isRecord) as InvoiceLineNode[]
 }
 
@@ -634,7 +780,7 @@ function getPayloadChildren(item: InvoiceLineNode): InvoiceLineNode[] {
 }
 
 function stripPackageSessionSuffix(value: string): string {
-  return value
+  return String(value ?? "")
     .replace(/\s+-\s+Session\s+\d+\s+of\s+\d+\s*$/i, "")
     .replace(/\s+Session\s+-\s+Session\s+\d+\s+of\s+\d+\s*$/i, "")
     .trim()
@@ -661,25 +807,6 @@ function normalizeCatalogName(value?: string): string {
     .toLowerCase()
 }
 
-function catalogNamesMatch(left?: string, right?: string): boolean {
-  const normalizedLeft = normalizeCatalogName(left)
-  const normalizedRight = normalizeCatalogName(right)
-
-  return Boolean(normalizedLeft && normalizedRight) && (
-    normalizedLeft === normalizedRight ||
-    normalizedLeft.includes(normalizedRight) ||
-    normalizedRight.includes(normalizedLeft)
-  )
-}
-
-function normalizeIdArray(value: unknown, prefix: string): string[] {
-  return parseMaybeJsonArray(value)
-    .map(item => isRecord(item) ? item.id ?? item.item_id ?? item.service_id : item)
-    .map(item => String(item ?? "").trim())
-    .filter(Boolean)
-    .map(id => id.includes("-") ? id : `${prefix}${id}`)
-}
-
 function getAmount(record: unknown, keys: string[]): number | null {
   if (!isRecord(record)) return null
 
@@ -701,6 +828,20 @@ function getConsumedServicesJson(value?: {
   return value?.consumed_services_json?.trim() || value?.consumedServicesJson?.trim() || null
 }
 
+function getConsumedServicesPayload(value?: AnyRecord | null): unknown {
+  if (!value) return null
+
+  return (
+    value.consumed_services_json ||
+    value.consumedServicesJson ||
+    value.consumed_services ||
+    value.consumedServices ||
+    value.availed_services ||
+    value.availedServices ||
+    null
+  )
+}
+
 function getQuantity(item: InvoiceLineNode): number {
   const quantity = Math.floor(Number(item.quantity ?? 1))
   return Number.isFinite(quantity) && quantity > 0 ? quantity : 1
@@ -709,20 +850,29 @@ function getQuantity(item: InvoiceLineNode): number {
 function isPackageLine(item: InvoiceLineNode): boolean {
   const type = String(item.type ?? "").trim().toLowerCase()
   const id = String(item.id ?? "").trim().toLowerCase()
-  return type === "package" || type === "package-service" || type === "package_service" || id.startsWith("package-")
+
+  return (
+    type === "package" ||
+    type === "package-service" ||
+    type === "package_service" ||
+    id.startsWith("package-")
+  )
 }
 
 function isBundleLine(item: InvoiceLineNode): boolean {
   const type = String(item.type ?? "").trim().toLowerCase()
   const id = String(item.id ?? "").trim().toLowerCase()
   const hasPayloadChildren = getPayloadChildren(item).length > 0
-  return type === "bundle"
-    || type === "service-bundle"
-    || type === "service_bundle"
-    || id.startsWith("bundle-")
-    || id.startsWith("package-bundle-")
-    || id.startsWith("service-bundle-")
-    || (hasPayloadChildren && Boolean(getBundleRecord(item)))
+
+  return (
+    type === "bundle" ||
+    type === "service-bundle" ||
+    type === "service_bundle" ||
+    id.startsWith("bundle-") ||
+    id.startsWith("package-bundle-") ||
+    id.startsWith("service-bundle-") ||
+    hasPayloadChildren
+  )
 }
 
 function normalizeBundleLookupId(value: unknown): string {
@@ -731,38 +881,100 @@ function normalizeBundleLookupId(value: unknown): string {
     .replace(/^(?:bundle-|package-bundle-|service-bundle-|lgu-)/i, "")
 }
 
-function getBundleRecord(item: InvoiceLineNode): LocalBundle | undefined {
-  const rawId = String(item.id ?? "").trim()
-  const normalizedId = normalizeBundleLookupId(rawId)
-  const itemName = getServiceName(item)
+function getBundleDisplayName(item: InvoiceLineNode): string {
+  return stripPackageSessionSuffix(getServiceName(item))
+}
 
-  return localBundles.value.find(bundle =>
-    bundle.id === rawId ||
-    bundle.id === normalizedId ||
-    `bundle-${bundle.id}` === rawId ||
-    `package-bundle-${bundle.id}` === rawId ||
-    `lgu-${bundle.id}` === rawId ||
-    catalogNamesMatch(bundle.name, itemName)
+function normalizeLguStatusText(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_")
+}
+
+function isDropoutStatusText(value: unknown): boolean {
+  const status = normalizeLguStatusText(value)
+
+  return (
+    status === "DROPPED_OUT" ||
+    status === "DROP_OUT" ||
+    status === "CROSS_MONTH_DROPPED_OUT" ||
+    status === "CROSS_MONTH_DROP_OUT" ||
+    status.includes("DROPOUT") ||
+    status.includes("DROP_OUT")
   )
 }
 
-function getBundleDisplayName(item: InvoiceLineNode): string {
-  const bundle = getBundleRecord(item)
-  return stripPackageSessionSuffix(bundle?.name || getServiceName(item))
+function shouldUseDropoutRate(item?: InvoiceLineNode): boolean {
+  return [
+    item?.status,
+    item?.lgu_status,
+    item?.lguStatus,
+    item?.patient_program_status,
+    item?.patientProgramStatus,
+    item?.program_status,
+    item?.programStatus,
+    item?.pricing_source,
+    item?.pricingSource,
+    item?.pricing_tier,
+    item?.pricingTier,
+    getBillingText("lgu_patient_program_status"),
+    getBillingText("patient_program_status"),
+    getBillingText("dropout_status"),
+    getBillingText("pricing_source"),
+    getBillingText("pricing_tier"),
+    getDetailText("dropout_status"),
+    patientProgramStatus.value
+  ].some(isDropoutStatusText)
 }
 
-
-function getCatalogServiceName(id: string): string | undefined {
-  return localServices.value.find(service => service.id === id)?.name
+function getPositiveAmount(record: unknown, keys: string[]): number | null {
+  const amount = getAmount(record, keys)
+  return amount !== null && amount > 0 ? amount : null
 }
 
+function getPositiveAmountFromChildren(item: InvoiceLineNode, keys: string[]): number | null {
+  const children = getPayloadChildren(item)
+
+  for (const child of children) {
+    const childAmount = getPositiveAmount(child, keys)
+    if (childAmount !== null) return childAmount
+  }
+
+  return null
+}
+
+function getBillingFallbackTotal(): number {
+  const total = Number(billingDetail.value?.total_amount ?? billingDetail.value?.amount_due ?? 0)
+  return Number.isFinite(total) && total > 0 ? total : 0
+}
+
+function getLguStatusUnitPrice(item: InvoiceLineNode): number {
+  const useDropoutRate = shouldUseDropoutRate(item)
+  const primaryKeys = useDropoutRate ? DROPOUT_PRICE_KEYS : CONTRACT_PRICE_KEYS
+  const secondaryKeys = useDropoutRate ? CONTRACT_PRICE_KEYS : DROPOUT_PRICE_KEYS
+
+  return (
+    getPositiveAmount(item, primaryKeys) ??
+    getPositiveAmountFromChildren(item, primaryKeys) ??
+    getPositiveAmount(item, secondaryKeys) ??
+    getPositiveAmountFromChildren(item, secondaryKeys) ??
+    getPositiveAmount(item, PRICE_FALLBACK_KEYS) ??
+    getPositiveAmountFromChildren(item, PRICE_FALLBACK_KEYS) ??
+    0
+  )
+}
 
 function getBundleContractPrice(item: InvoiceLineNode): number {
-  const direct = getAmount(item, CONTRACT_PRICE_KEYS)
-  if (direct !== null) return direct
+  const price = getLguStatusUnitPrice(item)
 
-  const bundle = getBundleRecord(item)
-  return Number.isFinite(bundle?.lguContractPrice) ? Number(bundle?.lguContractPrice ?? 0) : 0
+  if (price > 0) return price
+
+  return getBillingFallbackTotal()
+}
+
+function getLineUnitPrice(item: InvoiceLineNode): number {
+  return getLguStatusUnitPrice(item)
 }
 
 function dedupeInvoiceChildren(items: InvoiceLineNode[]): InvoiceLineNode[] {
@@ -770,11 +982,12 @@ function dedupeInvoiceChildren(items: InvoiceLineNode[]): InvoiceLineNode[] {
   const output: InvoiceLineNode[] = []
 
   for (const item of items) {
-const name = normalizeCatalogName(getServiceName(item))
+    const name = normalizeCatalogName(getServiceName(item))
     const id = String(item.id ?? "").trim().toLowerCase()
     const key = id || name
 
     if (!key || seen.has(key)) continue
+
     seen.add(key)
     output.push(item)
   }
@@ -783,23 +996,7 @@ const name = normalizeCatalogName(getServiceName(item))
 }
 
 function getBundleChildren(item: InvoiceLineNode): InvoiceLineNode[] {
-  const payloadChildren = getPayloadChildren(item)
-  const bundle = getBundleRecord(item)
-
-  const catalogChildren = bundle
-    ? [
-        ...bundle.machineIds,
-        ...bundle.techniqueIds,
-        ...bundle.evaluationIds,
-        ...bundle.addOnIds
-      ].flatMap(id => {
-        const service = localServices.value.find(service => service.id === id)
-        return service?.name ? [{ id, name: service.name }] : []
-      })
-    : []
-
-  // Prefer the service list from the bundle table, but keep payload children as fallback/extra safety.
-  return dedupeInvoiceChildren([...catalogChildren, ...payloadChildren])
+  return dedupeInvoiceChildren(getPayloadChildren(item))
 }
 
 function getLineStartSession(item: InvoiceLineNode): number {
@@ -828,6 +1025,7 @@ function filterLinesForSession(
     const isAllocatedToSession =
       sessionSequence >= startSession &&
       sessionSequence < startSession + occurrences
+
     const children = getBundleChildren(item)
 
     if (children.length) {
@@ -866,7 +1064,14 @@ function getSelectedSessionLabel(lineItems: InvoiceLineNode[]): string {
 }
 
 function getAppointmentDate(): string {
-  return selectedAppointmentDate.value || billingDetail.value?.created_at || ""
+  return (
+    selectedAppointmentDate.value ||
+    getBillingText("appointment_date") ||
+    getBillingText("appointment_starts_at") ||
+    getBillingText("starts_at") ||
+    billingDetail.value?.created_at ||
+    ""
+  )
 }
 
 function getPackagePayloadChildren(item: InvoiceLineNode): InvoiceLineNode[] {
@@ -883,19 +1088,19 @@ function getPackageBundleMetadataLines(item: InvoiceLineNode): InvoiceLineNode[]
     const rawId = isRecord(entry)
       ? entry.id ?? entry.bundle_id ?? entry.bundleId ?? entry.bundle_template_id ?? entry.bundleTemplateId
       : entry
+
     const bundleId = normalizeBundleLookupId(rawId)
     if (!bundleId) return []
 
-    const catalogBundle = localBundles.value.find(bundle => bundle.id === bundleId)
     const name = isRecord(entry)
-      ? String(entry.name ?? entry.bundle_name ?? entry.bundleName ?? catalogBundle?.name ?? "").trim()
-      : catalogBundle?.name ?? ""
+      ? String(entry.name ?? entry.bundle_name ?? entry.bundleName ?? "").trim()
+      : ""
 
     return [{
       ...(isRecord(entry) ? entry : {}),
       id: `bundle-${bundleId}`,
       type: "bundle",
-      name: name || catalogBundle?.name || `Bundle ${bundleId}`,
+      name: name || `Bundle ${bundleId}`,
       quantity: 1
     }]
   })
@@ -919,11 +1124,21 @@ function getPrintablePackageChildren(lineItems: InvoiceLineNode[]): InvoiceLineN
   })
 }
 
+function sortBundleLinesFirst(items: InvoiceLineNode[]): InvoiceLineNode[] {
+  const bundleLines = items.filter(isBundleLine)
+  const otherLines = items.filter(item => !isBundleLine(item))
+
+  return [
+    ...bundleLines,
+    ...otherLines
+  ]
+}
+
 function buildSelectedAppointmentRowsFromBillingLines(lineItems: InvoiceLineNode[]): TableRow[] {
   const appointmentDate = getAppointmentDate()
   const sessionSequence = selectedAppointmentSessionSequences.value[0] || Number(billingDetail.value?.session_sequence ?? 1)
   const fallbackSessionLabel = getSelectedSessionLabel(lineItems)
-  const packageChildren = getPrintablePackageChildren(lineItems)
+  const packageChildren = sortBundleLinesFirst(getPrintablePackageChildren(lineItems))
   const hasPackageSource = lineItems.some(isPackageLine)
   const rows: TableRow[] = []
 
@@ -937,6 +1152,7 @@ function buildSelectedAppointmentRowsFromBillingLines(lineItems: InvoiceLineNode
     ).trim()
 
     if (totalOccurrences > 1) return `${occurrence} of ${totalOccurrences}`
+
     return explicit || fallbackSessionLabel
   }
 
@@ -947,15 +1163,13 @@ function buildSelectedAppointmentRowsFromBillingLines(lineItems: InvoiceLineNode
     occurrence = 1,
     totalOccurrences = 1
   ): void => {
-    const isFirstMainRow = rows.every(row => row.level && row.level > 0)
-
     rows.push({
       key: `main-${rows.length}-${serviceName}`,
-      itemNo: isFirstMainRow ? 1 : 0,
+      itemNo: nextItemNo(rows),
       treatmentDate: appointmentDate,
       serviceName,
       sessionSequence: item ? resolveLineSessionLabel(item, occurrence, totalOccurrences) : fallbackSessionLabel,
-      unitTotal: isFirstMainRow ? unitTotal : null,
+      unitTotal,
       level: 0,
       isParent: false
     })
@@ -963,10 +1177,11 @@ function buildSelectedAppointmentRowsFromBillingLines(lineItems: InvoiceLineNode
 
   for (const item of packageChildren) {
     if (isBundleLine(item)) {
-      const contractPrice = getBundleContractPrice(item)
-      addMainRow(getBundleDisplayName(item), contractPrice)
+      const bundlePrice = getBundleContractPrice(item)
+      addMainRow(getBundleDisplayName(item), bundlePrice, item)
 
       const bundleChildren = filterLinesForSession(getBundleChildren(item), sessionSequence)
+
       for (const child of bundleChildren) {
         rows.push({
           key: `bundle-child-${rows.length}-${String(child.id ?? child.name ?? "item")}`,
@@ -984,8 +1199,15 @@ function buildSelectedAppointmentRowsFromBillingLines(lineItems: InvoiceLineNode
     }
 
     const quantity = hasPackageSource ? 1 : getQuantity(item)
+
     for (let occurrence = 1; occurrence <= quantity; occurrence += 1) {
-      addMainRow(stripPackageSessionSuffix(getServiceName(item)), null, item, occurrence, quantity)
+      addMainRow(
+        stripPackageSessionSuffix(getServiceName(item)),
+        getLineUnitPrice(item),
+        item,
+        occurrence,
+        quantity
+      )
     }
   }
 
@@ -994,15 +1216,36 @@ function buildSelectedAppointmentRowsFromBillingLines(lineItems: InvoiceLineNode
 
 function buildFallbackAppointmentRows(): TableRow[] {
   const appointment = selectedAppointment.value
-  if (!appointment) return []
+
+  if (appointment) {
+    return [{
+      key: `appointment-${appointment.appointment_id}`,
+      itemNo: 1,
+      treatmentDate: appointment.appointment_date || billingDetail.value?.created_at || "",
+      serviceName: appointment.package_name || "LGU appointment",
+      sessionSequence: getSelectedSessionLabel([]),
+      unitTotal: Number(billingDetail.value?.total_amount ?? billingDetail.value?.amount_due ?? 0),
+      level: 0,
+      isParent: false
+    }]
+  }
+
+  const billing = billingDetail.value
+  if (!billing) return []
+
+  const serviceName =
+    getBillingText("package_name") ||
+    getBillingText("service_name") ||
+    getBillingText("service_type") ||
+    "LGU billing"
 
   return [{
-    key: `appointment-${appointment.appointment_id}`,
+    key: `billing-fallback-${billing.id ?? "record"}`,
     itemNo: 1,
-    treatmentDate: appointment.appointment_date || billingDetail.value?.created_at || "",
-    serviceName: appointment.package_name || "LGU appointment",
+    treatmentDate: getAppointmentDate(),
+    serviceName: stripPackageSessionSuffix(serviceName),
     sessionSequence: getSelectedSessionLabel([]),
-    unitTotal: Number(billingDetail.value?.total_amount ?? billingDetail.value?.amount_due ?? 0),
+    unitTotal: Number(billing.total_amount ?? billing.amount_due ?? 0),
     level: 0,
     isParent: false
   }]
@@ -1041,91 +1284,55 @@ function mergeClaimBillingJson(
   }
 }
 
-async function loadLguInvoiceCatalog(): Promise<void> {
-  if (catalogLoaded.value) return
+function printableDocumentToBillingDetail(document: PrintableBillingDocument): BillingListItem {
+  const appointment = (document.appointment ?? {}) as AnyRecord
+  const sponsor = (document.sponsor ?? {}) as AnyRecord
+  const creditAccount = (document.credit_account ?? {}) as AnyRecord
+  const sessionSequence = Number(appointment.session_sequence ?? 0)
+  const totalSessions = Number(appointment.total_sessions ?? 0)
 
-  const requestParams = { page: 1, size: 1000, name: "", status: "ALL" }
-
-  try {
-    const [
-      machineResponse,
-      techniqueResponse,
-      evaluationResponse,
-      addOnMachineResponse,
-      addOnTechniqueResponse,
-      addOnHomeServiceResponse,
-      bundleResponse,
-      globalMachineResponse,
-      globalTechniqueResponse,
-      globalEvaluationResponse,
-      globalAddOnMachineResponse,
-      globalAddOnTechniqueResponse,
-      globalAddOnHomeServiceResponse,
-      globalBundleResponse
-    ] = await Promise.all([
-      pamsAPI.get<{ content?: AnyRecord[] }>("/lgu-machines", { params: requestParams }),
-      pamsAPI.get<{ content?: AnyRecord[] }>("/lgu-techniques", { params: requestParams }),
-      pamsAPI.get<{ content?: AnyRecord[] }>("/lgu-evaluations", { params: requestParams }),
-      pamsAPI.get<{ content?: AnyRecord[] }>("/lgu-add-on-machines", { params: requestParams }),
-      pamsAPI.get<{ content?: AnyRecord[] }>("/lgu-add-on-techniques", { params: requestParams }),
-      pamsAPI.get<{ content?: AnyRecord[] }>("/lgu-add-on-home-services", { params: requestParams }),
-      pamsAPI.get<{ content?: AnyRecord[] }>("/lgu-service-bundles", { params: requestParams }),
-      pamsAPI.get<{ content?: AnyRecord[] }>("/machines", { params: requestParams }),
-      pamsAPI.get<{ content?: AnyRecord[] }>("/techniques", { params: requestParams }),
-      pamsAPI.get<{ content?: AnyRecord[] }>("/evaluations", { params: requestParams }),
-      pamsAPI.get<{ content?: AnyRecord[] }>("/add-on-machines", { params: requestParams }),
-      pamsAPI.get<{ content?: AnyRecord[] }>("/add-on-techniques", { params: requestParams }),
-      pamsAPI.get<{ content?: AnyRecord[] }>("/add-on-home-services", { params: requestParams }),
-      pamsAPI.get<{ content?: AnyRecord[] }>("/service-bundles", { params: requestParams })
-    ])
-
-    localServices.value = [
-      ...(machineResponse.data.content ?? []).map(item => ({ id: `machine-${item.id}`, name: String(item.name ?? "") })),
-      ...(techniqueResponse.data.content ?? []).map(item => ({ id: `technique-${item.id}`, name: String(item.name ?? "") })),
-      ...(evaluationResponse.data.content ?? []).map(item => ({ id: `evaluation-${item.id}`, name: String(item.name ?? "") })),
-      ...(addOnMachineResponse.data.content ?? []).map(item => ({ id: `add-on-machine-${item.id}`, name: String(item.name ?? item.machine_name ?? `Add-on Machine ${item.id}`) })),
-      ...(addOnTechniqueResponse.data.content ?? []).map(item => ({ id: `add-on-technique-${item.id}`, name: String(item.name ?? item.technique_name ?? `Add-on Technique ${item.id}`) })),
-      ...(addOnHomeServiceResponse.data.content ?? []).map(item => ({ id: `add-on-home-service-${item.id}`, name: String(item.name ?? item.label ?? `Home Service - ${item.start ?? ""} km`) })),
-      ...(globalMachineResponse.data.content ?? []).map(item => ({ id: `machine-${item.id}`, name: String(item.name ?? "") })),
-      ...(globalTechniqueResponse.data.content ?? []).map(item => ({ id: `technique-${item.id}`, name: String(item.name ?? "") })),
-      ...(globalEvaluationResponse.data.content ?? []).map(item => ({ id: `evaluation-${item.id}`, name: String(item.name ?? "") })),
-      ...(globalAddOnMachineResponse.data.content ?? []).map(item => ({ id: `add-on-machine-${item.id}`, name: String(item.name ?? item.machine_name ?? `Add-on Machine ${item.id}`) })),
-      ...(globalAddOnTechniqueResponse.data.content ?? []).map(item => ({ id: `add-on-technique-${item.id}`, name: String(item.name ?? item.technique_name ?? `Add-on Technique ${item.id}`) })),
-      ...(globalAddOnHomeServiceResponse.data.content ?? []).map(item => ({ id: `add-on-home-service-${item.id}`, name: String(item.name ?? item.label ?? `Home Service - ${item.start ?? ""} km`) }))
-    ].filter(service => service.id && service.name)
-
-localBundles.value = [
-  ...(bundleResponse.data.content ?? []),
-  ...(globalBundleResponse.data.content ?? [])
-]
-  .map(row => ({
-    id: String(row.id ?? ""),
-    name: String(row.name ?? ""),
-    lguContractPrice: Number(
-      row.lgu_contract_price ??
-      row.lguContractPrice ??
-      row.contract_price ??
-      row.contractPrice ??
-      row.bundled_price ??
-      row.price ??
-      0
-    ),
-    machineIds: normalizeIdArray(row.machine_ids ?? row.machine_ids_json, "machine-"),
-    techniqueIds: normalizeIdArray(row.technique_ids ?? row.technique_ids_json, "technique-"),
-    evaluationIds: normalizeIdArray(row.evaluation_ids ?? row.evaluation_ids_json, "evaluation-"),
-    addOnIds: [
-      ...normalizeIdArray(row.add_on_machine_ids ?? row.add_on_machine_ids_json, "add-on-machine-"),
-      ...normalizeIdArray(row.add_on_technique_ids ?? row.add_on_technique_ids_json, "add-on-technique-"),
-      ...normalizeIdArray(row.add_on_home_service_ids ?? row.add_on_home_service_ids_json, "add-on-home-service-")
-    ]
-  }))
-  .filter(bundle => bundle.id && bundle.name)
-  } catch {
-    localServices.value = []
-    localBundles.value = []
-  } finally {
-    catalogLoaded.value = true
-  }
+  return {
+    id: document.header.id,
+    public_id: document.header.document_number ?? `BD-${document.header.id}`,
+    created_at: document.header.document_date,
+    patient_id: document.patient.id,
+    patient_name: document.patient.name,
+    patient_age: document.patient.age == null ? undefined : String(document.patient.age),
+    patient_address: document.patient.address ?? undefined,
+    patient_gender: document.patient.gender ?? undefined,
+    appointment_id: appointment.id == null ? undefined : Number(appointment.id),
+    session_sequence: sessionSequence > 0 ? sessionSequence : undefined,
+    session_sequence_label: sessionSequence > 0 && totalSessions > 0 ? `${sessionSequence} of ${totalSessions}` : undefined,
+    total_sessions: totalSessions > 0 ? totalSessions : undefined,
+    billing_type: "LGU_BILLING",
+    service_type: document.header.document_type,
+    service_name: document.lines.find(line => Number(line.line_total ?? 0) > 0)?.service_name ?? document.header.document_type,
+    line_items_json: JSON.stringify(document.lines),
+    package_name: String(creditAccount.package_name ?? creditAccount.account_name ?? ""),
+    billing_status: document.header.document_status,
+    amount_due: document.totals.total,
+    amount_paid: document.totals.paid,
+    subtotal_amount: document.totals.subtotal,
+    discount_amount: document.totals.discount,
+    tax_amount: document.totals.tax,
+    total_amount: document.totals.total,
+    pricing_tier: document.header.pricing_mode ?? undefined,
+    pricing_source: document.header.pricing_source ?? undefined,
+    clinic_id: document.clinic?.id,
+    clinic_name: document.clinic?.name ?? undefined,
+    balance_amount: document.totals.balance,
+    physical_therapist: String(appointment.provider_name ?? ""),
+    physical_therapist_name: String(appointment.provider_name ?? ""),
+    doctor: String(appointment.referring_staff_name ?? ""),
+    doctor_name: String(appointment.referring_staff_name ?? ""),
+    diagnosis: String(appointment.diagnosis ?? ""),
+    lgu_program_name: String(sponsor.lgu_program_name ?? sponsor.lgu_company_name ?? ""),
+    lgu_reference_label: String(sponsor.lgu_referral_form_no ?? ""),
+    lgu_patient_referral_form_no: String(sponsor.lgu_referral_form_no ?? ""),
+    lgu_date_issued: String(sponsor.lgu_referral_issued_date ?? document.header.document_date),
+    lgu_patient_program_status: String(sponsor.lgu_status ?? ""),
+    sponsor_approval_code: String(sponsor.lgu_approval_code ?? "")
+  } as BillingListItem
 }
 
 async function load(): Promise<void> {
@@ -1133,6 +1340,7 @@ async function load(): Promise<void> {
   detail.value = null
   sponsorInfo.value = null
   billingDetail.value = null
+  printableDocument.value = null
 
   if (!patientId.value && !billingId.value) {
     error.value = "Patient ID is required."
@@ -1144,7 +1352,17 @@ async function load(): Promise<void> {
     let selectedPatientId = patientId.value
 
     if (billingId.value) {
-      selectedBilling = (await billingContextTanstackService.fetchContext(queryClient, billingId.value))?.billing ?? null
+      const printable = await appointmentBillingService
+        .getPrintableBillingDocument(billingId.value)
+        .catch(() => null)
+
+      if (printable) {
+        printableDocument.value = printable
+        selectedBilling = printableDocumentToBillingDetail(printable)
+      } else {
+        selectedBilling = (await billingContextTanstackService.fetchContext(queryClient, billingId.value))?.billing ?? null
+      }
+
       if (!selectedBilling) {
         error.value = "Billing record was not found."
         return
@@ -1158,19 +1376,19 @@ async function load(): Promise<void> {
     const periodMonth = transactionPeriodEndDate.value ? transactionPeriodEndDate.value.getMonth() + 1 : undefined
 
     const [detailResult, sponsorResult] = await Promise.all([
-      loadLguInvoiceCatalog().then(() => null),
       lguBillingService
         .getPatientCreditDetail(selectedPatientId, periodYear, periodMonth)
         .catch(() => null),
       patientTanstackService
         .fetchContext(queryClient, selectedPatientId)
         .catch(() => null)
-    ]).then(([_, detailResult, sponsorResult]) => [detailResult, sponsorResult] as const)
+    ])
 
     detail.value = detailResult ?? null
     sponsorInfo.value = (sponsorResult?.sponsor_information ?? []).find(item => item.sponsor_context === "LGU") ?? null
 
     const latestBilling = selectedBilling ?? detail.value?.billings?.[0]
+
     if (!billingDetail.value && latestBilling?.id) {
       billingDetail.value = (await billingContextTanstackService.fetchContext(queryClient, latestBilling.id))?.billing ?? null
     }
@@ -1192,28 +1410,6 @@ onMounted(() => {
     }
   })
 })
-
-const getBundleIncludedServices = (bundle: InvoiceLineNode): InvoiceLineNode[] => {
-  const payloadChildren = getPayloadChildren(bundle)
-  if (payloadChildren.length) return payloadChildren
-
-  const bundleId = normalizeBundleLookupId(bundle.id)
-  const catalogBundle = localBundles.value.find(item =>
-    item.id === bundleId || catalogNamesMatch(item.name, getServiceName(bundle))
-  )
-
-  if (!catalogBundle) return []
-
-  return [
-    ...(catalogBundle.machineIds ?? []),
-    ...(catalogBundle.techniqueIds ?? []),
-    ...(catalogBundle.evaluationIds ?? []),
-    ...(catalogBundle.addOnIds ?? [])
-  ].flatMap(id => {
-    const name = getCatalogServiceName(id)
-    return name ? [{ name }] : []
-  })
-}
 </script>
 
 <style scoped>

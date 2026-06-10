@@ -177,7 +177,9 @@
   v-model:visible="detailsVisible"
   :appointment="detailAppointment"
   :planned-services="detailPlannedServices"
+  :consumed-services="detailFlowSummary?.consumed_services ?? []"
   :billing-preparation="detailBillingPreparation"
+  :billing-document="detailFlowSummary?.billing_document ?? null"
   :format-date="formatDate"
   :format-time="formatTime"
   :format-payer="formatPayer"
@@ -570,8 +572,12 @@
       :appointment="activeAppointment"
       :attendance-items="attendanceItems"
       :is-saving="isSavingAttendance"
+      :is-dropping-out="isDroppingOut"
+      :can-drop-out-lgu="canDropOutActiveAppointment"
+      :dropout-status="activeAppointment?.dropout_status ?? null"
       :format-date="formatDate"
       :format-time="formatTime"
+      @drop-out="dropOutActiveAppointment"
       @save="saveAttendance"
     />
   </main>
@@ -609,7 +615,8 @@ import {
   type AppointmentPhase,
   type AppointmentServiceSelectionType,
   type AppointmentCreatePayload,
-  type AppointmentSessionSchedulePayload
+  type AppointmentSessionSchedulePayload,
+  type AppointmentFlowSummary
 } from "@/features/appointments/api/appointment-phase1.service"
 import { clinicService } from "@/features/clinics/api/clinic.service"
 import { patientService } from "@/features/patients/api/patient.service"
@@ -625,7 +632,20 @@ import { errorToast, successToast } from "@/utils/toast.util"
 type SelectOption = { label: string; value: number | string | null }
 type PayerType = "SELF_PAY_SINGLE" | "SELF_PAY_PACKAGE" | "HMO" | "LGU"
 type Laterality = "LEFT" | "RIGHT" | "BOTH" | "BILATERAL" | "NA"
-type ServiceOption = { label: string; value: number; price: number; type: AppointmentServiceSelectionType }
+type IncludedServicePreview = {
+  name: string
+  quantity: number
+  type?: string
+}
+
+type ServiceOption = {
+  label: string
+  value: number
+  price: number
+  type: AppointmentServiceSelectionType
+  inheritedQuantity: number
+  includedServices: IncludedServicePreview[]
+}
 type ClinicSelectOption = SelectOption & { startDay: number; endDay: number; startTime: string; endTime: string }
 type PatientSelectOption = SelectOption & { clinicId: number | null }
 type SelectedService = ServiceOption & { name: string; quantity: number; typeLabel: string }
@@ -680,6 +700,7 @@ const isAvailabilityLoading = ref(false)
 const isSaving = ref(false)
 const isSavingServices = ref(false)
 const isSavingAttendance = ref(false)
+const isDroppingOut = ref(false)
 const isBillingActionLoading = ref(false)
 const isTenderSaving = ref(false)
 const isPaymentMethodsLoading = ref(false)
@@ -721,6 +742,7 @@ const serviceCatalog = ref<Record<AppointmentServiceSelectionType, ServiceOption
 })
 
 const selectedServices = ref<SelectedService[]>([])
+const detailFlowSummary = ref<AppointmentFlowSummary | null>(null)
 const detailPlannedServices = ref<AppointmentPlannedService[]>([])
 const detailBillingPreparation = ref<AppointmentBillingPreparation | null>(null)
 const tenderBillingDocument = ref<AppointmentBillingDocument | null>(null)
@@ -1022,6 +1044,18 @@ const canManageAppointmentBilling = computed(() =>
   canUseAppointmentPermission("Appointment::MANAGE_BILL", "Patient::MANAGE_BILLS")
 )
 
+const canDropOutActiveAppointment = computed(() => {
+  const appointment = activeAppointment.value
+  const summary = detailFlowSummary.value
+  if (!appointment) return false
+  const status = String(appointment.dropout_status ?? "").toUpperCase()
+  return appointment.payer_type === "LGU"
+    && canManageAppointmentBilling.value
+    && status !== "DROPPED_OUT"
+    && summary?.appointment.id === appointment.id
+    && !summary.billing_document
+})
+
 const toDateParam = (date: Date | null): string | undefined => {
   if (!date) return undefined
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
@@ -1209,10 +1243,68 @@ const getDefaultAppointmentEnd = (start: Date): Date =>
 const isWithinOneMinute = (left: Date, right: Date): boolean =>
   Math.abs(left.getTime() - right.getTime()) < 60 * 1000
 
+const getDayNumber = (date: Date): number => {
+  const day = date.getDay()
+  return day === 0 ? 7 : day
+}
+
+const isClinicOpenOnDate = (date: Date): boolean => {
+  const schedule = selectedClinicSchedule.value
+  if (!schedule) return true
+
+  const day = getDayNumber(date)
+  const startDay = Number(schedule.startDay)
+  const endDay = Number(schedule.endDay)
+
+  if (!Number.isFinite(startDay) || !Number.isFinite(endDay)) return true
+  if (startDay <= endDay) return day >= startDay && day <= endDay
+
+  return day >= startDay || day <= endDay
+}
+
+const moveToNextClinicOpenDate = (date: Date): Date => {
+  const next = new Date(date)
+
+  for (let attempt = 0; attempt < 14; attempt += 1) {
+    if (isClinicOpenOnDate(next)) return next
+    next.setDate(next.getDate() + 1)
+  }
+
+  return next
+}
+
+const copyTime = (targetDate: Date, sourceTime: Date): Date => {
+  const result = new Date(targetDate)
+  result.setHours(
+    sourceTime.getHours(),
+    sourceTime.getMinutes(),
+    sourceTime.getSeconds(),
+    sourceTime.getMilliseconds()
+  )
+  return result
+}
+
+const serviceSessionQuantity = (service: SelectedService): number => {
+  const inherited = Number(service.inheritedQuantity ?? 0)
+  const selected = Number(service.quantity ?? 0)
+  const includedMax = Math.max(
+    0,
+    ...(service.includedServices ?? []).map(item => Number(item.quantity ?? 0))
+  )
+
+  return Math.max(1, inherited, selected, includedMax)
+}
+
+const servicePayloadQuantity = (service: SelectedService): number =>
+  service.type === "PACKAGE" ? 1 : Math.max(1, Number(service.quantity ?? 1))
+
 const fallbackSessionCountFromSelectedServices = (): number => {
-  const packageOrBundle = selectedServices.value.find(service => service.type === "PACKAGE" || service.type === "BUNDLE")
-  if (packageOrBundle) return Math.max(1, Number(packageOrBundle.quantity ?? 1))
-  return Math.max(1, ...selectedServices.value.map(service => Number(service.quantity ?? 1)))
+  const packageOrBundleServices = selectedServices.value.filter(service => service.type === "PACKAGE" || service.type === "BUNDLE")
+  if (packageOrBundleServices.length) {
+    return Math.max(1, ...packageOrBundleServices.map(serviceSessionQuantity))
+  }
+
+  return Math.max(1, ...selectedServices.value.map(serviceSessionQuantity))
 }
 
 const estimateSessionCountFromSelectedServices = (): number =>
@@ -1231,7 +1323,7 @@ const refreshSessionPreview = async (): Promise<void> => {
       services: selectedServices.value.map(service => ({
         type: service.type,
         id: service.value,
-        quantity: service.quantity
+        quantity: servicePayloadQuantity(service)
       }))
     })
     sessionCountPreview.value = Math.max(1, Number(preview.total_sessions ?? 1))
@@ -1246,14 +1338,24 @@ const syncSessionDateCountFromSelectedServices = (): void => {
   const targetCount = estimateSessionCountFromSelectedServices()
   if (!form.starts_at) return
 
-  const current = form.session_dates.slice(0, targetCount)
+  const durationMs = getAppointmentDurationMs()
+  const firstStart = copyTime(moveToNextClinicOpenDate(new Date(form.starts_at)), form.starts_at)
+  const current = form.session_dates
+    .slice(0, targetCount)
+    .map(date => copyTime(moveToNextClinicOpenDate(new Date(date)), form.starts_at as Date))
+
+  if (!current.length) current.push(firstStart)
+
   while (current.length < targetCount) {
-    const next = new Date(form.starts_at)
-    next.setDate(next.getDate() + current.length * 7)
-    current.push(next)
+    const previous = current[current.length - 1]
+    const next = new Date(previous)
+    next.setDate(next.getDate() + 7)
+    current.push(copyTime(moveToNextClinicOpenDate(next), form.starts_at))
   }
 
   form.session_dates = current
+  form.starts_at = new Date(form.session_dates[0])
+  form.ends_at = new Date(form.starts_at.getTime() + durationMs)
 }
 
 const generateSessionDates = (mode: "DAILY" | "EVERY_OTHER_DAY" | "WEEKLY"): void => {
@@ -1263,13 +1365,20 @@ const generateSessionDates = (mode: "DAILY" | "EVERY_OTHER_DAY" | "WEEKLY"): voi
   }
 
   const count = estimateSessionCountFromSelectedServices()
+  const durationMs = getAppointmentDurationMs()
   const dayStep = mode === "DAILY" ? 1 : mode === "EVERY_OTHER_DAY" ? 2 : 7
+  const firstStart = copyTime(moveToNextClinicOpenDate(new Date(form.starts_at)), form.starts_at)
 
   form.session_dates = Array.from({ length: count }, (_, index) => {
-    const date = new Date(form.starts_at as Date)
+    if (index === 0) return firstStart
+
+    const date = new Date(firstStart)
     date.setDate(date.getDate() + index * dayStep)
-    return date
+    return copyTime(moveToNextClinicOpenDate(date), form.starts_at as Date)
   })
+
+  form.starts_at = new Date(form.session_dates[0])
+  form.ends_at = new Date(form.starts_at.getTime() + durationMs)
 }
 
 const buildSessionSchedules = (): AppointmentSessionSchedulePayload[] => {
@@ -1315,7 +1424,7 @@ const buildAppointmentPayload = (date: Date): AppointmentCreatePayload => {
     services: selectedServices.value.map(service => ({
       type: service.type,
       id: service.value,
-      quantity: service.quantity
+      quantity: servicePayloadQuantity(service)
     })),
     session_schedules: buildSessionSchedules()
   }
@@ -1412,18 +1521,142 @@ const loadLookups = async (): Promise<void> => {
   await loadServiceCatalog()
 }
 
+const numberFromKeys = (row: Record<string, unknown>, keys: string[]): number => {
+  for (const key of keys) {
+    const value = Number(row[key])
+    if (Number.isFinite(value) && value > 0) return value
+  }
+
+  return 0
+}
+
+const recordFromUnknown = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null
+
+const arrayFromUnknown = (value: unknown): Array<Record<string, unknown>> =>
+  Array.isArray(value) ? value.map(recordFromUnknown).filter(Boolean) as Array<Record<string, unknown>> : []
+
+const serviceNameFromRow = (row: Record<string, unknown>, fallback = "Included service"): string => {
+  const direct = row.name
+    ?? row.service_name
+    ?? row.machine_name
+    ?? row.technique_name
+    ?? row.evaluation_name
+    ?? row.add_on_name
+    ?? row.package_name
+    ?? row.bundle_name
+
+  if (direct) return String(direct)
+
+  for (const key of ["service", "machine", "technique", "evaluation", "item", "credit_item"]) {
+    const nested = recordFromUnknown(row[key])
+    if (nested) return serviceNameFromRow(nested, fallback)
+  }
+
+  return fallback
+}
+
+const serviceTypeFromRow = (row: Record<string, unknown>): string | undefined => {
+  const value = row.type ?? row.service_type ?? row.selection_type ?? row.item_type ?? row.category
+  return value ? String(value) : undefined
+}
+
+const includedQuantityFromRow = (row: Record<string, unknown>): number =>
+  Math.max(
+    1,
+    numberFromKeys(row, [
+      "quantity",
+      "qty",
+      "sessions",
+      "session_count",
+      "number_of_sessions",
+      "service_quantity",
+      "included_quantity",
+      "total_sessions"
+    ])
+  )
+
+const extractIncludedServices = (row: Record<string, unknown>): IncludedServicePreview[] => {
+  const includedKeys = [
+    "included_services",
+    "includedServices",
+    "services",
+    "items",
+    "bundle_items",
+    "bundleItems",
+    "session_items",
+    "sessionItems",
+    "invoice_sub_items",
+    "invoiceSubItems",
+    "package_items",
+    "packageItems",
+    "package_services",
+    "packageServices",
+    "service_items",
+    "serviceItems",
+    "children",
+    "inclusions"
+  ]
+
+  const includedRows = includedKeys.flatMap(key => arrayFromUnknown(row[key]))
+
+  return includedRows
+    .map(item => ({
+      name: serviceNameFromRow(item),
+      quantity: includedQuantityFromRow(item),
+      type: serviceTypeFromRow(item)
+    }))
+    .filter(item => item.name.trim().length > 0)
+}
+
+const inheritedQuantityFromServiceRow = (
+  row: Record<string, unknown>,
+  type: AppointmentServiceSelectionType,
+  includedServices: IncludedServicePreview[]
+): number => {
+  const explicitQuantity = numberFromKeys(row, [
+    "total_sessions",
+    "sessions",
+    "session_count",
+    "number_of_sessions",
+    "bundle_qty",
+    "bundleQty",
+    "session_qty",
+    "sessionQty",
+    "quantity",
+    "qty",
+    "service_quantity",
+    "package_quantity",
+    "bundle_quantity"
+  ])
+
+  const includedMax = Math.max(0, ...includedServices.map(item => Number(item.quantity ?? 0)))
+
+  if (type === "PACKAGE" || type === "BUNDLE") {
+    return Math.max(1, explicitQuantity, includedMax)
+  }
+
+  return Math.max(1, explicitQuantity || 1)
+}
+
 const normalizeServiceRows = (
   rows: Array<Record<string, unknown>>,
   type: AppointmentServiceSelectionType,
   priceKeys: string[]
 ): ServiceOption[] =>
   rows
-    .map(row => ({
-      label: String(row.name ?? row.machine_name ?? row.technique_name ?? `Service ${row.id}`),
-      value: Number(row.id),
-      price: Number(priceKeys.map(key => row[key]).find(value => value !== undefined && value !== null) ?? 0),
-      type
-    }))
+    .map(row => {
+      const includedServices = extractIncludedServices(row)
+
+      return {
+        label: serviceNameFromRow(row, `Service ${row.id}`),
+        value: Number(row.id),
+        price: Number(priceKeys.map(key => row[key]).find(value => value !== undefined && value !== null) ?? 0),
+        type,
+        inheritedQuantity: inheritedQuantityFromServiceRow(row, type, includedServices),
+        includedServices
+      }
+    })
     .filter(row => Number.isFinite(row.value) && row.value > 0)
 
 const loadCatalogPage = async (url: string): Promise<Array<Record<string, unknown>>> => {
@@ -1675,6 +1908,36 @@ const openEditDialog = (appointment: AppointmentListItem): void => {
   void loadAvailabilityAppointmentsForRange()
 }
 
+const applyAppointmentFlowSummary = (summary: AppointmentFlowSummary): void => {
+  detailFlowSummary.value = summary
+  detailAppointment.value = summary.appointment
+  activeAppointment.value = summary.appointment
+  detailPlannedServices.value = summary.planned_services ?? []
+  detailBillingPreparation.value = summary.billing_preparation as AppointmentBillingPreparation | null
+}
+
+const buildAttendanceItems = (planned: AppointmentPlannedService[]): AttendanceItem[] =>
+  planned.map(item => {
+    const appointmentConsumed = Math.max(0, Number(item.appointment_consumed_quantity ?? 0))
+    const remaining = Math.max(
+      0,
+      Number(item.remaining_quantity ?? (Number(item.planned_quantity ?? 0) - Number(item.consumed_quantity ?? 0)))
+    )
+    return {
+      ...item,
+      remaining,
+      appointmentConsumed,
+      selected: false,
+      quantity: remaining > 0 && appointmentConsumed <= 0 ? 1 : 0
+    }
+  })
+
+const loadAppointmentFlowSummary = async (appointmentId: number): Promise<AppointmentFlowSummary> => {
+  const summary = await appointmentPhase1Service.getFlowSummary(appointmentId)
+  applyAppointmentFlowSummary(summary)
+  return summary
+}
+
 const openDetailsDialog = async (appointment: AppointmentListItem): Promise<void> => {
   if (!canViewAppointmentDetails.value) {
     errorToast(toast, "You do not have permission to view appointment details")
@@ -1683,31 +1946,36 @@ const openDetailsDialog = async (appointment: AppointmentListItem): Promise<void
 
   detailAppointment.value = appointment
   activeAppointment.value = appointment
+  detailFlowSummary.value = null
   detailPlannedServices.value = []
   detailBillingPreparation.value = null
   detailsVisible.value = true
 
-  const plannedServicesPromise = appointmentPhase1Service
-    .getPlannedServices(appointment.id)
-    .then((plannedServices) => {
-      detailPlannedServices.value = plannedServices
-    })
-    .catch(() => {
-      detailPlannedServices.value = []
-    })
-
-  const billingPreparationPromise = canManageAppointmentBilling.value
-    ? appointmentBillingService
-      .getPreparation(appointment.id)
-      .then((preparation) => {
-        detailBillingPreparation.value = preparation
+  try {
+    await loadAppointmentFlowSummary(appointment.id)
+  } catch {
+    const plannedServicesPromise = appointmentPhase1Service
+      .getPlannedServices(appointment.id)
+      .then((plannedServices) => {
+        detailPlannedServices.value = plannedServices
       })
       .catch(() => {
-        detailBillingPreparation.value = null
+        detailPlannedServices.value = []
       })
-    : Promise.resolve()
 
-  await Promise.all([plannedServicesPromise, billingPreparationPromise])
+    const billingPreparationPromise = canManageAppointmentBilling.value
+      ? appointmentBillingService
+        .getPreparation(appointment.id)
+        .then((preparation) => {
+          detailBillingPreparation.value = preparation
+        })
+        .catch(() => {
+          detailBillingPreparation.value = null
+        })
+      : Promise.resolve()
+
+    await Promise.all([plannedServicesPromise, billingPreparationPromise])
+  }
 }
 
 const editFromDetails = (): void => {
@@ -1729,9 +1997,13 @@ const refreshDetailBillingPreparation = async (): Promise<void> => {
   if (!detailAppointment.value || !canManageAppointmentBilling.value) return
 
   try {
-    detailBillingPreparation.value = await appointmentBillingService.getPreparation(detailAppointment.value.id)
+    await loadAppointmentFlowSummary(detailAppointment.value.id)
   } catch {
-    detailBillingPreparation.value = null
+    try {
+      detailBillingPreparation.value = await appointmentBillingService.getPreparation(detailAppointment.value.id)
+    } catch {
+      detailBillingPreparation.value = null
+    }
   }
 }
 
@@ -2034,7 +2306,7 @@ const savePlannedServicesForAppointment = async (appointmentId: number, payerTyp
     services: selectedServices.value.map(service => ({
       type: service.type,
       id: service.value,
-      quantity: service.quantity
+      quantity: servicePayloadQuantity(service)
     }))
   })
 
@@ -2110,6 +2382,20 @@ const removeDisallowedSelectedServices = (billingType: PayerType | null): void =
   selectedServices.value = selectedServices.value.filter(service => allowed.has(service.type))
 }
 
+const getSelectedServiceQuantity = (selected: ServiceOption): number => {
+  const requestedQuantity = Math.max(1, Number(servicePicker.quantity ?? 1))
+
+  if (selected.type === "PACKAGE") {
+    return 1
+  }
+
+  if (selected.type === "BUNDLE") {
+    return Math.max(1, Number(selected.inheritedQuantity ?? 1), requestedQuantity)
+  }
+
+  return requestedQuantity
+}
+
 const addPickedService = (): void => {
   const allowedTypes = new Set(getAllowedServiceTypes(currentServiceBillingType.value))
   if (!allowedTypes.has(servicePicker.type)) {
@@ -2131,7 +2417,7 @@ const addPickedService = (): void => {
   selectedServices.value.push({
     ...selected,
     name: selected.label,
-    quantity: selected.type === "PACKAGE" ? 1 : Math.max(1, Number(servicePicker.quantity ?? 1)),
+    quantity: getSelectedServiceQuantity(selected),
     typeLabel: serviceTypeLabel(selected.type)
   })
 
@@ -2174,20 +2460,24 @@ const openAttendanceDialog = async (appointment: AppointmentListItem): Promise<v
   }
 
   activeAppointment.value = appointment
+  detailFlowSummary.value = null
   attendanceVisible.value = true
 
   try {
-    const planned = await appointmentPhase1Service.getPlannedServices(appointment.id)
+    const summary = await loadAppointmentFlowSummary(appointment.id)
+    const planned = summary.planned_services ?? []
     attendancePlannedServices.value = planned
-    attendanceItems.value = planned.map(item => {
-      const appointmentConsumed = Math.max(0, Number(item.appointment_consumed_quantity ?? 0))
-      const remaining = Math.max(0, Number(item.planned_quantity ?? 0) - Number(item.consumed_quantity ?? 0))
-      return { ...item, remaining, appointmentConsumed, selected: false, quantity: remaining > 0 && appointmentConsumed <= 0 ? 1 : 0 }
-    })
+    attendanceItems.value = buildAttendanceItems(planned)
   } catch {
-    attendancePlannedServices.value = []
-    attendanceItems.value = []
-    errorToast(toast, "Failed to load planned services")
+    try {
+      const planned = await appointmentPhase1Service.getPlannedServices(appointment.id)
+      attendancePlannedServices.value = planned
+      attendanceItems.value = buildAttendanceItems(planned)
+    } catch {
+      attendancePlannedServices.value = []
+      attendanceItems.value = []
+      errorToast(toast, "Failed to load planned services")
+    }
   }
 }
 
@@ -2224,6 +2514,31 @@ const saveAttendance = async (): Promise<void> => {
     errorToast(toast, message ? String(message) : "Failed to save attendance")
   } finally {
     isSavingAttendance.value = false
+  }
+}
+
+const dropOutActiveAppointment = async (reason: string): Promise<void> => {
+  if (!activeAppointment.value) return
+  if (!canDropOutActiveAppointment.value) {
+    errorToast(toast, "This LGU appointment cannot be marked as dropped out.")
+    return
+  }
+
+  try {
+    isDroppingOut.value = true
+    const summary = await appointmentPhase1Service.updateDropoutStatus(activeAppointment.value.id, {
+      dropout_status: "DROPPED_OUT",
+      reason
+    })
+    applyAppointmentFlowSummary(summary)
+    attendanceItems.value = buildAttendanceItems(summary.planned_services ?? [])
+    successToast(toast, "LGU patient marked as dropped out")
+    await refreshAppointmentViews()
+  } catch (error) {
+    const message = (error as any)?.response?.data?.message
+    errorToast(toast, message ? String(message) : "Failed to mark patient as dropped out")
+  } finally {
+    isDroppingOut.value = false
   }
 }
 
