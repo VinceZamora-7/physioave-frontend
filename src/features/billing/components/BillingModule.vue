@@ -3502,7 +3502,11 @@ const fetchBillings = async (): Promise<void> => {
     })
     billings.value = response?.content ?? []
     selectedBillingRows.value = []
-  } catch (e) { errorToast(toast, extractApiErrorMessage(e, "Could not load billings. Check filters and click Refresh.")) }
+  } catch (e) {
+    billings.value = []
+    selectedBillingRows.value = []
+    errorToast(toast, extractApiErrorMessage(e, "Could not load billings. Check filters and click Refresh."))
+  }
   finally { isLoading.value = false }
 }
 

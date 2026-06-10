@@ -617,6 +617,7 @@ import { ptPrimaryBtn } from "@/features/shared/table-header.styles"
 import { useAuthSessionStore } from "@/stores/auth-session.store"
 import { clinicStore } from "@/stores/clinic.store"
 import { pamsAPI } from "@/utils/axios-interceptor"
+import { errorHandler } from "@/utils/error-handler"
 import { Status } from "@/utils/global.type"
 import { errorToast, successToast } from "@/utils/toast.util"
 
@@ -1486,6 +1487,9 @@ const loadAppointments = async (): Promise<void> => {
     tableAppointmentSource.value = result.content
     refreshDisplayedAppointmentRows()
   } catch {
+    tableAppointmentSource.value = []
+    appointments.value = []
+    totalRecords.value = 0
     errorToast(toast, "Failed to load appointments")
   } finally {
     isLoading.value = false
@@ -1512,6 +1516,7 @@ const loadCalendarAppointmentsForRange = async (range?: CalendarVisibleRange): P
 
     calendarAppointments.value = result.content
   } catch {
+    calendarAppointments.value = []
     errorToast(toast, "Failed to load calendar appointments")
   } finally {
     isCalendarLoading.value = false
@@ -1950,6 +1955,11 @@ const saveAppointment = async (): Promise<void> => {
     return
   }
 
+  if (selectedServices.value.length && !form.payer_type) {
+    errorToast(toast, "Select a billing type before saving planned services.")
+    return
+  }
+
   try {
     isSaving.value = true
     await refreshSessionPreview()
@@ -1966,8 +1976,16 @@ const saveAppointment = async (): Promise<void> => {
 
     formVisible.value = false
     await refreshAppointmentViews()
-  } catch {
-    errorToast(toast, "Failed to save appointment")
+  } catch (error) {
+    let message = "Failed to save appointment"
+    try {
+      errorHandler(error)
+    } catch (handledError) {
+      if (handledError instanceof Error && handledError.message.trim()) {
+        message = handledError.message
+      }
+    }
+    errorToast(toast, message)
   } finally {
     isSaving.value = false
   }
