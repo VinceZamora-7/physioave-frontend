@@ -108,17 +108,17 @@
                 {{ row.isParent || !row.itemNo ? "" : row.itemNo }}
               </td>
 
-              <td class="text-right">
-                {{ row.isParent ? "" : row.treatmentDate ? formatDate(row.treatmentDate) : "-" }}
-              </td>
+<td class="text-right">
+  {{ Number(row.level ?? 0) > 0 ? "" : row.treatmentDate ? formatDate(row.treatmentDate) : "-" }}
+</td>
 
               <td class="text-left service-name-cell">
                 {{ stripPackageSessionSuffix(row.serviceName) || "-" }}
               </td>
 
-              <td class="text-center">
-                {{ row.isParent ? "" : row.sessionSequence || "-" }}
-              </td>
+<td class="text-center">
+  {{ Number(row.level ?? 0) > 0 ? "" : row.sessionSequence || "-" }}
+</td>
 
               <td class="text-right">
                 {{ row.isParent ? "" : formatUnitTotal(row.unitTotal) }}
@@ -484,7 +484,9 @@ const validityLabel = computed(() => {
 
 const billing = computed(() => {
   const savedTotal = Number(billingDetail.value?.total_amount ?? billingDetail.value?.amount_due ?? 0)
-  const rowTotal = invoiceRows.value.reduce((sum, row) => sum + Number(row.unitTotal ?? 0), 0)
+  const rowTotal = invoiceRows.value.reduce((sum, row) => {
+    return sum + (Number(row.level ?? 0) > 0 ? 0 : Number(row.unitTotal ?? 0))
+  }, 0)
   const total = savedTotal > 0 ? savedTotal : rowTotal
 
   return {
@@ -665,7 +667,7 @@ function formatCurrency(value?: number | null): string {
 function formatUnitTotal(value: number | null): string {
   if (value === null) return ""
   if (value > 0) return formatCurrency(value)
-  return "-"
+  return "FREE"
 }
 
 function nextItemNo(rows: TableRow[]): number {
@@ -1113,7 +1115,7 @@ function getPrintablePackageChildren(lineItems: InvoiceLineNode[]): InvoiceLineN
     const payloadChildren = getPackagePayloadChildren(item)
     const bundleLines = [
       ...payloadChildren.filter(isBundleLine),
-      ...getPackageBundleMetadataLines(item)
+      ...(payloadChildren.length ? [] : getPackageBundleMetadataLines(item))
     ]
     const individualLines = payloadChildren.filter(child => !isBundleLine(child))
 
@@ -1176,27 +1178,27 @@ function buildSelectedAppointmentRowsFromBillingLines(lineItems: InvoiceLineNode
   }
 
   for (const item of packageChildren) {
-    if (isBundleLine(item)) {
-      const bundlePrice = getBundleContractPrice(item)
-      addMainRow(getBundleDisplayName(item), bundlePrice, item)
+ if (isBundleLine(item)) {
+  const bundlePrice = getBundleContractPrice(item)
+  addMainRow(getBundleDisplayName(item), bundlePrice, item)
 
-      const bundleChildren = filterLinesForSession(getBundleChildren(item), sessionSequence)
+  const bundleChildren = getBundleChildren(item)
 
-      for (const child of bundleChildren) {
-        rows.push({
-          key: `bundle-child-${rows.length}-${String(child.id ?? child.name ?? "item")}`,
-          itemNo: 0,
-          treatmentDate: appointmentDate,
-          serviceName: `- ${stripPackageSessionSuffix(getServiceName(child))}`,
-          sessionSequence: fallbackSessionLabel,
-          unitTotal: null,
-          level: 1,
-          isParent: false
-        })
-      }
+  for (const child of bundleChildren) {
+    rows.push({
+      key: `bundle-child-${rows.length}-${String(child.id ?? child.name ?? "item")}`,
+      itemNo: 0,
+      treatmentDate: "",
+      serviceName: `- ${stripPackageSessionSuffix(getServiceName(child))}`,
+      sessionSequence: "",
+      unitTotal: null,
+      level: 1,
+      isParent: false
+    })
+  }
 
-      continue
-    }
+  continue
+}
 
     const quantity = hasPackageSource ? 1 : getQuantity(item)
 
@@ -1291,6 +1293,7 @@ function printableDocumentToBillingDetail(document: PrintableBillingDocument): B
   const sessionSequence = Number(appointment.session_sequence ?? 0)
   const totalSessions = Number(appointment.total_sessions ?? 0)
 
+
   return {
     id: document.header.id,
     public_id: document.header.document_number ?? `BD-${document.header.id}`,
@@ -1300,7 +1303,25 @@ function printableDocumentToBillingDetail(document: PrintableBillingDocument): B
     patient_age: document.patient.age == null ? undefined : String(document.patient.age),
     patient_address: document.patient.address ?? undefined,
     patient_gender: document.patient.gender ?? undefined,
-    appointment_id: appointment.id == null ? undefined : Number(appointment.id),
+
+    appointment_date: String(
+  appointment.appointment_date ??
+  appointment.appointmentDate ??
+  appointment.starts_at ??
+  appointment.startsAt ??
+  appointment.start_time ??
+  appointment.startTime ??
+  ""
+),
+appointment_starts_at: String(
+  appointment.starts_at ??
+  appointment.startsAt ??
+  appointment.start_time ??
+  appointment.startTime ??
+  appointment.appointment_date ??
+  appointment.appointmentDate ??
+  ""
+),
     session_sequence: sessionSequence > 0 ? sessionSequence : undefined,
     session_sequence_label: sessionSequence > 0 && totalSessions > 0 ? `${sessionSequence} of ${totalSessions}` : undefined,
     total_sessions: totalSessions > 0 ? totalSessions : undefined,
@@ -1332,6 +1353,7 @@ function printableDocumentToBillingDetail(document: PrintableBillingDocument): B
     lgu_date_issued: String(sponsor.lgu_referral_issued_date ?? document.header.document_date),
     lgu_patient_program_status: String(sponsor.lgu_status ?? ""),
     sponsor_approval_code: String(sponsor.lgu_approval_code ?? "")
+
   } as BillingListItem
 }
 
@@ -1447,6 +1469,14 @@ onMounted(() => {
 @media print {
   .patient-billing-summary-table .col-item-no {
     width: 9%;
+  }
+
+
+  .approval-wrap-hmo {
+display: flex;
+justify-content: space-between;
+align-items: center;
+width: 100%;
   }
 
   .patient-billing-summary-table .col-treatment-date {

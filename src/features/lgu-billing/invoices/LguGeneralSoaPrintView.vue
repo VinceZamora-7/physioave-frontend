@@ -100,11 +100,13 @@
                 </td>
 
                 <td class="text-center">
-                  {{ row.treatmentDate ? formatDate(row.treatmentDate) : " " }}
-                </td>
+  {{ shouldShowTreatmentDate(row) ? formatDate(row.treatmentDate) : " " }}
+</td>
 
                 <td class="service-name-cell">
-                  {{ row.level && row.level > 0 ? `- ${row.serviceName}` : row.serviceName || " " }}
+                  <span :style="{ paddingLeft: `${Number(row.level ?? 0) * 14}px` }">
+  {{ Number(row.level ?? 0) > 0 ? `- ${row.serviceName}` : row.serviceName || " " }}
+</span>
                 </td>
 
                 <td class="text-center">
@@ -213,6 +215,7 @@ type ServiceSoaRow = {
   serviceName: string
   sessionSequence: string
   price: number | null
+  billablePrice: number
   level?: number
 }
 
@@ -233,6 +236,7 @@ type PatientSoaContext = {
 type LocalService = {
   id: string
   name: string
+  price?: number | null
 }
 
 type LocalBundle = {
@@ -482,6 +486,44 @@ const payer = computed<Payer>(() => {
   return normalized === "hmo" ? "hmo" : "lgu"
 })
 
+const shouldShowTreatmentDate = (row: ServiceSoaRow): boolean => {
+  const currentIndex = rows.value.findIndex(item => item.key === row.key)
+
+  if (currentIndex <= 0 || !row.treatmentDate) {
+    return Boolean(row.treatmentDate)
+  }
+
+  const previousServiceRow = [...rows.value]
+    .slice(0, currentIndex)
+    .reverse()
+    .find((item): item is ServiceSoaRow => item.kind === "service")
+
+  if (!previousServiceRow) {
+    return true
+  }
+
+  const samePatient =
+    normalizeKey(previousServiceRow.patientName || getPreviousPatientName(currentIndex)) ===
+    normalizeKey(row.patientName || getPreviousPatientName(currentIndex))
+
+  const sameDate =
+    formatDate(previousServiceRow.treatmentDate) === formatDate(row.treatmentDate)
+
+  return !(samePatient && sameDate)
+}
+
+const getPreviousPatientName = (currentIndex: number): string => {
+  for (let index = currentIndex; index >= 0; index -= 1) {
+    const item = rows.value[index]
+
+    if (item?.kind === "service" && item.patientName) {
+      return item.patientName
+    }
+  }
+
+  return ""
+}
+
 const dateFrom = computed(() => String(route.query.from ?? "").trim())
 const dateTo = computed(() => String(route.query.to ?? "").trim())
 const programName = computed(() => String(route.query.program_name ?? "").trim())
@@ -532,7 +574,7 @@ const patientCount = computed(() =>
 
 const grandTotal = computed(() =>
   serviceRows.value.reduce((sum, row) => {
-    return sum + Number(row.price ?? 0)
+    return sum + Number(row.billablePrice ?? 0)
   }, 0)
 )
 
@@ -1004,6 +1046,132 @@ const parseMaybeJsonArray = (value: unknown): unknown[] => {
   }
 }
 
+const extractConsumedServiceLines = (item: unknown): InvoiceLineItem[] => {
+  const consumed = [
+    ...getChildArrayFromRecord(item, ["consumed_services", "consumedServices"]),
+    ...getJsonChildArrayFromRecord(item, ["consumed_services_json", "consumedServicesJson"])
+  ]
+
+  if (!consumed.length) return []
+
+  const output: InvoiceLineItem[] = []
+  const bundleGroups = new Map<string, InvoiceLineItem[]>()
+  const addedBundleNames = new Set<string>()
+
+  const addBundleRow = (bundleName: string, source: InvoiceLineItem): void => {
+    if (!bundleName || addedBundleNames.has(bundleName)) return
+
+    const bundlePrice =
+      getAmount(source, [
+        "line_total",
+        "lineTotal",
+        "total",
+        "total_amount",
+        "totalAmount",
+        "lgu_billable_parent_line_total",
+        "lguBillableParentLineTotal",
+        "lgu_billable_parent_unit_price",
+        "lguBillableParentUnitPrice",
+        "contract_unit_price_snapshot",
+        "contractUnitPriceSnapshot",
+        "parent_contract_unit_price_snapshot",
+        "parentContractUnitPriceSnapshot",
+        "lgu_contract_price",
+        "lguContractPrice",
+        "contract_price",
+        "contractPrice",
+        "unit_price",
+        "unitPrice",
+        "price"
+      ]) ?? 0
+
+    output.push(withPrintLevel({
+      type: "BUNDLE",
+      name: bundleName,
+      service_name: bundleName,
+      line_total: bundlePrice,
+      unit_price: bundlePrice,
+      price: bundlePrice
+    }, 0))
+
+    addedBundleNames.add(bundleName)
+  }
+
+  const walk = (lines: InvoiceLineItem[]): void => {
+    lines.forEach(line => {
+      if (isPackageLine(line)) {
+        walk(getChildren(line))
+        return
+      }
+
+      if (isBundleLine(line)) {
+        addBundleRow(getServiceName(line), line)
+        return
+      }
+
+      const bundleName = getText(line, ["bundle_name", "bundleName"])
+
+      if (bundleName) {
+        const group = bundleGroups.get(bundleName) ?? []
+        group.push(line)
+        bundleGroups.set(bundleName, group)
+        return
+      }
+
+      output.push(withPrintLevel(line, 0))
+    })
+  }
+
+  walk(consumed)
+
+const bundleRows: InvoiceLineItem[] = []
+const serviceRows: InvoiceLineItem[] = [...output]
+
+bundleGroups.forEach((children, bundleName) => {
+  const firstChild = children[0]
+
+  const bundlePrice =
+    getAmount(firstChild, [
+      "line_total",
+      "lineTotal",
+      "total",
+      "total_amount",
+      "totalAmount",
+      "lgu_billable_parent_line_total",
+      "lguBillableParentLineTotal",
+      "lgu_billable_parent_unit_price",
+      "lguBillableParentUnitPrice",
+      "contract_unit_price_snapshot",
+      "contractUnitPriceSnapshot",
+      "parent_contract_unit_price_snapshot",
+      "parentContractUnitPriceSnapshot",
+      "lgu_contract_price",
+      "lguContractPrice",
+      "contract_price",
+      "contractPrice",
+      "unit_price",
+      "unitPrice",
+      "price"
+    ]) ?? 0
+
+  bundleRows.push(
+    withPrintLevel({
+      type: "BUNDLE",
+      name: bundleName,
+      service_name: bundleName,
+      line_total: bundlePrice,
+      unit_price: bundlePrice,
+      price: bundlePrice
+    }, 0)
+  )
+})
+
+return [
+  ...bundleRows,
+  ...serviceRows
+]
+}
+
 const normalizeIdArray = (value: unknown, prefix: string): string[] =>
   parseMaybeJsonArray(value)
     .map(item => typeof item === "object" && item !== null
@@ -1064,7 +1232,12 @@ const getCatalogBundleChildren = (item: InvoiceLineItem): InvoiceLineItem[] => {
     ...bundle.addOnIds
   ].flatMap(id => {
     const service = localServices.value.find(service => service.id === id)
-    return service?.name ? [{ id, name: service.name, type: "included-service" }] : []
+    return service?.name ? [{
+      id,
+      name: service.name,
+      type: "included-service",
+      lgu_contract_price: service.price ?? undefined
+    }] : []
   })
 }
 
@@ -1115,7 +1288,7 @@ const getChildren = (item: InvoiceLineItem): InvoiceLineItem[] => {
   if (!isBundleLine(item)) return payloadChildren
 
   const catalogChildren = getCatalogBundleChildren(item)
-  return catalogChildren.length ? catalogChildren : payloadChildren
+  return payloadChildren.length ? payloadChildren : catalogChildren
 }
 
 const getArrayLineItems = (item: unknown): InvoiceLineItem[] => [
@@ -1153,18 +1326,54 @@ const withPrintLevel = (item: InvoiceLineItem, level: number): InvoiceLineItem =
 
 const getRenderableServiceLines = (item: InvoiceLineItem, level = 0): InvoiceLineItem[] => {
   const children = getChildren(item)
-  const childLevel = isBundleLine(item) ? level + 1 : level
-  const renderedChildren = children.flatMap(child => getRenderableServiceLines(child, childLevel))
 
   if (isPackageLine(item)) {
-    return renderedChildren
+    return children.flatMap(child =>
+      getRenderableServiceLines(child, level)
+    )
   }
+
+  const childLevel = isBundleLine(item) ? level + 1 : level
+
+  const renderedChildren = children.flatMap(child =>
+    getRenderableServiceLines(child, childLevel)
+  )
 
   if (isBundleLine(item) || hasRenderableServiceLine(item)) {
     return [withPrintLevel(item, level), ...renderedChildren]
   }
 
   return renderedChildren
+}
+
+const getLineStartSession = (item: InvoiceLineItem): number => {
+  const parsed = getAmount(item, [
+    "session_sequence",
+    "sessionSequence",
+    "session_no",
+    "sessionNo",
+    "session_number",
+    "sessionNumber",
+    "applies_on_session",
+    "appliesOnSession",
+    "start_session",
+    "startSession"
+  ])
+
+  return parsed && parsed > 0 ? Math.floor(parsed) : 1
+}
+
+const isLineCompletedOnSession = (
+  item: InvoiceLineItem,
+  completedSessionSequence: number
+): boolean => {
+  const quantity = getQuantity(item)
+  const startSession = getLineStartSession(item)
+
+  return (
+    completedSessionSequence >= startSession &&
+    completedSessionSequence < startSession + quantity
+  )
 }
 
 const dedupeServiceLines = (
@@ -1223,6 +1432,12 @@ const shouldUseDirectSoaServiceRow = (item: unknown): boolean => {
 }
 
 const extractIncludedServiceLines = (item: unknown): InvoiceLineItem[] => {
+  const consumedLines = extractConsumedServiceLines(item)
+
+  if (consumedLines.length) {
+    return dedupeServiceLines(consumedLines, item)
+  }
+
   const topLevelItems = getArrayLineItems(item)
 
   if (topLevelItems.length) {
@@ -1416,7 +1631,13 @@ const buildStatementRows = (
           const isDirectSoaServiceRow = lineItem === item
           const printLevel = Math.max(0, Math.floor(Number(lineItem.__printLevel ?? 0)))
           const isChildLine = printLevel > 0
-          const price = isChildLine ? null : getContractPrice(lineItem, item, !isDirectSoaServiceRow, isDropoutPatient)
+          if (isChildLine) {
+            return
+          }
+
+          const rawPrice = getContractPrice(lineItem, item, !isDirectSoaServiceRow, isDropoutPatient)
+          const price = isChildLine ? null : rawPrice
+          const billablePrice = isChildLine ? 0 : Number(rawPrice ?? 0)
           const configuredQuantity = isBundleLine(lineItem) ? 1 : getQuantity(lineItem)
           const quantity = isChildLine || isBundleLine(lineItem)
             ? 1
@@ -1430,8 +1651,15 @@ const buildStatementRows = (
           patientHasServiceRows = true
 
           for (let occurrence = 1; occurrence <= quantity; occurrence += 1) {
-            const completedSessionSequence = completedSessionSequences[occurrence - 1] ?? occurrence
-            patientTotal += Number(price ?? 0)
+            const completedSessionSequence =
+              completedSessionSequences[occurrence - 1] ?? occurrence
+
+            if (
+              !isBundleLine(lineItem) &&
+              !isLineCompletedOnSession(lineItem, completedSessionSequence)
+            ) {
+              return
+            }
 
             outputRows.push({
               kind: "service",
@@ -1455,8 +1683,11 @@ const buildStatementRows = (
                     configuredQuantity
                   ),
               price,
+              billablePrice,
               level: printLevel
             })
+
+            patientTotal += Number(billablePrice ?? 0)
 
             isFirstPatientRow = false
           }
@@ -1573,18 +1804,18 @@ const loadLguInvoiceCatalog = async (): Promise<void> => {
     ])
 
     localServices.value = [
-      ...(machineResponse.data.content ?? []).map(item => ({ id: `machine-${item.id}`, name: String(item.name ?? "") })),
-      ...(techniqueResponse.data.content ?? []).map(item => ({ id: `technique-${item.id}`, name: String(item.name ?? "") })),
-      ...(evaluationResponse.data.content ?? []).map(item => ({ id: `evaluation-${item.id}`, name: String(item.name ?? "") })),
-      ...(addOnMachineResponse.data.content ?? []).map(item => ({ id: `add-on-machine-${item.id}`, name: String(item.name ?? item.machine_name ?? `Add-on Machine ${item.id}`) })),
-      ...(addOnTechniqueResponse.data.content ?? []).map(item => ({ id: `add-on-technique-${item.id}`, name: String(item.name ?? item.technique_name ?? `Add-on Technique ${item.id}`) })),
-      ...(addOnHomeServiceResponse.data.content ?? []).map(item => ({ id: `add-on-home-service-${item.id}`, name: String(item.name ?? item.label ?? `Home Service - ${item.start ?? ""} km`) })),
-      ...(globalMachineResponse.data.content ?? []).map(item => ({ id: `machine-${item.id}`, name: String(item.name ?? "") })),
-      ...(globalTechniqueResponse.data.content ?? []).map(item => ({ id: `technique-${item.id}`, name: String(item.name ?? "") })),
-      ...(globalEvaluationResponse.data.content ?? []).map(item => ({ id: `evaluation-${item.id}`, name: String(item.name ?? "") })),
-      ...(globalAddOnMachineResponse.data.content ?? []).map(item => ({ id: `add-on-machine-${item.id}`, name: String(item.name ?? item.machine_name ?? `Add-on Machine ${item.id}`) })),
-      ...(globalAddOnTechniqueResponse.data.content ?? []).map(item => ({ id: `add-on-technique-${item.id}`, name: String(item.name ?? item.technique_name ?? `Add-on Technique ${item.id}`) })),
-      ...(globalAddOnHomeServiceResponse.data.content ?? []).map(item => ({ id: `add-on-home-service-${item.id}`, name: String(item.name ?? item.label ?? `Home Service - ${item.start ?? ""} km`) }))
+      ...(machineResponse.data.content ?? []).map(item => ({ id: `machine-${item.id}`, name: String(item.name ?? ""), price: parseNumber(item.price) })),
+      ...(techniqueResponse.data.content ?? []).map(item => ({ id: `technique-${item.id}`, name: String(item.name ?? ""), price: parseNumber(item.price) })),
+      ...(evaluationResponse.data.content ?? []).map(item => ({ id: `evaluation-${item.id}`, name: String(item.name ?? ""), price: parseNumber(item.price) })),
+      ...(addOnMachineResponse.data.content ?? []).map(item => ({ id: `add-on-machine-${item.id}`, name: String(item.name ?? item.machine_name ?? `Add-on Machine ${item.id}`), price: parseNumber(item.add_on_price ?? item.price) })),
+      ...(addOnTechniqueResponse.data.content ?? []).map(item => ({ id: `add-on-technique-${item.id}`, name: String(item.name ?? item.technique_name ?? `Add-on Technique ${item.id}`), price: parseNumber(item.add_on_price ?? item.price) })),
+      ...(addOnHomeServiceResponse.data.content ?? []).map(item => ({ id: `add-on-home-service-${item.id}`, name: String(item.name ?? item.label ?? `Home Service - ${item.start ?? ""} km`), price: parseNumber(item.add_on_price ?? item.price) })),
+      ...(globalMachineResponse.data.content ?? []).map(item => ({ id: `machine-${item.id}`, name: String(item.name ?? ""), price: parseNumber(item.price) })),
+      ...(globalTechniqueResponse.data.content ?? []).map(item => ({ id: `technique-${item.id}`, name: String(item.name ?? ""), price: parseNumber(item.price) })),
+      ...(globalEvaluationResponse.data.content ?? []).map(item => ({ id: `evaluation-${item.id}`, name: String(item.name ?? ""), price: parseNumber(item.price) })),
+      ...(globalAddOnMachineResponse.data.content ?? []).map(item => ({ id: `add-on-machine-${item.id}`, name: String(item.name ?? item.machine_name ?? `Add-on Machine ${item.id}`), price: parseNumber(item.add_on_price ?? item.price) })),
+      ...(globalAddOnTechniqueResponse.data.content ?? []).map(item => ({ id: `add-on-technique-${item.id}`, name: String(item.name ?? item.technique_name ?? `Add-on Technique ${item.id}`), price: parseNumber(item.add_on_price ?? item.price) })),
+      ...(globalAddOnHomeServiceResponse.data.content ?? []).map(item => ({ id: `add-on-home-service-${item.id}`, name: String(item.name ?? item.label ?? `Home Service - ${item.start ?? ""} km`), price: parseNumber(item.add_on_price ?? item.price) }))
     ].filter(service => service.id && service.name)
 
     localBundles.value = [

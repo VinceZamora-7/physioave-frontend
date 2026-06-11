@@ -2120,8 +2120,7 @@ const generateSoa = async (): Promise<void> => {
   const [from, to] = soaRange.value as Date[]
   const popup = openPrintableRouteWindow(
     {
-      name: "soa-print",
-      params: { payer: "lgu" },
+      name: "lgu-soa-print",
       query: {
         from: formatYmd(from),
         to: formatYmd(to),

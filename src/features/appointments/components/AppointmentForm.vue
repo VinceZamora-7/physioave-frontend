@@ -75,6 +75,26 @@
                 {{ appointmentStatusLabel }}
               </div>
             </div>
+
+            <div class="space-y-2 md:col-span-2 xl:col-span-1">
+              <p class="text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">Sponsor Billing Eligibility</p>
+              <div class="grid grid-cols-1 gap-2 sm:grid-cols-3 xl:grid-cols-1">
+                <div
+                  v-for="item in sponsorEligibility"
+                  :key="item.payerType"
+                  :class="[
+                    'rounded-2xl border px-3 py-2',
+                    sponsorEligibilityClass(item.status)
+                  ]"
+                >
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-xs font-black text-[rgb(var(--app-fg))]">{{ item.label }}</span>
+                    <span class="text-[0.65rem] font-black uppercase">{{ sponsorEligibilityLabel(item.status) }}</span>
+                  </div>
+                  <p class="mt-1 text-xs leading-4 text-[rgb(var(--app-fg))]/65">{{ item.detail }}</p>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -732,6 +752,13 @@ type SelectOption = { label: string; value: number | string | null }
 type Option<T extends string | number = string | number> = { label: string; value: T }
 type SessionMode = "DAILY" | "EVERY_OTHER_DAY" | "WEEKLY"
 type ScheduleAppointment = Record<string, any>
+type SponsorEligibilityStatus = "available" | "active" | "missing" | "blocked" | "loading"
+type SponsorEligibilityItem = {
+  payerType: string
+  label: string
+  status: SponsorEligibilityStatus
+  detail: string
+}
 type ClinicSchedule = {
   startDay: number
   endDay: number
@@ -795,6 +822,7 @@ const props = defineProps<{
   ptOptions: SelectOption[]
   doctorOptions: SelectOption[]
   payerOptions: Option[]
+  sponsorEligibility: SponsorEligibilityItem[]
   appointmentTypeOptions: SelectOption[]
   appointmentStatusLabel: string
   phaseOptions: Option[]
@@ -822,6 +850,21 @@ const selectedBillingTypeValue = computed(() => String(props.form.payer_type ?? 
 const selectBillingType = (value: string | number | null): void => {
   props.form.payer_type = value
   props.servicePicker.id = null
+}
+
+const sponsorEligibilityLabel = (status: SponsorEligibilityStatus): string => {
+  if (status === "active") return "Active"
+  if (status === "available") return "Open"
+  if (status === "blocked") return "Blocked"
+  if (status === "loading") return "Checking"
+  return "Missing"
+}
+
+const sponsorEligibilityClass = (status: SponsorEligibilityStatus): string => {
+  if (status === "active" || status === "available") return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20"
+  if (status === "blocked") return "border-rose-200 bg-rose-50 text-rose-700 dark:bg-rose-950/20"
+  if (status === "loading") return "border-sky-200 bg-sky-50 text-sky-700 dark:bg-sky-950/20"
+  return "border-amber-200 bg-amber-50 text-amber-700 dark:bg-amber-950/20"
 }
 
 const billingTypeIcon = (value: unknown): string => {

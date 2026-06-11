@@ -43,6 +43,18 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: "/billing/print/hmo-soa",
+      name: "hmo-soa-print",
+      component: () => import("@/features/hmo-billing/invoices/HmoGeneralSoaPrintView.vue"),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: "/billing/print/lgu-soa",
+      name: "lgu-soa-print",
+      component: () => import("@/features/lgu-billing/invoices/LguGeneralSoaPrintView.vue"),
+      meta: { requiresAuth: true }
+    },
+    {
       path: "/home",
       name: "home",
       component: () => import("@/app/layouts/HomeLayout.vue"),

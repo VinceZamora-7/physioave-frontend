@@ -670,5 +670,10 @@ export const appointmentPhase1Service = {
     return data
   },
 
+  async undoDropoutStatus(id: number): Promise<AppointmentFlowSummary> {
+    const { data } = await pamsAPI.post<AppointmentFlowSummary>(`/appointments/${id}/undo-dropout`)
+    return data
+  },
+
   exportCsv: (_params: QueryParams) => emptyBlobResponse()
 }

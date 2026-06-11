@@ -569,7 +569,6 @@ const load = async (): Promise<void> => {
     const data = await billingPhase1Service.getHmoSoa({
       from: dateFrom.value,
       to: dateTo.value,
-      limit: 5000,
       ...(hmoId.value ? { hmo_id: hmoId.value } : {})
     }) ?? []
 

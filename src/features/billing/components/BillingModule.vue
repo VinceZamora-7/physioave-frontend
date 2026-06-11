@@ -1852,8 +1852,8 @@ const extractApiErrorMessage = (error: unknown, fallback: string): string =>
   })
 
 // â”€â”€ Local catalog types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-type LocalService  = {id: string; type: string; name: string; price: number; status: string}
-type LocalBundle   = {id: string; name: string; machineIds: string[]; techniqueIds: string[]; evaluationIds: string[]; addOnIds: string[]; bundledPrice: number; status: string}
+type LocalService  = {id: string; type: string; name: string; price: number; status: string; dropoutUnitPrice?: number}
+type LocalBundle   = {id: string; name: string; machineIds: string[]; techniqueIds: string[]; evaluationIds: string[]; addOnIds: string[]; bundledPrice: number; status: string; dropoutUnitPrice?: number}
 type LocalPackageItem = {
   id: string
   qty: number
@@ -1870,6 +1870,7 @@ type LocalPackageOffer = {
   addOnIds?: string[]; addOnQty?: number; addOnItems?: LocalPackageItem[]
   sessionIds?: string[]; sessionQty?: number; sessionItems?: LocalPackageItem[]
   invoiceSubItems?: PackageInvoicePrintSubItem[]
+  dropoutUnitPrice?: number
   packagePrice: number; status: string
 }
 
@@ -2001,6 +2002,7 @@ const normalizePackageServiceOffer = (value: unknown): LocalPackageOffer | null 
     sessionQty: normalizePositiveInt(raw.sessionQty ?? raw.session_qty, 1),
     sessionItems: normalizeQtyItems(raw.sessionItems ?? raw.session_items ?? raw.session_items_json),
     invoiceSubItems: normalizeInvoiceSubItems(raw.invoiceSubItems ?? raw.invoice_sub_items),
+    dropoutUnitPrice: normalizeOptionalAmount(raw.dropoutUnitPrice, raw.dropout_unit_price, raw.dropoutPrice, raw.dropout_price, raw.packageDropoutPrice, raw.package_dropout_price),
     packagePrice: normalizeNonNegativeNumber(raw.packagePrice ?? raw.package_price),
     status: normalizePackageStatus(raw)
   }
@@ -2059,6 +2061,7 @@ const catalogItemToLocalService = (type: string, item: ServiceCatalogItem, scope
   type,
   name: item.name,
   price: Number(item.effective_price ?? item.price ?? 0),
+  dropoutUnitPrice: normalizeOptionalAmount((item as Record<string, unknown>).dropout_unit_price, (item as Record<string, unknown>).dropoutUnitPrice, (item as Record<string, unknown>).dropout_price, (item as Record<string, unknown>).dropoutPrice),
   status: item.is_active ? "Active" : "Inactive",
 })
 
@@ -2090,6 +2093,7 @@ const catalogBundleToLocalBundle = (bundle: ServiceCatalogBundle, scope: Service
       ...collect("ADD_ON_HOME_SERVICE"),
     ],
     bundledPrice: Number(bundle.bundled_price ?? 0),
+    dropoutUnitPrice: normalizeOptionalAmount((bundle as unknown as Record<string, unknown>).dropout_unit_price, (bundle as unknown as Record<string, unknown>).dropoutUnitPrice, (bundle as unknown as Record<string, unknown>).dropout_price, (bundle as unknown as Record<string, unknown>).dropoutPrice),
     status: bundle.is_active ? "Active" : "Inactive",
   }
 }
@@ -2177,6 +2181,54 @@ const findPackageOffer = (pkgId?: string|number, pkgName?: string): LocalPackage
   })
 }
 
+const getPackageItemDropoutTotal = (items?: LocalPackageItem[]): number | undefined => {
+  if (!items?.length) return undefined
+
+  let total = 0
+
+  for (const item of items) {
+    if (item.dropoutUnitPrice === undefined) {
+      return undefined
+    }
+
+    total += Number(item.dropoutUnitPrice ?? 0) * Math.max(1, Number(item.qty ?? 1))
+  }
+
+  return total
+}
+
+const resolvePackageOfferDropoutUnitPrice = (offer: LocalPackageOffer): number | undefined => {
+  if (offer.dropoutUnitPrice !== undefined) {
+    return Number(offer.dropoutUnitPrice ?? 0)
+  }
+
+  const totals: number[] = []
+
+  if (offer.bundleId) {
+    const bundle = findBundle(offer.bundleId)
+    if (bundle?.dropoutUnitPrice === undefined) {
+      return undefined
+    }
+
+    totals.push(Number(bundle.dropoutUnitPrice ?? 0) * Math.max(1, Number(offer.bundleQty ?? 1)))
+  }
+
+  for (const total of [
+    getPackageItemDropoutTotal(offer.bundleItems),
+    getPackageItemDropoutTotal(offer.machineItems),
+    getPackageItemDropoutTotal(offer.techniqueItems),
+    getPackageItemDropoutTotal(offer.evaluationItems),
+    getPackageItemDropoutTotal(offer.addOnItems),
+    getPackageItemDropoutTotal(offer.sessionItems)
+  ]) {
+    if (total !== undefined) {
+      totals.push(total)
+    }
+  }
+
+  return totals.length ? totals.reduce((sum, total) => sum + total, 0) : undefined
+}
+
 const getBundleComponents = (bundleId?: string|number, bundleName?: string): LocalService[] => {
   const bundle = findBundle(bundleId, bundleName); if (!bundle) return []
   const ids = [...bundle.machineIds, ...bundle.techniqueIds, ...bundle.evaluationIds, ...bundle.addOnIds]
@@ -2210,7 +2262,13 @@ const buildBreakdownItems = (
     const resolved = resolveItem(entry.id); if (!resolved) return []
     const quantity = Math.max(1, Number(entry.qty ?? 1) * multiplier)
     const unitPrice = Number(resolved.price ?? 0)
-    return [{name: resolved.name, quantity, unitPrice, totalPrice: unitPrice * quantity}]
+    return [{
+      name: resolved.name,
+      quantity,
+      unitPrice,
+      totalPrice: unitPrice * quantity,
+      ...("dropoutUnitPrice" in entry && entry.dropoutUnitPrice !== undefined ? {dropoutUnitPrice: entry.dropoutUnitPrice} : {})
+    }]
   })
 
 const getBundleReceiptGroups = (bundleId?: string|number, bundleName?: string, multiplier = 1): BillingReceiptPrintBreakdownGroup[] =>
@@ -2248,16 +2306,18 @@ type PackageInvoicePrintSubItem = {
   dropoutUnitPrice?: number
   children?: PackageInvoicePrintSubItem[]
 }
-type ParsedLine = {key:string;id:string;type:string;name:string;price:number;quantity:number;originalPrice?:number;children?: BillingLineItem[]}
+type ParsedLine = {key:string;id:string;type:string;name:string;price:number;dropoutUnitPrice?:number;quantity:number;originalPrice?:number;children?: BillingLineItem[]}
 const parsedLineItems = (raw?: string): ParsedLine[] => {
   if (!raw) return []
   try {
-    const parsed = JSON.parse(raw) as Array<{id?:string|number;type?:string;name?:string;price?:number;originalPrice?:number;quantity?:number;children?: BillingLineItem[]}>
+    const parsed = JSON.parse(raw) as Array<{id?:string|number;type?:string;name?:string;price?:number;dropoutUnitPrice?:number;dropout_unit_price?:number;originalPrice?:number;quantity?:number;children?: BillingLineItem[]}>
     if (!Array.isArray(parsed)) return []
     return parsed.map((line, i) => ({
       key: `${i}-${line.id ?? line.name}`,
       id: String(line.id ?? ""), type: line.type ?? "service", name: line.name ?? "â€”",
-      price: Number(line.price ?? 0), quantity: Math.max(1, Number(line.quantity ?? 1)),
+      price: Number(line.price ?? 0),
+      dropoutUnitPrice: normalizeOptionalAmount(line.dropoutUnitPrice, line.dropout_unit_price),
+      quantity: Math.max(1, Number(line.quantity ?? 1)),
       originalPrice: line.originalPrice ? Number(line.originalPrice) : undefined,
       children: Array.isArray(line.children) ? line.children : undefined
     }))
@@ -3069,6 +3129,7 @@ const addOnHomeServices= ref<BillingPickerLookup[]>([])
 // â”€â”€ HMO rate maps and ID filters â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const billingPatientHmoId               = ref<number|null>(null)
 const billingPatientHmoInfo             = ref<PatientHMOInformation|null>(null)
+const billingPatientLguStatus           = ref<string>("")
 const syncingBillingHmoRates            = ref(false)
 const billingPatientMachineRateMap      = ref<Map<number,number>>(new Map())
 const billingPatientTechniqueRateMap    = ref<Map<number,number>>(new Map())
@@ -3084,6 +3145,7 @@ type SelectedLine = {
   type: string
   name: string
   price: number
+  dropoutUnitPrice?: number
   quantity: number
   originalPrice?: number
   priceOverride?: number
@@ -3171,6 +3233,12 @@ const canCreateBundleFromSelection = computed(() =>
   !findExistingBundleFromSelection.value
 )
 
+const isBillingPatientLguDroppedOut = computed(() =>
+  ["DROPPED_OUT", "CROSS_MONTH_DROPPED_OUT", "DROPOUT"].includes(
+    String(billingPatientLguStatus.value ?? "").trim().toUpperCase()
+  )
+)
+
 // â”€â”€ Form â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const form = ref<{
   patient_id?: number; appointment_id?: number; billing_type: BillingType; service_type: ServiceType
@@ -3214,7 +3282,15 @@ const addSelectedLine = (): void => {
   if (!selectedLineId.value) return
   const found = currentLineTypeOptions.value.find(i => String(i.id) === String(selectedLineId.value))
   if (!found) return
-  selectedLines.value.push({key: crypto.randomUUID(), id: found.id, type: found.type ?? selectedLineType.value, name: found.name, price: toWholePeso(found.price), quantity: Math.max(1, toWholePeso(selectedLineQty.value))})
+  selectedLines.value.push({
+    key: crypto.randomUUID(),
+    id: found.id,
+    type: found.type ?? selectedLineType.value,
+    name: found.name,
+    price: toWholePeso(found.price),
+    dropoutUnitPrice: normalizeOptionalAmount((found as Record<string, unknown>).dropoutUnitPrice, (found as Record<string, unknown>).dropout_unit_price),
+    quantity: Math.max(1, toWholePeso(selectedLineQty.value))
+  })
   selectedLineId.value = undefined; selectedLineQty.value = 1
 }
 
@@ -3228,6 +3304,7 @@ const addSelectedPackageOffer = (): void => {
     type: "package",
     name: found.name,
     price: toWholePeso(found.packagePrice),
+    dropoutUnitPrice: resolvePackageOfferDropoutUnitPrice(found),
     quantity: 1,
     packageId: found.id,
     bundleTemplateId: found.bundleId,
@@ -3251,6 +3328,10 @@ const addSelectedPackageOffer = (): void => {
 
 // â”€â”€ Price resolution â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const resolveNaturalLinePrice = (line: SelectedLine): number => {
+  if (form.value.billing_type === "LGU_BILLING" && isBillingPatientLguDroppedOut.value && line.dropoutUnitPrice !== undefined) {
+    return Number(line.dropoutUnitPrice ?? 0)
+  }
+
   if (form.value.billing_type !== "HMO_BILLING") return Number(line.price ?? 0)
   const itemId = Number(line.id); if (!Number.isFinite(itemId) || itemId <= 0) return Number(line.price ?? 0)
   const maps: Record<string, Map<number,number>> = {
@@ -3284,6 +3365,7 @@ const buildHmoRateMap = (items: ServiceCatalogItem[]): {map: Map<number, number>
 const syncBillingPatientHmoRates = async (): Promise<void> => {
   // Reset all HMO state
   billingPatientHmoId.value = null; billingPatientHmoInfo.value = null
+  billingPatientLguStatus.value = ""
   billingPatientMachineRateMap.value = new Map(); billingPatientTechniqueRateMap.value = new Map()
   billingPatientEvaluationRateMap.value = new Map(); billingPatientAddOnMachineRateMap.value = new Map()
   billingPatientAddOnTechniqueRateMap.value = new Map(); billingPatientAddOnHomeServiceRateMap.value = new Map()
@@ -3295,6 +3377,7 @@ const syncBillingPatientHmoRates = async (): Promise<void> => {
   syncingBillingHmoRates.value = true
   try {
     const patientContext = await patientTanstackService.fetchContext(queryClient, patientId)
+    billingPatientLguStatus.value = String(patientContext?.patient?.lgu_patient_status ?? "").trim().toUpperCase()
     const sponsorEntries = patientContext?.sponsor_information ?? []
     const hmoInfo = sponsorEntries.find(entry => entry.sponsor_context === 'HMO' && Number(entry.hmo_id) > 0) ?? null
     billingPatientHmoInfo.value = hmoInfo
@@ -3325,12 +3408,14 @@ const buildIncludedBillingLine = (
   name: string,
   quantity: number,
   unitPrice = 0,
+  dropoutUnitPrice?: number,
   children: BillingLineItem[] = []
 ): BillingLineItem => ({
   id,
   type: "included-service",
   name,
   price: toWholePeso(unitPrice),
+  ...(dropoutUnitPrice === undefined ? {} : {dropoutUnitPrice: toWholePeso(dropoutUnitPrice)}),
   quantity: Math.max(1, toWholePeso(quantity)),
   originalPrice: toWholePeso(unitPrice),
   ...(children.length ? {children} : {})
@@ -3347,6 +3432,7 @@ const buildInvoiceSubItemBillingChildren = (
       item.name,
       Math.max(1, Number(item.quantity ?? 1) * multiplier),
       toWholePeso(item.unitPrice),
+      item.dropoutUnitPrice,
       buildInvoiceSubItemBillingChildren(item.children, multiplier, `${path}-${index + 1}`)
     )
   )
@@ -3361,7 +3447,8 @@ const buildBreakdownGroupBillingChildren = (
         `${path}-${groupIndex + 1}-${itemIndex + 1}`,
         item.name,
         item.quantity,
-        item.unitPrice
+        item.unitPrice,
+        (item as BillingReceiptPrintSubItem & {dropoutUnitPrice?: number}).dropoutUnitPrice
       )
     )
   )
@@ -3405,6 +3492,7 @@ const lineItemsAsPayload = computed((): BillingLineItem[] =>
     return {
       id: item.id, type: item.type as BillingLineItem["type"], name: item.name,
       price: effectivePrice, quantity: Math.max(1, toWholePeso(item.quantity)),
+      ...(item.dropoutUnitPrice === undefined ? {} : {dropoutUnitPrice: toWholePeso(item.dropoutUnitPrice)}),
       originalPrice, body_area: item.body_area || undefined,
       ...(item.type === "package" ? {
         package_id: item.packageId ?? item.id,

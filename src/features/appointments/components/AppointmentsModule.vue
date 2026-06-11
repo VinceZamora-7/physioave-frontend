@@ -275,10 +275,6 @@
             class="grid grid-cols-1 gap-3 rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3 sm:grid-cols-2"
           >
             <div class="space-y-1">
-              <label class="app-appointment-muted text-xs font-semibold uppercase tracking-wide">Referral Form No.</label>
-              <InputText v-model="lguClaimForm.referral_form_no" class="w-full" placeholder="Enter referral form no." />
-            </div>
-            <div class="space-y-1">
               <label class="app-appointment-muted text-xs font-semibold uppercase tracking-wide">Approval Code</label>
               <InputText v-model="lguClaimForm.approval_code" class="w-full" placeholder="Optional approval code" />
             </div>
@@ -331,6 +327,7 @@
               icon="pi pi-file-check"
               size="small"
               :loading="isBillingActionLoading"
+              :disabled="!canCreateSponsorClaimFromDetails('HMO')"
               :pt="ptPrimaryBtn"
               @click="createHmoClaimFromDetails"
             />
@@ -340,6 +337,7 @@
               icon="pi pi-file-check"
               size="small"
               :loading="isBillingActionLoading"
+              :disabled="!canCreateSponsorClaimFromDetails('LGU')"
               :pt="ptPrimaryBtn"
               @click="createLguClaimFromDetails"
             />
@@ -531,7 +529,8 @@
       :active-branch-id="activeBranchId"
       :pt-options="ptOptions"
       :doctor-options="doctorOptions"
-      :payer-options="payerOptions"
+      :payer-options="appointmentPayerOptions"
+      :sponsor-eligibility="sponsorBillingEligibility"
       :appointment-type-options="appointmentTypeOptions"
       :appointment-status-label="appointmentStatusLabel"
       :phase-options="phaseOptions"
@@ -578,6 +577,7 @@
       :format-date="formatDate"
       :format-time="formatTime"
       @drop-out="dropOutActiveAppointment"
+      @undo-drop-out="undoDropOutActiveAppointment"
       @save="saveAttendance"
     />
   </main>
@@ -620,6 +620,8 @@ import {
 } from "@/features/appointments/api/appointment-phase1.service"
 import { clinicService } from "@/features/clinics/api/clinic.service"
 import { patientService } from "@/features/patients/api/patient.service"
+import type { PatientContext } from "@/features/patients/types/patient"
+import type { PatientHMOInformation } from "@/models/hmo-information"
 import { staffService } from "@/features/staff/api/staff.service"
 import { ptPrimaryBtn } from "@/features/shared/table-header.styles"
 import { useAuthSessionStore } from "@/stores/auth-session.store"
@@ -652,6 +654,13 @@ type SelectedService = ServiceOption & { name: string; quantity: number; typeLab
 type AttendanceItem = AppointmentPlannedService & { selected: boolean; quantity: number; remaining: number; appointmentConsumed: number }
 type TreatmentAreaOption = SelectOption & { clinicId: number | null; color?: string | null }
 type CalendarVisibleRange = { from: Date; to: Date }
+type SponsorEligibilityStatus = "available" | "active" | "missing" | "blocked" | "loading"
+type SponsorEligibilityItem = {
+  payerType: PayerType
+  label: string
+  status: SponsorEligibilityStatus
+  detail: string
+}
 
 const toast = useToast()
 const router = useRouter()
@@ -730,7 +739,9 @@ const specialtyOptions = ref<SelectOption[]>([])
 const treatmentAreaOptions = ref<TreatmentAreaOption[]>([])
 const medicalDiagnoseOptions = ref<SelectOption[]>([])
 
-const serviceCatalog = ref<Record<AppointmentServiceSelectionType, ServiceOption[]>>({
+type AppointmentServiceCatalog = Record<AppointmentServiceSelectionType, ServiceOption[]>
+
+const emptyServiceCatalog = (): AppointmentServiceCatalog => ({
   PACKAGE: [],
   BUNDLE: [],
   MACHINE: [],
@@ -740,6 +751,9 @@ const serviceCatalog = ref<Record<AppointmentServiceSelectionType, ServiceOption
   ADD_ON_TECHNIQUE: [],
   ADD_ON_HOME_SERVICE: []
 })
+
+const globalServiceCatalog = ref<AppointmentServiceCatalog>(emptyServiceCatalog())
+const lguServiceCatalog = ref<AppointmentServiceCatalog>(emptyServiceCatalog())
 
 const selectedServices = ref<SelectedService[]>([])
 const detailFlowSummary = ref<AppointmentFlowSummary | null>(null)
@@ -751,6 +765,8 @@ const servicesModalPlannedServices = ref<AppointmentPlannedService[]>([])
 const attendancePlannedServices = ref<AppointmentPlannedService[]>([])
 const attendanceItems = ref<AttendanceItem[]>([])
 const sessionCountPreview = ref(1)
+const selectedPatientContext = ref<PatientContext | null>(null)
+const isLoadingPatientContext = ref(false)
 
 type AttendanceStatusFilter = "PENDING" | "COMPLETED" | "CANCELED"
 
@@ -805,7 +821,6 @@ const hmoClaimForm = reactive({
 })
 
 const lguClaimForm = reactive({
-  referral_form_no: "",
   approval_code: "",
   notes: ""
 })
@@ -873,6 +888,96 @@ const getAllowedServiceTypes = (billingType?: PayerType | null): AppointmentServ
 
 const payerOptionsWithAll = computed(() => [{ label: "All Billing Types", value: null }, ...payerOptions])
 
+const parseDateOnlyValue = (value?: string | null): Date | null => {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+const isActiveSponsorInfo = (info: PatientHMOInformation): boolean => {
+  const today = normalizeDateOnly(new Date())
+  const start = parseDateOnlyValue(info.validity_start_date)
+  const end = parseDateOnlyValue(info.validity_end_date)
+  return (!start || start.getTime() <= today.getTime())
+    && (!end || end.getTime() >= today.getTime())
+}
+
+const activeSponsorInfos = computed(() =>
+  (selectedPatientContext.value?.sponsor_information ?? []).filter(isActiveSponsorInfo)
+)
+
+const hasActiveHmoSponsor = computed(() =>
+  activeSponsorInfos.value.some(info => String(info.sponsor_context ?? "").toUpperCase() === "HMO")
+)
+
+const hasActiveLguSponsor = computed(() =>
+  activeSponsorInfos.value.some(info => String(info.sponsor_context ?? "").toUpperCase() === "LGU")
+)
+
+const selectedPatientLguStatus = computed(() =>
+  String(selectedPatientContext.value?.patient?.lgu_patient_status ?? "").trim().toUpperCase()
+)
+
+const isSelectedPatientLguDroppedOut = computed(() =>
+  selectedPatientLguStatus.value === "DROPPED_OUT" || selectedPatientLguStatus.value === "CROSS_MONTH_DROPPED_OUT"
+)
+
+const isAppointmentPayerTypeAllowed = (payerType: PayerType | null | undefined): boolean => {
+  if (!payerType) return true
+  if (payerType === "SELF_PAY_SINGLE" || payerType === "SELF_PAY_PACKAGE") return true
+  if (isLoadingPatientContext.value) return false
+  if (!selectedPatientContext.value) return false
+  if (payerType === "HMO") return hasActiveHmoSponsor.value
+  if (payerType === "LGU") return hasActiveLguSponsor.value && !isSelectedPatientLguDroppedOut.value
+  return false
+}
+
+const appointmentPayerOptions = computed(() =>
+  payerOptions.filter(option => isAppointmentPayerTypeAllowed(option.value))
+)
+
+const sponsorBillingEligibility = computed<SponsorEligibilityItem[]>(() => {
+  if (!form.patient_id) {
+    return [
+      { payerType: "SELF_PAY_SINGLE", label: "Self Pay", status: "available", detail: "Available without sponsor information" },
+      { payerType: "HMO", label: "HMO", status: "missing", detail: "Select a patient to check sponsor information" },
+      { payerType: "LGU", label: "LGU", status: "missing", detail: "Select a patient to check sponsor information" }
+    ]
+  }
+
+  if (isLoadingPatientContext.value) {
+    return [
+      { payerType: "SELF_PAY_SINGLE", label: "Self Pay", status: "available", detail: "Available without sponsor information" },
+      { payerType: "HMO", label: "HMO", status: "loading", detail: "Checking HMO sponsor information" },
+      { payerType: "LGU", label: "LGU", status: "loading", detail: "Checking LGU sponsor information" }
+    ]
+  }
+
+  const lguStatus = isSelectedPatientLguDroppedOut.value
+    ? "Patient LGU profile is dropped out. New LGU availments are blocked."
+    : hasActiveLguSponsor.value
+      ? "Active LGU sponsor information found"
+      : "No active LGU sponsor information"
+
+  return [
+    { payerType: "SELF_PAY_SINGLE", label: "Self Pay", status: "available", detail: "Available without sponsor information" },
+    {
+      payerType: "HMO",
+      label: "HMO",
+      status: hasActiveHmoSponsor.value ? "active" : "missing",
+      detail: hasActiveHmoSponsor.value ? "Active HMO sponsor information found" : "No active HMO sponsor information"
+    },
+    {
+      payerType: "LGU",
+      label: "LGU",
+      status: isSelectedPatientLguDroppedOut.value ? "blocked" : hasActiveLguSponsor.value ? "active" : "missing",
+      detail: lguStatus
+    }
+  ]
+})
+
 const billingStatusOptions: Array<{ label: string; value: BillingStatusFilter | null }> = [
   { label: "All Billing Status", value: null },
   { label: "Unbilled", value: "UNBILLED" },
@@ -936,7 +1041,11 @@ const serviceTypeOptions = computed(() => {
   return allServiceTypeOptions.filter(option => allowed.has(option.value))
 })
 
-const currentServiceOptions = computed(() => serviceCatalog.value[servicePicker.type] ?? [])
+const currentServiceCatalog = computed(() =>
+  currentServiceBillingType.value === "LGU" ? lguServiceCatalog.value : globalServiceCatalog.value
+)
+
+const currentServiceOptions = computed(() => currentServiceCatalog.value[servicePicker.type] ?? [])
 
 const clinicAreaOptions = computed(() =>
   treatmentAreaOptions.value.filter(option => !form.clinic_id || option.clinicId === form.clinic_id)
@@ -1044,16 +1153,35 @@ const canManageAppointmentBilling = computed(() =>
   canUseAppointmentPermission("Appointment::MANAGE_BILL", "Patient::MANAGE_BILLS")
 )
 
+const normalizePayerType = (value: unknown): string =>
+  String(value ?? "").trim().toUpperCase().replace(/[\s-]+/g, "_")
+
+const isLguAppointment = (appointment: AppointmentListItem | null | undefined): boolean => {
+  if (!appointment) return false
+
+  const valuesToCheck = [
+    appointment.payer_type,
+    (appointment as any).billing_type,
+    (appointment as any).source_type,
+    (appointment as any).payment_source,
+    (appointment as any).contract_type,
+    (appointment as any).sponsor_context
+  ]
+
+  return valuesToCheck.some(value => {
+    const normalized = normalizePayerType(value)
+    return normalized === "LGU" || normalized === "LGU_BILLING"
+  })
+    || Boolean((appointment as any).lgu_patient_id)
+    || Boolean((appointment as any).lgu_contract_id)
+}
+
 const canDropOutActiveAppointment = computed(() => {
   const appointment = activeAppointment.value
-  const summary = detailFlowSummary.value
   if (!appointment) return false
-  const status = String(appointment.dropout_status ?? "").toUpperCase()
-  return appointment.payer_type === "LGU"
+
+  return isLguAppointment(appointment)
     && canManageAppointmentBilling.value
-    && status !== "DROPPED_OUT"
-    && summary?.appointment.id === appointment.id
-    && !summary.billing_document
 })
 
 const toDateParam = (date: Date | null): string | undefined => {
@@ -1437,6 +1565,33 @@ const resetServicePicker = (billingType: PayerType | string | null = form.payer_
   servicePicker.quantity = 1
 }
 
+const clearDisallowedBillingSelection = (): void => {
+  if (isAppointmentPayerTypeAllowed(form.payer_type)) return
+
+  form.payer_type = null
+  selectedServices.value = []
+  resetServicePicker(null)
+}
+
+const loadSelectedPatientContext = async (patientId: number | null): Promise<void> => {
+  selectedPatientContext.value = null
+  if (!patientId) {
+    clearDisallowedBillingSelection()
+    return
+  }
+
+  try {
+    isLoadingPatientContext.value = true
+    selectedPatientContext.value = await patientService.getContext(patientId) ?? null
+  } catch {
+    selectedPatientContext.value = null
+    errorToast(toast, "Unable to check sponsor billing eligibility.")
+  } finally {
+    isLoadingPatientContext.value = false
+    clearDisallowedBillingSelection()
+  }
+}
+
 const resetForm = (): void => {
   const start = new Date()
   start.setMinutes(0, 0, 0)
@@ -1462,6 +1617,7 @@ const resetForm = (): void => {
   form.create_all_sessions = true
   form.session_dates = [start]
   sessionCountPreview.value = 1
+  selectedPatientContext.value = null
 
   selectedServices.value = []
   resetServicePicker()
@@ -1659,24 +1815,49 @@ const normalizeServiceRows = (
     })
     .filter(row => Number.isFinite(row.value) && row.value > 0)
 
-const loadCatalogPage = async (url: string): Promise<Array<Record<string, unknown>>> => {
-  const { data } = await pamsAPI.get(url, { params: { page: 1, size: 500, status: "ACTIVE" } })
+const loadCatalogPage = async (url: string, params: Record<string, unknown> = {}): Promise<Array<Record<string, unknown>>> => {
+  const { data } = await pamsAPI.get(url, { params: { page: 1, size: 500, status: "ACTIVE", ...params } })
   return data?.content ?? []
 }
 
 const loadServiceCatalog = async (): Promise<void> => {
-  const [packages, bundles, machines, techniques, evaluations, addOnMachines, addOnTechniques, addOnHome] = await Promise.all([
-    loadCatalogPage("/package-service-offers"),
+  const [
+    packages,
+    bundles,
+    machines,
+    techniques,
+    evaluations,
+    addOnMachines,
+    addOnTechniques,
+    addOnHome,
+    lguPackages,
+    lguBundles,
+    lguMachines,
+    lguTechniques,
+    lguEvaluations,
+    lguAddOnMachines,
+    lguAddOnTechniques,
+    lguAddOnHome
+  ] = await Promise.all([
+    loadCatalogPage("/package-service-offers", { scope: "GLOBAL" }),
     loadCatalogPage("/service-bundles"),
     loadCatalogPage("/machines"),
     loadCatalogPage("/techniques"),
     loadCatalogPage("/evaluations"),
     loadCatalogPage("/add-on-machines"),
     loadCatalogPage("/add-on-techniques"),
-    loadCatalogPage("/add-on-home-services")
+    loadCatalogPage("/add-on-home-services"),
+    loadCatalogPage("/package-service-offers", { scope: "LGU" }),
+    loadCatalogPage("/lgu-service-bundles"),
+    loadCatalogPage("/lgu-machines"),
+    loadCatalogPage("/lgu-techniques"),
+    loadCatalogPage("/lgu-evaluations"),
+    loadCatalogPage("/lgu-add-on-machines"),
+    loadCatalogPage("/lgu-add-on-techniques"),
+    loadCatalogPage("/lgu-add-on-home-services")
   ])
 
-  serviceCatalog.value = {
+  globalServiceCatalog.value = {
     PACKAGE: normalizeServiceRows(packages, "PACKAGE", ["package_price", "price"]),
     BUNDLE: normalizeServiceRows(bundles, "BUNDLE", ["bundled_price", "price"]),
     MACHINE: normalizeServiceRows(machines, "MACHINE", ["price"]),
@@ -1685,6 +1866,17 @@ const loadServiceCatalog = async (): Promise<void> => {
     ADD_ON_MACHINE: normalizeServiceRows(addOnMachines, "ADD_ON_MACHINE", ["add_on_price", "price"]),
     ADD_ON_TECHNIQUE: normalizeServiceRows(addOnTechniques, "ADD_ON_TECHNIQUE", ["add_on_price", "price"]),
     ADD_ON_HOME_SERVICE: normalizeServiceRows(addOnHome, "ADD_ON_HOME_SERVICE", ["add_on_price", "price"])
+  }
+
+  lguServiceCatalog.value = {
+    PACKAGE: normalizeServiceRows(lguPackages, "PACKAGE", ["package_price", "price"]),
+    BUNDLE: normalizeServiceRows(lguBundles, "BUNDLE", ["bundled_price", "price"]),
+    MACHINE: normalizeServiceRows(lguMachines, "MACHINE", ["price"]),
+    TECHNIQUE: normalizeServiceRows(lguTechniques, "TECHNIQUE", ["price"]),
+    EVALUATION: normalizeServiceRows(lguEvaluations, "EVALUATION", ["price"]),
+    ADD_ON_MACHINE: normalizeServiceRows(lguAddOnMachines, "ADD_ON_MACHINE", ["add_on_price", "price"]),
+    ADD_ON_TECHNIQUE: normalizeServiceRows(lguAddOnTechniques, "ADD_ON_TECHNIQUE", ["add_on_price", "price"]),
+    ADD_ON_HOME_SERVICE: normalizeServiceRows(lguAddOnHome, "ADD_ON_HOME_SERVICE", ["add_on_price", "price"])
   }
 }
 
@@ -2057,10 +2249,35 @@ const buildHmoClaimPayload = () => {
 }
 
 const buildLguClaimPayload = () => ({
-  referral_form_no: lguClaimForm.referral_form_no.trim() || null,
   approval_code: lguClaimForm.approval_code.trim() || null,
   notes: lguClaimForm.notes.trim() || null
 })
+
+const canCreateSponsorClaimFromDetails = (payerType: "HMO" | "LGU"): boolean => {
+  const appointment = detailAppointment.value
+  const preparation = detailBillingPreparation.value
+
+  if (!appointment || !preparation) return false
+
+  if (payerType === "HMO") {
+    return (
+      preparation.billing_path.action === "CREATE_HMO_CLAIM" &&
+      preparation.billing_path.payer_type === "HMO" &&
+      (
+        Number((appointment as any).hmo_id ?? 0) > 0 ||
+        Number((preparation.appointment as any)?.hmo_id ?? 0) > 0 ||
+        preparation.consumed_services.count > 0
+      )
+    )
+  }
+
+  return (
+    preparation.billing_path.action === "CREATE_LGU_CLAIM" &&
+    preparation.billing_path.payer_type === "LGU" &&
+    Number((appointment as any).credit_account_id ?? 0) > 0 &&
+    preparation.consumed_services.count > 0
+  )
+}
 
 const createInvoiceDocumentForCurrentBillingPath = async (): Promise<AppointmentBillingDocument | null> => {
   if (!detailAppointment.value || !detailBillingPreparation.value) return null
@@ -2076,10 +2293,18 @@ const createInvoiceDocumentForCurrentBillingPath = async (): Promise<Appointment
     return appointmentBillingService.createSessionDocumentationInvoice(detailAppointment.value.id)
   }
   if (action === "CREATE_HMO_CLAIM") {
+    if (!canCreateSponsorClaimFromDetails("HMO")) {
+      errorToast(toast, "Patient has no active HMO sponsor information for this appointment.")
+      return null
+    }
     const payload = buildHmoClaimPayload()
     return payload ? appointmentBillingService.createHmoClaim(detailAppointment.value.id, payload) : null
   }
   if (action === "CREATE_LGU_CLAIM") {
+    if (!canCreateSponsorClaimFromDetails("LGU")) {
+      errorToast(toast, "Patient has no active LGU sponsor information for this appointment.")
+      return null
+    }
     return appointmentBillingService.createLguClaim(detailAppointment.value.id, buildLguClaimPayload())
   }
 
@@ -2234,6 +2459,11 @@ const createSessionDocumentationInvoiceFromDetails = (): void => {
 }
 
 const createHmoClaimFromDetails = (): void => {
+  if (!canCreateSponsorClaimFromDetails("HMO")) {
+    errorToast(toast, "Patient has no active HMO sponsor information for this appointment.")
+    return
+  }
+
   const payload = buildHmoClaimPayload()
   if (!payload) return
 
@@ -2244,6 +2474,11 @@ const createHmoClaimFromDetails = (): void => {
 }
 
 const createLguClaimFromDetails = (): void => {
+  if (!canCreateSponsorClaimFromDetails("LGU")) {
+    errorToast(toast, "Patient has no active LGU sponsor information for this appointment.")
+    return
+  }
+
   void runBillingActionFromDetails(
     (appointmentId) => appointmentBillingService.createLguClaim(appointmentId, buildLguClaimPayload()),
     "LGU claim created"
@@ -2266,6 +2501,11 @@ const saveAppointment = async (): Promise<void> => {
 
   if (selectedServices.value.length && !form.payer_type) {
     errorToast(toast, "Select a billing type before saving planned services.")
+    return
+  }
+
+  if (form.payer_type && !isAppointmentPayerTypeAllowed(form.payer_type)) {
+    errorToast(toast, "Selected patient is not eligible for that billing type.")
     return
   }
 
@@ -2542,6 +2782,28 @@ const dropOutActiveAppointment = async (reason: string): Promise<void> => {
   }
 }
 
+const undoDropOutActiveAppointment = async (): Promise<void> => {
+  if (!activeAppointment.value) return
+  if (!isLguAppointment(activeAppointment.value) || !canManageAppointmentBilling.value) {
+    errorToast(toast, "This LGU appointment cannot undo drop-out status.")
+    return
+  }
+
+  try {
+    isDroppingOut.value = true
+    const summary = await appointmentPhase1Service.undoDropoutStatus(activeAppointment.value.id)
+    applyAppointmentFlowSummary(summary)
+    attendanceItems.value = buildAttendanceItems(summary.planned_services ?? [])
+    successToast(toast, "LGU drop-out status restored")
+    await refreshAppointmentViews()
+  } catch (error) {
+    const message = (error as any)?.response?.data?.message
+    errorToast(toast, message ? String(message) : "Failed to undo patient drop-out status")
+  } finally {
+    isDroppingOut.value = false
+  }
+}
+
 onMounted(async () => {
   try {
     await branchStore.initializeFromAuthSession()
@@ -2607,6 +2869,13 @@ watch(
     if (selectedPt?.specialtyTagId) {
       form.specialty_tag_id = selectedPt.specialtyTagId
     }
+  }
+)
+
+watch(
+  () => form.patient_id,
+  (patientId) => {
+    void loadSelectedPatientContext(patientId)
   }
 )
 
