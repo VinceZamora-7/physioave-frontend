@@ -927,7 +927,7 @@
             />
           </div>
 
-          <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
             <div class="rounded-xl border border-white/60 bg-white/70 p-3 dark:border-white/10 dark:bg-white/5">
               <div class="text-xs uppercase tracking-wide opacity-60">Package Total</div>
               <div class="font-semibold">{{ asCurrency(selectedBillingPackageTotalPrice) }}</div>
@@ -951,6 +951,16 @@
             <div class="rounded-xl border border-white/60 bg-white/70 p-3 dark:border-white/10 dark:bg-white/5">
               <div class="text-xs uppercase tracking-wide opacity-60">This Session</div>
               <div class="font-semibold">{{ asCurrency(selectedBillingTotalDue) }}</div>
+            </div>
+
+            <div class="rounded-xl border border-white/60 bg-white/70 p-3 dark:border-white/10 dark:bg-white/5">
+              <div class="text-xs uppercase tracking-wide opacity-60">This Session Paid</div>
+              <div
+                class="font-semibold"
+                :class="selectedBillingAmountPaid >= selectedBillingTotalDue && selectedBillingTotalDue > 0 ? 'text-green-600 dark:text-green-300' : selectedBillingAmountPaid > 0 ? 'text-orange-600 dark:text-orange-300' : ''"
+              >
+                {{ asCurrency(selectedBillingAmountPaid) }}
+              </div>
             </div>
 
             <div class="rounded-xl border border-white/60 bg-white/70 p-3 dark:border-white/10 dark:bg-white/5">
@@ -987,15 +997,15 @@
               <span class="text-right">{{ asCurrency(billing.amount_paid) }}</span>
               <span class="flex justify-end gap-1">
                 <Button size="small" text icon="pi pi-eye" v-tooltip.top="'Open billing'" @click="openBillingDetails(billing.id)" />
-                <Button
-                  v-if="isLguBillingRow(billing)"
-                  size="small"
-                  text
-                  icon="pi pi-file"
-                  v-tooltip.top="getLguAppointmentInvoiceTooltip(billing)"
-                  :disabled="!canPrintLguAppointmentInvoice(billing)"
-                  @click="printLguAppointmentInvoice(billing)"
-                />
+           <Button
+  v-if="isLguBillingRow(billing)"
+  size="small"
+  text
+  icon="pi pi-file"
+  v-tooltip.top="getLguAppointmentInvoiceTooltip(billing)"
+  :disabled="!canPrintLguAppointmentInvoice(billing)"
+  @click="printLguAppointmentInvoice(billing)"
+/>
                 <Button size="small" text icon="pi pi-pencil" v-tooltip.top="isBillingStatusLocked(resolveBillingRuntimeStatus(billing)) ? 'Open in locked mode' : 'Edit billing'" @click="loadBillingForEdit(billing.id)" />
               </span>
             </div>
@@ -2369,12 +2379,14 @@ const isBillingMarkedBilled = (billing?: BillingListItem | null): boolean =>
   normalizeBillingStatusLabel(resolveBillingRuntimeStatus(billing)) === "BILLED"
 
 const canPrintLguAppointmentInvoice = (billing?: BillingListItem | null): boolean =>
-  Boolean(billing) && isLguBillingRow(billing) && isBillingMarkedBilled(billing)
+  Boolean(billing) &&
+  isLguBillingRow(billing) &&
+  isPrintableBillingStatus(resolveBillingRuntimeStatus(billing))
 
 const getLguAppointmentInvoiceTooltip = (billing?: BillingListItem | null): string =>
   canPrintLguAppointmentInvoice(billing)
     ? "Print this appointment invoice"
-    : "Mark this LGU appointment billing as billed first"
+    : "Billing is not printable yet"
 
 const selectedBillingPrintButtonLabel = computed(() =>
   "Print Invoice"
@@ -2687,14 +2699,22 @@ const displayBillingStatus = (value?: string): string => {
 
 const resolveBillingRuntimeStatus = (billing?: BillingListItem | null): string => {
   if (!billing) return "UNBILLED"
+
   const billingType = normalizeBillingTypeValue(billing.billing_type)
-  const programStatus = normalizeBillingStatusLabel(billing.lgu_patient_program_status)
+
+  const dropoutStatus = normalizeBillingStatusLabel(
+    (billing as any).lgu_patient_program_status ??
+    (billing as any).lgu_patient_status ??
+    (billing as any).dropout_status ??
+    (billing as any).patient_lgu_status ??
+    (billing as any).program_status
+  )
 
   if (
     billingType === "LGU_BILLING" &&
-    ["DROPPED_OUT", "CROSS_MONTH_DROPPED_OUT"].includes(programStatus)
+    ["DROPPED_OUT", "CROSS_MONTH_DROPPED_OUT"].includes(dropoutStatus)
   ) {
-    return programStatus
+    return dropoutStatus
   }
 
   return normalizeBillingStatusLabel(billing.billing_status)
@@ -3863,17 +3883,19 @@ const openBillingPrintableRoute = (detail: BillingListItem): void => {
             to: printDate
           }
         })
-      : normalizedBillingType === "LGU_BILLING"
-        ? router.resolve({
-            name: "lgu-patient-billing-summary-print",
-            query: {
-              ...commonQuery,
-              transaction_from: printDate,
-              transaction_to: printDate
-            }
-          })
+: normalizedBillingType === "LGU_BILLING"
+  ? router.resolve({
+      name: "lgu-patient-invoice-billing-print",
+      query: {
+        ...commonQuery,
+        billing_id: String(detail.id),
+        autoprint: "1"
+      }
+    })
         : router.resolve({
-            name: "self-pay-patient-billing-summary-print",
+            name: normalizedBillingType === "SELF_PAY_PACKAGE"
+              ? "self-pay-package-invoice-print"
+              : "self-pay-single-invoice-print",
             query: commonQuery
           })
 
@@ -3942,9 +3964,22 @@ const printSelectedBillingReceipt = async (): Promise<void> => {
   openBillingPrintableRoute(refreshed)
 }
 
-const printLguAppointmentInvoice = (billing: BillingListItem): void => {
-  if (!canPrintLguAppointmentInvoice(billing)) return
-  openBillingPrintableRoute(billing)
+const printLguAppointmentInvoice = async (billing: BillingListItem): Promise<void> => {
+  if (!billing?.id) return
+
+  const { detail: refreshed } = await fetchBillingContextDetail(billing.id)
+
+  if (!refreshed) {
+    errorToast(toast, "Billing details could not be refreshed before printing.")
+    return
+  }
+
+  if (!canPrintLguAppointmentInvoice(refreshed)) {
+    errorToast(toast, "Billing is not printable yet.")
+    return
+  }
+
+  openBillingPrintableRoute(refreshed)
 }
 
 const canPrintPatientInvoiceCopy = computed<boolean>(() => {

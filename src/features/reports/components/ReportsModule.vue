@@ -634,7 +634,7 @@ onMounted(async () => {
       </div>
     </section>
 
-    <section ref="eodSectionRef" class="app-section-card-comfy space-y-4">
+    <section class="app-section-card-comfy space-y-4">
       <div class="grid grid-cols-1 gap-3 md:grid-cols-[minmax(240px,320px)_1fr]">
         <div class="space-y-2">
           <label class="text-xs font-semibold uppercase tracking-wide opacity-60">Report Date</label>
@@ -664,7 +664,7 @@ onMounted(async () => {
       </article>
     </section>
 
-    <section v-if="canViewEodReports" ref="monthlySectionRef" class="app-section-card-comfy space-y-4">
+    <section v-if="canViewEodReports" ref="eodSectionRef" class="app-section-card-comfy space-y-4">
       <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 class="app-section-title">End-of-Day Report</h2>
@@ -1057,7 +1057,7 @@ onMounted(async () => {
       </div>
     </section>
 
-    <section v-if="canViewFinanceReports" class="app-section-card-comfy space-y-4">
+    <section v-if="canViewFinanceReports" ref="monthlySectionRef" class="app-section-card-comfy space-y-4">
       <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 class="app-section-title">Monthly Income &amp; Expenses</h2>

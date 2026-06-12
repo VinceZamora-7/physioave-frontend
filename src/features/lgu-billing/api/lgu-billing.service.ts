@@ -1,3 +1,4 @@
+import axios from "axios"
 import { pamsAPI } from "@/utils/axios-interceptor"
 
 export interface LguProgramLookup {
@@ -437,6 +438,12 @@ export const lguBillingService = {
         ...(periodYear ? { period_year: periodYear } : {}),
         ...(periodMonth ? { period_month: periodMonth } : {})
       }
+    }).catch((error: unknown) => {
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        return { data: null }
+      }
+
+      throw error
     })
 
     return data

@@ -27,7 +27,10 @@ export const ROUTE_ACCESS_RULES: Record<string, RouteAccessRule> = {
   billing: {
     anyOf: [...MODULE_ACCESS_RULES.billing],
   },
-  "self-pay-patient-billing-summary-print": {
+  "self-pay-single-invoice-print": {
+    anyOf: [...MODULE_ACCESS_RULES.billing],
+  },
+  "self-pay-package-invoice-print": {
     anyOf: [...MODULE_ACCESS_RULES.billing],
   },
   "hmo-patient-billing-summary-print": {

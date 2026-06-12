@@ -25,9 +25,15 @@ const router = createRouter({
       meta: { requiresAuth: false }
     },
     {
-      path: "/billing/print/self-pay-summary",
-      name: "self-pay-patient-billing-summary-print",
-      component: () => import("@/features/billing/invoices/SelfPayPatientBillingSummaryPrintView.vue"),
+      path: "/billing/print/self-pay-single",
+      name: "self-pay-single-invoice-print",
+      component: () => import("@/features/billing/invoices/SelfPaySingleInvoicePrintView.vue"),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: "/billing/print/self-pay-package",
+      name: "self-pay-package-invoice-print",
+      component: () => import("@/features/billing/invoices/SelfPayPackageInvoicePrintView.vue"),
       meta: { requiresAuth: true }
     },
     {
@@ -38,8 +44,14 @@ const router = createRouter({
     },
     {
       path: "/billing/print/lgu-summary",
-      name: "lgu-patient-billing-summary-print",
+      name: "lgu-patient-invoice-billing-print",
       component: () => import("@/features/lgu-billing/invoices/LguPatientBillingSummaryPrintView.vue"),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: "/billing/print/lgu-invoice-billing",
+      name: "lgu-patient-invoice-billing-print",
+      component: () => import("@/features/lgu-billing/invoices/LguPatientInvoiceBillingPrintView.vue"),
       meta: { requiresAuth: true }
     },
     {
@@ -119,6 +131,12 @@ const router = createRouter({
           meta: { requiresAuth: true }
         },
         {
+          path: "reports",
+          name: "reports",
+          component: () => import("@/features/reports/pages/FinanceReportsView.vue"),
+          meta: { requiresAuth: true }
+        },
+        {
           path: "promos-offers",
           name: "promos-offers",
           component: () => import("@/features/promos-offers/pages/PromosOffersView.vue"),
@@ -185,6 +203,7 @@ const resolveFallbackRouteName = (
     "dashboard",
     "patients",
     "billing",
+    "reports",
     "promos-offers-single-service",
     "promos-offers-package-service",
     "promos-offers-hmo",

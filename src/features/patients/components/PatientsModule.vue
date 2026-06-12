@@ -284,6 +284,16 @@
       @updated="void onPatientProfileImageUpdated()"
     />
 
+    <PatientBillingsDialog
+      ref="patientBillingsDialog"
+      :patient="selectedPatientDetails"
+    />
+
+    <PatientAppointmentsDialog
+      ref="patientAppointmentsDialog"
+      :patient="selectedPatientDetails"
+    />
+
     <Dialog
       v-model:visible="registerSponsorInfoVisible"
       modal
@@ -578,6 +588,8 @@ const PatientMedicalImagingDialog = defineAsyncComponent(() => import("@/compone
 const PatientAttachmentDialog = defineAsyncComponent(() => import("@/components/PatientAttachmentDialog.vue"))
 const PatientProfileImageDialog = defineAsyncComponent(() => import("@/components/PatientProfileImageDialog.vue"))
 const PatientEvaluationVisitLogSection = defineAsyncComponent(() => import("@/features/patients/components/PatientEvaluationVisitLogSection.vue"))
+const PatientBillingsDialog = defineAsyncComponent(() => import("@/features/patients/components/PatientBillingsDialog.vue"))
+const PatientAppointmentsDialog = defineAsyncComponent(() => import("@/features/patients/components/PatientAppointmentsDialog.vue"))
 
 const patientMedicalCategoryDialog = useTemplateRef<ToggleDialogExpose>('patientMedicalCategoryDialog')
 const patientMedicalDiagnoseDialog = useTemplateRef<ToggleDialogExpose>('patientMedicalDiagnoseDialog')
@@ -587,6 +599,8 @@ const patientMedicalImagingDialog = useTemplateRef<ToggleDialogExpose>('patientM
 const patientValidIdAttachmentDialog = useTemplateRef<ToggleDialogExpose>('patientValidIdAttachmentDialog')
 const patientHMOValidIdAttachmentDialog = useTemplateRef<ToggleDialogExpose>('patientHMOValidIdAttachmentDialog')
 const patientProfileImageDialog = useTemplateRef<OpenDialogExpose>('patientProfileImageDialog')
+const patientBillingsDialog = useTemplateRef<OpenDialogExpose>('patientBillingsDialog')
+const patientAppointmentsDialog = useTemplateRef<OpenDialogExpose>('patientAppointmentsDialog')
 
 const patientForm = useTemplateRef<ToggleDialogExpose>('patientForm')
 const patientHMOInformationForm = useTemplateRef<ToggleDialogExpose>('patientHMOInformationForm')
@@ -1134,6 +1148,22 @@ const menuButtons = (patient: Patient): MenuItem[] => {
       icon: 'pi pi-pen-to-square',
       command: () => {
         void openEditPatient(patient)
+      },
+    },
+    {
+      label: 'View Billings',
+      icon: 'pi pi-receipt',
+      command: () => {
+        selectedPatientDetails.value = patient
+        patientBillingsDialog.value?.open()
+      },
+    },
+    {
+      label: 'View Appointments',
+      icon: 'pi pi-calendar',
+      command: () => {
+        selectedPatientDetails.value = patient
+        patientAppointmentsDialog.value?.open()
       },
     },
     {

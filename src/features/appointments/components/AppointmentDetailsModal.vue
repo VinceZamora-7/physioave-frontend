@@ -226,6 +226,7 @@
     <template #footer>
       <Button label="Close" severity="secondary" outlined @click="$emit('update:visible', false)" />
       <Button v-if="canMarkAttendance" label="Attendance" icon="pi pi-check-square" severity="success" outlined @click="$emit('attendance')" />
+      <Button v-if="canReschedule" label="Reschedule" icon="pi pi-calendar-plus" severity="warn" outlined @click="$emit('reschedule')" />
       <Button v-if="canEdit" label="Edit Appointment" icon="pi pi-pencil" :pt="ptPrimaryBtn" @click="$emit('edit')" />
     </template>
   </Dialog>
@@ -264,6 +265,7 @@ const props = withDefaults(defineProps<{
   displayLaterality: (value?: string | null) => string
   formatOptionalNumber: (value?: number | null) => string | undefined
   canEdit?: boolean
+  canReschedule?: boolean
   canMarkAttendance?: boolean
 }>(), {
   plannedServices: () => [],
@@ -272,12 +274,14 @@ const props = withDefaults(defineProps<{
   billingDocument: null,
   isBillingActionLoading: false,
   canEdit: true,
+  canReschedule: true,
   canMarkAttendance: true
 })
 
 defineEmits<{
   "update:visible": [value: boolean]
   edit: []
+  reschedule: []
   attendance: []
   "open-billing": []
   "create-self-pay-appointment-bill": []

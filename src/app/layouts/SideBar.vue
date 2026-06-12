@@ -186,6 +186,22 @@
               </button>
             </li>
 
+            <li v-if="canAccessRoute('reports')">
+              <button
+                type="button"
+                class="group relative w-full"
+                @click="goToAndClose('reports')"
+                :class="itemClass('reports')"
+                aria-label="Reports"
+                title="Reports"
+              >
+                <span :class="iconWrapClass('reports')">
+                  <i class="pi pi-chart-bar text-[16px]" />
+                </span>
+                <span v-if="!collapsed" class="truncate">Reports</span>
+              </button>
+            </li>
+
           </ul>
         </div>
       </div>
@@ -286,6 +302,22 @@
                   <i class="pi pi-wallet text-[16px]" />
                 </span>
                 <span v-if="!collapsed" class="truncate">Billing</span>
+              </button>
+            </li>
+
+            <li v-if="canAccessRoute('reports')">
+              <button
+                type="button"
+                class="group relative w-full"
+                @click="goToAndClose('reports')"
+                :class="itemClass('reports')"
+                aria-label="Reports"
+                title="Reports"
+              >
+                <span :class="iconWrapClass('reports')">
+                  <i class="pi pi-chart-bar text-[16px]" />
+                </span>
+                <span v-if="!collapsed" class="truncate">Reports</span>
               </button>
             </li>
 
@@ -663,6 +695,7 @@ const ADMIN_NAV_ROUTE_NAMES = [
   "clinics",
   "patients",
   "billing",
+  "reports",
   "promos-offers",
   "promos-offers-single-service",
   "promos-offers-package-service",

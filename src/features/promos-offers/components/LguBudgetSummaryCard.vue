@@ -413,8 +413,22 @@ const getSelectedPatientPrintRange = (): { from: Date; to: Date } => {
   return { from, to }
 }
 
+const createEmptyPatientCreditDetail = (patientId: number): LguPatientCreditDetail => {
+  const patient = lguPatients.value.find(item => Number(item.id) === Number(patientId))
+
+  return {
+    patient_id: patientId,
+    patient_name: patient?.full_name || `Patient ${patientId}`,
+    dropout_status: patient?.lgu_patient_status ?? null,
+    appointments: [],
+    package_availments: [],
+    authorizations: [],
+    billings: []
+  }
+}
+
 const openLguPatientPrintRoute = (
-  routeName: "lgu-patient-profile-print" | "lgu-patient-billing-summary-print",
+  routeName: "lgu-patient-profile-print" | "lgu-patient-billing-summary-print" | "lgu-patient-invoice-billing-print",
   patientId: number,
   options: { billingId?: number | null; appointmentId?: number | null; from?: Date; to?: Date } = {}
 ): Window | null => {
@@ -2011,7 +2025,7 @@ const printSessionInvoice = async (option?: LguInvoiceSessionOption): Promise<vo
   selectedPatientSoaSessionKey.value = selectedOption.key
   const sessionDate = new Date(selectedOption.appointmentDate)
   patientSoaRange.value = Number.isNaN(sessionDate.getTime()) ? null : [sessionDate, sessionDate]
-  openLguPatientPrintRoute("lgu-patient-billing-summary-print", selectedPatientDetail.value?.patient_id ?? 0, {
+  openLguPatientPrintRoute("lgu-patient-invoice-billing-print", selectedPatientDetail.value?.patient_id ?? 0, {
     billingId: selectedOption.billingId,
     appointmentId: selectedOption.appointmentId,
     from: sessionDate,
@@ -2718,7 +2732,7 @@ const loadDashboardBudget = async (): Promise<void> => {
         loadLguInvoiceCatalog()
       ])
       if (detailResult.status === "rejected") throw detailResult.reason
-      selectedPatientDetail.value = detailResult.value ?? null
+      selectedPatientDetail.value = detailResult.value ?? createEmptyPatientCreditDetail(patientId)
     } catch (error: unknown) {
       patientDetailError.value = extractApiErrorMessage(error, "Failed to load patient LGU credit details")
     } finally {
@@ -2734,7 +2748,7 @@ const loadDashboardBudget = async (): Promise<void> => {
         patientId,
         selectedBudgetPeriodYear.value,
         selectedBudgetPeriodMonth.value
-      ) ?? null
+      ) ?? createEmptyPatientCreditDetail(patientId)
     } catch (error: unknown) {
       patientDetailError.value = extractApiErrorMessage(error, "Failed to refresh patient LGU credit details")
     }
@@ -2780,7 +2794,7 @@ const loadDashboardBudget = async (): Promise<void> => {
         return
       }
       const sessionDate = sessionOption?.appointmentDate ? new Date(sessionOption.appointmentDate) : null
-      openLguPatientPrintRoute("lgu-patient-billing-summary-print", detail.patient_id, {
+      openLguPatientPrintRoute("lgu-patient-invoice-billing-print", detail.patient_id, {
         billingId: detail.id,
         appointmentId: sessionOption?.appointmentId,
         from: sessionDate && !Number.isNaN(sessionDate.getTime()) ? sessionDate : new Date(detail.created_at),

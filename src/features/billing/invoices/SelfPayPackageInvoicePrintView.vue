@@ -1,7 +1,7 @@
 <template>
   <HmoInvoiceLayout
-    title="Invoice Billing"
-    :subtitle="`Self Pay printable record for ${patientName}`"
+    title="Self Pay Package Service Invoice"
+    :subtitle="`Package service printable record for ${patientName}`"
     :has-error="!!error"
   >
     <template #meta>
@@ -927,7 +927,7 @@ const buildRows = (billing: BillingListItem): SelfPaySummaryRow[] => {
 
     itemNo += 1
 
-    if (children.length > 0) {
+    if (children.length > 0 && !isBundleLikeLine(line)) {
       appendIncludedServiceRows(
         children,
         billing.id,

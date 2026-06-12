@@ -171,6 +171,7 @@ export interface AppointmentEncounterTicket {
   record_locked: boolean
   locked_at?: string
   billing_snapshot?: AppointmentBillingSnapshot
+  notes?: string | null
 }
 
 export interface LguCreditSummaryItem {
@@ -390,7 +391,11 @@ export interface AppointmentCreatePayload extends Record<string, unknown> {
 
 export interface AppointmentUpdatePayload extends Record<string, unknown> {}
 export interface AppointmentStatusUpdatePayload extends Record<string, unknown> {}
-export interface ReschedulePayload extends Record<string, unknown> {}
+export interface ReschedulePayload extends Record<string, unknown> {
+  starts_at: string
+  ends_at: string
+  reason?: string
+}
 export interface AppointmentEncounterTicketPayload extends Record<string, unknown> {}
 export interface AppointmentPtCompletionPayload extends Record<string, unknown> {}
 export interface LguServiceConsumptionPayload extends Record<string, unknown> {}
@@ -482,6 +487,7 @@ export interface AppointmentFlowSummary {
   }
   planned_services: AppointmentPlannedService[]
   consumed_services: AppointmentConsumedService[]
+  encounter_ticket?: AppointmentEncounterTicket | null
   billing_preparation: Record<string, any> | null
   billing_preparation_error?: string | null
   billing_document: {
@@ -558,24 +564,16 @@ export const appointmentPhase1Service = {
     return { physical_therapists: [] }
   },
 
-  async getPtEndOfDay(_date?: string, _clinicId?: number): Promise<PtEndOfDayReport> {
-    return {
-      eod_report_generated: false,
-      eod_generated_at: "",
-      summary: {
-        pending_pt_signature_count: 0,
-        pending_billing_count: 0,
-        billing_cleared_appointments: 0,
-        eligible_appointments: 0,
-        all_appointments_done: false,
-        all_billings_cleared: false
-      },
-      appointments: []
-    }
+  async getPtEndOfDay(date?: string, clinicId?: number): Promise<PtEndOfDayReport> {
+    const { data } = await pamsAPI.get<PtEndOfDayReport>("/pt-end-of-day", {
+      params: { date, clinic_id: clinicId }
+    })
+    return data
   },
 
-  async getEndOfDayHistory(_params: EndOfDayHistoryParams = {}): Promise<EndOfDayHistoryItem[]> {
-    return []
+  async getEndOfDayHistory(params: EndOfDayHistoryParams = {}): Promise<EndOfDayHistoryItem[]> {
+    const { data } = await pamsAPI.get<EndOfDayHistoryItem[]>("/end-of-day-history", { params })
+    return data ?? []
   },
 
   async getDailyLog(_params: AppointmentDailyLogParams): Promise<AppointmentDailyLogResponse> {
@@ -612,14 +610,23 @@ export const appointmentPhase1Service = {
     await pamsAPI.patch(`/appointments/${id}/status`, typeof payload === "string" ? { appointment_status: payload } : payload)
   },
 
-  reschedule: (_id: number, _payload: ReschedulePayload) => disabled<void>(),
+  async reschedule(id: number, payload: ReschedulePayload): Promise<void> {
+    await pamsAPI.patch(`/appointments/${id}/reschedule`, payload)
+  },
 
   async delete(id: number): Promise<void> {
     await pamsAPI.delete(`/appointments/${id}`)
   },
 
-  processEncounterTicket: (_id: number, _payload: AppointmentEncounterTicketPayload) =>
-    disabled<AppointmentEncounterTicket>(),
+  async getEncounterTicket(id: number): Promise<AppointmentEncounterTicket | null> {
+    const { data } = await pamsAPI.get<AppointmentEncounterTicket | null>(`/appointments/${id}/encounter-ticket`)
+    return data
+  },
+
+  async processEncounterTicket(id: number, payload: AppointmentEncounterTicketPayload): Promise<AppointmentEncounterTicket> {
+    const { data } = await pamsAPI.post<AppointmentEncounterTicket>(`/appointments/${id}/encounter-ticket`, payload)
+    return data
+  },
 
   processPtCompletion: (_id: number, _payload: AppointmentPtCompletionPayload) =>
     disabled<AppointmentEncounterTicket>(),
@@ -652,8 +659,17 @@ export const appointmentPhase1Service = {
 
   async saveAttendance(
     id: number,
-    payload: { items: Array<{ credit_item_id: number; quantity: number }> }
-  ): Promise<{ consumed_services: unknown[] }> {
+    payload: {
+      items: Array<{ credit_item_id: number; quantity: number }>
+      patient_signature_data_url?: string
+      patient_signature_signed_at?: string
+      patient_signature_signed_by?: string | null
+      pt_signature_data_url?: string
+      pt_confirmed_at?: string
+      pt_completion_tag?: string | null
+      notes?: string | null
+    }
+  ): Promise<{ consumed_services: unknown[]; encounter_ticket?: AppointmentEncounterTicket }> {
     const { data } = await pamsAPI.post(`/appointments/${id}/attendance`, payload)
     return data
   },

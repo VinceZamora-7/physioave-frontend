@@ -717,23 +717,32 @@
       </section>
     </div>
 
-    <template #footer>
-      <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <Button
-          label="Cancel"
-          severity="secondary"
-          outlined
-          @click="$emit('update:visible', false)"
-        />
-        <Button
-          label="Save Appointment"
-          icon="pi pi-save"
-          :loading="isSaving"
-          :pt="ptPrimaryBtn"
-          @click="$emit('save')"
-        />
-      </div>
-    </template>
+<template #footer>
+  <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
+    <Button
+      label="Cancel"
+      severity="secondary"
+      outlined
+      @click="$emit('update:visible', false)"
+    />
+
+    <div
+      v-if="blockingScheduleMessage"
+      class="max-w-xl rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-left text-xs font-semibold leading-5 text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-100"
+    >
+      {{ blockingScheduleMessage }}
+    </div>
+
+    <Button
+      label="Save Appointment"
+      icon="pi pi-save"
+      :loading="isSaving"
+      :disabled="isSaving"
+      :pt="ptPrimaryBtn"
+      @click="submitSave"
+    />
+  </div>
+</template>
   </Dialog>
 </template>
 
@@ -771,6 +780,13 @@ type TimeSlot = {
   end: Date
   taken: boolean
   takenBy: ScheduleAppointment[]
+}
+
+type SamePtTimeConflict = {
+  sessionIndex: number
+  sessionStart: Date
+  sessionEnd: Date
+  appointments: ScheduleAppointment[]
 }
 
 const FormSectionHeader = defineComponent({
@@ -837,7 +853,7 @@ const props = defineProps<{
   isAvailabilityLoading: boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   "update:visible": [value: boolean]
   "generate-session-dates": [mode: SessionMode]
   "add-picked-service": []
@@ -1095,6 +1111,7 @@ const isCanceledAppointment = (appointment: ScheduleAppointment): boolean => {
 
 const appointmentsForSelectedSession = computed(() => {
   const selectedKey = dateKey(selectedSessionDate.value)
+  const hasSelectedPt = Boolean(props.form.primary_provider_staff_id)
 
   return props.scheduleAppointments.filter(appointment => {
     if (Number(appointment.id) === Number(props.editingId)) return false
@@ -1103,7 +1120,11 @@ const appointmentsForSelectedSession = computed(() => {
     const startsAt = asDate(appointment.starts_at)
     if (!startsAt || dateKey(startsAt) !== selectedKey) return false
 
-    return matchesSelectedClinic(appointment) && matchesSelectedPt(appointment)
+    if (hasSelectedPt) {
+      return matchesSelectedPt(appointment)
+    }
+
+    return matchesSelectedClinic(appointment)
   })
 })
 
@@ -1122,6 +1143,62 @@ const overlappingManualAppointments = computed(() => {
   })
 })
 
+const samePtTimeConflicts = computed<SamePtTimeConflict[]>(() => {
+  const selectedPtId = Number(props.form.primary_provider_staff_id)
+
+  if (!Number.isFinite(selectedPtId) || selectedPtId <= 0) return []
+
+  const sessionDates = Array.isArray(props.form.session_dates)
+    ? props.form.session_dates
+    : []
+
+  return sessionDates
+    .map((sessionDate, sessionIndex) => {
+      const sessionStart = asDate(sessionDate)
+      if (!sessionStart) return null
+
+      const sessionEnd = new Date(sessionStart.getTime() + slotDurationMs.value)
+      const selectedKey = dateKey(sessionStart)
+
+      const appointments = props.scheduleAppointments.filter(appointment => {
+        if (Number(appointment.id) === Number(props.editingId)) return false
+        if (isCanceledAppointment(appointment)) return false
+        if (appointmentProviderId(appointment) !== selectedPtId) return false
+
+        const appointmentStart = asDate(appointment.starts_at)
+        const appointmentEnd = asDate(appointment.ends_at)
+
+        if (!appointmentStart || !appointmentEnd) return false
+        if (dateKey(appointmentStart) !== selectedKey) return false
+
+        return overlaps(sessionStart, sessionEnd, appointmentStart, appointmentEnd)
+      })
+
+      if (!appointments.length) return null
+
+      return {
+        sessionIndex,
+        sessionStart,
+        sessionEnd,
+        appointments
+      }
+    })
+    .filter((item): item is SamePtTimeConflict => Boolean(item))
+})
+
+const hasSamePtTimeConflict = computed(() => samePtTimeConflicts.value.length > 0)
+
+const blockingScheduleMessage = computed(() => {
+  const conflict = samePtTimeConflicts.value[0]
+  if (!conflict) return ""
+
+  const appointment = conflict.appointments[0]
+  const patientName = appointment?.patient_name || "another patient"
+  const ptName = appointment?.provider_name || appointment?.doctor_name || "selected PT"
+
+  return `Cannot save. Session ${conflict.sessionIndex + 1} overlaps with ${ptName}'s existing appointment for ${patientName} from ${formatTimeValue(appointment?.starts_at)} to ${formatTimeValue(appointment?.ends_at)}.`
+})
+
 const manualScheduleWarnings = computed(() => {
   const warnings: string[] = []
 
@@ -1134,7 +1211,7 @@ const manualScheduleWarnings = computed(() => {
   }
 
   if (overlappingManualAppointments.value.length) {
-    warnings.push("Selected manual time overlaps with another appointment for this branch or PT.")
+    warnings.push("Selected manual time overlaps with another appointment for this PT.")
   }
 
   return warnings
@@ -1218,6 +1295,20 @@ const setSlotForActiveSession = (slot: TimeSlot): void => {
   }
 }
 
+const submitSave = (): void => {
+  if (hasSamePtTimeConflict.value) {
+    const conflict = samePtTimeConflicts.value[0]
+
+    if (conflict) {
+      activeSessionIndex.value = conflict.sessionIndex
+    }
+
+    return
+  }
+
+  emit("save")
+}
+
 const handleServiceTypeChange = (): void => {
   props.servicePicker.id = null
   if (props.servicePicker.type === "PACKAGE") props.servicePicker.quantity = 1
@@ -1271,23 +1362,7 @@ watch(
   }
 )
 
-watch(
-  () => props.form.starts_at,
-  (value) => {
-    const start = asDate(value)
-    if (!start) return
-
-    ensureSessionDatesArray()
-
-    const firstSession = asDate(props.form.session_dates[0])
-    if (!firstSession || firstSession.getTime() !== start.getTime()) {
-      props.form.session_dates[0] = new Date(start)
-    }
-
-    const end = asDate(props.form.ends_at)
-    if (!end || end.getTime() <= start.getTime()) {
-      props.form.ends_at = new Date(start.getTime() + DEFAULT_DURATION_MS)
-    }
-  }
-)
+// Parent AppointmentsModule owns starts_at / ends_at synchronization.
+// Do not watch props.form.starts_at here and mutate props.form.session_dates,
+// because that can fight the parent watcher and cause Maximum recursive updates.
 </script>

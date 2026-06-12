@@ -177,7 +177,7 @@
                 </td>
                 <td class="px-3 py-2 text-xs text-[rgb(var(--app-fg))]/60">{{ formatDateTime(billing.created_at) }}</td>
                 <td class="px-3 py-2">
-                  <Button label="Billing Summary" icon="pi pi-file-pdf" size="small" outlined :loading="printingClaimBillingId === billing.id" @click="$emit('download-claim-pdf', billing.id)" />
+                  <Button label="Invoice Billing" icon="pi pi-file-pdf" size="small" outlined :loading="printingClaimBillingId === billing.id" @click="$emit('download-claim-pdf', billing.id)" />
                 </td>
               </tr>
             </tbody>
@@ -231,24 +231,12 @@ const lguPrintables = [
     icon: "pi pi-id-card",
     event: "export-patient-lgu-details" as LguPrintableEvent
   },
-  // {
-  //   title: "Patient Billing Summary",
-  //   buttonLabel: "Print Patient Billing Summary",
-  //   icon: "pi pi-file",
-  //   event: "export-patient-billing-summary" as LguPrintableEvent
-  // },
-  // {
-  //   title: "Patient Billing Summary",
-  //   buttonLabel: "Print Patient Billing Summary",
-  //   icon: "pi pi-file",
-  //   event: "export-patient-billing-summary" as LguPrintableEvent
-  // },
-  // {
-  //   title: "Patient Billing Summary",
-  //   buttonLabel: "Print Patient Billing Summary",
-  //   icon: "pi pi-file-pdf",
-  //   event: "open-patient-soa-picker" as LguPrintableEvent
-  // }
+  {
+    title: "Patient Billing Summary",
+    buttonLabel: "Print Billing Summary",
+    icon: "pi pi-file",
+    event: "export-patient-billing-summary" as LguPrintableEvent
+  },
 ]
 
 const printPrintable = (event: LguPrintableEvent): void => {
