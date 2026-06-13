@@ -30,6 +30,19 @@
                 <label>Search</label>
               </IftaLabel>
             </div>
+            <div class="min-w-52">
+              <IftaLabel>
+                <Select
+                  v-model="tableFilterBillingType"
+                  :options="billingTypeOptions"
+                  optionLabel="label"
+                  optionValue="value"
+                  showClear
+                  fluid
+                />
+                <label>Billing Type</label>
+              </IftaLabel>
+            </div>
             <Button
               :label="filtersExpanded ? 'Hide Filters' : 'Advanced Filters'"
               :icon="filtersExpanded ? 'pi pi-chevron-up' : 'pi pi-filter'"
@@ -43,18 +56,6 @@
           <!-- Collapsible advanced filters -->
           <Transition name="filter-expand">
             <div v-if="filtersExpanded" class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <IftaLabel>
-                <Select
-                  v-model="tableFilterBillingType"
-                  :options="billingTypeOptions"
-                  optionLabel="label"
-                  optionValue="value"
-                  showClear
-                  fluid
-                />
-                <label>Billing Type</label>
-              </IftaLabel>
-
               <IftaLabel>
                 <Select
                   v-model="tableFilterPaymentType"
@@ -149,22 +150,30 @@
             </template>
           </Column>
           <Column field="patient_name" header="Patient" style="width: 160px" />
-          <Column field="billing_type" header="Type" style="width: 140px">
+          <Column field="billing_type" header="Billing Type" style="width: 190px">
             <template #body="{data}">
-              <Tag
-                :value="data.is_package_group_row ? 'Package Group' : displayBillingType(data.billing_type)"
-                :severity="data.is_package_group_row ? 'info' : 'secondary'"
-                class="text-xs"
-              />
+              <div class="flex flex-col gap-1">
+                <Tag
+                  :value="billingTableTypeLabel(data)"
+                  :severity="billingTableTypeSeverity(data)"
+                  class="w-fit text-xs font-semibold"
+                />
+                <span v-if="data.is_lgu_group_row" class="text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                  Per appointment
+                </span>
+              </div>
             </template>
           </Column>
           <Column header="Label / Receipt" >
             <template #body="{data}">
               <div>
                 <div class="font-medium">{{ data.service_name || "â€”" }}</div>
-                <div v-if="data.is_package_group_row" class="text-xs opacity-60">
+                <div v-if="data.is_package_group_row || data.is_lgu_group_row" class="text-xs opacity-60">
                   {{ data.package_group_billing_count }} billing{{ data.package_group_billing_count !== 1 ? 's' : '' }}
                   <span v-if="data.total_sessions"> · {{ data.total_sessions }} session{{ data.total_sessions !== 1 ? 's' : '' }}</span>
+                </div>
+                <div v-if="data.is_lgu_group_row && (data.lgu_program_name || data.lgu_reference_label)" class="text-xs opacity-50">
+                  {{ [data.lgu_program_name, data.lgu_reference_label].filter(Boolean).join(" · ") }}
                 </div>
                 <div v-if="data.receipt_number" class="text-xs opacity-50">{{ data.receipt_number }}</div>
               </div>
@@ -194,7 +203,7 @@
               <div class="flex flex-wrap items-center gap-1">
                 <Button size="small" outlined icon="pi pi-eye" label="View" @click="openBillingDetails(data.representative_billing_id ?? data.id)" />
                 <Button
-                  v-if="isLguBillingRow(data) && !data.is_package_group_row"
+                  v-if="isLguBillingRow(data) && !data.is_package_group_row && !data.is_lgu_group_row"
                   size="small"
                   outlined
                   icon="pi pi-file"
@@ -1768,6 +1777,7 @@ import {openEncounterTicketPdfWindow, renderEncounterTicketPdfWindow, type Encou
 import {getApiErrorMessage} from "@/utils/actionable-error.util"
 import type {BillingReceiptPrintBreakdownGroup, BillingReceiptPrintSubItem} from "@/utils/billing-receipt-print.util"
 import {lguBillingService} from "@/features/lgu-billing/api/lgu-billing.service"
+import {formatLguStatus, normalizeLguStatus} from "@/features/lgu-billing/invoices/lgu-invoice.shared"
 import {useAuthSessionStore} from "@/stores/auth-session.store"
 import {billingContextTanstackService} from "@/features/billing/queries/billing-context.tanstack.service"
 import {BillingTanstackKey} from "@/utils/keys/tanstack-key"
@@ -1786,6 +1796,7 @@ const queryClient = useQueryClient()
 
 type BillingTableRow = BillingListItem & {
   is_package_group_row?: boolean
+  is_lgu_group_row?: boolean
   representative_billing_id?: number
   package_group_billing_count?: number
   package_total_due?: number
@@ -2659,6 +2670,28 @@ const displayBillingType = (value?: string): string => {
   return value?.trim() || "N/A"
 }
 
+const billingTypeSeverity = (value?: string): "success"|"info"|"warn"|"secondary" => {
+  const n = normalizeBillingTypeValue(value)
+  if (n === "SELF_PAY_SINGLE") return "success"
+  if (n === "SELF_PAY_PACKAGE") return "info"
+  if (n === "HMO_BILLING") return "info"
+  if (n === "LGU_BILLING") return "warn"
+  return "secondary"
+}
+
+const billingTableTypeLabel = (billing: BillingTableRow): string => {
+  if (billing.is_lgu_group_row) return "LGU Group"
+  if (billing.is_package_group_row) return "Package Group"
+  return displayBillingType(billing.billing_type)
+}
+
+const billingTableTypeSeverity = (billing: BillingTableRow): "success"|"info"|"warn"|"secondary" =>
+  billing.is_lgu_group_row
+    ? "warn"
+    : billing.is_package_group_row
+      ? "info"
+      : billingTypeSeverity(billing.billing_type)
+
 // â”€â”€ Billing mode banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const billingModeBannerClass = computed(() => {
   if (form.value.billing_type === "HMO_BILLING")     return "bg-blue-50 dark:bg-blue-950 text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-800"
@@ -2684,16 +2717,13 @@ const billingModeHint  = computed(() => {
 })
 
 const normalizeBillingStatusLabel = (value?: string): string =>
-  String(value ?? "UNBILLED")
-    .trim()
-    .toUpperCase()
-    .replace(/-/g, "_")
-    .replace(/\s+/g, "_")
+  normalizeLguStatus(value ?? "UNBILLED")
 
 const displayBillingStatus = (value?: string): string => {
   const normalized = normalizeBillingStatusLabel(value)
-  if (normalized === "CROSS_MONTH_DROPPED_OUT") return "CROSS MONTH DROPPED OUT"
-  if (normalized === "DROPPED_OUT") return "DROPPED OUT"
+  if (["DROPPED_OUT", "CROSS_MONTH_DROPPED_OUT", "VOIDED_DROPOUT"].includes(normalized)) {
+    return formatLguStatus(normalized).toUpperCase()
+  }
   return normalized.replace(/_/g, " ")
 }
 
@@ -2712,7 +2742,7 @@ const resolveBillingRuntimeStatus = (billing?: BillingListItem | null): string =
 
   if (
     billingType === "LGU_BILLING" &&
-    ["DROPPED_OUT", "CROSS_MONTH_DROPPED_OUT"].includes(dropoutStatus)
+    ["DROPPED_OUT", "CROSS_MONTH_DROPPED_OUT", "VOIDED_DROPOUT"].includes(dropoutStatus)
   ) {
     return dropoutStatus
   }
@@ -2724,7 +2754,7 @@ const billingStatusSeverity = (value?: string): "success"|"warn"|"danger"|"info"
   const n = normalizeBillingStatusLabel(value)
   if (n === "PAID")    return "success"
   if (["PARTIAL","PENDING","UNBILLED"].includes(n)) return "warn"
-  if (["VOID","CANCELLED","DROPPED_OUT","CROSS_MONTH_DROPPED_OUT"].includes(n)) return "danger"
+  if (["VOID","CANCELLED","DROPPED_OUT","CROSS_MONTH_DROPPED_OUT","VOIDED_DROPOUT"].includes(n)) return "danger"
   return "info"
 }
 
@@ -2847,6 +2877,27 @@ const isPackageGroupBilling = (billing: BillingListItem): boolean =>
   getBillingPackageGroupId(billing) > 0 &&
   ["SELF_PAY_PACKAGE", "LGU_BILLING"].includes(normalizeBillingTypeValue(billing.billing_type) ?? "")
 
+const getLguAppointmentGroupKey = (billing: BillingListItem): string => {
+  if (normalizeBillingTypeValue(billing.billing_type) !== "LGU_BILLING") return ""
+
+  const patientId = Number(billing.patient_id ?? 0)
+  if (!Number.isFinite(patientId) || patientId <= 0) return ""
+
+  const program = String(billing.lgu_program_name ?? "NO_PROGRAM").trim().toUpperCase()
+  const referral = String(
+    billing.lgu_reference_label ??
+    billing.lgu_patient_referral_form_no ??
+    "NO_REFERRAL"
+  ).trim().toUpperCase()
+
+  return [patientId, program || "NO_PROGRAM", referral || "NO_REFERRAL"].join("|")
+}
+
+const isLguAppointmentGroupBilling = (billing: BillingListItem): boolean =>
+  normalizeBillingTypeValue(billing.billing_type) === "LGU_BILLING" &&
+  getBillingPackageGroupId(billing) <= 0 &&
+  Boolean(getLguAppointmentGroupKey(billing))
+
 const resolvePackageGroupStatus = (rows: BillingListItem[]): string => {
   const statuses = rows.map(row => normalizeBillingStatusLabel(resolveBillingRuntimeStatus(row)))
   if (statuses.includes("CROSS_MONTH_DROPPED_OUT")) return "CROSS_MONTH_DROPPED_OUT"
@@ -2925,9 +2976,53 @@ const buildPackageGroupTableRow = (groupId: number, rows: BillingListItem[]): Bi
   }
 }
 
+const buildLguAppointmentGroupTableRow = (groupKey: string, rows: BillingListItem[]): BillingTableRow => {
+  const sortedRows = [...rows].sort((a, b) => {
+    const leftDate = new Date(a.created_at).getTime()
+    const rightDate = new Date(b.created_at).getTime()
+    if (leftDate !== rightDate) return leftDate - rightDate
+    return Number(a.id ?? 0) - Number(b.id ?? 0)
+  })
+  const representative = sortedRows[0] ?? rows[0]
+  const totalDue = Number(sortedRows.reduce((sum, row) => sum + Number(row.total_amount ?? row.amount_due ?? 0), 0).toFixed(2))
+  const totalPaid = Number(sortedRows.reduce((sum, row) => sum + Number(row.amount_paid ?? 0), 0).toFixed(2))
+  const balance = Math.max(0, Number((totalDue - totalPaid).toFixed(2)))
+  const groupStatus = resolvePackageGroupStatus(sortedRows)
+  const totalSessions = Math.max(
+    Number(representative.total_sessions ?? 0),
+    ...sortedRows.map(row => Number(row.session_sequence ?? 0)),
+    sortedRows.length
+  )
+
+  return {
+    ...representative,
+    id: representative.id,
+    service_name: representative.lgu_reference_label
+      ? `LGU Appointments · ${representative.lgu_reference_label}`
+      : "LGU Appointment Billings",
+    package_group_id: groupKey,
+    appointment_id: undefined,
+    appointment_public_id: `${sortedRows.length} appointments`,
+    billing_status: groupStatus,
+    amount_due: totalDue,
+    total_amount: totalDue,
+    amount_paid: totalPaid,
+    is_lgu_group_row: true,
+    representative_billing_id: representative.id,
+    package_group_billing_count: sortedRows.length,
+    package_total_due: totalDue,
+    package_total_paid: totalPaid,
+    package_balance: balance,
+    package_display_status: groupStatus,
+    total_sessions: totalSessions,
+    included_billings: sortedRows
+  }
+}
+
 const billingTableRows = computed<BillingTableRow[]>(() => {
   const output: BillingTableRow[] = []
   const packageGroups = new Map<number, BillingListItem[]>()
+  const lguAppointmentGroups = new Map<string, BillingListItem[]>()
 
   filteredBillings.value.forEach((billing) => {
     const packageGroupId = getBillingPackageGroupId(billing)
@@ -2936,11 +3031,21 @@ const billingTableRows = computed<BillingTableRow[]>(() => {
       return
     }
 
+    const lguAppointmentGroupKey = getLguAppointmentGroupKey(billing)
+    if (isLguAppointmentGroupBilling(billing) && lguAppointmentGroupKey) {
+      lguAppointmentGroups.set(lguAppointmentGroupKey, [...(lguAppointmentGroups.get(lguAppointmentGroupKey) ?? []), billing])
+      return
+    }
+
     output.push(billing)
   })
 
   packageGroups.forEach((rows, groupId) => {
     output.push(buildPackageGroupTableRow(groupId, rows))
+  })
+
+  lguAppointmentGroups.forEach((rows, groupKey) => {
+    output.push(buildLguAppointmentGroupTableRow(groupKey, rows))
   })
 
   return output.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())

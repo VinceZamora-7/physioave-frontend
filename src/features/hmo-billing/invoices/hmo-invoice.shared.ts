@@ -1,4 +1,4 @@
-import { useLguInvoicePrintActions } from "@/features/lgu-billing/invoices/lgu-invoice.shared"
+import { useSponsorInvoicePrintActions } from "@/features/shared/invoices/sponsor-invoice.shared"
 
 export const normalizeHmoStatus = (value?: string | null): string =>
   String(value ?? "")
@@ -23,4 +23,4 @@ export const formatHmoStatus = (value?: string | null): string => {
   }
 }
 
-export const useHmoInvoicePrintActions = useLguInvoicePrintActions
+export const useHmoInvoicePrintActions = useSponsorInvoicePrintActions

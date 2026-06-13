@@ -1,5 +1,6 @@
 <template>
   <main class="app-page-shell space-y-5">
+    <ConfirmDialog />
 
     <!-- ── Hero ──────────────────────────────────────────────────────── -->
     <section
@@ -24,6 +25,26 @@
     </section>
 
     <Message v-if="loadError" severity="error" :closable="false">{{ loadError }}</Message>
+
+    <section v-if="canClearAppointmentsAndBillings" class="app-section-card-comfy space-y-4 border-red-200/80 bg-red-50/60 dark:border-red-900/40 dark:bg-red-950/20">
+      <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h3 class="app-section-title text-red-700 dark:text-red-300">Danger Zone</h3>
+          <p class="max-w-3xl text-sm text-red-700/80 dark:text-red-200/80">
+            Clear all appointment and billing records, including claim documents, receipts, SOAs, encounter tickets, and package credit usage. Patients, staff, services, and settings are kept.
+          </p>
+        </div>
+
+        <Button
+          label="Clear Appointments and Billings"
+          icon="pi pi-trash"
+          severity="danger"
+          :loading="clearingAppointmentsAndBillings"
+          :disabled="clearingAppointmentsAndBillings"
+          @click="confirmClearAppointmentsAndBillings"
+        />
+      </div>
+    </section>
 
     <!-- ── Your Account ───────────────────────────────────────────────── -->
     <section class="app-section-card-comfy space-y-4">
@@ -293,14 +314,19 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from "vue"
+import { computed, onMounted, ref } from "vue"
 import { storeToRefs } from "pinia"
 import Button from "primevue/button"
+import ConfirmDialog from "primevue/confirmdialog"
 import Message from "primevue/message"
 import Tag from "primevue/tag"
+import { useConfirm } from "primevue/useconfirm"
+import { useToast } from "primevue/usetoast"
 
 import { ptOutlinedBtn, ptPrimaryBtn } from "@/features/shared/table-header.styles"
 import { useAuthSessionStore } from "@/stores/auth-session.store"
+import { pamsAPI } from "@/utils/axios-interceptor"
+import { getApiErrorMessage } from "@/utils/actionable-error.util"
 import ModeOfReferralManagerDialog from "@/features/general-settings/components/ModeOfReferralManagerDialog.vue"
 import ExpenseItemManagerDialog from "@/features/general-settings/components/ExpenseItemManagerDialog.vue"
 import MedicalReferenceManagerDialog from "@/features/general-settings/components/MedicalReferenceManagerDialog.vue"
@@ -308,14 +334,23 @@ import EvaluationDropdownManagerDialog from "@/features/general-settings/compone
 
 const authSession = useAuthSessionStore()
 const { currentUser } = storeToRefs(authSession)
+const confirm = useConfirm()
+const toast = useToast()
 
 const loadError = ref("")
+const clearingAppointmentsAndBillings = ref(false)
 const modeOfReferralManager = ref<InstanceType<typeof ModeOfReferralManagerDialog> | null>(null)
 const expenseItemManager = ref<InstanceType<typeof ExpenseItemManagerDialog> | null>(null)
 const medicalCategoryManager = ref<InstanceType<typeof MedicalReferenceManagerDialog> | null>(null)
 const medicalDiagnosisManager = ref<InstanceType<typeof MedicalReferenceManagerDialog> | null>(null)
 const ptCaseImpressionManager = ref<InstanceType<typeof MedicalReferenceManagerDialog> | null>(null)
 const evaluationDropdownManager = ref<InstanceType<typeof EvaluationDropdownManagerDialog> | null>(null)
+const clearConfirmationPhrase = "CLEAR_APPOINTMENTS_AND_BILLINGS"
+
+const canClearAppointmentsAndBillings = computed(() => {
+  const permissions = currentUser.value?.permissions ?? []
+  return permissions.includes("AccessMatrix::DELETE") || permissions.includes("Appointment::DELETE")
+})
 
 const formatProviderType = (type?: string): string => {
   if (!type) return "—"
@@ -323,6 +358,64 @@ const formatProviderType = (type?: string): string => {
     .replace(/_/g, " ")
     .toLowerCase()
     .replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+const extractApiErrorMessage = (error: unknown, fallback: string): string =>
+  getApiErrorMessage(error, {
+    baseMessage: fallback,
+    invalidInputHint: "The confirmation phrase did not match."
+  })
+
+const clearAppointmentsAndBillings = async (): Promise<void> => {
+  clearingAppointmentsAndBillings.value = true
+  try {
+    const { data } = await pamsAPI.post<{ counts?: Record<string, number> }>(
+      "/maintenance/clear-appointments-billings",
+      { confirmation: clearConfirmationPhrase }
+    )
+
+    const clearedCount = Object.values(data.counts ?? {}).reduce((sum, value) => sum + Number(value ?? 0), 0)
+    toast.add({
+      severity: "success",
+      summary: "Appointments and billings cleared",
+      detail: `${clearedCount} related records were cleared.`,
+      life: 5000
+    })
+  } catch (error: unknown) {
+    toast.add({
+      severity: "error",
+      summary: "Clear failed",
+      detail: extractApiErrorMessage(error, "Failed to clear appointments and billings"),
+      life: 6000
+    })
+  } finally {
+    clearingAppointmentsAndBillings.value = false
+  }
+}
+
+const confirmClearAppointmentsAndBillings = (): void => {
+  confirm.require({
+    header: "Clear appointments and billings?",
+    message: `This permanently clears appointment and billing records. Type ${clearConfirmationPhrase} in the next prompt to continue.`,
+    icon: "pi pi-exclamation-triangle",
+    rejectLabel: "Cancel",
+    acceptLabel: "Continue",
+    acceptClass: "p-button-danger",
+    accept: () => {
+      const typed = window.prompt(`Type ${clearConfirmationPhrase} to clear appointments and billings.`)
+      if (typed !== clearConfirmationPhrase) {
+        toast.add({
+          severity: "warn",
+          summary: "Clear cancelled",
+          detail: "The confirmation phrase did not match.",
+          life: 3500
+        })
+        return
+      }
+
+      void clearAppointmentsAndBillings()
+    }
+  })
 }
 
 onMounted(async () => {

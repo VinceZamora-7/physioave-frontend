@@ -36,7 +36,22 @@ export const ROUTE_ACCESS_RULES: Record<string, RouteAccessRule> = {
   "hmo-patient-billing-summary-print": {
     anyOf: [...MODULE_ACCESS_RULES.billing],
   },
+  "hmo-patient-profile-print": {
+    anyOf: [...MODULE_ACCESS_RULES.billing],
+  },
+  "hmo-attendance-treatment-print": {
+    anyOf: [...MODULE_ACCESS_RULES.billing],
+  },
   "lgu-patient-billing-summary-print": {
+    anyOf: [...MODULE_ACCESS_RULES.billing],
+  },
+  "lgu-patient-profile-print": {
+    anyOf: [...MODULE_ACCESS_RULES.billing],
+  },
+  "lgu-patient-invoice-billing-print": {
+    anyOf: [...MODULE_ACCESS_RULES.billing],
+  },
+  "lgu-attendance-treatment-print": {
     anyOf: [...MODULE_ACCESS_RULES.billing],
   },
   "hmo-soa-print": {

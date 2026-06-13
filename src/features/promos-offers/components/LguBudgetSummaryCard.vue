@@ -124,8 +124,6 @@
       :format-date-time="formatDateTime"
       :format-lgu-status="formatLguStatus"
       :lgu-status-severity="lguStatusSeverity"
-      :as-currency="asCurrency"
-      :get-billing-summary-amount="getPatientBillingSummaryAmount"
       @print-attendance-record="exportPatientAttendanceRecord"
       @export-patient-lgu-details="exportPatientLguDetails"
       @export-patient-billing-summary="exportPatientProfileBillingSummary"
@@ -165,7 +163,6 @@ import {
   type LguPatientCreditDetail,
   type LguProgramLookup
 } from "@/features/lgu-billing/api/lgu-billing.service"
-import { renderLguInvoiceWindow } from "@/features/lgu-billing/invoices/lgu-invoice.util"
 import { pamsAPI } from "@/utils/axios-interceptor"
 import { getApiErrorMessage } from "@/utils/actionable-error.util"
 import { errorToast, successToast } from "@/utils/toast.util"
@@ -176,10 +173,6 @@ import {
   renderEncounterTicketBulkPdfWindow,
   type EncounterTicketPdfCard
 } from "@/utils/encounter-ticket-pdf.util"
-import {
-  renderStandardInvoiceWindow,
-  type InvoiceDetailRow
-} from "@/features/billing/invoices/invoice-layout.util"
 import { LGU_BILLING_TYPE, isLguBillingType } from "@/features/promos-offers/lgu/lgu-billing-type.module"
 import type { Patient } from "@/features/patients/types/patient"
 import type { PatientHMOInformation } from "@/models/hmo-information"

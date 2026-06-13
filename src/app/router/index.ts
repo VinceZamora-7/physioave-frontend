@@ -43,9 +43,33 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: "/billing/print/hmo-profile",
+      name: "hmo-patient-profile-print",
+      component: () => import("@/features/hmo-billing/invoices/HmoPatientProfilePrintView.vue"),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: "/billing/print/hmo-attendance-treatment",
+      name: "hmo-attendance-treatment-print",
+      component: () => import("@/features/hmo-billing/invoices/HmoAttendanceTreatmentRecordPrintView.vue"),
+      meta: { requiresAuth: true }
+    },
+    {
       path: "/billing/print/lgu-summary",
-      name: "lgu-patient-invoice-billing-print",
+      name: "lgu-patient-billing-summary-print",
       component: () => import("@/features/lgu-billing/invoices/LguPatientBillingSummaryPrintView.vue"),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: "/billing/print/lgu-profile",
+      name: "lgu-patient-profile-print",
+      component: () => import("@/features/lgu-billing/invoices/LguPatientProfilePrintView.vue"),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: "/billing/print/lgu-attendance-treatment",
+      name: "lgu-attendance-treatment-print",
+      component: () => import("@/features/lgu-billing/invoices/LguAttendanceTreatmentRecordPrintView.vue"),
       meta: { requiresAuth: true }
     },
     {

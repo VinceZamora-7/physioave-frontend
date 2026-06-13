@@ -1,5 +1,5 @@
 <template>
-  <HmoInvoiceLayout
+  <SponsorInvoiceLayout
     title="Self Pay Single Service Invoice"
     :subtitle="`Single service printable record for ${patientName}`"
     :has-error="!!error"
@@ -165,7 +165,7 @@
         </section>
       </div>
     </template>
-  </HmoInvoiceLayout>
+  </SponsorInvoiceLayout>
 </template>
 
 <script setup lang="ts">
@@ -175,7 +175,7 @@ import { useQueryClient } from "@tanstack/vue-query"
 import Button from "primevue/button"
 import type { BillingListItem } from "@/features/billing/api/billing-phase1.service"
 import { billingContextTanstackService } from "@/features/billing/queries/billing-context.tanstack.service"
-import HmoInvoiceLayout from "@/features/hmo-billing/invoices/HmoInvoiceLayout.vue"
+import SponsorInvoiceLayout from "@/features/shared/invoices/SponsorInvoiceLayout.vue"
 import { useHmoInvoicePrintActions } from "@/features/hmo-billing/invoices/hmo-invoice.shared"
 
 type SelfPaySummaryRow = {

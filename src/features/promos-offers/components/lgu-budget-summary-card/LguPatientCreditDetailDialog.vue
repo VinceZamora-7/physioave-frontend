@@ -136,54 +136,46 @@
           />
         </div>
 
-        <div v-if="selectedPatientDetail.billings.length" class="overflow-x-auto rounded-2xl border border-[rgb(var(--app-border))]">
+        <div v-if="billingSummaryRows.length" class="overflow-x-auto rounded-2xl border border-[rgb(var(--app-border))]">
           <table class="min-w-full text-sm">
             <thead class="bg-[rgb(var(--app-bg-soft))] text-left text-xs uppercase tracking-wide text-[rgb(var(--app-fg))]/60">
               <tr>
                 <th class="px-3 py-2 font-bold">Reference</th>
-                <th class="px-3 py-2 font-bold">Availed Package</th>
-                <th class="px-3 py-2 font-bold">Type</th>
-                <th class="px-3 py-2 font-bold">Program Status</th>
-                <th class="px-3 py-2 font-bold">Sessions Rendered</th>
-                <th class="px-3 py-2 text-right font-bold">Amount</th>
-                <th class="px-3 py-2 font-bold">Status</th>
-                <th class="px-3 py-2 font-bold">Date</th>
+                <th class="px-3 py-2 font-bold">Appointment ID</th>
+                <th class="px-3 py-2 font-bold">Session Sequence</th>
+                <th class="px-3 py-2 font-bold">Appointment Status</th>
+                <th class="px-3 py-2 font-bold">Date of Appointment</th>
                 <th class="px-3 py-2 font-bold">PDF</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="billing in selectedPatientDetail.billings" :key="billing.id" class="border-t border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))]">
-                <td class="px-3 py-2 font-mono text-xs">{{ billing.public_id }}</td>
-                <td class="px-3 py-2 text-xs">{{ billing.package_name || billing.service_name || '-' }}</td>
+              <tr v-for="row in billingSummaryRows" :key="row.key" class="border-t border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))]">
                 <td class="px-3 py-2">
-                  <span v-if="billing.pricing_source === 'LGU_DROPOUT_INDIVIDUAL_CLAIM'" class="inline-flex rounded-full bg-orange-100 px-2 py-0.5 text-xs font-bold text-orange-700 dark:bg-orange-900/30 dark:text-orange-300">Dropout Claim</span>
-                  <span v-else-if="billing.pricing_source === 'LGU_PACKAGE_MONTHLY_CLAIM'" class="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">Monthly Claim</span>
-                  <span v-else class="text-xs text-[rgb(var(--app-fg))]/60">{{ billing.pricing_source || '-' }}</span>
+                  <div class="font-mono text-xs font-semibold">{{ row.reference }}</div>
+                  <div class="mt-0.5 text-[11px] text-[rgb(var(--app-fg))]/60">{{ row.serviceName }}</div>
                 </td>
+                <td class="px-3 py-2 font-mono text-xs">APT-{{ row.appointmentId }}</td>
+                <td class="px-3 py-2 text-xs">{{ row.sessionSequenceLabel }}</td>
                 <td class="px-3 py-2">
-                  <Tag :value="getProgramStatusLabel(billing)" :severity="getProgramStatusSeverity(billing)" class="text-xs" />
+                  <Tag :value="formatLguStatus(row.appointmentStatus)" :severity="lguStatusSeverity(row.appointmentStatus)" class="text-xs" />
                 </td>
-                <td class="px-3 py-2 text-xs">
-                  <div class="space-y-1">
-                    <div class="font-semibold">{{ sessionsRenderedLabel }}</div>
-                    <div class="h-1.5 w-28 overflow-hidden rounded-full bg-[rgb(var(--app-border))]">
-                      <div class="h-full bg-emerald-500" :style="{ width: sessionsRenderedPercent + '%' }" />
-                    </div>
-                  </div>
-                </td>
-                <td class="px-3 py-2 text-right font-bold">{{ asCurrency(getBillingSummaryAmount(billing)) }}</td>
+                <td class="px-3 py-2 text-xs text-[rgb(var(--app-fg))]/60">{{ formatDateTime(row.appointmentDate) }}</td>
                 <td class="px-3 py-2">
-                  <Tag :value="billing.billing_status" :severity="billing.billing_status === 'PAID' ? 'success' : billing.billing_status === 'BILLED' ? 'info' : billing.billing_status === 'VOID' ? 'danger' : 'secondary'" class="text-xs" />
-                </td>
-                <td class="px-3 py-2 text-xs text-[rgb(var(--app-fg))]/60">{{ formatDateTime(billing.created_at) }}</td>
-                <td class="px-3 py-2">
-                  <Button label="Invoice Billing" icon="pi pi-file-pdf" size="small" outlined :loading="printingClaimBillingId === billing.id" @click="$emit('download-claim-pdf', billing.id)" />
+                  <Button
+                    :label="row.billingId ? 'PDF' : 'No Claim'"
+                    icon="pi pi-file-pdf"
+                    size="small"
+                    outlined
+                    :disabled="!row.billingId"
+                    :loading="row.billingId !== null && printingClaimBillingId === row.billingId"
+                    @click="row.billingId && $emit('download-claim-pdf', row.billingId)"
+                  />
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
-        <EmptyBlock v-else text="No LGU claim billings generated yet." />
+        <EmptyBlock v-else text="No consumed LGU sessions recorded yet." />
       </section>
     </template>
   </Dialog>
@@ -195,7 +187,7 @@ import Button from "primevue/button"
 import Dialog from "primevue/dialog"
 import Message from "primevue/message"
 import Tag from "primevue/tag"
-import type { LguPatientBilling, LguPatientCreditDetail } from "@/features/lgu-billing/api/lgu-billing.service"
+import type { LguPatientCreditDetail } from "@/features/lgu-billing/api/lgu-billing.service"
 
 const props = defineProps<{
   selectedPatientDetail: LguPatientCreditDetail | null
@@ -207,8 +199,6 @@ const props = defineProps<{
   formatDateTime: (value?: string) => string
   formatLguStatus: (value?: string | null) => string
   lguStatusSeverity: (value?: string | null) => "success" | "warn" | "danger" | "info" | "secondary"
-  asCurrency: (value: number) => string
-  getBillingSummaryAmount: (billing: LguPatientBilling) => number
 }>()
 
 const visibleModel = defineModel<boolean>("visible", { required: true })
@@ -279,39 +269,40 @@ const completedAppointmentCount = computed(() =>
   props.selectedPatientDetail?.appointments.filter(appointment => appointment.status === "COMPLETED").length ?? 0
 )
 
-const totalAuthorizedSessions = computed(() => {
-  const authorizations = props.selectedPatientDetail?.authorizations ?? []
-  const totalFromAuthorizations = authorizations.reduce((sum, auth) => sum + Number(auth.total_sessions ?? 0), 0)
-  if (totalFromAuthorizations > 0) return totalFromAuthorizations
-  const packageAvailments = props.selectedPatientDetail?.package_availments ?? []
-  return packageAvailments.reduce((sum, pkg) => sum + Number(pkg.availed_count ?? 0), 0)
-})
+const billingsById = computed(() =>
+  new Map((props.selectedPatientDetail?.billings ?? []).map(billing => [Number(billing.id), billing]))
+)
 
-const sessionsRenderedLabel = computed(() => {
-  const total = totalAuthorizedSessions.value
-  return `${completedAppointmentCount.value} / ${total || 0} Sessions`
-})
+const appointmentsById = computed(() =>
+  new Map((props.selectedPatientDetail?.appointments ?? []).map(appointment => [Number(appointment.appointment_id), appointment]))
+)
 
-const sessionsRenderedPercent = computed(() => {
-  const total = totalAuthorizedSessions.value
-  if (!total) return 0
-  return Math.min(100, Math.max(0, (completedAppointmentCount.value / total) * 100))
-})
+const billingSummaryRows = computed(() =>
+  (props.selectedPatientDetail?.authorizations ?? []).flatMap(authorization => {
+    const totalSessions = Math.max(1, Number(authorization.total_sessions ?? authorization.sessions.length ?? 1))
 
-const getProgramStatusLabel = (billing: LguPatientBilling): string => {
-  const pricingSource = String(billing.pricing_source ?? "").toUpperCase()
-  if (pricingSource.includes("DROPOUT")) return "DROPPED_OUT"
-  const fallback = selectedPatientStatus.value
-  if (!fallback) return "ACTIVE"
-  return String(fallback).trim().toUpperCase()
-}
+    return (authorization.sessions ?? []).map(session => {
+      const billingId = Number(session.dropout_billing_id ?? session.monthly_billing_id ?? 0) || null
+      const billing = billingId ? billingsById.value.get(billingId) : undefined
+      const appointment = appointmentsById.value.get(Number(session.appointment_id))
+      const sessionSequence = Number(session.session_sequence ?? 0)
 
-const getProgramStatusSeverity = (billing: LguPatientBilling): "success" | "warn" | "danger" | "info" | "secondary" => {
-  const status = getProgramStatusLabel(billing)
-  if (status === "DROPPED_OUT" || status === "CROSS_MONTH_DROPPED_OUT") return "danger"
-  if (status === "ACTIVE") return "success"
-  return "info"
-}
+      return {
+        key: `${authorization.authorization_id}-${session.id}`,
+        reference: billing?.public_id || (billingId ? `BILLING-${billingId}` : "No claim yet"),
+        serviceName: session.service_name || appointment?.package_name || authorization.package_name || "LGU Session",
+        appointmentId: Number(session.appointment_id),
+        sessionSequenceLabel: sessionSequence > 0
+          ? `${sessionSequence} of ${totalSessions}`
+          : "-",
+        appointmentStatus: appointment?.status ?? authorization.authorization_status ?? "PENDING",
+        appointmentDate: session.appointment_date || appointment?.appointment_date || "",
+        billingId
+      }
+    })
+  })
+)
+
 </script>
 
 <script lang="ts">

@@ -124,6 +124,7 @@ export interface BillingListItem {
   physical_therapist?: string
   doctor?: string
   diagnosis?: string
+  diagnosis_laterality?: string
   encounter_tickets?: BillingEncounterTicket[]
 }
 

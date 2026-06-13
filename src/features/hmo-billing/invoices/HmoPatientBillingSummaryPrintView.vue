@@ -114,7 +114,7 @@
   <div class="approval-wrap-hmo">
     <section class="payment-box">
       <span class="self-pay-bottom-text-header">HMO DETAILS</span>
-      <div><span class="self-pay-bottom-text">Billing To:</span> HMO</div>
+      <div><span class="self-pay-bottom-text">Billing To:</span> {{ hmoLabel }}</div>
       <div><span class="self-pay-bottom-text">HMO Type:</span> {{ sponsorHmoType }}</div>
       <div><span class="self-pay-bottom-text">Company Name:</span> {{ sponsorCompanyName }}</div>
       <div><span class="self-pay-bottom-text">LOA Approval No.:</span> {{ sponsorApprovalNo }}</div>
@@ -178,6 +178,7 @@ type BillingSummaryRow = {
 
 type BillingSummarySource = BillingListItem & {
   line_items_json?: string
+  diagnosis_laterality?: string | null
   hmo_approval_code?: string | null
   hmo_loa_number?: string | null
   hmo_loa_date?: string | null
@@ -225,6 +226,7 @@ const patientAge = computed(() =>
 const sponsorRecord = computed(() => sponsorInfo.value)
 
 const hmoLabel = computed(() =>
+  billingDetail.value?.hmo_name?.trim() ||
   sponsorRecord.value?.company_name?.trim() ||
   sponsorRecord.value?.hmo_name?.trim() ||
   String(route.query.hmo_name ?? "HMO").trim() ||
@@ -384,6 +386,15 @@ const diagnosisParts = computed(() => {
   return { laterality: "N/A", bodyArea: value }
 })
 
+const formatLateralityForTable = (value?: string | null): string => {
+  const normalized = String(value ?? "").trim().toUpperCase()
+  if (!normalized || normalized === "NA" || normalized === "N/A") return "N/A"
+  if (normalized === "LEFT" || normalized === "L") return "L"
+  if (normalized === "RIGHT" || normalized === "R") return "R"
+  if (normalized === "BOTH" || normalized === "BILATERAL" || normalized === "B") return "B"
+  return normalized
+}
+
 const normalizeBodyArea = (value?: string | null): string => {
   const text = String(value ?? "").trim()
   if (!text) return "N/A"
@@ -486,6 +497,17 @@ const buildRows = (items: BillingSummarySource[]): BillingSummaryRow[] => {
     const lineItems = parseLineItems(item)
     const referenceNo = getBillingRecordId(item)
     const billingStatus = formatHmoStatus(item.billing_status)
+    const appointmentLaterality = formatLateralityForTable(
+      item.diagnosis_laterality ||
+      latestEvaluationVisitLog.value?.doctor_diagnosis_laterality
+    )
+    const appointmentBodyArea = normalizeBodyArea(
+      firstNonBlank(
+        item.diagnosis,
+        latestEvaluationVisitLog.value?.doctor_diagnosis,
+        diagnosisParts.value.bodyArea
+      )
+    )
 
     if (!lineItems.length) {
       const unitPrice = Number(item.total_amount ?? 0)
@@ -496,8 +518,8 @@ const buildRows = (items: BillingSummarySource[]): BillingSummaryRow[] => {
         treatmentDate: formatDate(getLoaDate(item)),
         serviceName: item.service_name || "HMO Service",
         quantity: 1,
-        laterality: "N/A",
-        bodyArea: "N/A",
+        laterality: appointmentLaterality,
+        bodyArea: appointmentBodyArea,
         unitPrice,
         unitTotal: unitPrice,
         referenceNo,
@@ -511,15 +533,6 @@ const buildRows = (items: BillingSummarySource[]): BillingSummaryRow[] => {
 
     lineItems.forEach((lineItem, lineIndex) => {
       const quantity = Math.max(1, Number(lineItem.quantity ?? 1))
-      const laterality = String(
-        lineItem.laterality ??
-        lineItem.laterality_name ??
-        diagnosisParts.value.laterality ??
-        "N/A"
-      )
-      const bodyArea = normalizeBodyArea(
-        String(lineItem.body_area ?? lineItem.bodyArea ?? diagnosisParts.value.bodyArea ?? "")
-      )
       const serviceName = String(lineItem.name ?? item.service_name ?? "HMO Service")
       const baseUnitPrice = Number(lineItem.price ?? lineItem.unitPrice ?? lineItem.unit_price ?? 0)
       const unitPrice = baseUnitPrice
@@ -531,8 +544,8 @@ const buildRows = (items: BillingSummarySource[]): BillingSummaryRow[] => {
         treatmentDate: formatDate(getLoaDate(item)),
         serviceName,
         quantity,
-        laterality,
-        bodyArea,
+        laterality: appointmentLaterality,
+        bodyArea: appointmentBodyArea,
         unitPrice,
         unitTotal,
         referenceNo,

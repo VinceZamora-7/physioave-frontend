@@ -1,5 +1,5 @@
 <template>
-  <LguInvoiceLayout
+  <SponsorInvoiceLayout
     :title="title"
     :subtitle="subtitle"
     :has-error="hasError"
@@ -25,11 +25,11 @@
     <template #bottom>
       <slot name="bottom" />
     </template>
-  </LguInvoiceLayout>
+  </SponsorInvoiceLayout>
 </template>
 
 <script setup lang="ts">
-import LguInvoiceLayout from "@/features/lgu-billing/invoices/LguInvoiceLayout.vue"
+import SponsorInvoiceLayout from "@/features/shared/invoices/SponsorInvoiceLayout.vue"
 
 withDefaults(defineProps<{
   title: string
