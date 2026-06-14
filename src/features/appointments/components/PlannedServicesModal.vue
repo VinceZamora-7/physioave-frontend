@@ -17,7 +17,7 @@
 
       <div class="grid grid-cols-1 gap-3 md:grid-cols-[220px_1fr_140px_auto] md:items-end">
         <Select v-model="servicePicker.type" :options="serviceTypeOptions" optionLabel="label" optionValue="value" fluid @change="servicePicker.id = null" />
-        <Select v-model="servicePicker.id" :options="currentServiceOptions" optionLabel="label" optionValue="value" filter fluid placeholder="Select service" />
+        <Select v-model="servicePicker.id" :options="currentServiceOptions" optionLabel="label" optionValue="pickerValue" filter fluid placeholder="Select service" />
         <InputNumber v-model="servicePicker.quantity" :min="1" showButtons fluid />
         <Button label="Add" icon="pi pi-plus" severity="secondary" outlined @click="$emit('add-picked-service')" />
       </div>

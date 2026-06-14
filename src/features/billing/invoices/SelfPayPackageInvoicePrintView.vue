@@ -1,6 +1,6 @@
 <template>
   <SponsorInvoiceLayout
-    title="Self Pay Package Service Invoice"
+    title="Self Pay-Package Service Invoice"
     :subtitle="`Package service printable record for ${patientName}`"
     :has-error="!!error"
   >
@@ -150,7 +150,9 @@
           <div class="approval-label">
             Approved by:
           </div>
-
+          <div class="approval-label">
+            &nbsp;
+          </div>
           <div class="approval-name">
             RENALOU B. CORDOVA, PTRP, UK-PT
           </div>
@@ -249,6 +251,10 @@ type SelfPayLineItem = {
   originalQuantity?: number | string
   included_quantity?: number | string
   includedQuantity?: number | string
+  bundle_qty?: number | string
+  bundleQty?: number | string
+  package_config?: Record<string, unknown> | string | null
+  packageConfig?: Record<string, unknown> | string | null
   total_sessions?: number | string
   totalSessions?: number | string
 
@@ -672,6 +678,8 @@ const getPlannedServiceQuantity = (line: SelfPayLineItem): number => {
 
 const getBundleTotalQuantity = (line: SelfPayLineItem): number => {
   const quantity = Number(
+    line.bundle_qty ??
+    line.bundleQty ??
     line.total_quantity ??
     line.totalQuantity ??
     line.total_qty ??
@@ -687,6 +695,120 @@ const getBundleTotalQuantity = (line: SelfPayLineItem): number => {
   }
 
   return getQuantity(line)
+}
+
+const normalizeLineKey = (value: string): string =>
+  value.trim().toLowerCase().replace(/\s+/g, " ")
+
+const getPackageConfigRecord = (line?: SelfPayLineItem): Record<string, unknown> | undefined => {
+  const config = line?.package_config ?? line?.packageConfig
+
+  if (config && typeof config === "object" && !Array.isArray(config)) {
+    return config
+  }
+
+  if (typeof config === "string" && config.trim()) {
+    try {
+      const parsed = JSON.parse(config) as unknown
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? parsed as Record<string, unknown>
+        : undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  return undefined
+}
+
+const firstPositiveInteger = (...values: unknown[]): number => {
+  for (const value of values) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return Math.floor(parsed)
+    }
+  }
+
+  return 0
+}
+
+const getConfiguredPackageBundleQuantity = (packageLine?: SelfPayLineItem): number => {
+  const packageConfig = getPackageConfigRecord(packageLine)
+
+  return firstPositiveInteger(
+    getRecordValue(packageLine, "bundle_qty"),
+    getRecordValue(packageLine, "bundleQty"),
+    getRecordValue(packageLine, "bundle_quantity"),
+    getRecordValue(packageLine, "bundleQuantity"),
+    getRecordValue(packageConfig, "bundle_qty"),
+    getRecordValue(packageConfig, "bundleQty"),
+    getRecordValue(packageConfig, "bundle_quantity"),
+    getRecordValue(packageConfig, "bundleQuantity")
+  )
+}
+
+const isConfiguredPackageBundleLine = (
+  line: SelfPayLineItem,
+  packageLine?: SelfPayLineItem
+): boolean => {
+  if (!packageLine || getConfiguredPackageBundleQuantity(packageLine) <= 0) {
+    return false
+  }
+
+  return normalizeLineKey(getServiceName(line, "")).includes("bundle")
+}
+
+const getBundleConfiguredQuantity = (
+  bundleLine: SelfPayLineItem,
+  packageLine?: SelfPayLineItem
+): number => {
+  const packageConfig = getPackageConfigRecord(packageLine)
+  const directQuantity = firstPositiveInteger(
+    bundleLine.bundle_qty ??
+    bundleLine.bundleQty ??
+    bundleLine.total_quantity ??
+    bundleLine.totalQuantity ??
+    bundleLine.total_qty ??
+    bundleLine.totalQty ??
+    bundleLine.package_quantity ??
+    bundleLine.packageQuantity ??
+    bundleLine.total_sessions ??
+    bundleLine.totalSessions ??
+    getConfiguredPackageBundleQuantity(packageLine)
+  )
+
+  if (directQuantity > 0) {
+    return directQuantity
+  }
+
+  const bundleId = String(bundleLine.id ?? "").trim()
+  const bundleName = normalizeLineKey(getServiceName(bundleLine, ""))
+  const configuredItems = [
+    ...toLineItemArray(packageLine?.bundleItems),
+    ...toLineItemArray(packageLine?.bundle_items),
+    ...toLineItemArray(getRecordValue(packageLine, "bundle_items_json")),
+    ...toLineItemArray(getRecordValue(packageLine, "bundleItemsJson")),
+    ...toLineItemArray(getRecordValue(packageConfig, "bundleItems")),
+    ...toLineItemArray(getRecordValue(packageConfig, "bundle_items")),
+    ...toLineItemArray(getRecordValue(packageConfig, "bundle_items_json")),
+    ...toLineItemArray(getRecordValue(packageConfig, "bundleItemsJson"))
+  ]
+  const matchedItem = configuredItems.find(item => {
+    const itemId = String(item.id ?? "").trim()
+    const itemName = normalizeLineKey(getServiceName(item, ""))
+
+    return Boolean(
+      (bundleId && itemId && bundleId === itemId) ||
+      (bundleName && itemName && bundleName === itemName)
+    )
+  }) ?? (configuredItems.length === 1 ? configuredItems[0] : undefined)
+  const matchedQuantity = firstPositiveInteger(matchedItem?.qty, matchedItem?.quantity)
+
+  if (matchedQuantity > 0) {
+    return matchedQuantity
+  }
+
+  return getBundleTotalQuantity(bundleLine)
 }
 
 const getIncludedDisplayQuantity = (line: SelfPayLineItem): number => {
@@ -822,16 +944,19 @@ const appendIncludedServiceRows = (
   billingDate: string,
   output: SelfPaySummaryRow[],
   level = 1,
-  path = "included"
+  path = "included",
+  parentLine?: SelfPayLineItem
 ): void => {
   children.forEach((child, childIndex) => {
-    const childQuantity = getIncludedDisplayQuantity(child)
+    const childIsBundle = isBundleLikeLine(child) || isConfiguredPackageBundleLine(child, parentLine)
+    const childQuantity = childIsBundle
+      ? getBundleConfiguredQuantity(child, parentLine)
+      : getIncludedDisplayQuantity(child)
     const childName = getServiceName(child, "Included Service")
     const childPath = `${path}-${childIndex}`
-    const isBundle = isBundleLikeLine(child)
 
     output.push({
-      key: `${billingIdValue}-${parentIndex}-${childPath}${isBundle ? "-bundle" : ""}`,
+      key: `${billingIdValue}-${parentIndex}-${childPath}${childIsBundle ? "-bundle" : ""}`,
       itemNo: null,
       billingDate,
       serviceName: `- ${childQuantity} ${childName}`,
@@ -842,7 +967,7 @@ const appendIncludedServiceRows = (
       level,
       isIncluded: true,
       isPackageParent: false,
-      isBundleParent: isBundle
+      isBundleParent: childIsBundle
     })
   })
 }
@@ -933,7 +1058,10 @@ const buildRows = (billing: BillingListItem): SelfPaySummaryRow[] => {
         billing.id,
         Number(String(indexPath).replace(/\D/g, "")) || itemNo,
         billingDate,
-        output
+        output,
+        1,
+        "included",
+        line
       )
     }
   }
@@ -969,17 +1097,23 @@ const buildRows = (billing: BillingListItem): SelfPaySummaryRow[] => {
       const packageServiceName = stripPackageSessionDescriptor(
         getServiceName(line, "Package Service")
       )
-  const bundleQuantity = children
-  .filter(child => isBundleLikeLine(child))
-  .reduce((sum, child) => sum + getBundleTotalQuantity(child), 0)
-      const packageDisplayName = bundleQuantity > 0
-        ? `(${bundleQuantity}) ${packageServiceName} `
+      const bundleQuantity = children
+        .filter(child => isBundleLikeLine(child) || isConfiguredPackageBundleLine(child, line))
+        .reduce((sum, child) => sum + getBundleConfiguredQuantity(child, line), 0)
+      const packageQuantity = firstPositiveInteger(
+        bundleQuantity,
+        getBundleTotalQuantity(line),
+        getPlannedServiceQuantity(line),
+        getPositiveRecordNumber(billing, "total_sessions")
+      ) || 1
+      const packageDisplayName = packageQuantity > 1
+        ? `(${packageQuantity}) ${packageServiceName} `
         : packageServiceName
       const sessionLine = {
         ...line,
         name: packageDisplayName,
-        quantity: 1,
-        price: fullPackagePrice,
+        quantity: packageQuantity,
+        price: fullPackagePrice / packageQuantity,
         lineTotal: fullPackagePrice
       }
 
@@ -992,7 +1126,10 @@ const buildRows = (billing: BillingListItem): SelfPaySummaryRow[] => {
         billing.id,
         index,
         billingDate,
-        output
+        output,
+        1,
+        "included",
+        line
       )
 
       return

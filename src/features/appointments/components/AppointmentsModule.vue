@@ -73,6 +73,7 @@
       :loading="isCalendarLoading"
       :can-add-appointment="canCreateAppointment"
       :can-view-appointment="canViewAppointmentDetails"
+      :selected-clinic-schedule="selectedClinicSchedule"
       @addAppointment="openCreateDialog"
       @selectAppointment="openDetailsDialog"
       @selectDate="selectCalendarDate"
@@ -931,8 +932,10 @@
       v-model:visible="formVisible"
       :editing-id="editingId"
       :is-saving="isSaving"
+      :is-follow-up-mode="Boolean(followUpSourceAppointment)"
+      :can-create-follow-up="Boolean(editingId && form.credit_account_id && !followUpSourceAppointment)"
       :form="form"
-      :session-count="sessionCountPreview"
+      :session-count="adjustedSessionCountPreview"
       :selected-clinic="selectedClinic"
       :selected-clinic-schedule="selectedClinicSchedule"
       :selected-services="selectedServices"
@@ -958,6 +961,7 @@
       @generate-session-dates="generateSessionDates"
       @add-picked-service="addPickedService"
       @remove-selected-service="removeSelectedService"
+      @create-follow-up="openFollowUpAppointmentFromForm"
       @save="saveAppointment"
     />
 
@@ -992,6 +996,7 @@
       @drop-out="dropOutActiveAppointment"
       @undo-drop-out="undoDropOutActiveAppointment"
       @save-draft="saveEncounterTicketDraft"
+      @create-follow-up="openFollowUpAppointmentFromAttendance"
       @save="saveAttendance"
     />
   </main>
@@ -1041,6 +1046,7 @@ import { staffService } from "@/features/staff/api/staff.service";
 import { ptPrimaryBtn } from "@/features/shared/table-header.styles";
 import { useAuthSessionStore } from "@/stores/auth-session.store";
 import { clinicStore } from "@/stores/clinic.store";
+import { getApiErrorMessage } from "@/utils/actionable-error.util";
 import { pamsAPI } from "@/utils/axios-interceptor";
 import { errorHandler } from "@/utils/error-handler";
 import { Status } from "@/utils/global.type";
@@ -1058,6 +1064,7 @@ type IncludedServicePreview = {
 type ServiceOption = {
   label: string;
   value: number;
+  pickerValue?: number | string;
   price: number;
   type: AppointmentServiceSelectionType;
   inheritedQuantity: number;
@@ -1175,6 +1182,7 @@ const editingId = ref<number | null>(null);
 const activeAppointment = ref<AppointmentListItem | null>(null);
 const detailAppointment = ref<AppointmentListItem | null>(null);
 const rescheduleAppointment = ref<AppointmentListItem | null>(null);
+const followUpSourceAppointment = ref<AppointmentListItem | null>(null);
 
 const patientOptions = ref<PatientSelectOption[]>([]);
 const clinicOptions = ref<ClinicSelectOption[]>([]);
@@ -1260,8 +1268,10 @@ const form = reactive({
   medical_diagnose_id: null as number | null,
   diagnosis_laterality: null as Laterality | null,
   payer_type: null as PayerType | null,
+  credit_account_id: null as number | null,
   notes: "",
   create_all_sessions: true,
+  add_initial_evaluation_appointment: false,
   session_dates: [] as Date[],
 });
 
@@ -1295,7 +1305,7 @@ const lguClaimForm = reactive({
 
 const servicePicker = reactive({
   type: "TECHNIQUE" as AppointmentServiceSelectionType,
-  id: null as number | null,
+  id: null as number | string | null,
   quantity: 1,
 });
 
@@ -1344,10 +1354,14 @@ const allServiceTypeOptions: Array<{
   { label: "Single Service: Machine", value: "MACHINE" },
   { label: "Single Service: Technique", value: "TECHNIQUE" },
   { label: "Single Service: Evaluation", value: "EVALUATION" },
-  { label: "Service Add-on: Machine", value: "ADD_ON_MACHINE" },
-  { label: "Service Add-on: Technique", value: "ADD_ON_TECHNIQUE" },
-  { label: "Home Care Add-on", value: "ADD_ON_HOME_SERVICE" },
+  { label: "Add-ons", value: "ADD_ON_MACHINE" },
+  { label: "Add-ons", value: "ADD_ON_TECHNIQUE" },
+  { label: "Home Care Add-ons", value: "ADD_ON_HOME_SERVICE" },
 ];
+
+const hiddenServiceTypeOptions = new Set<AppointmentServiceSelectionType>([
+  "ADD_ON_TECHNIQUE",
+]);
 
 const allowedServiceTypesByBillingType: Record<
   PayerType,
@@ -1642,7 +1656,10 @@ const serviceTypeOptions = computed(() => {
   const allowed = new Set(
     getAllowedServiceTypes(currentServiceBillingType.value),
   );
-  return allServiceTypeOptions.filter((option) => allowed.has(option.value));
+  return allServiceTypeOptions.filter(
+    (option) =>
+      allowed.has(option.value) && !hiddenServiceTypeOptions.has(option.value),
+  );
 });
 
 const currentServiceCatalog = computed(() =>
@@ -1651,9 +1668,22 @@ const currentServiceCatalog = computed(() =>
     : globalServiceCatalog.value,
 );
 
-const currentServiceOptions = computed(
-  () => currentServiceCatalog.value[servicePicker.type] ?? [],
-);
+const currentServiceOptions = computed(() => {
+  if (servicePicker.type !== "ADD_ON_MACHINE") {
+    return currentServiceCatalog.value[servicePicker.type] ?? [];
+  }
+
+  return [
+    ...currentServiceCatalog.value.ADD_ON_MACHINE.map((option) => ({
+      ...option,
+      pickerValue: `${option.type}:${option.value}`,
+    })),
+    ...currentServiceCatalog.value.ADD_ON_TECHNIQUE.map((option) => ({
+      ...option,
+      pickerValue: `${option.type}:${option.value}`,
+    })),
+  ];
+});
 
 const clinicAreaOptions = computed(() =>
   treatmentAreaOptions.value.filter(
@@ -2129,6 +2159,20 @@ const getDayNumber = (date: Date): number => {
   return day === 0 ? 7 : day;
 };
 
+const timeToMinutes = (value?: string | null, fallback = 0): number => {
+  const [hours, minutes] = String(value ?? "")
+    .split(":")
+    .map((part) => Number(part));
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return fallback;
+  return hours * 60 + minutes;
+};
+
+const setTimeFromMinutes = (date: Date, minutes: number): Date => {
+  const result = new Date(date);
+  result.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+  return result;
+};
+
 const isClinicOpenOnDate = (date: Date): boolean => {
   const schedule = selectedClinicSchedule.value;
   if (!schedule) return true;
@@ -2152,6 +2196,39 @@ const moveToNextClinicOpenDate = (date: Date): Date => {
   }
 
   return next;
+};
+
+const clampAppointmentStartToClinicHours = (date: Date, durationMs = DEFAULT_APPOINTMENT_DURATION_MS): Date => {
+  const openDate = moveToNextClinicOpenDate(new Date(date));
+  const schedule = selectedClinicSchedule.value;
+  if (!schedule) return openDate;
+
+  const startMinute = timeToMinutes(schedule.startTime, 7 * 60);
+  const endMinute = timeToMinutes(schedule.endTime, 19 * 60);
+  const selectedMinute = openDate.getHours() * 60 + openDate.getMinutes();
+  const durationMinutes = Math.ceil(durationMs / 60000);
+  const latestStartMinute = Math.max(startMinute, endMinute - durationMinutes);
+  const clampedMinute = Math.min(Math.max(selectedMinute, startMinute), latestStartMinute);
+
+  return setTimeFromMinutes(openDate, clampedMinute);
+};
+
+const isScheduleWithinSelectedClinicHours = (start: Date, end: Date): boolean => {
+  const schedule = selectedClinicSchedule.value;
+  if (!schedule) return true;
+  if (!isClinicOpenOnDate(start)) return false;
+  if (dateTimeKey(start).slice(0, 10) !== dateTimeKey(end).slice(0, 10)) return false;
+
+  const startMinute = start.getHours() * 60 + start.getMinutes();
+  const endMinute = end.getHours() * 60 + end.getMinutes();
+  return startMinute >= timeToMinutes(schedule.startTime, 7 * 60)
+    && endMinute <= timeToMinutes(schedule.endTime, 19 * 60);
+};
+
+const formatSelectedClinicHours = (): string => {
+  const schedule = selectedClinicSchedule.value;
+  if (!schedule) return "the selected clinic hours";
+  return `${formatTime(`2000-01-01T${schedule.startTime}`)} - ${formatTime(`2000-01-01T${schedule.endTime}`)}`;
 };
 
 const copyTime = (targetDate: Date, sourceTime: Date): Date => {
@@ -2198,7 +2275,11 @@ const estimateSessionCountFromSelectedServices = (): number =>
     Number(
       sessionCountPreview.value || fallbackSessionCountFromSelectedServices(),
     ),
-  );
+  ) + (form.add_initial_evaluation_appointment ? 1 : 0);
+
+const adjustedSessionCountPreview = computed(() =>
+  estimateSessionCountFromSelectedServices(),
+);
 
 const refreshSessionPreview = async (): Promise<void> => {
   if (!selectedServices.value.length) {
@@ -2257,11 +2338,17 @@ const normalizeUniqueSessionDates = (
   const baseTime = form.starts_at ? new Date(form.starts_at) : new Date();
 
   for (const rawDate of dates) {
-    let date = copyTime(moveToNextClinicOpenDate(new Date(rawDate)), baseTime);
+    let date = clampAppointmentStartToClinicHours(
+      copyTime(moveToNextClinicOpenDate(new Date(rawDate)), baseTime),
+      getAppointmentDurationMs(),
+    );
 
     while (used.has(dateTimeKey(date))) {
       date.setDate(date.getDate() + 1);
-      date = copyTime(moveToNextClinicOpenDate(date), baseTime);
+      date = clampAppointmentStartToClinicHours(
+        copyTime(moveToNextClinicOpenDate(date), baseTime),
+        getAppointmentDurationMs(),
+      );
     }
 
     used.add(dateTimeKey(date));
@@ -2342,11 +2429,17 @@ const generateSessionDates = (
       date.setDate(date.getDate() + index * dayStep);
     }
 
-    date = copyTime(moveToNextClinicOpenDate(date), form.starts_at);
+    date = clampAppointmentStartToClinicHours(
+      copyTime(moveToNextClinicOpenDate(date), form.starts_at),
+      durationMs,
+    );
 
     while (used.has(dateTimeKey(date))) {
       date.setDate(date.getDate() + 1);
-      date = copyTime(moveToNextClinicOpenDate(date), form.starts_at);
+      date = clampAppointmentStartToClinicHours(
+        copyTime(moveToNextClinicOpenDate(date), form.starts_at),
+        durationMs,
+      );
     }
 
     used.add(dateTimeKey(date));
@@ -2383,6 +2476,10 @@ const buildSessionSchedules = (): AppointmentSessionSchedulePayload[] => {
 const buildAppointmentPayload = (date: Date): AppointmentCreatePayload => {
   const endDate = new Date(date.getTime() + getAppointmentDurationMs());
   const clinicId = activeBranchId.value ?? form.clinic_id;
+  const followUpRootAppointmentId = followUpSourceAppointment.value
+    ? followUpSourceAppointment.value.root_appointment_id ??
+      followUpSourceAppointment.value.id
+    : null;
 
   return {
     patient_id: form.patient_id,
@@ -2404,6 +2501,12 @@ const buildAppointmentPayload = (date: Date): AppointmentCreatePayload => {
     appointment_phase: form.appointment_phase,
     location_context: form.location_context,
     payer_type: form.payer_type,
+    credit_account_id: form.credit_account_id,
+    root_appointment_id: followUpRootAppointmentId,
+    add_initial_evaluation_appointment:
+      Boolean(selectedServices.value.length) &&
+      !followUpRootAppointmentId &&
+      Boolean(form.add_initial_evaluation_appointment),
     notes: form.notes.trim() || undefined,
     services: selectedServices.value.map((service) => ({
       type: service.type,
@@ -2456,9 +2559,8 @@ const loadSelectedPatientContext = async (
 };
 
 const resetForm = (): void => {
-  const start = new Date();
-  start.setMinutes(0, 0, 0);
-  const end = getDefaultAppointmentEnd(start);
+  const now = new Date();
+  now.setMinutes(0, 0, 0);
 
   editingId.value = null;
   form.patient_id = null;
@@ -2466,6 +2568,8 @@ const resetForm = (): void => {
     activeBranchId.value ??
     (clinicOptions.value[0]?.value as number | null) ??
     null;
+  const start = clampAppointmentStartToClinicHours(now);
+  const end = getDefaultAppointmentEnd(start);
   form.primary_provider_staff_id = null;
   form.referring_staff_id = null;
   form.appointment_type_id =
@@ -2481,11 +2585,14 @@ const resetForm = (): void => {
   form.medical_diagnose_id = null;
   form.diagnosis_laterality = null;
   form.payer_type = null;
+  form.credit_account_id = null;
   form.notes = "";
   form.create_all_sessions = true;
+  form.add_initial_evaluation_appointment = false;
   form.session_dates = [start];
   sessionCountPreview.value = 1;
   selectedPatientContext.value = null;
+  followUpSourceAppointment.value = null;
 
   selectedServices.value = [];
   resetServicePicker();
@@ -2762,6 +2869,7 @@ const normalizeServiceRows = (
       return {
         label: serviceNameFromRow(row, `Service ${row.id}`),
         value: Number(row.id),
+        pickerValue: Number(row.id),
         price: Number(
           priceKeys
             .map((key) => row[key])
@@ -3102,6 +3210,75 @@ const openCreateDialog = (): void => {
   void loadAvailabilityAppointmentsForRange();
 };
 
+const openFollowUpAppointmentFromAttendance = (): void => {
+  const source = activeAppointment.value;
+  if (!source) return;
+
+  if (!canCreateAppointment.value) {
+    errorToast(toast, "You do not have permission to create appointments");
+    return;
+  }
+
+  if (!source.credit_account_id) {
+    errorToast(toast, "This appointment has no credit account to continue.");
+    return;
+  }
+
+  const sourceStart = new Date(source.starts_at);
+  const sourceEnd = new Date(source.ends_at);
+  const durationMs = Math.max(
+    15 * 60 * 1000,
+    sourceEnd.getTime() - sourceStart.getTime(),
+  );
+  const preferredFollowUpStart = addDays(sourceStart, 1);
+
+  resetForm();
+  followUpSourceAppointment.value = source;
+  editingId.value = null;
+  activeAppointment.value = source;
+  form.patient_id = source.patient_id;
+  form.clinic_id = activeBranchId.value ?? source.clinic_id;
+  form.primary_provider_staff_id =
+    source.primary_provider_staff_id ?? source.doctor_id ?? null;
+  form.referring_staff_id = source.referring_staff_id ?? null;
+  form.appointment_type_id = source.appointment_type_id;
+  form.appointment_status_id =
+    (pendingStatusOption.value?.value as number | null) ??
+    source.appointment_status_id;
+  const followUpStart = clampAppointmentStartToClinicHours(
+    preferredFollowUpStart,
+    durationMs,
+  );
+  const followUpEnd = new Date(followUpStart.getTime() + durationMs);
+  form.starts_at = followUpStart;
+  form.ends_at = followUpEnd;
+  form.appointment_phase = source.appointment_phase;
+  form.location_context = source.location_context;
+  form.specialty_tag_id = source.specialty_tag_id ?? null;
+  form.treatment_area_id = source.treatment_area_id ?? null;
+  form.medical_diagnose_id = source.medical_diagnose_id ?? null;
+  form.diagnosis_laterality =
+    source.diagnosis_laterality as Laterality | null;
+  form.payer_type = source.payer_type as PayerType | null;
+  form.credit_account_id = Number(source.credit_account_id);
+  form.notes = `Follow-up from appointment #${source.id}`;
+  form.create_all_sessions = false;
+  form.add_initial_evaluation_appointment = false;
+  form.session_dates = [followUpStart];
+  selectedServices.value = [];
+  sessionCountPreview.value = 1;
+  attendanceVisible.value = false;
+  formVisible.value = true;
+  void loadAvailabilityAppointmentsForRange();
+};
+
+const openFollowUpAppointmentFromForm = (): void => {
+  const source = activeAppointment.value ?? detailAppointment.value;
+  if (!source) return;
+  activeAppointment.value = source;
+  openFollowUpAppointmentFromAttendance();
+};
+
 const applyAppointmentToForm = (appointment: AppointmentListItem): void => {
   editingId.value = appointment.id;
   form.patient_id = appointment.patient_id;
@@ -3121,10 +3298,13 @@ const applyAppointmentToForm = (appointment: AppointmentListItem): void => {
   form.diagnosis_laterality =
     appointment.diagnosis_laterality as Laterality | null;
   form.payer_type = appointment.payer_type as PayerType | null;
+  form.credit_account_id = appointment.credit_account_id ?? null;
   form.notes = appointment.notes ?? "";
   form.create_all_sessions = false;
+  form.add_initial_evaluation_appointment = false;
   form.session_dates = [new Date(appointment.starts_at)];
   selectedServices.value = [];
+  followUpSourceAppointment.value = null;
 };
 
 const openEditDialog = (appointment: AppointmentListItem): void => {
@@ -3133,6 +3313,7 @@ const openEditDialog = (appointment: AppointmentListItem): void => {
     return;
   }
 
+  activeAppointment.value = appointment;
   applyAppointmentToForm(appointment);
   formVisible.value = true;
   void loadAvailabilityAppointmentsForRange();
@@ -3170,6 +3351,20 @@ const submitReschedule = async (): Promise<void> => {
     return;
   }
 
+  const previousClinicId = form.clinic_id;
+  form.clinic_id = appointment.clinic_id;
+  const withinClinicHours = isScheduleWithinSelectedClinicHours(
+    rescheduleForm.starts_at,
+    rescheduleForm.ends_at,
+  );
+  const clinicHoursLabel = formatSelectedClinicHours();
+  form.clinic_id = previousClinicId;
+
+  if (!withinClinicHours) {
+    errorToast(toast, `Choose a time within ${clinicHoursLabel}.`);
+    return;
+  }
+
   try {
     isRescheduling.value = true;
     await appointmentPhase1Service.reschedule(appointment.id, {
@@ -3185,8 +3380,12 @@ const submitReschedule = async (): Promise<void> => {
     }
 
     await refreshAppointmentViews();
-  } catch {
-    errorToast(toast, "Failed to reschedule appointment");
+  } catch (error) {
+    errorToast(toast, getApiErrorMessage(error, {
+      baseMessage: "Failed to reschedule appointment",
+      invalidInputHint: "Review the selected date and time, then try again.",
+      notFoundHint: "The appointment could not be found. Refresh and try again."
+    }));
   } finally {
     isRescheduling.value = false;
   }
@@ -3803,7 +4002,11 @@ const saveAppointment = async (): Promise<void> => {
     return;
   }
 
-  if (!editingId.value && !selectedServices.value.length) {
+  const isFollowUpAppointment = Boolean(
+    followUpSourceAppointment.value && form.credit_account_id,
+  );
+
+  if (!editingId.value && !selectedServices.value.length && !isFollowUpAppointment) {
     errorToast(toast, "Add at least one planned service.");
     return;
   }
@@ -3813,7 +4016,11 @@ const saveAppointment = async (): Promise<void> => {
     return;
   }
 
-  if (form.payer_type && !isAppointmentPayerTypeAllowed(form.payer_type)) {
+  if (
+    form.payer_type &&
+    !isFollowUpAppointment &&
+    !isAppointmentPayerTypeAllowed(form.payer_type)
+  ) {
     errorToast(
       toast,
       "Selected patient is not eligible for that billing type.",
@@ -3835,6 +4042,17 @@ const saveAppointment = async (): Promise<void> => {
     }
 
     const payload = buildAppointmentPayload(firstAppointmentDate);
+    const schedules = payload.session_schedules ?? [];
+    const outsideClinicHours = schedules.some((schedule) => {
+      const start = new Date(schedule.starts_at);
+      const end = new Date(schedule.ends_at);
+      return !isScheduleWithinSelectedClinicHours(start, end);
+    });
+
+    if (outsideClinicHours) {
+      errorToast(toast, `Choose session times within ${formatSelectedClinicHours()}.`);
+      return;
+    }
 
     if (editingId.value) {
       await appointmentPhase1Service.update(editingId.value, payload);
@@ -3845,11 +4063,14 @@ const saveAppointment = async (): Promise<void> => {
         created.appointment_ids?.length ?? created.total_sessions ?? 1;
       successToast(
         toast,
-        `Appointment created with ${totalCreated} session${totalCreated > 1 ? "s" : ""}`,
+        isFollowUpAppointment
+          ? "Follow-up appointment created"
+          : `Appointment created with ${totalCreated} session${totalCreated > 1 ? "s" : ""}`,
       );
     }
 
     formVisible.value = false;
+    followUpSourceAppointment.value = null;
     await refreshAppointmentViews();
   } catch (error) {
     let message = "Failed to save appointment";
@@ -3998,7 +4219,7 @@ const addPickedService = (): void => {
   }
 
   const selected = currentServiceOptions.value.find(
-    (option) => option.value === servicePicker.id,
+    (option) => String(option.pickerValue) === String(servicePicker.id),
   );
   if (!selected) {
     errorToast(toast, "Select a service first");
@@ -4396,6 +4617,13 @@ watch(
     removeDisallowedSelectedServices(billingType);
     resetServicePicker(billingType);
     void refreshSessionPreview();
+  },
+);
+
+watch(
+  () => form.add_initial_evaluation_appointment,
+  () => {
+    syncSessionDateCountFromSelectedServices();
   },
 );
 </script>

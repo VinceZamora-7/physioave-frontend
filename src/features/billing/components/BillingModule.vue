@@ -3546,16 +3546,52 @@ const buildIncludedBillingLine = (
   ...(children.length ? {children} : {})
 })
 
+const normalizeInvoiceSubItemName = (value?: string): string =>
+  String(value ?? "")
+    .replace(/^\s*\d+\s+/, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+
+const isPackageBundleInvoiceSubItem = (
+  item: PackageInvoicePrintSubItem,
+  packageOffer: LocalPackageOffer
+): boolean => {
+  const itemName = normalizeInvoiceSubItemName(item.name)
+  const bundle = findBundle(packageOffer.bundleId)
+  const bundleName = normalizeInvoiceSubItemName(bundle?.name)
+
+  if (itemName && bundleName) {
+    return itemName === bundleName || itemName.includes(bundleName) || bundleName.includes(itemName)
+  }
+
+  return Boolean(packageOffer.bundleId && itemName.includes("bundle"))
+}
+
+const getPackageInvoiceSubItemQuantity = (
+  item: PackageInvoicePrintSubItem,
+  multiplier: number,
+  packageOffer?: LocalPackageOffer
+): number => {
+  if (packageOffer && isPackageBundleInvoiceSubItem(item, packageOffer)) {
+    const configuredBundleQty = packageOffer.bundleItems?.[0]?.qty ?? packageOffer.bundleQty
+    return Math.max(1, Number(configuredBundleQty ?? 1) * multiplier)
+  }
+
+  return Math.max(1, Number(item.quantity ?? 1) * multiplier)
+}
+
 const buildInvoiceSubItemBillingChildren = (
   items: PackageInvoicePrintSubItem[] | undefined,
   multiplier = 1,
-  path = "package-included"
+  path = "package-included",
+  packageOffer?: LocalPackageOffer
 ): BillingLineItem[] =>
   (items ?? []).map((item, index) =>
     buildIncludedBillingLine(
       `${path}-${index + 1}`,
       item.name,
-      Math.max(1, Number(item.quantity ?? 1) * multiplier),
+      getPackageInvoiceSubItemQuantity(item, multiplier, packageOffer),
       toWholePeso(item.unitPrice),
       item.dropoutUnitPrice,
       buildInvoiceSubItemBillingChildren(item.children, multiplier, `${path}-${index + 1}`)
@@ -3592,7 +3628,7 @@ const buildLineItemChildren = (item: SelectedLine): BillingLineItem[] => {
     const packageOffer = findPackageOffer(item.id, item.name)
     const quantity = Math.max(1, Number(item.quantity ?? 1))
     if (packageOffer?.invoiceSubItems?.length) {
-      return buildInvoiceSubItemBillingChildren(packageOffer.invoiceSubItems, quantity)
+      return buildInvoiceSubItemBillingChildren(packageOffer.invoiceSubItems, quantity, "package-included", packageOffer)
     }
 
     return buildBreakdownGroupBillingChildren(

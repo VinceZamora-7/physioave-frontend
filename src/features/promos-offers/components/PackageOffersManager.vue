@@ -197,7 +197,15 @@
                     <InputNumber v-model="row.item.qty" :min="1" :maxFractionDigits="0" fluid />
                   </td>
                   <td class="px-3 py-3 align-top">
-                    <InputNumber v-model="row.item.standardUnitPrice" :min="0" mode="currency" currency="PHP" locale="en-PH" fluid />
+                    <InputNumber
+                      v-model="row.item.standardUnitPrice"
+                      :min="0"
+                      mode="currency"
+                      currency="PHP"
+                      locale="en-PH"
+                      fluid
+                      disabled
+                    />
                   </td>
                   <td class="px-3 py-3 align-top">
                     <div class="flex gap-2">

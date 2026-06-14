@@ -1,4 +1,4 @@
-import type { AxiosResponse } from "axios"
+import type { AxiosError, AxiosResponse } from "axios"
 import type { Pageable } from "@/models/paging"
 import { pamsAPI } from "@/utils/axios-interceptor"
 
@@ -11,6 +11,12 @@ export type AppointmentServiceType = "SINGLE" | "PACKAGE" | "HMO" | "LGU"
 export type AppointmentSponsorType = "HMO" | "LGU"
 export type AppointmentStatus = "Pending" | "Rescheduled" | "No show" | "Cancelled" | "Completed" | string
 export type QueryParams = Record<string, string | number | boolean | null | undefined>
+
+const isRouteNotFoundError = (error: unknown): boolean => {
+  const axiosError = error as AxiosError<{ message?: string }>
+  return axiosError?.response?.status === 404 &&
+    String(axiosError.response.data?.message ?? "").toLowerCase() === "route not found"
+}
 
 export interface AppointmentListItem {
   id: number
@@ -387,6 +393,8 @@ export interface AppointmentCreatePayload extends Record<string, unknown> {
   services?: AppointmentServiceCreatePayload[]
   session_schedules?: AppointmentSessionSchedulePayload[]
   credit_account_id?: number | null
+  root_appointment_id?: number | null
+  add_initial_evaluation_appointment?: boolean
 }
 
 export interface AppointmentUpdatePayload extends Record<string, unknown> {}
@@ -611,7 +619,15 @@ export const appointmentPhase1Service = {
   },
 
   async reschedule(id: number, payload: ReschedulePayload): Promise<void> {
-    await pamsAPI.patch(`/appointments/${id}/reschedule`, payload)
+    try {
+      await pamsAPI.patch(`/appointments/${id}/reschedule`, payload)
+    } catch (error) {
+      if (!isRouteNotFoundError(error)) {
+        throw error
+      }
+
+      await pamsAPI.post(`/appointments/${id}/reschedule`, payload)
+    }
   },
 
   async delete(id: number): Promise<void> {

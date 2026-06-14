@@ -155,7 +155,7 @@ const { printPage, goBack } = useSponsorInvoicePrintActions()
 
 .lgu-invoice-logo {
   display: block;
-  height: 120px;
+  height: 90px;
   width: auto;
   flex-shrink: 0;
   object-fit: contain;
@@ -420,12 +420,12 @@ const { printPage, goBack } = useSponsorInvoicePrintActions()
     display: flex !important;
     flex-direction: row !important;
     justify-content: space-between !important;
-    align-items: flex-start !important;
+    align-items: center !important;
     gap: 8px !important;
   }
 
   .lgu-invoice-logo {
-    height: 120px !important;
+    height: 90px !important;
     width: auto !important;
     flex-shrink: 0 !important;
   }

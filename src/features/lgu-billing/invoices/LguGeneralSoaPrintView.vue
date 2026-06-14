@@ -1803,10 +1803,13 @@ const buildStatementRows = (
           patientHasServiceRows = true
 
           for (let occurrence = 1; occurrence <= quantity; occurrence += 1) {
-            const completedSessionSequence =
-              completedSessionSequences[occurrence - 1] ?? occurrence
+            const lineStartSession = getLineStartSession(lineItem)
+            const completedSessionSequence = lineStartSession > 1
+              ? lineStartSession + occurrence - 1
+              : completedSessionSequences[occurrence - 1] ?? occurrence
 
             if (
+              !isDirectSoaServiceRow &&
               !isBundleLine(lineItem) &&
               !isLineCompletedOnSession(lineItem, completedSessionSequence)
             ) {

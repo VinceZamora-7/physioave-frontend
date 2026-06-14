@@ -37,6 +37,15 @@
           Branch:
           <span class="app-appointment-value font-medium">{{ selectedClinic?.name || "No branch selected" }}</span>
         </div>
+        <Button
+          v-if="ptColorOptions.length"
+          :label="showPtColorSettings ? 'Hide PT colors' : 'PT colors'"
+          icon="pi pi-palette"
+          size="small"
+          severity="secondary"
+          outlined
+          @click="showPtColorSettings = !showPtColorSettings"
+        />
         <div v-if="calendarView === 'weekly'" class="flex items-center gap-1">
           <Button icon="pi pi-chevron-left" text size="small" rounded @click="prevWeek" />
           <span class="min-w-[190px] text-center text-sm font-medium text-slate-600 dark:text-slate-300">
@@ -61,6 +70,51 @@
         <span class="app-appointment-legend-dot app-appointment-legend-dot-muted" />
         Canceled
       </span>
+    </div>
+
+    <div
+      v-if="showPtColorSettings && ptColorOptions.length"
+      class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3"
+    >
+      <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div class="text-sm font-bold text-[rgb(var(--app-fg))]">PT Name Colors</div>
+          <div class="text-xs text-[rgb(var(--app-fg))]/55">
+            These colors are saved on this browser and applied to PT names in the weekly schedule.
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        <label
+          v-for="pt in ptColorOptions"
+          :key="pt.key"
+          class="flex items-center gap-3 rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-3 py-2"
+        >
+          <input
+            type="color"
+            class="h-8 w-10 shrink-0 cursor-pointer rounded border border-[rgb(var(--app-border))] bg-transparent p-0.5"
+            :value="pt.color"
+            :aria-label="`Set color for ${pt.name}`"
+            @input="setPtColor(pt.key, ($event.target as HTMLInputElement).value)"
+          />
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-sm font-black" :style="{ color: pt.color }">{{ pt.name }}</span>
+            <span class="block text-[11px] font-semibold text-[rgb(var(--app-fg))]/45">
+              {{ pt.appointmentCount }} appointment{{ pt.appointmentCount === 1 ? "" : "s" }}
+            </span>
+          </span>
+          <Button
+            icon="pi pi-refresh"
+            text
+            rounded
+            size="small"
+            severity="secondary"
+            :aria-label="`Reset color for ${pt.name}`"
+            @click.prevent="resetPtColor(pt.key)"
+          />
+        </label>
+      </div>
     </div>
 
     <!-- Weekly Schedule -->
@@ -179,12 +233,19 @@
                 >
                   <div class="flex items-start justify-between gap-2">
                     <div class="min-w-0">
-                      <div class="truncate text-[12px] font-bold leading-tight">
-                        {{ appt.provider_name ?? appt.doctor_name ?? 'Unassigned PT' }}
-                      </div>
 
-                      <div class="mt-1 truncate text-[11px] font-medium leading-tight opacity-85">
+
+                      <div class="truncate text-[12px] font-bold leading-tight ">
                         {{ appt.patient_name }}
+                      </div>
+                      <div class="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] font-black leading-tight">
+                        <span
+                          class="h-2 w-2 shrink-0 rounded-full shadow-sm ring-1 ring-white/70 dark:ring-white/20"
+                          :style="{ backgroundColor: getPtColor(appt) }"
+                        />
+                        <span class="truncate" :style="{ color: getPtColor(appt) }">
+                          {{ appointmentPtName(appt) }}
+                        </span>
                       </div>
 
                       <div class="mt-1 inline-flex max-w-full items-center rounded-full bg-white/60 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ring-1 ring-current/10 dark:bg-white/10">
@@ -309,10 +370,12 @@ const props = withDefaults(defineProps<{
   loading?: boolean
   canAddAppointment?: boolean
   canViewAppointment?: boolean
+  selectedClinicSchedule?: ClinicSchedule | null
 }>(), {
   loading: false,
   canAddAppointment: true,
-  canViewAppointment: true
+  canViewAppointment: true,
+  selectedClinicSchedule: null
 })
 
 const emit = defineEmits<{
@@ -338,12 +401,67 @@ type CalendarVisibleRange = {
   to: Date
 }
 type CalendarAppointmentStatus = "completed" | "pending" | "canceled"
+type ClinicSchedule = {
+  startDay: number
+  endDay: number
+  startTime: string
+  endTime: string
+}
 
 const DEFAULT_WEEK_HOURS = Array.from({ length: 13 }, (_, index) => index + 7)
+const PT_COLOR_STORAGE_KEY = "physioave.appointmentSchedule.ptColors"
+const DEFAULT_PT_COLORS = [
+  "#2563EB",
+  "#16A34A",
+  "#DC2626",
+  "#9333EA",
+  "#EA580C",
+  "#0891B2",
+  "#DB2777",
+  "#4F46E5",
+  "#65A30D",
+  "#0F766E",
+  "#B45309",
+  "#7C3AED"
+]
 const calendarView = ref<CalendarView>("weekly")
 const selectedDate = ref(new Date())
 const visibleMonth = ref(new Date())
+const showPtColorSettings = ref(false)
 const calendarDisabledDays: number[] = []
+
+const normalizeHexColor = (value: unknown): string | null => {
+  const color = String(value ?? "").trim().toUpperCase()
+  return /^#[0-9A-F]{6}$/.test(color) ? color : null
+}
+
+const loadStoredPtColors = (): Record<string, string> => {
+  if (typeof window === "undefined") return {}
+
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(PT_COLOR_STORAGE_KEY) ?? "{}") as Record<string, unknown>
+    return Object.entries(parsed).reduce<Record<string, string>>((colors, [key, value]) => {
+      const color = normalizeHexColor(value)
+      if (color) colors[key] = color
+      return colors
+    }, {})
+  } catch {
+    return {}
+  }
+}
+
+const ptColors = ref<Record<string, string>>(loadStoredPtColors())
+
+const hashText = (value: string): number => {
+  let hash = 0
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0
+  }
+  return hash
+}
+
+const defaultPtColor = (key: string): string =>
+  DEFAULT_PT_COLORS[hashText(key) % DEFAULT_PT_COLORS.length]
 
 const dateKey = (date: Date): string =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
@@ -390,6 +508,31 @@ const localCalendarDate = computed({
 })
 
 const selectedDayStr = computed(() => dateKey(selectedDate.value))
+
+const timeToMinutes = (value?: string | null, fallback = 0): number => {
+  const [hours, minutes] = String(value ?? "").split(":").map(part => Number(part))
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return fallback
+  return hours * 60 + minutes
+}
+
+const clinicStartMinute = computed(() =>
+  timeToMinutes(props.selectedClinicSchedule?.startTime, DEFAULT_WEEK_HOURS[0] * 60)
+)
+
+const clinicEndMinute = computed(() =>
+  timeToMinutes(
+    props.selectedClinicSchedule?.endTime,
+    (DEFAULT_WEEK_HOURS[DEFAULT_WEEK_HOURS.length - 1] + 1) * 60
+  )
+)
+
+const clinicWeekHours = computed(() => {
+  const startHour = Math.max(0, Math.floor(clinicStartMinute.value / 60))
+  const endHour = Math.min(23, Math.ceil(clinicEndMinute.value / 60) - 1)
+  if (endHour < startHour) return DEFAULT_WEEK_HOURS
+
+  return Array.from({ length: endHour - startHour + 1 }, (_, index) => startHour + index)
+})
 
 const selectAppointment = (appointment: AppointmentListItem): void => {
   if (!props.canViewAppointment) return
@@ -455,13 +598,54 @@ const weeklyAppointments = computed(() =>
   weekDays.value.flatMap(day => appointmentsByDate.value.get(day.dateStr) ?? [])
 )
 
-const weekHours = computed(() => {
-  const appointmentHours = weeklyAppointments.value
-    .map(appointment => new Date(appointment.starts_at).getHours())
-    .filter(hour => Number.isFinite(hour) && hour >= 0 && hour <= 23)
+const weekHours = computed(() => clinicWeekHours.value)
 
-  return Array.from(new Set([...DEFAULT_WEEK_HOURS, ...appointmentHours]))
-    .sort((left, right) => left - right)
+const appointmentPtName = (appointment: AppointmentListItem): string =>
+  appointment.provider_name ?? appointment.doctor_name ?? "Unassigned PT"
+
+const appointmentPtKey = (appointment: AppointmentListItem): string => {
+  if (appointment.primary_provider_staff_id) return `staff:${appointment.primary_provider_staff_id}`
+
+  const name = appointmentPtName(appointment).trim().toLowerCase()
+  return name ? `name:${name}` : "unassigned"
+}
+
+const getPtColor = (appointment: AppointmentListItem): string => {
+  const key = appointmentPtKey(appointment)
+  return ptColors.value[key] ?? defaultPtColor(key)
+}
+
+const setPtColor = (key: string, value: string): void => {
+  const color = normalizeHexColor(value)
+  if (!color) return
+  ptColors.value = { ...ptColors.value, [key]: color }
+}
+
+const resetPtColor = (key: string): void => {
+  const { [key]: _removed, ...rest } = ptColors.value
+  ptColors.value = rest
+}
+
+const ptColorOptions = computed(() => {
+  const items = new Map<string, { key: string; name: string; color: string; appointmentCount: number }>()
+
+  for (const appointment of weeklyAppointments.value) {
+    const key = appointmentPtKey(appointment)
+    const existing = items.get(key)
+    if (existing) {
+      existing.appointmentCount += 1
+      continue
+    }
+
+    items.set(key, {
+      key,
+      name: appointmentPtName(appointment),
+      color: ptColors.value[key] ?? defaultPtColor(key),
+      appointmentCount: 1
+    })
+  }
+
+  return [...items.values()].sort((left, right) => left.name.localeCompare(right.name))
 })
 
 const getWeeklyDayAppointments = (day: string): AppointmentListItem[] =>
@@ -662,5 +846,21 @@ watch(
     emitVisibleRange()
   },
   { immediate: true }
+)
+
+watch(
+  ptColors,
+  (colors) => {
+    if (typeof window === "undefined") return
+    window.localStorage.setItem(PT_COLOR_STORAGE_KEY, JSON.stringify(colors))
+  },
+  { deep: true }
+)
+
+watch(
+  ptColorOptions,
+  (options) => {
+    if (!options.length) showPtColorSettings.value = false
+  }
 )
 </script>

@@ -935,11 +935,11 @@ function getPositiveAmount(record: unknown, keys: string[]): number | null {
   return amount !== null && amount > 0 ? amount : null
 }
 
-function getPositiveAmountFromChildren(item: InvoiceLineNode, keys: string[]): number | null {
+function getAmountFromChildren(item: InvoiceLineNode, keys: string[]): number | null {
   const children = getPayloadChildren(item)
 
   for (const child of children) {
-    const childAmount = getPositiveAmount(child, keys)
+    const childAmount = getAmount(child, keys)
     if (childAmount !== null) return childAmount
   }
 
@@ -951,26 +951,37 @@ function getBillingFallbackTotal(): number {
   return Number.isFinite(total) && total > 0 ? total : 0
 }
 
-function getLguStatusUnitPrice(item: InvoiceLineNode): number {
+function getLguStatusUnitPriceAmount(item: InvoiceLineNode): number | null {
   const useDropoutRate = shouldUseDropoutRate(item)
   const primaryKeys = useDropoutRate ? DROPOUT_PRICE_KEYS : CONTRACT_PRICE_KEYS
-  const secondaryKeys = useDropoutRate ? CONTRACT_PRICE_KEYS : DROPOUT_PRICE_KEYS
+  const primaryAmount =
+    getAmount(item, primaryKeys) ??
+    getAmountFromChildren(item, primaryKeys)
+
+  if (primaryAmount !== null) return primaryAmount
+
+  if (useDropoutRate) {
+    const contractFallback =
+      getAmount(item, CONTRACT_PRICE_KEYS) ??
+      getAmountFromChildren(item, CONTRACT_PRICE_KEYS)
+
+    if (contractFallback !== null) return contractFallback
+  }
 
   return (
-    getPositiveAmount(item, primaryKeys) ??
-    getPositiveAmountFromChildren(item, primaryKeys) ??
-    getPositiveAmount(item, secondaryKeys) ??
-    getPositiveAmountFromChildren(item, secondaryKeys) ??
     getPositiveAmount(item, PRICE_FALLBACK_KEYS) ??
-    getPositiveAmountFromChildren(item, PRICE_FALLBACK_KEYS) ??
-    0
+    getAmountFromChildren(item, PRICE_FALLBACK_KEYS)
   )
 }
 
-function getBundleContractPrice(item: InvoiceLineNode): number {
-  const price = getLguStatusUnitPrice(item)
+function getLguStatusUnitPrice(item: InvoiceLineNode): number {
+  return getLguStatusUnitPriceAmount(item) ?? 0
+}
 
-  if (price > 0) return price
+function getBundleContractPrice(item: InvoiceLineNode): number {
+  const price = getLguStatusUnitPriceAmount(item)
+
+  if (price !== null) return price
 
   return getBillingFallbackTotal()
 }
@@ -1057,8 +1068,8 @@ function getSelectedSessionLabel(lineItems: InvoiceLineNode[]): string {
     Number(billingDetail.value?.session_sequence ?? 1)
 
   const total =
-    Number(billingDetail.value?.total_sessions ?? 0) ||
     getQuantity(lineItems[0] ?? {}) ||
+    Number(billingDetail.value?.total_sessions ?? 0) ||
     completedSessionSequences.value.length ||
     1
 

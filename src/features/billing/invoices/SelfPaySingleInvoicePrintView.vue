@@ -1,6 +1,6 @@
 <template>
   <SponsorInvoiceLayout
-    title="Self Pay Single Service Invoice"
+    title="Self Pay-Single Service Invoice"
     :subtitle="`Single service printable record for ${patientName}`"
     :has-error="!!error"
   >
@@ -150,7 +150,9 @@
           <div class="approval-label">
             Approved by:
           </div>
-
+          <div class="approval-label">
+            &nbsp;
+          </div>
           <div class="approval-name">
             RENALOU B. CORDOVA, PTRP, UK-PT
           </div>

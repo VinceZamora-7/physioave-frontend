@@ -248,6 +248,15 @@
       />
 
       <Button
+        label="Create Follow-up Appointment"
+        icon="pi pi-calendar-plus"
+        severity="secondary"
+        outlined
+        :disabled="isSaving || !canCreateFollowUp"
+        @click="$emit('create-follow-up')"
+      />
+
+      <Button
         label="Save Attendance"
         icon="pi pi-check"
         :loading="isSaving"
@@ -309,6 +318,7 @@ const emit = defineEmits<{
   "update:visible": [value: boolean]
   save: [payload: AttendanceSignaturePayload]
   "save-draft": [payload: AttendanceSignaturePayload]
+  "create-follow-up": []
   "drop-out": [reason: string]
   "undo-drop-out": []
 }>()
@@ -338,6 +348,10 @@ const staffSignatureError = ref("")
 const encounterNotes = ref("")
 
 const isTicketLocked = computed(() => Boolean(props.encounterTicket?.record_locked))
+
+const canCreateFollowUp = computed(() =>
+  Boolean(props.appointment?.credit_account_id)
+)
 
 const normalizeStatus = (value?: string | null): string =>
   String(value ?? "").trim().toUpperCase()

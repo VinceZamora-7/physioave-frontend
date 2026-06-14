@@ -22,6 +22,22 @@
           </div>
 
           <div class="flex gap-2">
+            <Button
+              v-if="canCreateFollowUp"
+              label="Follow-up"
+              icon="pi pi-calendar-plus"
+              severity="secondary"
+              outlined
+              size="small"
+              @click="$emit('create-follow-up')"
+            />
+            <div
+              v-if="isFollowUpMode"
+              class="rounded-xl bg-emerald-100 px-3 py-2 text-center ring-1 ring-emerald-200"
+            >
+              <span class="block text-[10px] font-black uppercase tracking-widest text-emerald-600">Follow-up</span>
+              <strong class="block text-sm font-black text-emerald-700">Uses existing credit</strong>
+            </div>
             <div class="rounded-xl bg-violet-100 px-3 py-2 text-center ring-1 ring-violet-200">
               <span class="block text-[10px] font-black uppercase tracking-widest text-violet-600">Branch</span>
               <strong class="block text-sm font-black text-violet-700">{{ selectedClinic?.label || "All branches" }}</strong>
@@ -251,7 +267,7 @@
                       v-model="servicePicker.id"
                       :options="currentServiceOptions"
                       optionLabel="label"
-                      optionValue="value"
+                      optionValue="pickerValue"
                       filter
                       fluid
                       placeholder="Select service"
@@ -619,7 +635,7 @@
           <div class="mt-4 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(20rem,0.7fr)_minmax(0,1.3fr)]">
             <!-- Left: Date controls -->
             <div class="space-y-4">
-              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
+              <!-- <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
                 <div class="space-y-1.5">
                   <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">First Start</label>
                   <DatePicker
@@ -642,15 +658,33 @@
                   />
                   <div class="text-xs text-[rgb(var(--app-fg))]/50">This becomes default duration for other sessions</div>
                 </div>
-              </div>
+              </div> -->
 
               <!-- Session count info -->
               <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-4">
                 <div class="text-sm font-black text-[rgb(var(--app-fg))]">Session Dates</div>
                 <div class="mt-1 text-xs text-[rgb(var(--app-fg))]/60">
-                  Required: {{ sessionCount }} appointment{{ sessionCount === 1 ? "" : "s" }} · Sending {{ form.session_dates?.length || 0 }} date{{ (form.session_dates?.length || 0) === 1 ? "" : "s" }}
+                  Required: {{ sessionCount }} appointment{{ sessionCount === 1 ? "" : "s" }} - Sending {{ form.session_dates?.length || 0 }} date{{ (form.session_dates?.length || 0) === 1 ? "" : "s" }}
                 </div>
               </div>
+
+              <label
+                v-if="!editingId && !isFollowUpMode"
+                class="flex cursor-pointer items-start gap-3 rounded-xl border border-violet-200 bg-violet-50/70 p-4 text-sm text-violet-950 ring-1 ring-violet-100 dark:border-violet-900/50 dark:bg-violet-950/20 dark:text-violet-100"
+              >
+                <Checkbox
+                  v-model="form.add_initial_evaluation_appointment"
+                  binary
+                  inputId="add-initial-evaluation-appointment"
+                  class="mt-0.5 shrink-0"
+                />
+                <span class="min-w-0">
+                  <span class="block font-black">Add initial evaluation appointment</span>
+                  <span class="mt-1 block text-xs leading-5 text-violet-800/75 dark:text-violet-100/70">
+                    Adds one extra appointment date before the main treatment sessions. Attendance will still consume the selected planned service credit.
+                  </span>
+                </span>
+              </label>
 
               <!-- Generation buttons -->
               <div class="flex flex-wrap gap-2">
@@ -887,6 +921,7 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, ref, watch } from "vue"
 import Button from "primevue/button"
+import Checkbox from "primevue/checkbox"
 import DatePicker from "primevue/datepicker"
 import Dialog from "primevue/dialog"
 import InputNumber from "primevue/inputnumber"
@@ -972,6 +1007,8 @@ const props = defineProps<{
   visible: boolean
   editingId: number | null
   isSaving: boolean
+  isFollowUpMode?: boolean
+  canCreateFollowUp?: boolean
   form: Record<string, any>
   sessionCount: number
   selectedClinic: SelectOption | null
@@ -1015,6 +1052,7 @@ const emit = defineEmits<{
   "generate-session-dates": [mode: SessionMode]
   "add-picked-service": []
   "remove-selected-service": [index: number]
+  "create-follow-up": []
   save: []
 }>()
 
@@ -1071,9 +1109,8 @@ const serviceCategoryDescription = (value: unknown): string => {
   if (type === "MACHINE") return "Machine-based individual service."
   if (type === "TECHNIQUE") return "Hands-on treatment or therapy technique."
   if (type === "EVALUATION") return "Evaluation, re-evaluation, or assessment service."
-  if (type === "ADD_ON_MACHINE") return "Machine add-on attached to the visit or package."
-  if (type === "ADD_ON_TECHNIQUE") return "Technique add-on attached to the visit or package."
-  if (type === "ADD_ON_HOME_SERVICE") return "Home service add-on for non-clinic visits."
+  if (type === "ADD_ON_MACHINE" || type === "ADD_ON_TECHNIQUE") return "All service add-ons attached to the visit or package."
+  if (type === "ADD_ON_HOME_SERVICE") return "Home care add-ons for non-clinic visits."
   return "Service option available for the selected billing type."
 }
 
@@ -1082,7 +1119,7 @@ const currentCategoryLabel = computed(() =>
 )
 
 const selectedServiceOption = computed(() =>
-  props.currentServiceOptions.find(option => Number(option.value) === Number(props.servicePicker.id)) ?? null
+  props.currentServiceOptions.find(option => String(option.pickerValue) === String(props.servicePicker.id)) ?? null
 )
 
 const formatMoney = (value: unknown): string => {
@@ -1412,6 +1449,14 @@ const hasSamePtTimeConflict = computed(() => samePtTimeConflicts.value.length > 
 
 const blockingScheduleMessage = computed(() => {
   const conflict = samePtTimeConflicts.value[0]
+  if (!isSelectedSessionOnClinicDay.value) {
+    return "Cannot save. Selected date is outside this clinic's regular schedule."
+  }
+
+  if (!isSelectedManualTimeWithinClinicHours.value) {
+    return "Cannot save. Selected time is outside clinic operating hours."
+  }
+
   if (!conflict) return ""
 
   const appointment = conflict.appointments[0]
@@ -1522,7 +1567,7 @@ const setSlotForActiveSession = (slot: TimeSlot): void => {
 }
 
 const submitSave = (): void => {
-  if (hasSamePtTimeConflict.value) {
+  if (blockingScheduleMessage.value) {
     const conflict = samePtTimeConflicts.value[0]
 
     if (conflict) {
@@ -1548,6 +1593,7 @@ const setServiceType = (type: string): void => {
 const serviceTypeIcon = (type: string): string => {
   if (type === "PACKAGE") return "pi pi-box"
   if (type === "BUNDLE") return "pi pi-th-large"
+  if (type === "ADD_ON_MACHINE" || type === "ADD_ON_TECHNIQUE") return "pi pi-plus"
   if (type.includes("MACHINE")) return "pi pi-cog"
   if (type.includes("TECHNIQUE")) return "pi pi-heart"
   if (type.includes("EVALUATION")) return "pi pi-clipboard"
