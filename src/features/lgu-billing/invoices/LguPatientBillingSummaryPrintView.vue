@@ -54,35 +54,46 @@
       <div class="table-wrap">
         <table class="summary-table billing-summary-table">
           <colgroup>
+            <col class="col-item-no" />
+            <col class="col-treatment-date" />
             <col class="col-item" />
-            <col class="col-type" />
+            <col class="col-session" />
+            <col class="col-total" />
           </colgroup>
 
           <thead>
             <tr>
-              <th class="text-left">SERVICE / PACKAGE</th>
-              <th class="text-left">TYPE</th>
+              <th class="text-center">ITEM No.</th>
+              <th class="text-left">TREATMENT DATE</th>
+              <th class="text-left">PT SERVICE RENDERED</th>
+              <th class="text-left">SESSION SEQUENCE</th>
+              <th class="text-right">UNIT TOTAL</th>
             </tr>
           </thead>
 
           <tbody>
             <tr v-if="!summaryRows.length">
-              <td colspan="2" class="empty-row">No LGU services found for the selected date range.</td>
+              <td colspan="5" class="empty-row">No LGU services found for the selected date range.</td>
             </tr>
 
             <tr
               v-for="row in summaryRows"
               :key="row.key"
-              :class="{
-                'package-row': row.level === 0,
-                'bundle-row': row.kind === 'bundle',
-                'child-row': row.level > 1
-              }"
+              :class="{ 'package-row': row.kind === 'package' }"
             >
-              <td class="service-cell" :style="{ paddingLeft: `${row.level * 18 + 6}px` }">
-                {{ row.name }}
-              </td>
-              <td class="type-cell">{{ row.label }}</td>
+              <td v-if="row.kind === 'package'" class="package-cell" colspan="5">{{ row.serviceRendered }}</td>
+              <template v-else>
+                <td class="item-cell text-center">{{ row.itemNo }}</td>
+                <td class="date-cell">{{ row.treatmentDate }}</td>
+                <td class="service-cell">{{ row.serviceRendered }}</td>
+                <td class="session-cell">{{ row.sessionSequence }}</td>
+                <td class="total-cell text-right">{{ row.unitTotalLabel }}</td>
+              </template>
+            </tr>
+
+            <tr v-if="summaryRows.length" class="grand-total-row">
+              <td colspan="4" class="text-right">Grand Total:</td>
+              <td class="text-right">{{ grandTotalLabel }}</td>
             </tr>
           </tbody>
         </table>
@@ -120,17 +131,15 @@ type LineNode = AnyRecord & {
   children?: LineNode[]
 }
 
-type SummaryNode = {
-  name: string
-  children: SummaryNode[]
-}
-
 type SummaryRow = {
   key: string
-  name: string
-  label: string
-  level: number
-  kind: "package" | "bundle" | "service"
+  kind: "package" | "service"
+  itemNo: string
+  treatmentDate: string
+  serviceRendered: string
+  sessionSequence: string
+  unitTotal: number
+  unitTotalLabel: string
 }
 
 const route = useRoute()
@@ -168,43 +177,62 @@ const dateRangeLabel = computed(() => {
 
 const dateSigned = computed(() => formatDate(new Date()))
 
+const grandTotal = computed(() =>
+  summaryRows.value.reduce((sum, row) => sum + (row.kind === "service" ? row.unitTotal : 0), 0)
+)
+
+const grandTotalLabel = computed(() => formatCurrency(grandTotal.value))
+
 const summaryRows = computed<SummaryRow[]>(() => {
-  const packages = buildPackageTree()
   const rows: SummaryRow[] = []
+  const billingById = new Map<number, BillingListItem>()
+  const renderedPackageKeys = new Set<string>()
 
-  packages.forEach((packageNode, packageIndex) => {
-    rows.push({
-      key: `package-${packageIndex}-${normalizeKey(packageNode.name)}`,
-      name: packageNode.name,
-      label: "Package",
-      level: 0,
-      kind: "package"
-    })
+  for (const billing of billings.value) {
+    billingById.set(Number(billing.id), billing)
+  }
 
-    packageNode.children.forEach((child, childIndex) => {
-      const isBundle = child.children.length > 0
+  for (const authorization of detail.value?.authorizations ?? []) {
+    const packageName = authorization.package_name || "LGU Package"
+    const packageKey = `authorization-${authorization.authorization_id}-${normalizeKey(packageName)}`
 
-      rows.push({
-        key: `package-${packageIndex}-child-${childIndex}-${normalizeKey(child.name)}`,
-        name: child.name,
-        label: isBundle ? "Bundle" : "Service",
-        level: 1,
-        kind: isBundle ? "bundle" : "service"
-      })
+    const sortedSessions = [...(authorization.sessions ?? [])]
+      .filter(session => isWithinSelectedRange(session.appointment_date))
+      .sort(compareSessionDates)
+    const totalSessions = Math.max(1, sortedSessions.length)
 
-      child.children.forEach((bundleChild, bundleChildIndex) => {
+    sortedSessions.forEach((session, index) => {
+      if (!renderedPackageKeys.has(packageKey)) {
+        renderedPackageKeys.add(packageKey)
         rows.push({
-          key: `package-${packageIndex}-child-${childIndex}-bundle-child-${bundleChildIndex}-${normalizeKey(bundleChild.name)}`,
-          name: bundleChild.name,
-          label: "Bundle Child",
-          level: 2,
-          kind: "service"
+          key: `package-${packageKey}`,
+          kind: "package",
+          itemNo: "",
+          treatmentDate: "",
+          serviceRendered: packageName,
+          sessionSequence: "",
+          unitTotal: 0,
+          unitTotalLabel: ""
         })
-      })
-    })
-  })
+      }
 
-  return rows
+      const billingId = Number(session.dropout_billing_id ?? session.monthly_billing_id ?? 0) || null
+      const billing = billingId ? billingById.get(billingId) : undefined
+      const sessionSequenceLabel = `${index + 1} of ${totalSessions}`
+      const sessionRows = buildRowsForSessionBilling({
+        billing,
+        packageName,
+        fallbackServiceName: session.service_name,
+        keyPrefix: `session-${authorization.authorization_id}-${session.id}`,
+        treatmentDate: formatDate(session.appointment_date),
+        sessionSequenceLabel
+      })
+
+      rows.push(...sessionRows)
+    })
+  }
+
+  return finalizeSummaryRows(rows.length ? rows : buildRowsFromBillings())
 })
 
 function parsePositiveNumber(value: unknown): number {
@@ -229,6 +257,14 @@ function formatDate(value?: Date | string | null): string {
   if (!value) return "N/A"
   const parsed = value instanceof Date ? value : new Date(value)
   return Number.isNaN(parsed.getTime()) ? "N/A" : parsed.toLocaleDateString("en-PH")
+}
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: "PHP",
+    minimumFractionDigits: 2
+  }).format(value)
 }
 
 function firstNonBlank(...values: unknown[]): string {
@@ -260,6 +296,53 @@ function normalizeKey(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ")
 }
 
+function compareSessionDates(
+  left: { appointment_date?: string | null; appointment_id?: number | null; id?: number | null },
+  right: { appointment_date?: string | null; appointment_id?: number | null; id?: number | null }
+): number {
+  const leftTime = left.appointment_date ? new Date(left.appointment_date).getTime() : 0
+  const rightTime = right.appointment_date ? new Date(right.appointment_date).getTime() : 0
+  const leftSort = Number.isNaN(leftTime) ? 0 : leftTime
+  const rightSort = Number.isNaN(rightTime) ? 0 : rightTime
+
+  return leftSort - rightSort
+    || Number(left.appointment_id ?? 0) - Number(right.appointment_id ?? 0)
+    || Number(left.id ?? 0) - Number(right.id ?? 0)
+}
+
+function finalizeSummaryRows(rows: SummaryRow[]): SummaryRow[] {
+  let itemNo = 1
+  let previousSessionSequence = ""
+
+  return rows.map(row => {
+    if (row.kind !== "service") return row
+
+    const actualSessionSequence = row.sessionSequence
+    const displaySessionSequence = actualSessionSequence && actualSessionSequence === previousSessionSequence
+      ? "-"
+      : actualSessionSequence
+
+    previousSessionSequence = actualSessionSequence
+
+    return {
+      ...row,
+      itemNo: String(itemNo++),
+      sessionSequence: displaySessionSequence
+    }
+  })
+}
+
+function getNumber(record: AnyRecord | null | undefined, keys: string[]): number {
+  if (!record) return 0
+
+  for (const key of keys) {
+    const parsed = Number(record[key])
+    if (Number.isFinite(parsed)) return parsed
+  }
+
+  return 0
+}
+
 function getText(record: AnyRecord | null | undefined, keys: string[]): string {
   if (!record) return ""
 
@@ -277,6 +360,24 @@ function getLineName(line: AnyRecord): string {
     getText(line, ["name", "service_name", "serviceName", "pt_service_rendered", "ptServiceRendered", "description"]),
     "Unnamed Service"
   )
+}
+
+function getLineAmount(line: AnyRecord): number {
+  return getNumber(line, [
+    "line_total",
+    "lineTotal",
+    "total_amount",
+    "totalAmount",
+    "amount",
+    "unit_total",
+    "unitTotal",
+    "contract_price_snapshot",
+    "contractPriceSnapshot",
+    "lgu_contract_price",
+    "lguContractPrice",
+    "dropout_price_snapshot",
+    "dropoutPriceSnapshot"
+  ])
 }
 
 function getLineType(line: AnyRecord): string {
@@ -342,82 +443,19 @@ function parseBillingLines(billing: BillingListItem): LineNode[] {
   return parseMaybeJsonArray(billing.consumed_services_json).filter(isRecord) as LineNode[]
 }
 
-function getPackageNameFromBilling(billing: BillingListItem, lines: LineNode[]): string {
-  const packageLine = lines.find(isPackageLine)
-  return firstNonBlank(
-    billing.package_name,
-    packageLine ? getLineName(packageLine) : "",
-    billing.service_name,
-    "LGU Package"
-  )
-}
+function getBillableLinesFromBilling(billing?: BillingListItem): LineNode[] {
+  if (!billing) return []
 
-function addUniqueChild(parent: SummaryNode, child: SummaryNode): SummaryNode {
-  const key = normalizeKey(child.name)
-  const existing = parent.children.find(item => normalizeKey(item.name) === key)
-  if (existing) return existing
+  const lines = parseBillingLines(billing)
+  const packageLines = lines.filter(isPackageLine)
+  const sourceLines = packageLines.length
+    ? packageLines.flatMap(line => getLineChildren(line))
+    : lines
 
-  parent.children.push(child)
-  return child
-}
-
-function addService(packageNode: SummaryNode, name: string): void {
-  const serviceName = name.trim()
-  if (!serviceName) return
-  addUniqueChild(packageNode, { name: serviceName, children: [] })
-}
-
-function addBundle(packageNode: SummaryNode, line: LineNode): void {
-  const bundleNode = addUniqueChild(packageNode, {
-    name: getLineName(line),
-    children: []
+  return sourceLines.filter(line => {
+    const type = getLineType(line)
+    return !type.includes("package")
   })
-
-  for (const child of getLineChildren(line)) {
-    const childName = getLineName(child)
-    if (childName) {
-      addUniqueChild(bundleNode, { name: childName, children: [] })
-    }
-  }
-}
-
-function addLineToPackage(packageNode: SummaryNode, line: LineNode): void {
-  if (isPackageLine(line)) {
-    const packageChildren = getLineChildren(line)
-    if (!packageChildren.length) return
-
-    packageChildren.forEach(child => addLineToPackage(packageNode, child))
-    return
-  }
-
-  if (isBundleLine(line)) {
-    addBundle(packageNode, line)
-    return
-  }
-
-  addService(packageNode, getLineName(line))
-}
-
-function buildPackageTreeFromBillings(): SummaryNode[] {
-  const packageMap = new Map<string, SummaryNode>()
-
-  for (const billing of billings.value) {
-    const lines = parseBillingLines(billing)
-    const packageName = getPackageNameFromBilling(billing, lines)
-    const packageKey = normalizeKey(packageName)
-    const packageNode = packageMap.get(packageKey) ?? { name: packageName, children: [] }
-
-    packageMap.set(packageKey, packageNode)
-
-    if (!lines.length) {
-      addService(packageNode, billing.service_name || billing.package_name || "LGU Service")
-      continue
-    }
-
-    lines.forEach(line => addLineToPackage(packageNode, line))
-  }
-
-  return Array.from(packageMap.values())
 }
 
 function isWithinSelectedRange(value?: string | null): boolean {
@@ -429,27 +467,139 @@ function isWithinSelectedRange(value?: string | null): boolean {
   return day >= dateFrom.value.getTime() && day <= dateTo.value.getTime()
 }
 
-function buildPackageTreeFromAppointments(): SummaryNode[] {
-  const packageMap = new Map<string, SummaryNode>()
-
-  for (const appointment of detail.value?.appointments ?? []) {
-    if (!isWithinSelectedRange(appointment.appointment_date)) continue
-
-    const packageName = appointment.package_name || "LGU Package"
-    const packageKey = normalizeKey(packageName)
-    const packageNode = packageMap.get(packageKey) ?? { name: packageName, children: [] }
-
-    packageMap.set(packageKey, packageNode)
-    appointment.availed_services.forEach(service => addService(packageNode, service))
-  }
-
-  return Array.from(packageMap.values())
+function getBillingUnitTotal(billing?: BillingListItem): number {
+  return getNumber(billing as AnyRecord | undefined, ["total_amount", "amount_due"])
 }
 
-function buildPackageTree(): SummaryNode[] {
-  const fromBillings = buildPackageTreeFromBillings()
-  if (fromBillings.some(item => item.children.length > 0)) return fromBillings
-  return buildPackageTreeFromAppointments()
+function getBillingTreatmentDate(billing: BillingListItem): string {
+  return getText(billing as unknown as AnyRecord, ["appointment_date", "appointmentDate", "treatment_date", "treatmentDate", "created_at", "createdAt"])
+}
+
+function getBillingServiceRendered(billing: BillingListItem): string {
+  const lines = parseBillingLines(billing)
+  const primaryLine = lines.find(line => !isPackageLine(line)) ?? lines[0]
+
+  return firstNonBlank(
+    primaryLine ? getLineName(primaryLine) : "",
+    billing.service_name,
+    billing.package_name,
+    "LGU Session"
+  )
+}
+
+function buildRowsForSessionBilling({
+  billing,
+  packageName,
+  fallbackServiceName,
+  keyPrefix,
+  treatmentDate,
+  sessionSequenceLabel
+}: {
+  billing?: BillingListItem
+  packageName: string
+  fallbackServiceName: string
+  keyPrefix: string
+  treatmentDate: string
+  sessionSequenceLabel: string
+}): SummaryRow[] {
+  const billableLines = getBillableLinesFromBilling(billing)
+  const billingTotal = getBillingUnitTotal(billing)
+
+  if (!billableLines.length) {
+    return [{
+      key: `${keyPrefix}-fallback`,
+      kind: "service",
+      itemNo: "",
+      treatmentDate,
+      serviceRendered: firstNonBlank(fallbackServiceName, billing?.service_name, packageName, "LGU Service"),
+      sessionSequence: sessionSequenceLabel,
+      unitTotal: billingTotal,
+      unitTotalLabel: formatCurrency(billingTotal)
+    }]
+  }
+
+  return billableLines.map((line, index) => {
+    const lineAmount = getLineAmount(line)
+    const amount = lineAmount > 0
+      ? lineAmount
+      : billableLines.length === 1
+        ? billingTotal
+        : 0
+
+    return {
+      key: `${keyPrefix}-line-${index}-${normalizeKey(getLineName(line))}`,
+      kind: "service",
+      itemNo: "",
+      treatmentDate,
+      serviceRendered: getLineName(line),
+      sessionSequence: sessionSequenceLabel,
+      unitTotal: amount,
+      unitTotalLabel: amount > 0 ? formatCurrency(amount) : "-"
+    }
+  })
+}
+
+function getBillingSessionSequence(billing: BillingListItem): string {
+  const billingRecord = billing as unknown as AnyRecord
+  const sequenceLabel = getText(billingRecord, ["session_sequence_label", "sessionSequenceLabel"])
+  if (sequenceLabel) return sequenceLabel
+
+  const sequence = getNumber(billingRecord, ["session_sequence", "sessionSequence"])
+  const totalSessions = getNumber(billingRecord, ["total_sessions", "totalSessions"])
+
+  return sequence > 0 ? `${sequence} of ${Math.max(1, totalSessions || 1)}` : "-"
+}
+
+function buildRowsFromBillings(): SummaryRow[] {
+  const seenKeys = new Set<string>()
+  const rows: SummaryRow[] = []
+  const renderedPackageKeys = new Set<string>()
+
+  for (const billing of billings.value) {
+    const treatmentDate = getBillingTreatmentDate(billing)
+    if (!isWithinSelectedRange(treatmentDate)) continue
+
+    const packageName = billing.package_name || "LGU Package"
+    const packageKey = normalizeKey(packageName)
+
+    if (!renderedPackageKeys.has(packageKey)) {
+      renderedPackageKeys.add(packageKey)
+      rows.push({
+        key: `billing-package-${packageKey}`,
+        kind: "package",
+        itemNo: "",
+        treatmentDate: "",
+        serviceRendered: packageName,
+        sessionSequence: "",
+        unitTotal: 0,
+        unitTotalLabel: ""
+      })
+    }
+
+    const duplicateKey = [
+      Number(billing.appointment_id ?? 0),
+      normalizeKey(getBillingServiceRendered(billing)),
+      getBillingSessionSequence(billing),
+      formatDate(treatmentDate),
+      getBillingUnitTotal(billing)
+    ].join("|")
+
+    if (seenKeys.has(duplicateKey)) continue
+    seenKeys.add(duplicateKey)
+
+    rows.push({
+      key: `billing-${billing.id}`,
+      kind: "service",
+      itemNo: "",
+      treatmentDate: formatDate(treatmentDate),
+      serviceRendered: getBillingServiceRendered(billing),
+      sessionSequence: getBillingSessionSequence(billing),
+      unitTotal: getBillingUnitTotal(billing),
+      unitTotalLabel: formatCurrency(getBillingUnitTotal(billing))
+    })
+  }
+
+  return rows
 }
 
 async function load(): Promise<void> {
@@ -499,33 +649,46 @@ onMounted(() => {
   min-width: 0;
 }
 
+.billing-summary-table .col-item-no {
+  width: 9%;
+}
+
+.billing-summary-table .col-treatment-date {
+  width: 17%;
+}
+
 .billing-summary-table .col-item {
-  width: 75%;
+  width: 40%;
 }
 
-.billing-summary-table .col-type {
-  width: 25%;
+.billing-summary-table .col-session {
+  width: 17%;
 }
 
-.service-cell {
-  font-weight: 600;
+.billing-summary-table .col-total {
+  width: 17%;
 }
 
-.package-row .service-cell {
+.package-cell {
+  background: #f3f4f6;
+  color: #111827;
   font-weight: 900;
   text-transform: uppercase;
 }
 
-.bundle-row .service-cell {
-  font-weight: 800;
+.item-cell,
+.date-cell,
+.service-cell {
+  font-weight: 600;
+  padding-left: 18px !important;
 }
 
-.child-row .service-cell {
-  color: #374151;
-  font-weight: 500;
+.item-cell {
+  padding-left: 6px !important;
 }
 
-.type-cell {
+.session-cell,
+.total-cell {
   color: #374151;
   font-weight: 700;
 }
@@ -537,13 +700,23 @@ onMounted(() => {
   font-style: italic;
 }
 
+.grand-total-row td {
+  border-top: 2px solid #111827;
+  font-weight: 900;
+}
+
 @media print {
   .billing-summary-table {
     min-width: 0 !important;
   }
 
+  .package-cell,
+  .item-cell,
+  .date-cell,
   .service-cell,
-  .type-cell {
+  .session-cell,
+  .total-cell,
+  .grand-total-row td {
     font-size: 9px !important;
   }
 }

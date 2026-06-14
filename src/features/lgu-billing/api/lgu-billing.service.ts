@@ -93,7 +93,8 @@ export interface LguPatientAppointmentStatus {
   appointment_date: string
   package_name?: string | null
   availed_services: string[]
-  status: "PENDING" | "COMPLETED" | "DROPPED_OUT" | "CROSS_MONTH_DROPPED_OUT"
+  status: "PENDING" | "COMPLETED" | "DROPPED_OUT" | "CROSS_MONTH_DROPPED_OUT" | "CANCELED"
+  dropout_starts_here?: boolean
 }
 
 export interface LguPatientPackageAvailment {
@@ -186,6 +187,7 @@ type LguSoaBillingRow = {
   lgu_reference_label?: string | null
   lgu_patient_referral_form_no?: string | null
   lgu_patient_program_status?: string | null
+  dropout_status?: string | null
 }
 
 export interface LguPackageCredit {
@@ -293,7 +295,7 @@ const mapBillingRowToSoaItem = (
     billing_status: row.billing_status ?? null,
     billing_amount_due: Number(row.total_amount ?? row.amount_due ?? 0),
     amount_paid: Number(row.amount_paid ?? 0),
-    program_status: row.lgu_patient_program_status ?? null,
+    program_status: row.lgu_patient_program_status ?? row.dropout_status ?? null,
     pricing_source: row.pricing_source ?? null,
     physical_therapist: row.physical_therapist ?? null,
     doctor: row.doctor ?? null,

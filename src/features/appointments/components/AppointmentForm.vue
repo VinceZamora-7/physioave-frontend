@@ -46,15 +46,28 @@
           <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-1">
             <div class="space-y-1.5 md:col-span-2 xl:col-span-1">
               <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">Patient</label>
-              <Select
-                v-model="form.patient_id"
-                :options="patientOptions"
-                optionLabel="label"
-                optionValue="value"
-                filter
-                fluid
-                placeholder="Select patient"
-              />
+<Select
+  v-model="form.patient_id"
+  :options="patientOptions"
+  optionLabel="label"
+  optionValue="value"
+  filter
+  fluid
+  placeholder="Select patient"
+  class="py-3"
+>
+  <template #option="{ option }">
+    {{ toTitleCase(option.label) }}
+  </template>
+
+  <template #value="{ value }">
+    {{
+      toTitleCase(
+        patientOptions.find(p => p.value === value)?.label || ''
+      )
+    }}
+  </template>
+</Select>
             </div>
 
             <div class="space-y-1.5">
@@ -347,7 +360,6 @@
           </div>
         </section>
 
-<!-- Section 3: Patient Care and Evaluation Visit -->
 <!-- Section 3: Patient Care and Evaluation Visit -->
 <section class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 shadow-sm sm:p-5 xl:col-span-2">
   <FormSectionHeader
@@ -1575,6 +1587,11 @@ watch(
     }
   }
 )
+
+const toTitleCase = (text: string): string =>
+  text
+    .toLowerCase()
+    .replace(/\b\w/g, char => char.toUpperCase())
 
 // Parent AppointmentsModule owns starts_at / ends_at synchronization.
 // Do not watch props.form.starts_at here and mutate props.form.session_dates,

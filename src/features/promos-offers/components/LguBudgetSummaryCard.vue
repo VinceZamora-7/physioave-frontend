@@ -2404,6 +2404,9 @@ const exportPatientAttendanceRecord = async (): Promise<void> => {
 
 const firstDroppedOutAppointmentId = computed<number | null>(() => {
   const appointments = selectedPatientDetail.value?.appointments ?? []
+  const explicitDropoutStart = appointments.find(appointment => appointment.dropout_starts_here)
+  if (explicitDropoutStart) return explicitDropoutStart.appointment_id
+
   return appointments.find(appointment =>
     appointment.status === "DROPPED_OUT" || appointment.status === "CROSS_MONTH_DROPPED_OUT"
   )?.appointment_id ?? null
@@ -2414,6 +2417,7 @@ const formatLguStatus = (value?: string | null): string => {
   if (normalized === "CROSS_MONTH_DROPPED_OUT") return "Cross Month Dropped Out"
   if (normalized === "DROPPED_OUT") return "Dropped Out"
   if (normalized === "COMPLETED") return "Completed"
+  if (normalized === "CANCELED" || normalized === "CANCELLED") return "Canceled"
   return "Pending"
 }
 
@@ -2421,6 +2425,7 @@ const lguStatusSeverity = (value?: string | null): "success" | "warn" | "danger"
   const normalized = String(value ?? "").trim().toUpperCase()
   if (normalized === "COMPLETED") return "success"
   if (normalized === "DROPPED_OUT" || normalized === "CROSS_MONTH_DROPPED_OUT") return "danger"
+  if (normalized === "CANCELED" || normalized === "CANCELLED") return "secondary"
   if (normalized === "PENDING" || normalized === "ACTIVE") return "warn"
   return "secondary"
 }

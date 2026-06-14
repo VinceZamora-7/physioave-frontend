@@ -69,7 +69,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(appointment, index) in selectedPatientDetail.appointments" :key="appointment.appointment_id" :class="['border-t border-[rgb(var(--app-border))]', firstDroppedOutAppointmentId === appointment.appointment_id ? 'bg-red-50/70 dark:bg-red-900/20' : 'bg-[rgb(var(--app-card))]']">
+              <tr v-for="(appointment, index) in sortedAppointments" :key="appointment.appointment_id" :class="['border-t border-[rgb(var(--app-border))]', firstDroppedOutAppointmentId === appointment.appointment_id ? 'bg-red-50/70 dark:bg-red-900/20' : 'bg-[rgb(var(--app-card))]']">
                 <td class="px-3 py-2">
                   <div class="text-xs font-bold text-[rgb(var(--app-fg))]">Session {{ index + 1 }}</div>
                   <div class="font-mono text-[11px] text-[rgb(var(--app-fg))]/60">APT-{{ appointment.appointment_id }}</div>
@@ -87,10 +87,10 @@
           </table>
         </div>
 
-        <EmptyBlock v-if="!selectedPatientDetail.appointments.length" text="No appointments recorded yet." />
+        <EmptyBlock v-if="!sortedAppointments.length" text="No appointments recorded yet." />
       </section>
 
-      <section class="space-y-3">
+      <!-- <section class="space-y-3">
         <h4 class="m-0 text-sm font-bold text-[rgb(var(--app-fg))]">Package Availment</h4>
         <div class="overflow-x-auto rounded-2xl border border-[rgb(var(--app-border))]">
           <table class="min-w-full text-sm">
@@ -117,7 +117,7 @@
           </table>
         </div>
         <EmptyBlock v-if="!selectedPatientDetail.package_availments.length" text="No package availment records yet." />
-      </section>
+      </section> -->
 
       <section class="space-y-3">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -269,32 +269,50 @@ const completedAppointmentCount = computed(() =>
   props.selectedPatientDetail?.appointments.filter(appointment => appointment.status === "COMPLETED").length ?? 0
 )
 
+const sortedAppointments = computed(() =>
+  [...(props.selectedPatientDetail?.appointments ?? [])].sort((left, right) => {
+    const leftTime = new Date(left.appointment_date).getTime()
+    const rightTime = new Date(right.appointment_date).getTime()
+    const leftSort = Number.isNaN(leftTime) ? 0 : leftTime
+    const rightSort = Number.isNaN(rightTime) ? 0 : rightTime
+
+    return leftSort - rightSort || Number(left.appointment_id) - Number(right.appointment_id)
+  })
+)
+
 const billingsById = computed(() =>
   new Map((props.selectedPatientDetail?.billings ?? []).map(billing => [Number(billing.id), billing]))
 )
 
 const appointmentsById = computed(() =>
-  new Map((props.selectedPatientDetail?.appointments ?? []).map(appointment => [Number(appointment.appointment_id), appointment]))
+  new Map(sortedAppointments.value.map(appointment => [Number(appointment.appointment_id), appointment]))
 )
 
 const billingSummaryRows = computed(() =>
   (props.selectedPatientDetail?.authorizations ?? []).flatMap(authorization => {
-    const totalSessions = Math.max(1, Number(authorization.total_sessions ?? authorization.sessions.length ?? 1))
+    const sortedSessions = [...(authorization.sessions ?? [])].sort((left, right) => {
+      const leftTime = new Date(left.appointment_date).getTime()
+      const rightTime = new Date(right.appointment_date).getTime()
+      const leftSort = Number.isNaN(leftTime) ? 0 : leftTime
+      const rightSort = Number.isNaN(rightTime) ? 0 : rightTime
 
-    return (authorization.sessions ?? []).map(session => {
+      return leftSort - rightSort
+        || Number(left.appointment_id ?? 0) - Number(right.appointment_id ?? 0)
+        || Number(left.id ?? 0) - Number(right.id ?? 0)
+    })
+    const totalSessions = Math.max(1, sortedSessions.length)
+
+    return sortedSessions.map((session, index) => {
       const billingId = Number(session.dropout_billing_id ?? session.monthly_billing_id ?? 0) || null
       const billing = billingId ? billingsById.value.get(billingId) : undefined
       const appointment = appointmentsById.value.get(Number(session.appointment_id))
-      const sessionSequence = Number(session.session_sequence ?? 0)
 
       return {
         key: `${authorization.authorization_id}-${session.id}`,
         reference: billing?.public_id || (billingId ? `BILLING-${billingId}` : "No claim yet"),
         serviceName: session.service_name || appointment?.package_name || authorization.package_name || "LGU Session",
         appointmentId: Number(session.appointment_id),
-        sessionSequenceLabel: sessionSequence > 0
-          ? `${sessionSequence} of ${totalSessions}`
-          : "-",
+        sessionSequenceLabel: `${index + 1} of ${totalSessions}`,
         appointmentStatus: appointment?.status ?? authorization.authorization_status ?? "PENDING",
         appointmentDate: session.appointment_date || appointment?.appointment_date || "",
         billingId

@@ -190,7 +190,6 @@ import {
 } from "@/features/lgu-billing/api/lgu-billing.service"
 import LguInvoiceLayout from "./LguInvoiceLayout.vue"
 import {
-  formatLguStatus,
   isLguCompletedStatus,
   isLguDropoutStatus,
   normalizeLguStatus,
@@ -230,6 +229,7 @@ type SoaDisplayRow = ServiceSoaRow | PatientTotalRow
 type PatientSoaContext = {
   referralFormNo?: string | null
   referralIssuedDate?: string | null
+  dropoutStatus?: string | null
   completedSessionSequences: number[]
 }
 
@@ -242,6 +242,8 @@ type LocalService = {
 type LocalBundle = {
   id: string
   name: string
+  contractPrice?: number | null
+  dropoutPrice?: number | null
   machineIds: string[]
   techniqueIds: string[]
   evaluationIds: string[]
@@ -286,14 +288,28 @@ type InvoiceLineItem = {
 
   lgu_contract_price?: number | string
   lguContractPrice?: number | string
+  lgu_package_price?: number | string
+  lguPackagePrice?: number | string
+  lgu_package_rate?: number | string
+  lguPackageRate?: number | string
   lgu_price?: number | string
   lguPrice?: number | string
   contract_price?: number | string
   contractPrice?: number | string
   contract_unit_price?: number | string
   contractUnitPrice?: number | string
+  contract_unit_price_snapshot?: number | string
+  contractUnitPriceSnapshot?: number | string
   approved_price?: number | string
   approvedPrice?: number | string
+  dropout_unit_price_snapshot?: number | string
+  dropoutUnitPriceSnapshot?: number | string
+  dropout_unit_price?: number | string
+  dropoutUnitPrice?: number | string
+  dropout_price?: number | string
+  dropoutPrice?: number | string
+  lgu_dropout_price?: number | string
+  lguDropoutPrice?: number | string
 
   price?: number | string
   unit_price?: number | string
@@ -405,30 +421,28 @@ const CHILD_SERVICE_JSON_KEYS = [
 ]
 
 const CONTRACT_PRICE_KEYS = [
-  "standard_unit_price_snapshot",
-  "standardUnitPriceSnapshot",
   "package_unit_price_snapshot",
   "packageUnitPriceSnapshot",
-  "dropout_unit_price_snapshot",
-  "dropoutUnitPriceSnapshot",
-  "unit_price_snapshot",
-  "unitPriceSnapshot",
-  "amount_out",
-  "amountOut",
-  "billing_amount_due",
-  "billingAmountDue",
   "lgu_contract_price",
   "lguContractPrice",
-  "lgu_price",
-  "lguPrice",
   "contract_price",
   "contractPrice",
   "contract_unit_price",
   "contractUnitPrice",
   "contract_unit_price_snapshot",
   "contractUnitPriceSnapshot",
+  "lgu_package_price",
+  "lguPackagePrice",
+  "lgu_package_rate",
+  "lguPackageRate",
+  "lgu_price",
+  "lguPrice",
+  "lgu_unit_price",
+  "lguUnitPrice",
   "package_unit_price",
   "packageUnitPrice",
+  "standard_unit_price_snapshot",
+  "standardUnitPriceSnapshot",
   "standard_unit_price",
   "standardUnitPrice",
   "approved_price",
@@ -437,10 +451,37 @@ const CONTRACT_PRICE_KEYS = [
 ]
 
 const DROPOUT_PRICE_KEYS = [
+  "dropout_rate",
+  "dropOutRate",
+  "drop_out_rate",
   "dropout_unit_price",
   "dropoutUnitPrice",
+  "drop_out_unit_price",
+  "dropOutUnitPrice",
+  "dropout_unit_price_snapshot",
+  "dropoutUnitPriceSnapshot",
+  "drop_out_unit_price_snapshot",
+  "dropOutUnitPriceSnapshot",
   "dropout_price",
-  "dropoutPrice"
+  "dropoutPrice",
+  "drop_out_price",
+  "dropOutPrice",
+  "lgu_dropout_rate",
+  "lguDropoutRate",
+  "lgu_drop_out_rate",
+  "lguDropOutRate",
+  "lgu_dropout_price",
+  "lguDropoutPrice",
+  "lgu_drop_out_price",
+  "lguDropOutPrice",
+  "dropout_package_rate",
+  "dropoutPackageRate",
+  "drop_out_package_rate",
+  "dropOutPackageRate",
+  "lgu_dropout_package_rate",
+  "lguDropoutPackageRate",
+  "lgu_drop_out_package_rate",
+  "lguDropOutPackageRate"
 ]
 
 const UNIT_PRICE_KEYS = [
@@ -471,6 +512,34 @@ const LINE_TOTAL_KEYS = [
   "invoiceBillingTotal",
   "total_amount",
   "totalAmount"
+]
+
+const BUNDLE_PARENT_CONTRACT_PRICE_KEYS = [
+  "lgu_billable_parent_unit_price",
+  "lguBillableParentUnitPrice",
+  "parent_contract_unit_price_snapshot",
+  "parentContractUnitPriceSnapshot",
+  "grandparent_contract_unit_price_snapshot",
+  "grandparentContractUnitPriceSnapshot",
+  "parent_lgu_contract_price",
+  "parentLguContractPrice",
+  "bundle_contract_price",
+  "bundleContractPrice",
+  "bundle_lgu_contract_price",
+  "bundleLguContractPrice"
+]
+
+const BUNDLE_PARENT_DROPOUT_PRICE_KEYS = [
+  "parent_dropout_unit_price_snapshot",
+  "parentDropoutUnitPriceSnapshot",
+  "grandparent_dropout_unit_price_snapshot",
+  "grandparentDropoutUnitPriceSnapshot",
+  "bundle_dropout_unit_price",
+  "bundleDropoutUnitPrice",
+  "bundle_dropout_price",
+  "bundleDropoutPrice",
+  "lgu_bundle_dropout_price",
+  "lguBundleDropoutPrice"
 ]
 
 const route = useRoute()
@@ -709,7 +778,7 @@ const getProgramStatus = (item: unknown): string =>
     }
 
     if (pricingSource === "LGU_PACKAGE_MONTHLY_CLAIM") {
-      return "COMPLETED"
+      return "ACTIVE"
     }
 
     return getText(item, [
@@ -732,23 +801,41 @@ const isCompletedProgramStatus = (value: string): boolean => isLguCompletedStatu
 const isCrossMonthDropoutProgramStatus = (value: string): boolean =>
   normalizeProgramStatus(value) === "CROSS_MONTH_DROPPED_OUT"
 
-const formatProgramStatus = (value: string): string => formatLguStatus(value)
+const formatProgramStatus = (value: string): string => {
+  const normalized = normalizeProgramStatus(value)
+
+  if (normalized === "CROSS_MONTH_DROPPED_OUT") {
+    return "crossed-month Dropped out"
+  }
+
+  if (normalized === "DROPPED_OUT") {
+    return "Dropped out"
+  }
+
+  return "Active"
+}
 
 const isDropoutProgramStatus = (value: string): boolean => {
   return isLguDropoutStatus(value)
 }
 
-const resolvePatientProgramStatus = (patientItems: unknown[]): string => {
+const resolvePatientProgramStatus = (
+  patientItems: unknown[],
+  context?: PatientSoaContext
+): string => {
   const itemStatuses = patientItems.map(item => normalizeProgramStatus(getProgramStatus(item)))
   const pricingSources = patientItems.map(item => normalizeProgramStatus(getPricingSource(item)))
+  const contextDropoutStatus = normalizeProgramStatus(context?.dropoutStatus ?? "")
 
   if (
+    isCrossMonthDropoutProgramStatus(contextDropoutStatus) ||
     itemStatuses.some(isCrossMonthDropoutProgramStatus)
   ) {
     return "CROSS_MONTH_DROPPED_OUT"
   }
 
   if (
+    isDropoutProgramStatus(contextDropoutStatus) ||
     patientItems.some(item => {
       const pricingSource = normalizeProgramStatus(getPricingSource(item))
       return pricingSource === "LGU_DROPOUT_INDIVIDUAL_CLAIM" || pricingSource === "LGU_DROPOUT_PACKAGE_CLAIM"
@@ -763,10 +850,10 @@ const resolvePatientProgramStatus = (patientItems: unknown[]): string => {
     patientItems.some(item => normalizeProgramStatus(getPricingSource(item)) === "LGU_PACKAGE_MONTHLY_CLAIM") ||
     itemStatuses.some(isCompletedProgramStatus)
   ) {
-    return "COMPLETED"
+    return "ACTIVE"
   }
 
-  return getProgramStatus(patientItems[0] ?? null)
+  return "ACTIVE"
 }
 
 const getTreatmentDate = (
@@ -774,31 +861,51 @@ const getTreatmentDate = (
   parentItem: unknown,
   context?: PatientSoaContext
 ): string | null =>
-  String(context?.referralIssuedDate ?? "").trim() ||
+  getText(lineItem, [
+    "treatment_date",
+    "treatmentDate",
+  ]) ||
+  getText(parentItem, [
+    "treatment_date",
+    "treatmentDate"
+  ]) ||
+  getText(lineItem, [
+    "appointment_date",
+    "appointmentDate",
+  ]) ||
+  getText(parentItem, [
+    "appointment_date",
+    "appointmentDate"
+  ]) ||
+  getText(lineItem, [
+    "completed_at",
+    "completedAt",
+  ]) ||
+  getText(parentItem, [
+    "completed_at",
+    "completedAt"
+  ]) ||
+  getText(lineItem, [
+    "created_at",
+    "createdAt"
+  ]) ||
+  getText(parentItem, [
+    "created_at",
+    "createdAt"
+  ]) ||
+  getText(lineItem, [
+    "lgu_date_issued",
+    "lguDateIssued",
+    "referral_issued_date",
+    "referralIssuedDate"
+  ]) ||
   getText(parentItem, [
     "lgu_date_issued",
     "lguDateIssued",
     "referral_issued_date",
     "referralIssuedDate"
   ]) ||
-  getText(lineItem, [
-    "treatment_date",
-    "treatmentDate",
-    "appointment_date",
-    "appointmentDate",
-    "completed_at",
-    "completedAt"
-  ]) ||
-  getText(parentItem, [
-    "treatment_date",
-    "treatmentDate",
-    "appointment_date",
-    "appointmentDate",
-    "completed_at",
-    "completedAt",
-    "created_at",
-    "createdAt"
-  ]) ||
+  String(context?.referralIssuedDate ?? "").trim() ||
   null
 
 const getServiceName = (
@@ -896,6 +1003,10 @@ const getOccurrenceSessionSequence = (
 ): string => {
   const explicit = getSessionSequence(lineItem, parentItem)
 
+  if (explicit) {
+    return explicit
+  }
+
   if (isDropoutPatient) {
     const sessionNo = Math.max(1, Math.floor(Number(sequenceOverride ?? occurrence)))
     const totalSessions = Math.max(1, Math.floor(Number(configuredTotal ?? totalOccurrences)))
@@ -906,7 +1017,7 @@ const getOccurrenceSessionSequence = (
     return `${occurrence} of ${totalOccurrences}`
   }
 
-  return explicit || "1 of 1"
+  return "1 of 1"
 }
 
 const isPackageLine = (item: InvoiceLineItem): boolean => {
@@ -1046,6 +1157,64 @@ const parseMaybeJsonArray = (value: unknown): unknown[] => {
   }
 }
 
+const getCatalogBundlePrice = (
+  bundleName: string,
+  source: InvoiceLineItem,
+  isDropoutPrice: boolean
+): number | null => {
+  const bundle = getBundleRecord({
+    ...source,
+    type: "BUNDLE",
+    name: bundleName,
+    service_name: bundleName
+  })
+
+  return isDropoutPrice
+    ? bundle?.dropoutPrice ?? null
+    : bundle?.contractPrice ?? null
+}
+
+const getBundlePriceSnapshot = (
+  bundleName: string,
+  source: InvoiceLineItem,
+  parentItem: unknown,
+  isDropoutPrice: boolean,
+  includeGenericBundleTotals: boolean
+): number | null => {
+  const priceKeys = isDropoutPrice
+    ? [
+        ...BUNDLE_PARENT_DROPOUT_PRICE_KEYS,
+        ...(includeGenericBundleTotals ? DROPOUT_PRICE_KEYS : [])
+      ]
+    : [
+        ...BUNDLE_PARENT_CONTRACT_PRICE_KEYS,
+        ...(includeGenericBundleTotals ? CONTRACT_PRICE_KEYS : [])
+      ]
+
+  const metadataPrice =
+    getAmount(source, priceKeys) ??
+    getAmount(parentItem, priceKeys) ??
+    getCatalogBundlePrice(bundleName, source, isDropoutPrice)
+
+  if (metadataPrice !== null) {
+    return metadataPrice
+  }
+
+  if (!includeGenericBundleTotals) {
+    return null
+  }
+
+  if (isDropoutPrice) {
+    return null
+  }
+
+  return (
+    getAmount(source, LINE_TOTAL_KEYS) ??
+    getAmount(source, UNIT_PRICE_KEYS) ??
+    null
+  )
+}
+
 const extractConsumedServiceLines = (item: unknown): InvoiceLineItem[] => {
   const consumed = [
     ...getChildArrayFromRecord(item, ["consumed_services", "consumedServices"]),
@@ -1058,40 +1227,29 @@ const extractConsumedServiceLines = (item: unknown): InvoiceLineItem[] => {
   const bundleGroups = new Map<string, InvoiceLineItem[]>()
   const addedBundleNames = new Set<string>()
 
-  const addBundleRow = (bundleName: string, source: InvoiceLineItem): void => {
+  const addBundleRow = (
+    bundleName: string,
+    source: InvoiceLineItem,
+    includeGenericBundleTotals: boolean
+  ): void => {
     if (!bundleName || addedBundleNames.has(bundleName)) return
 
-    const bundlePrice =
-      getAmount(source, [
-        "line_total",
-        "lineTotal",
-        "total",
-        "total_amount",
-        "totalAmount",
-        "lgu_billable_parent_line_total",
-        "lguBillableParentLineTotal",
-        "lgu_billable_parent_unit_price",
-        "lguBillableParentUnitPrice",
-        "contract_unit_price_snapshot",
-        "contractUnitPriceSnapshot",
-        "parent_contract_unit_price_snapshot",
-        "parentContractUnitPriceSnapshot",
-        "lgu_contract_price",
-        "lguContractPrice",
-        "contract_price",
-        "contractPrice",
-        "unit_price",
-        "unitPrice",
-        "price"
-      ]) ?? 0
+    const contractPrice =
+      getBundlePriceSnapshot(bundleName, source, item, false, includeGenericBundleTotals) ?? 0
+    const dropoutPrice =
+      getBundlePriceSnapshot(bundleName, source, item, true, includeGenericBundleTotals)
 
     output.push(withPrintLevel({
       type: "BUNDLE",
       name: bundleName,
       service_name: bundleName,
-      line_total: bundlePrice,
-      unit_price: bundlePrice,
-      price: bundlePrice
+      contract_unit_price_snapshot: contractPrice,
+      lgu_contract_price: contractPrice,
+      ...(dropoutPrice === null ? {} : {
+        dropout_unit_price_snapshot: dropoutPrice,
+        dropout_unit_price: dropoutPrice,
+        dropout_price: dropoutPrice
+      })
     }, 0))
 
     addedBundleNames.add(bundleName)
@@ -1105,7 +1263,7 @@ const extractConsumedServiceLines = (item: unknown): InvoiceLineItem[] => {
       }
 
       if (isBundleLine(line)) {
-        addBundleRow(getServiceName(line), line)
+        addBundleRow(getServiceName(line), line, true)
         return
       }
 
@@ -1130,38 +1288,23 @@ const serviceRows: InvoiceLineItem[] = [...output]
 bundleGroups.forEach((children, bundleName) => {
   const firstChild = children[0]
 
-  const bundlePrice =
-    getAmount(firstChild, [
-      "line_total",
-      "lineTotal",
-      "total",
-      "total_amount",
-      "totalAmount",
-      "lgu_billable_parent_line_total",
-      "lguBillableParentLineTotal",
-      "lgu_billable_parent_unit_price",
-      "lguBillableParentUnitPrice",
-      "contract_unit_price_snapshot",
-      "contractUnitPriceSnapshot",
-      "parent_contract_unit_price_snapshot",
-      "parentContractUnitPriceSnapshot",
-      "lgu_contract_price",
-      "lguContractPrice",
-      "contract_price",
-      "contractPrice",
-      "unit_price",
-      "unitPrice",
-      "price"
-    ]) ?? 0
+  const contractPrice =
+    getBundlePriceSnapshot(bundleName, firstChild, item, false, false) ?? 0
+  const dropoutPrice =
+    getBundlePriceSnapshot(bundleName, firstChild, item, true, false)
 
   bundleRows.push(
     withPrintLevel({
       type: "BUNDLE",
       name: bundleName,
       service_name: bundleName,
-      line_total: bundlePrice,
-      unit_price: bundlePrice,
-      price: bundlePrice
+      contract_unit_price_snapshot: contractPrice,
+      lgu_contract_price: contractPrice,
+      ...(dropoutPrice === null ? {} : {
+        dropout_unit_price_snapshot: dropoutPrice,
+        dropout_unit_price: dropoutPrice,
+        dropout_price: dropoutPrice
+      })
     }, 0)
   )
 })
@@ -1465,14 +1608,21 @@ const getContractPrice = (
   hasExtractedServiceLines: boolean,
   isDropoutPatient: boolean
 ): number | null => {
-  const priceKeys = isDropoutPatient
-    ? [
-        ...DROPOUT_PRICE_KEYS,
-        ...CONTRACT_PRICE_KEYS
-      ]
-    : CONTRACT_PRICE_KEYS
+  if (isDropoutPatient) {
+    const dropoutPrice = getAmount(lineItem, DROPOUT_PRICE_KEYS)
 
-  const contractPrice = getAmount(lineItem, priceKeys)
+    if (dropoutPrice !== null) {
+      return dropoutPrice
+    }
+
+    if (!hasExtractedServiceLines) {
+      return getAmount(parentItem, DROPOUT_PRICE_KEYS)
+    }
+
+    return null
+  }
+
+  const contractPrice = getAmount(lineItem, CONTRACT_PRICE_KEYS)
 
   if (contractPrice !== null) {
     return contractPrice
@@ -1491,10 +1641,10 @@ const getContractPrice = (
   }
 
   /*
-    Do not copy the package total into every child service row.
+  Do not copy the package total into every child service row.
   */
   if (!hasExtractedServiceLines) {
-    const parentContractPrice = getAmount(parentItem, priceKeys)
+    const parentContractPrice = getAmount(parentItem, CONTRACT_PRICE_KEYS)
 
     if (parentContractPrice !== null) {
       return parentContractPrice
@@ -1574,6 +1724,7 @@ const buildPatientSoaContextMap = async (
       {
         referralFormNo: lguSponsor?.referral_form_no,
         referralIssuedDate: lguSponsor?.referral_issued_date,
+        dropoutStatus: detail?.dropout_status,
         completedSessionSequences: getCompletedSessionSequences(detail)
       }
     ] as const
@@ -1617,7 +1768,8 @@ const buildStatementRows = (
       let patientTotal = 0
       let patientHasServiceRows = false
       let isFirstPatientRow = true
-      const patientProgramStatus = resolvePatientProgramStatus(sortedItems)
+      let previousSessionSequence = ""
+      const patientProgramStatus = resolvePatientProgramStatus(sortedItems, patientContext)
       const isDropoutPatient = isDropoutProgramStatus(patientProgramStatus)
 
       sortedItems.forEach((item, itemIndex) => {
@@ -1661,6 +1813,21 @@ const buildStatementRows = (
               return
             }
 
+            const rawSessionSequence = isChildLine
+              ? getSessionSequence(lineItem, item)
+              : getOccurrenceSessionSequence(
+                  lineItem,
+                  item,
+                  occurrence,
+                  quantity,
+                  isDropoutPatient,
+                  completedSessionSequence,
+                  configuredQuantity
+                )
+            const sessionSequence = rawSessionSequence && rawSessionSequence === previousSessionSequence
+              ? "-"
+              : rawSessionSequence
+
             outputRows.push({
               kind: "service",
               key: `service-${payerType}-${patientKey}-${itemIndex}-${lineIndex}-${occurrence}`,
@@ -1671,22 +1838,13 @@ const buildStatementRows = (
               programStatus: isFirstPatientRow ? formatProgramStatus(patientProgramStatus) : "",
               treatmentDate: getTreatmentDate(lineItem, item, patientContext),
               serviceName: getServiceName(lineItem, item),
-              sessionSequence: isChildLine
-                ? getSessionSequence(lineItem, item)
-                : getOccurrenceSessionSequence(
-                    lineItem,
-                    item,
-                    occurrence,
-                    quantity,
-                    isDropoutPatient,
-                    completedSessionSequence,
-                    configuredQuantity
-                  ),
+              sessionSequence,
               price,
               billablePrice,
               level: printLevel
             })
 
+            previousSessionSequence = rawSessionSequence
             patientTotal += Number(billablePrice ?? 0)
 
             isFirstPatientRow = false
@@ -1824,6 +1982,25 @@ const loadLguInvoiceCatalog = async (): Promise<void> => {
     ].map(row => ({
       id: String(row.id ?? ""),
       name: String(row.name ?? ""),
+      contractPrice: parseNumber(
+        row.bundled_price ??
+        row.bundledPrice ??
+        row.package_unit_price ??
+        row.packageUnitPrice ??
+        row.lgu_contract_price ??
+        row.lguContractPrice ??
+        row.contract_price ??
+        row.contractPrice ??
+        row.price
+      ),
+      dropoutPrice: parseNumber(
+        row.dropout_unit_price ??
+        row.dropoutUnitPrice ??
+        row.dropout_price ??
+        row.dropoutPrice ??
+        row.lgu_dropout_price ??
+        row.lguDropoutPrice
+      ),
       machineIds: normalizeIdArray(row.machine_ids ?? row.machine_ids_json, "machine-"),
       techniqueIds: normalizeIdArray(row.technique_ids ?? row.technique_ids_json, "technique-"),
       evaluationIds: normalizeIdArray(row.evaluation_ids ?? row.evaluation_ids_json, "evaluation-"),
