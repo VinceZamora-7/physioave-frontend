@@ -6,6 +6,7 @@ export const MODULE_ACCESS_RULES = {
   dashboard: ["Dashboard::READ"],
   patients: ["Patient::READ", "Patient::LOOKUP", "Patient::CREATE", "Patient::UPDATE"],
   appointments: ["Appointment::READ", "Appointment::LOOKUP", "Appointment::CREATE", "Appointment::UPDATE"],
+  patientDailyLog: ["Appointment::READ", "Appointment::LOOKUP"],
   billing: ["Appointment::MANAGE_BILL", "Patient::MANAGE_BILLS"],
   reports: ["Appointment::READ", "Patient::READ", "Appointment::MANAGE_BILL", "Patient::MANAGE_BILLS"],
   offersPromotions: ["Reference::LOOKUP", "Reference::READ", "Reference::CREATE", "Reference::UPDATE"],
@@ -23,6 +24,9 @@ export const ROUTE_ACCESS_RULES: Record<string, RouteAccessRule> = {
   },
   appointments: {
     anyOf: [...MODULE_ACCESS_RULES.appointments],
+  },
+  "patient-daily-log": {
+    anyOf: [...MODULE_ACCESS_RULES.patientDailyLog],
   },
   billing: {
     anyOf: [...MODULE_ACCESS_RULES.billing],

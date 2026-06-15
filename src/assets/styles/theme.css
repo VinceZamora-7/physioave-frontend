@@ -33,6 +33,7 @@
   --app-surface: 255 255 255;
   --app-surface-muted: 249 248 250;
   --app-surface-soft: 244 247 250;
+  --app-bg-soft: 244 247 250;
   --app-card-hover: 248 250 252;
   --app-card-active: 241 245 249;
 
@@ -156,6 +157,7 @@ html.dark {
   --app-surface: 18 20 48;
   --app-surface-muted: 13 16 38;
   --app-surface-soft: 22 25 56;
+  --app-bg-soft: 22 25 56;
   --app-card-hover: 26 30 66;
   --app-card-active: 31 36 78;
 

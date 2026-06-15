@@ -9,6 +9,7 @@ export interface BaseStaff {
   can_view_all_branches?: boolean
   secondary_role_id?: number
   specialty_tag_id?: number
+  calendar_color?: string | null
 }
 
 export interface Staff extends BaseStaff {
@@ -21,6 +22,7 @@ export interface Staff extends BaseStaff {
   secondary_role_name?: string
   secondary_appointment_provider_type?: AppointmentProviderType
   specialty_tag_name?: string
+  calendar_color?: string | null
   can_view_all_branches?: boolean
   last_seen_at?: string | null
   is_online?: boolean

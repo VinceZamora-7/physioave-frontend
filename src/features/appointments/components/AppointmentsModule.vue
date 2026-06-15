@@ -263,7 +263,7 @@
                 @click="openAttendanceDialog(data)"
               />
               <Button
-                v-if="canRescheduleAppointment"
+                v-if="canRescheduleSpecificAppointment(data)"
                 icon="pi pi-calendar-plus"
                 text
                 rounded
@@ -312,7 +312,7 @@
       :display-laterality="displayLaterality"
       :format-optional-number="formatOptionalNumber"
       :can-edit="canEditAppointment"
-      :can-reschedule="canRescheduleAppointment"
+      :can-reschedule="canRescheduleSpecificAppointment(detailAppointment)"
       :can-mark-attendance="canMarkAttendance"
       :is-billing-action-loading="isBillingActionLoading"
       @edit="editFromDetails"
@@ -628,7 +628,7 @@
       v-model:visible="tenderVisible"
       modal
       header="Tender Payment"
-      :style="{ width: '34rem', maxWidth: '94vw' }"
+      :style="{ width: '44rem', maxWidth: '94vw' }"
       :draggable="false"
     >
       <div v-if="tenderBillingDocument" class="space-y-4">
@@ -686,7 +686,11 @@
               currency="PHP"
               locale="en-PH"
               class="w-full"
+              inputClass="tender-amount-input"
               :min="0"
+              :minFractionDigits="0"
+              :maxFractionDigits="0"
+              @focus="selectNumericInputText"
             />
           </div>
           <div class="space-y-1">
@@ -866,15 +870,27 @@
           </p>
         </section>
 
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div class="space-y-1">
             <label
               class="app-appointment-muted text-xs font-semibold uppercase tracking-wide"
-              >New Start</label
+              >New Date</label
             >
             <DatePicker
-              v-model="rescheduleForm.starts_at"
-              showTime
+              v-model="rescheduleForm.date"
+              showIcon
+              dateFormat="M dd, yy"
+              fluid
+            />
+          </div>
+          <div class="space-y-1">
+            <label
+              class="app-appointment-muted text-xs font-semibold uppercase tracking-wide"
+              >Start Time</label
+            >
+            <DatePicker
+              v-model="rescheduleForm.start_time"
+              timeOnly
               hourFormat="12"
               showIcon
               fluid
@@ -883,16 +899,48 @@
           <div class="space-y-1">
             <label
               class="app-appointment-muted text-xs font-semibold uppercase tracking-wide"
-              >New End</label
+              >Duration</label
             >
-            <DatePicker
-              v-model="rescheduleForm.ends_at"
-              showTime
-              hourFormat="12"
-              showIcon
+            <InputNumber
+              v-model="rescheduleForm.duration_minutes"
+              :min="15"
+              :max="480"
+              suffix=" min"
+              showButtons
               fluid
             />
           </div>
+        </div>
+
+        <section class="app-appointment-card app-appointment-card-secondary space-y-2">
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <p class="app-appointment-muted text-xs font-semibold uppercase tracking-wide">New Start</p>
+              <p class="app-appointment-value mt-1 text-sm font-semibold">
+                {{ reschedulePreviewStartLabel }}
+              </p>
+            </div>
+            <div>
+              <p class="app-appointment-muted text-xs font-semibold uppercase tracking-wide">New End</p>
+              <p class="app-appointment-value mt-1 text-sm font-semibold">
+                {{ reschedulePreviewEndLabel }}
+              </p>
+            </div>
+          </div>
+          <p v-if="reschedulePreviewShiftLabel" class="app-appointment-muted text-xs">
+            Schedule shift: {{ reschedulePreviewShiftLabel }}
+          </p>
+          <p v-if="connectedFutureSessionCount > 0" class="app-appointment-muted text-xs">
+            {{ connectedFutureSessionCount }} future connected session{{ connectedFutureSessionCount === 1 ? "" : "s" }}
+            will move by the same date/time change.
+          </p>
+        </section>
+
+        <div
+          v-if="rescheduleClinicWarning"
+          class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200"
+        >
+          {{ rescheduleClinicWarning }}
         </div>
 
         <div class="space-y-1">
@@ -1149,6 +1197,7 @@ const activeCalendarRange = ref<CalendarVisibleRange>(
   defaultCalendarRange(initialSelectedDate),
 );
 const DEFAULT_APPOINTMENT_DURATION_MS = 60 * 60 * 1000;
+const MAX_APPOINTMENT_RESCHEDULE_COUNT = 3;
 
 const appointments = ref<AppointmentListItem[]>([]);
 const tableAppointmentSource = ref<AppointmentListItem[]>([]);
@@ -1256,6 +1305,8 @@ const form = reactive({
   patient_id: null as number | null,
   clinic_id: null as number | null,
   primary_provider_staff_id: null as number | null,
+  assistant_provider_staff_id: null as number | null,
+  intern_provider_staff_id: null as number | null,
   referring_staff_id: null as number | null,
   appointment_type_id: null as number | null,
   appointment_status_id: null as number | null,
@@ -1276,19 +1327,25 @@ const form = reactive({
 });
 
 const tenderForm = reactive({
-  amount_tendered: null as number | null,
+  amount_tendered: 0 as number | null,
   payment_method_id: null as number | null,
   payment_reference: "",
   notes: "",
   senior_pwd_id_presented: false,
   senior_pwd_id_reference: "",
   custom_discount_type: null as "PERCENTAGE" | "FIXED" | null,
-  custom_discount_value: null as number | null,
+  custom_discount_value: 0 as number | null,
 });
 
+const selectNumericInputText = (event: Event): void => {
+  const input = event.target instanceof HTMLInputElement ? event.target : null;
+  window.setTimeout(() => input?.select(), 0);
+};
+
 const rescheduleForm = reactive({
-  starts_at: null as Date | null,
-  ends_at: null as Date | null,
+  date: null as Date | null,
+  start_time: null as Date | null,
+  duration_minutes: 60,
   reason: "",
 });
 
@@ -1607,17 +1664,13 @@ const patientOptionsForClinic = computed(() =>
   formBranchId.value
     ? patientOptions.value.filter(
         (option) =>
-          option.clinicId === null ||
           option.clinicId === Number(formBranchId.value),
       )
     : patientOptions.value,
 );
 
 const isOptionInFormBranch = (option: { clinicId?: number | null }): boolean =>
-  !formBranchId.value ||
-  option.clinicId === null ||
-  option.clinicId === undefined ||
-  option.clinicId === Number(formBranchId.value);
+  !formBranchId.value || option.clinicId === Number(formBranchId.value);
 
 const ptOptions = computed(() =>
   staffOptions.value.filter(
@@ -1715,12 +1768,90 @@ const selectedClinicSchedule = computed(
     null,
 );
 
+const clinicScheduleById = (clinicId?: number | null): ClinicSelectOption | null =>
+  clinicOptions.value.find((option) => Number(option.value) === Number(clinicId)) ?? null;
+
 const paymentMethodOptions = computed<SelectOption[]>(() =>
   paymentMethods.value.map((method) => ({
     label: method.name,
     value: method.id,
   })),
 );
+
+const combineDateAndTime = (dateValue: Date | null, timeValue: Date | null): Date | null => {
+  if (!dateValue || !timeValue) return null;
+  const result = new Date(dateValue);
+  result.setHours(timeValue.getHours(), timeValue.getMinutes(), 0, 0);
+  return result;
+};
+
+const connectedFutureSessionCount = computed(() => {
+  const appointment = rescheduleAppointment.value;
+  if (!appointment) return 0;
+  const currentSequence = Number(appointment.session_sequence ?? 1);
+  const totalSessions = Number(appointment.total_sessions ?? 1);
+  if (!Number.isFinite(currentSequence) || !Number.isFinite(totalSessions)) return 0;
+  return Math.max(0, totalSessions - currentSequence);
+});
+
+const reschedulePreviewStart = computed(() =>
+  combineDateAndTime(rescheduleForm.date, rescheduleForm.start_time),
+);
+
+const reschedulePreviewEnd = computed(() => {
+  const start = reschedulePreviewStart.value;
+  if (!start) return null;
+  const durationMinutes = Math.max(15, Number(rescheduleForm.duration_minutes || 60));
+  return new Date(start.getTime() + durationMinutes * 60 * 1000);
+});
+
+const formatDateTimePreview = (date: Date | null): string => {
+  if (!date) return "Select a date and time";
+  const payload = toDateTimePayload(date) as string;
+  return `${formatDate(payload)} - ${formatTime(payload)}`;
+};
+
+const reschedulePreviewStartLabel = computed(() =>
+  formatDateTimePreview(reschedulePreviewStart.value),
+);
+
+const reschedulePreviewEndLabel = computed(() =>
+  formatDateTimePreview(reschedulePreviewEnd.value),
+);
+
+const reschedulePreviewShiftLabel = computed(() => {
+  const appointment = rescheduleAppointment.value;
+  const nextStart = reschedulePreviewStart.value;
+  if (!appointment || !nextStart) return "";
+
+  const currentStart = new Date(appointment.starts_at);
+  const deltaMinutes = Math.round((nextStart.getTime() - currentStart.getTime()) / 60000);
+  if (!Number.isFinite(deltaMinutes) || deltaMinutes === 0) return "no date/time change";
+
+  const absoluteMinutes = Math.abs(deltaMinutes);
+  const days = Math.floor(absoluteMinutes / 1440);
+  const hours = Math.floor((absoluteMinutes % 1440) / 60);
+  const minutes = absoluteMinutes % 60;
+  const parts = [
+    days ? `${days} day${days === 1 ? "" : "s"}` : "",
+    hours ? `${hours} hour${hours === 1 ? "" : "s"}` : "",
+    minutes ? `${minutes} minute${minutes === 1 ? "" : "s"}` : "",
+  ].filter(Boolean);
+
+  return `${parts.join(" ") || "0 minutes"} ${deltaMinutes > 0 ? "later" : "earlier"}`;
+});
+
+const rescheduleClinicWarning = computed(() => {
+  const start = reschedulePreviewStart.value;
+  const end = reschedulePreviewEnd.value;
+  if (!start || !end || !rescheduleAppointment.value) return "";
+
+  const clinicSchedule = clinicScheduleById(rescheduleAppointment.value.clinic_id);
+  const withinClinicHours = isScheduleWithinClinicHours(start, end, clinicSchedule);
+  const clinicHoursLabel = formatClinicHours(clinicSchedule);
+
+  return withinClinicHours ? "" : `Choose a time within ${clinicHoursLabel}.`;
+});
 
 const largestTenderLineTotal = (
   lines: AppointmentBillingDocument["lines"] = [],
@@ -1835,6 +1966,12 @@ const canEditAppointment = computed(() =>
 );
 
 const canRescheduleAppointment = computed(() => canEditAppointment.value);
+
+const hasReachedRescheduleLimit = (appointment?: AppointmentListItem | null): boolean =>
+  Number(appointment?.reschedule_count ?? 0) >= MAX_APPOINTMENT_RESCHEDULE_COUNT;
+
+const canRescheduleSpecificAppointment = (appointment?: AppointmentListItem | null): boolean =>
+  canRescheduleAppointment.value && !hasReachedRescheduleLimit(appointment);
 
 const canCancelAppointment = computed(() =>
   canUseAppointmentPermission(
@@ -2173,8 +2310,7 @@ const setTimeFromMinutes = (date: Date, minutes: number): Date => {
   return result;
 };
 
-const isClinicOpenOnDate = (date: Date): boolean => {
-  const schedule = selectedClinicSchedule.value;
+const isClinicOpenOnDate = (date: Date, schedule = selectedClinicSchedule.value): boolean => {
   if (!schedule) return true;
 
   const day = getDayNumber(date);
@@ -2213,10 +2349,9 @@ const clampAppointmentStartToClinicHours = (date: Date, durationMs = DEFAULT_APP
   return setTimeFromMinutes(openDate, clampedMinute);
 };
 
-const isScheduleWithinSelectedClinicHours = (start: Date, end: Date): boolean => {
-  const schedule = selectedClinicSchedule.value;
+const isScheduleWithinClinicHours = (start: Date, end: Date, schedule: ClinicSelectOption | null): boolean => {
   if (!schedule) return true;
-  if (!isClinicOpenOnDate(start)) return false;
+  if (!isClinicOpenOnDate(start, schedule)) return false;
   if (dateTimeKey(start).slice(0, 10) !== dateTimeKey(end).slice(0, 10)) return false;
 
   const startMinute = start.getHours() * 60 + start.getMinutes();
@@ -2225,11 +2360,16 @@ const isScheduleWithinSelectedClinicHours = (start: Date, end: Date): boolean =>
     && endMinute <= timeToMinutes(schedule.endTime, 19 * 60);
 };
 
-const formatSelectedClinicHours = (): string => {
-  const schedule = selectedClinicSchedule.value;
+const isScheduleWithinSelectedClinicHours = (start: Date, end: Date): boolean =>
+  isScheduleWithinClinicHours(start, end, selectedClinicSchedule.value);
+
+const formatClinicHours = (schedule: ClinicSelectOption | null): string => {
   if (!schedule) return "the selected clinic hours";
   return `${formatTime(`2000-01-01T${schedule.startTime}`)} - ${formatTime(`2000-01-01T${schedule.endTime}`)}`;
 };
+
+const formatSelectedClinicHours = (): string =>
+  formatClinicHours(selectedClinicSchedule.value);
 
 const copyTime = (targetDate: Date, sourceTime: Date): Date => {
   const result = new Date(targetDate);
@@ -2571,6 +2711,8 @@ const resetForm = (): void => {
   const start = clampAppointmentStartToClinicHours(now);
   const end = getDefaultAppointmentEnd(start);
   form.primary_provider_staff_id = null;
+  form.assistant_provider_staff_id = null;
+  form.intern_provider_staff_id = null;
   form.referring_staff_id = null;
   form.appointment_type_id =
     (appointmentTypeOptions.value[0]?.value as number | null) ?? null;
@@ -2599,6 +2741,7 @@ const resetForm = (): void => {
 };
 
 const loadLookups = async (): Promise<void> => {
+  const clinicId = activeBranchId.value ?? undefined;
   const [
     patients,
     clinics,
@@ -2610,7 +2753,7 @@ const loadLookups = async (): Promise<void> => {
     medicalDiagnoses,
   ] = await Promise.all([
     patientService.getAll({
-      clinic_id: undefined,
+      clinic_id: clinicId,
       pageable_request: {
         page: 1,
         size: 500,
@@ -2625,7 +2768,7 @@ const loadLookups = async (): Promise<void> => {
       status: Status.ACTIVE,
     }),
     staffService.getAll({
-      clinic_id: undefined,
+      clinic_id: clinicId,
       pageable_request: {
         page: 1,
         size: 500,
@@ -3324,10 +3467,20 @@ const openRescheduleDialog = (appointment: AppointmentListItem): void => {
     errorToast(toast, "You do not have permission to reschedule appointments");
     return;
   }
+  if (hasReachedRescheduleLimit(appointment)) {
+    errorToast(toast, `This appointment has reached the maximum ${MAX_APPOINTMENT_RESCHEDULE_COUNT} reschedules`);
+    return;
+  }
 
   rescheduleAppointment.value = appointment;
-  rescheduleForm.starts_at = new Date(appointment.starts_at);
-  rescheduleForm.ends_at = new Date(appointment.ends_at);
+  const startsAt = new Date(appointment.starts_at);
+  const endsAt = new Date(appointment.ends_at);
+  rescheduleForm.date = startsAt;
+  rescheduleForm.start_time = startsAt;
+  rescheduleForm.duration_minutes = Math.max(
+    15,
+    Math.round((endsAt.getTime() - startsAt.getTime()) / 60000),
+  );
   rescheduleForm.reason = "";
   rescheduleVisible.value = true;
 };
@@ -3340,25 +3493,26 @@ const rescheduleFromDetails = (): void => {
 const submitReschedule = async (): Promise<void> => {
   const appointment = rescheduleAppointment.value;
   if (!appointment) return;
+  const startsAt = reschedulePreviewStart.value;
+  const endsAt = reschedulePreviewEnd.value;
 
-  if (!rescheduleForm.starts_at || !rescheduleForm.ends_at) {
-    errorToast(toast, "Set the new appointment start and end time.");
+  if (!startsAt || !endsAt) {
+    errorToast(toast, "Set the new appointment date and start time.");
     return;
   }
 
-  if (rescheduleForm.starts_at.getTime() >= rescheduleForm.ends_at.getTime()) {
+  if (startsAt.getTime() >= endsAt.getTime()) {
     errorToast(toast, "New end time must be later than the new start time.");
     return;
   }
 
-  const previousClinicId = form.clinic_id;
-  form.clinic_id = appointment.clinic_id;
-  const withinClinicHours = isScheduleWithinSelectedClinicHours(
-    rescheduleForm.starts_at,
-    rescheduleForm.ends_at,
+  const clinicSchedule = clinicScheduleById(appointment.clinic_id);
+  const withinClinicHours = isScheduleWithinClinicHours(
+    startsAt,
+    endsAt,
+    clinicSchedule,
   );
-  const clinicHoursLabel = formatSelectedClinicHours();
-  form.clinic_id = previousClinicId;
+  const clinicHoursLabel = formatClinicHours(clinicSchedule);
 
   if (!withinClinicHours) {
     errorToast(toast, `Choose a time within ${clinicHoursLabel}.`);
@@ -3368,8 +3522,8 @@ const submitReschedule = async (): Promise<void> => {
   try {
     isRescheduling.value = true;
     await appointmentPhase1Service.reschedule(appointment.id, {
-      starts_at: toDateTimePayload(rescheduleForm.starts_at) as string,
-      ends_at: toDateTimePayload(rescheduleForm.ends_at) as string,
+      starts_at: toDateTimePayload(startsAt) as string,
+      ends_at: toDateTimePayload(endsAt) as string,
       reason: rescheduleForm.reason.trim() || undefined,
     });
     successToast(toast, "Appointment rescheduled");
@@ -3485,8 +3639,6 @@ const openAttendanceFromDetails = (): void => {
   if (!detailAppointment.value) return;
 
   const appointment = detailAppointment.value;
-  detailsVisible.value = false;
-
   void openAttendanceDialog(appointment);
 };
 
@@ -3604,8 +3756,7 @@ const canCreateSponsorClaimFromDetails = (
       preparation.billing_path.action === "CREATE_HMO_CLAIM" &&
       preparation.billing_path.payer_type === "HMO" &&
       (Number((appointment as any).hmo_id ?? 0) > 0 ||
-        Number((preparation.appointment as any)?.hmo_id ?? 0) > 0 ||
-        preparation.consumed_services.count > 0)
+        Number((preparation.appointment as any)?.hmo_id ?? 0) > 0)
     );
   }
 
@@ -3616,8 +3767,7 @@ const canCreateSponsorClaimFromDetails = (
   return (
     preparation.billing_path.action === "CREATE_LGU_CLAIM" &&
     preparation.billing_path.payer_type === "LGU" &&
-    hasCreditAccount &&
-    (preparation.consumed_services.count > 0 || isLguDroppedOutBillingContext())
+    hasCreditAccount
   );
 };
 
@@ -3820,20 +3970,49 @@ const loadPaymentMethods = async (): Promise<void> => {
 
 const openTenderDialog = async (
   document: AppointmentBillingDocument,
+  _fallbackAmountDue = 0,
 ): Promise<void> => {
   tenderBillingDocument.value = document;
-  tenderForm.amount_tendered = Number(document.totals.balance ?? 0);
+  tenderForm.amount_tendered = 0;
   tenderForm.payment_method_id = paymentMethods.value[0]?.id ?? null;
   tenderForm.payment_reference = "";
   tenderForm.notes = "";
   tenderForm.senior_pwd_id_presented = false;
   tenderForm.senior_pwd_id_reference = "";
   tenderForm.custom_discount_type = null;
-  tenderForm.custom_discount_value = null;
+  tenderForm.custom_discount_value = 0;
   tenderVisible.value = true;
   await loadPaymentMethods();
   tenderForm.payment_method_id =
     tenderForm.payment_method_id ?? paymentMethods.value[0]?.id ?? null;
+};
+
+const plannedServicesAmountDue = (): number =>
+  Number(
+    detailPlannedServices.value
+      .filter((service) => {
+        const type = String((service as any).type ?? (service as any).line_type ?? "").toUpperCase();
+        return type !== "PACKAGE" && type !== "BUNDLE";
+      })
+      .reduce((sum, service) => {
+        const quantity = Number((service as any).planned_quantity ?? (service as any).quantity ?? 0);
+        const unitPrice = Number((service as any).unit_price ?? (service as any).price ?? 0);
+        return sum + (Number.isFinite(quantity) ? quantity : 0) * (Number.isFinite(unitPrice) ? unitPrice : 0);
+      }, 0)
+      .toFixed(2),
+  );
+
+const selfPayTenderFallbackAmount = (): number => {
+  const preparationSubtotal = Number(detailBillingPreparation.value?.consumed_services.subtotal ?? 0);
+  if (Number.isFinite(preparationSubtotal) && preparationSubtotal > 0) {
+    return preparationSubtotal;
+  }
+  return plannedServicesAmountDue();
+};
+
+const isPaidBillingDocument = (document: AppointmentBillingDocument): boolean => {
+  const status = normalizeBillingDocumentStatus(document.document_status);
+  return status === "PAID" || status === "SETTLED";
 };
 
 const submitTenderPayment = async (): Promise<void> => {
@@ -3863,7 +4042,7 @@ const submitTenderPayment = async (): Promise<void> => {
         senior_pwd_id_reference:
           tenderForm.senior_pwd_id_reference.trim() || null,
         custom_discount_type: tenderForm.custom_discount_type,
-        custom_discount_value: tenderForm.custom_discount_value,
+        custom_discount_value: Number(tenderForm.custom_discount_value ?? 0),
       },
     );
     tenderBillingDocument.value = result.billing_document;
@@ -3884,7 +4063,6 @@ const submitTenderPayment = async (): Promise<void> => {
 
 watch(
   () => [
-    tenderVisible.value,
     tenderForm.senior_pwd_id_presented,
     tenderForm.custom_discount_type,
     tenderForm.custom_discount_value,
@@ -3892,9 +4070,7 @@ watch(
   ],
   () => {
     if (!tenderVisible.value || !tenderBillingDocument.value) return;
-    tenderForm.amount_tendered = Number(
-      tenderDiscountSummary.value.amountDue.toFixed(2),
-    );
+    tenderForm.amount_tendered = Number(tenderForm.amount_tendered ?? 0);
   },
 );
 
@@ -3908,12 +4084,13 @@ const runBillingActionFromDetails = async (
   try {
     isBillingActionLoading.value = true;
     const document = await action(detailAppointment.value.id);
-    successToast(toast, successMessage);
     await refreshDetailBillingPreparation();
     await refreshAppointmentViews();
-    if (shouldOfferTender && Number(document.totals.balance ?? 0) > 0) {
-      await openTenderDialog(document);
+    if (shouldOfferTender && !isPaidBillingDocument(document)) {
+      await openTenderDialog(document, selfPayTenderFallbackAmount());
+      return;
     }
+    successToast(toast, successMessage);
   } catch (error) {
     const message = (error as any)?.response?.data?.message;
     errorToast(toast, message ? String(message) : "Billing action failed");
@@ -3999,6 +4176,11 @@ const saveAppointment = async (): Promise<void> => {
     !form.ends_at
   ) {
     errorToast(toast, "Complete patient, clinic branch, type, start, and end.");
+    return;
+  }
+
+  if (!form.primary_provider_staff_id) {
+    errorToast(toast, "Select a Main PT before saving the appointment.");
     return;
   }
 
@@ -4555,7 +4737,26 @@ watch(activeBranchId, (clinicId) => {
   }
 
   page.value = 1;
-  void refreshAppointmentViews();
+  void loadLookups().then(() => refreshAppointmentViews());
+});
+
+watch([ptOptions, doctorOptions], () => {
+  const isValidProvider = (staffId: number | null, options: SelectOption[]): boolean =>
+    !staffId || options.some((option) => Number(option.value) === Number(staffId));
+
+  if (!isValidProvider(form.primary_provider_staff_id, ptOptions.value)) {
+    form.primary_provider_staff_id = null;
+    form.specialty_tag_id = null;
+  }
+  if (!isValidProvider(form.assistant_provider_staff_id, ptOptions.value)) {
+    form.assistant_provider_staff_id = null;
+  }
+  if (!isValidProvider(form.intern_provider_staff_id, ptOptions.value)) {
+    form.intern_provider_staff_id = null;
+  }
+  if (!isValidProvider(form.referring_staff_id, doctorOptions.value)) {
+    form.referring_staff_id = null;
+  }
 });
 
 watch(

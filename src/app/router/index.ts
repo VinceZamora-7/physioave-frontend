@@ -149,6 +149,12 @@ const router = createRouter({
           meta: { requiresAuth: true }
         },
         {
+          path: "patient-daily-log",
+          name: "patient-daily-log",
+          component: () => import("@/features/daily-patient-log/pages/DailyPatientLogView.vue"),
+          meta: { requiresAuth: true }
+        },
+        {
           path: "billing",
           name: "billing",
           component: () => import("@/features/billing/pages/BillingView.vue"),
@@ -226,6 +232,7 @@ const resolveFallbackRouteName = (
   const fallbackRouteNames = [
     "dashboard",
     "patients",
+    "patient-daily-log",
     "billing",
     "reports",
     "promos-offers-single-service",

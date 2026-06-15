@@ -216,6 +216,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue"
 import { storeToRefs } from "pinia"
+import { useQueryClient } from "@tanstack/vue-query"
 import Button from "primevue/button"
 import Column from "primevue/column"
 import DataTable from "primevue/datatable"
@@ -225,10 +226,11 @@ import Message from "primevue/message"
 import Tag from "primevue/tag"
 import { useToast } from "primevue/usetoast"
 import { errorToast, successToast } from "@/utils/toast.util"
-import {readActivePromosServiceCatalog} from "@/features/promos-offers/composables/promos-storage.composable"
 import PromosCatalogManagerDialog from "@/features/promos-offers/components/PromosCatalogManagerDialog.vue"
 import ServiceBundlesManager from "@/features/promos-offers/components/ServiceBundlesManager.vue"
 import { useAuthSessionStore } from "@/stores/auth-session.store"
+import { serviceCatalogContextTanstackService } from "@/features/services/queries/service-catalog-context.tanstack.service"
+import type { ServiceCatalogItem } from "@/features/services/api/service-catalog-context.service"
 
 interface BillingPickerLookup {
   id: string | number
@@ -239,6 +241,7 @@ interface BillingPickerLookup {
 }
 
 const toast = useToast()
+const queryClient = useQueryClient()
 const authSession = useAuthSessionStore()
 const { roleName } = storeToRefs(authSession)
 const isLoading = ref(false)
@@ -351,28 +354,8 @@ const canManageLguDashboard = computed(() => {
   return MANAGER_ROLE_KEYWORDS.some(keyword => normalized.includes(keyword))
 })
 
-const loadDashboardBudget = (): void => {
-  try {
-    const raw = localStorage.getItem("lgu_dashboard_budget")
-    if (!raw) return
-    const parsed = JSON.parse(raw) as { baseMonthlyBudget?: number; rolloverAmount?: number }
-    baseMonthlyBudget.value = Math.max(0, Number(parsed.baseMonthlyBudget ?? 0))
-    rolloverAmount.value = Math.max(0, Number(parsed.rolloverAmount ?? 0))
-  } catch {
-    // Ignore malformed storage entries.
-  }
-}
-
 const saveDashboardBudget = (): void => {
-  localStorage.setItem(
-    "lgu_dashboard_budget",
-    JSON.stringify({
-      baseMonthlyBudget: Number(baseMonthlyBudget.value ?? 0),
-      rolloverAmount: Number(rolloverAmount.value ?? 0),
-      updatedAt: new Date().toISOString()
-    })
-  )
-  successToast(toast, "LGU dashboard budget saved")
+  errorToast(toast, "LGU dashboard budgets must be saved from the LGU Budget dashboard so they are stored in the database.")
 }
 
 const addRolloverAmount = (): void => {
@@ -388,14 +371,17 @@ const addRolloverAmount = (): void => {
 const loadServices = async (): Promise<void> => {
   try {
     isLoading.value = true
-    allServices.value = readActivePromosServiceCatalog().map(item => ({
-      id: item.id,
-      name: item.name,
-      price: Number(item.price ?? 0),
-      type: item.type,
-      status: item.status
-    }))
+    const context = await serviceCatalogContextTanstackService.fetchContext(queryClient, { scope: "GLOBAL" })
+    allServices.value = [
+      ...(context?.services.machines ?? []).map(item => catalogItemToService("machine", item)),
+      ...(context?.services.techniques ?? []).map(item => catalogItemToService("technique", item)),
+      ...(context?.services.evaluations ?? []).map(item => catalogItemToService("evaluation", item)),
+      ...(context?.services.add_on_machines ?? []).map(item => catalogItemToService("add-on-machine", item)),
+      ...(context?.services.add_on_techniques ?? []).map(item => catalogItemToService("add-on-technique", item)),
+      ...(context?.services.add_on_home_services ?? []).map(item => catalogItemToService("add-on-home-service", item))
+    ]
   } catch {
+    allServices.value = []
     errorToast(toast, "Failed to load services")
   } finally {
     isLoading.value = false
@@ -413,6 +399,14 @@ const openAddDialog = (): void => {
 const openAddServiceDialog = (): void => {
   successToast(toast, "Enable LGU coverage for existing services using the checkboxes above")
 }
+
+const catalogItemToService = (type: string, item: ServiceCatalogItem): BillingPickerLookup => ({
+  id: item.id,
+  name: item.name,
+  price: Number(item.effective_price ?? item.price ?? 0),
+  type,
+  status: item.is_active ? "Active" : "Inactive"
+})
 
 
 import { pamsAPI } from "@/utils/axios-interceptor"
@@ -496,7 +490,6 @@ const saveLguConfiguration = async (): Promise<void> => {
 
 onMounted(async () => {
   await authSession.ensureLoaded().catch(() => undefined)
-  loadDashboardBudget()
   await loadServices()
 })
 </script>

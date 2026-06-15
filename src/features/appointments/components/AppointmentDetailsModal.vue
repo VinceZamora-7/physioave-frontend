@@ -50,9 +50,8 @@
         <div class="app-appointment-card space-y-3">
           <h4 class="app-appointment-title text-base">Status</h4>
           <DetailField label="Billing Status" :value="appointment.billing_status" />
-          <DetailField label="Billing Type" :value="appointment.billing_type" />
-          <DetailField label="Service Type" :value="appointment.service_type" />
-          <DetailField label="Dropout Status" :value="appointment.dropout_status" />
+          <DetailField label="Billing Type" :value="displayBillingType" />
+          <DetailField v-if="isLguAppointment" label="Dropout Status" :value="appointment.dropout_status" />
           <DetailField label="Reschedule Count" :value="String(appointment.reschedule_count ?? 0)" />
         </div>
       </section>
@@ -215,6 +214,18 @@ defineEmits<{
 
 const plannedServicesList = computed(() => props.plannedServices ?? [])
 const consumedServicesList = computed(() => props.consumedServices ?? [])
+
+const normalizeToken = (value?: string | null): string =>
+  String(value ?? "").trim().toUpperCase()
+
+const isLguAppointment = computed(() =>
+  normalizeToken(props.appointment?.payer_type) === "LGU" ||
+  normalizeToken(props.appointment?.billing_type) === "LGU"
+)
+
+const displayBillingType = computed(() =>
+  props.formatPayer(props.appointment?.payer_type || props.appointment?.billing_type || null)
+)
 
 const formatBillingPreparationStatus = (value?: string | null): string =>
   String(value ?? "N/A")

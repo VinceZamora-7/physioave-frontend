@@ -318,7 +318,10 @@ const sponsorLabel = computed(() => isLguSponsor.value ? "LGU" : "HMO")
 	  refetch
 	} = patientHmoInformationTanstackService.getByPatientId(patientId)
 
-	const isEditing = computed<boolean>(() => !forceInsert?.value && Boolean(patientHMOInformation.value?.length))
+	const currentSponsorInformation = computed(() =>
+	  (patientHMOInformation.value ?? []).find(entry => entry.sponsor_context === sponsorLabel.value)
+	)
+	const isEditing = computed<boolean>(() => !forceInsert?.value && Boolean(currentSponsorInformation.value))
 	const editEnabled = ref(false)
 	const isReadOnly = computed<boolean>(() => isEditing.value && !editEnabled.value)
 
@@ -327,14 +330,14 @@ const sponsorLabel = computed(() => isLguSponsor.value ? "LGU" : "HMO")
 
 	const header = computed<string>(() => {
 	  const label = sponsorLabel.value
-	  return patientHMOInformation.value?.length
+	  return isEditing.value
 	    ? `Edit ${patient.value?.full_name} ${label} Information`
 	    : `Save ${patient.value?.full_name} ${label} Information`
 	})
 	const buttonProps = computed<ButtonProps>(() => ({
-	  label: patientHMOInformation.value?.length ? `Edit` : `Save`,
-	  icon: patientHMOInformation.value?.length ? 'pi pi-pen-to-square' : 'pi pi-save',
-	  severity: patientHMOInformation.value?.length ? 'success' : 'info'
+	  label: isEditing.value ? `Edit` : `Save`,
+	  icon: isEditing.value ? 'pi pi-pen-to-square' : 'pi pi-save',
+	  severity: isEditing.value ? 'success' : 'info'
 	}))
 
 	const resolver = ref(zodResolver(patientHMOInformationSchema))
@@ -509,19 +512,20 @@ const onShow = async (): Promise<void> => {
     return
   }
 
+  const current = currentSponsorInformation.value
   const initialValues: Partial<PatientHMOInformationFormState> = {
-    company_name: patientHMOInformation.value?.[0]?.company_name ?? undefined,
-    member_id: patientHMOInformation.value?.[0]?.member_id ?? undefined,
-    card_number: patientHMOInformation.value?.[0]?.card_number ?? undefined,
-    plan_name: patientHMOInformation.value?.[0]?.plan_name ?? undefined,
-    principal_name: patientHMOInformation.value?.[0]?.principal_name ?? undefined,
-    approval_code: patientHMOInformation.value?.[0]?.referral_form_no ?? patientHMOInformation.value?.[0]?.approval_code ?? undefined,
-    validity_start_date: patientHMOInformation.value?.[0]?.referral_issued_date ?? patientHMOInformation.value?.[0]?.validity_start_date ?? undefined,
-    validity_end_date: patientHMOInformation.value?.[0]?.validity_end_date ?? undefined,
-    notes: patientHMOInformation.value?.[0]?.notes ?? undefined,
-    hmo: hmos.value?.find(h => h.id === patientHMOInformation.value?.[0]?.hmo_id),
-    hmo_type: hmoTypes.value?.find(ht => ht.id === patientHMOInformation.value?.[0]?.hmo_type_id),
-    lgu_program: lguPrograms.value?.find(lgu => lgu.id === patientHMOInformation.value?.[0]?.lgu_program_id)
+    company_name: current?.company_name ?? undefined,
+    member_id: current?.member_id ?? undefined,
+    card_number: current?.card_number ?? undefined,
+    plan_name: current?.plan_name ?? undefined,
+    principal_name: current?.principal_name ?? undefined,
+    approval_code: current?.referral_form_no ?? current?.approval_code ?? undefined,
+    validity_start_date: current?.referral_issued_date ?? current?.validity_start_date ?? undefined,
+    validity_end_date: current?.validity_end_date ?? undefined,
+    notes: current?.notes ?? undefined,
+    hmo: hmos.value?.find(h => h.id === current?.hmo_id),
+    hmo_type: hmoTypes.value?.find(ht => ht.id === current?.hmo_type_id),
+    lgu_program: lguPrograms.value?.find(lgu => lgu.id === current?.lgu_program_id)
   }
   form.value?.setValues(initialValues)
 }

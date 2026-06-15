@@ -692,9 +692,11 @@
                       currency="PHP"
                       locale="en-PH"
                       fluid
+                      inputClass="tender-amount-input"
                       :min="0"
                       :minFractionDigits="0"
                       :maxFractionDigits="0"
+                      @focus="selectNumericInputText"
                     />
                     <label>Amount Tendered</label>
                   </IftaLabel>
@@ -1120,7 +1122,7 @@
                 </IftaLabel>
 
                 <IftaLabel>
-                  <InputNumber v-model="billingTenderAmount" mode="currency" currency="PHP" locale="en-PH" fluid :min="0" :minFractionDigits="0" :maxFractionDigits="0" />
+                  <InputNumber v-model="billingTenderAmount" mode="currency" currency="PHP" locale="en-PH" fluid inputClass="tender-amount-input" :min="0" :minFractionDigits="0" :maxFractionDigits="0" @focus="selectNumericInputText" />
                   <label>Additional Tender</label>
                 </IftaLabel>
 
@@ -2041,14 +2043,14 @@ const formatPatientName = (patient: Partial<Patient>): string => {
 const loadPatientOptions = async (): Promise<void> => {
   const lookupResponse = await patientService.getAllLookup({
     pageable_request: {page: defaultPage, size: 1000, name: undefined, status: Status.ACTIVE},
-    clinic_id: undefined
+    clinic_id: selectedClinicId.value
   })
   if ((lookupResponse?.content?.length ?? 0) > 0) {
     patientOptions.value = lookupResponse?.content ?? []; return
   }
   const allPatientsResponse = await patientService.getAll({
     pageable_request: {page: defaultPage, size: 1000, name: undefined, status: Status.ACTIVE},
-    clinic_id: undefined
+    clinic_id: selectedClinicId.value
   })
   patientOptions.value = (allPatientsResponse?.content ?? []).map(patient => ({id: patient.id, name: formatPatientName(patient)}))
 }
@@ -2060,14 +2062,9 @@ const loadCurrentUser = async (): Promise<void> => {
 
 // â”€â”€ Local catalog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const loadLocalData = (): void => {
-  try { localServices.value = JSON.parse(localStorage.getItem("singlePayServices") || "[]") } catch { localServices.value = [] }
-  try { localBundles.value = JSON.parse(localStorage.getItem("bundledServices") || "[]") } catch { localBundles.value = [] }
-  try {
-    const parsed = JSON.parse(localStorage.getItem("packageServiceOffers") || "[]")
-    localPackageOffers.value = Array.isArray(parsed)
-      ? parsed.map(normalizePackageServiceOffer).filter((item): item is LocalPackageOffer => item !== null)
-      : []
-  } catch { localPackageOffers.value = [] }
+  localServices.value = []
+  localBundles.value = []
+  localPackageOffers.value = []
 }
 
 const catalogItemToPicker = (type: BillingPickerLookup["type"], item: ServiceCatalogItem): BillingPickerLookup => ({
@@ -2142,8 +2139,8 @@ const catalogContextToLocalServices = (context: ServiceCatalogContext): LocalSer
 ]
 
 const mergeCatalogContextLocalData = (context: ServiceCatalogContext): void => {
-  localServices.value = mergeById(localServices.value, catalogContextToLocalServices(context))
-  localBundles.value = mergeById(localBundles.value, context.bundles.map(bundle => catalogBundleToLocalBundle(bundle, context.scope)))
+  localServices.value = catalogContextToLocalServices(context)
+  localBundles.value = context.bundles.map(bundle => catalogBundleToLocalBundle(bundle, context.scope))
 }
 
 const applyServiceCatalogContext = (context: ServiceCatalogContext): void => {
@@ -2171,11 +2168,12 @@ const loadDbPackageOffers = async (): Promise<void> => {
       .map(normalizePackageServiceOffer)
       .filter((item): item is LocalPackageOffer => item !== null)
 
-    const byId = new Map(localPackageOffers.value.map(item => [item.id, item]))
+    const byId = new Map<string, LocalPackageOffer>()
     normalized.forEach(item => byId.set(item.id, item))
     localPackageOffers.value = Array.from(byId.values())
-  } catch {
-    // Local storage fallback is still usable if the catalog request fails.
+  } catch (error) {
+    localPackageOffers.value = []
+    throw error
   }
 }
 
@@ -3384,6 +3382,12 @@ const asCurrency = (value: unknown) =>
     minimumFractionDigits: 0,
     maximumFractionDigits: 0
   })
+
+const selectNumericInputText = (event: Event): void => {
+  const input = event.target instanceof HTMLInputElement ? event.target : null
+  window.setTimeout(() => input?.select(), 0)
+}
+
 const formatFilterDate = (value?: Date): string|undefined => value ? new Date(value).toISOString().slice(0, 10) : undefined
 const formatType       = (type: string): string => ({
   machine: "Machine", technique: "Technique", evaluation: "Evaluation",
@@ -3855,18 +3859,7 @@ const openCreateBundleFromSelection = (): void => {
 
 const saveBundleFromSelection = (): void => {
   if (!canCreateBundleFromSelection.value) { errorToast(toast, "Selected items cannot be saved as a new bundle"); return }
-  const bundleName = createBundleName.value.trim()
-  if (!bundleName) { errorToast(toast, "Bundle name is required"); return }
-  const discountedPrice = toWholePeso(createBundleDiscountedPrice.value)
-  if (discountedPrice < 0) { errorToast(toast, "Bundled price must be 0 or greater"); return }
-  const parts = buildBundlePartsFromSelection()
-  const newBundle: LocalBundle = {id: `bundle-${Date.now()}`, name: bundleName, ...parts, bundledPrice: discountedPrice, status: "Active"}
-  localBundles.value = [...localBundles.value, newBundle]
-  localStorage.setItem("bundledServices", JSON.stringify(localBundles.value))
-  selectedLines.value = [{key: crypto.randomUUID(), id: newBundle.id, type: "bundle", name: newBundle.name, price: newBundle.bundledPrice, quantity: 1, originalPrice: selectionOriginalTotal.value}]
-  form.value.service_name = newBundle.name
-  createBundleDialogVisible.value = false
-  successToast(toast, "Bundle created and applied to this billing")
+  errorToast(toast, "Bundles must be created in Promos and Offers so they are saved to the database.")
 }
 
 // â”€â”€ Create / Update billing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -4407,7 +4400,11 @@ onMounted(async () => {
 
 })
 
-watch(selectedClinicId, () => { void fetchBillings() })
+watch(selectedClinicId, () => {
+  patientOptions.value = []
+  form.value.patient_id = undefined
+  void Promise.all([fetchBillings(), loadPatientOptions()])
+})
 </script>
 
 

@@ -9,7 +9,8 @@ export const staffSchema = z.strictObject({
   also_pt: z.boolean().optional(),
   role: lookupSchema('role is required'),
   secondary_role: lookupSchema('PT role is required').optional(),
-  specialty: lookupSchema('specialty is required').optional()
+  specialty: lookupSchema('specialty is required').optional(),
+  calendar_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "PT color must look like #2563EB").optional()
 }).superRefine((value, context) => {
   if (value.also_pt && !value.secondary_role?.id) {
     context.addIssue({

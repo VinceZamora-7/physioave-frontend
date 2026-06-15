@@ -180,11 +180,6 @@ import { patientTanstackService } from "@/features/patients/queries/patient.tans
 import { billingContextTanstackService } from "@/features/billing/queries/billing-context.tanstack.service"
 import { useAuthSessionStore } from "@/stores/auth-session.store"
 
-type LocalLguBudgetDraft = {
-  baseMonthlyBudget?: number
-  rolloverAmount?: number
-}
-
 const toast = useToast()
 const router = useRouter()
 const queryClient = useQueryClient()
@@ -2628,41 +2623,9 @@ const extractApiErrorMessage = (error: unknown, fallback: string): string =>
     retryHint: "Please try again."
   })
 
-const hasAnyBudgetDraft = (draft: LocalLguBudgetDraft | null): boolean =>
-  Number(draft?.baseMonthlyBudget ?? 0) > 0 || Number(draft?.rolloverAmount ?? 0) > 0
-
-const localDashboardBudgetStorageKey = computed(() =>
-  `lgu_dashboard_budget:${selectedProgramId.value ?? "all"}:${selectedBudgetPeriodYear.value}-${String(selectedBudgetPeriodMonth.value).padStart(2, "0")}`
-)
-
 const selectedBillingMonth = computed(() =>
   `${selectedBudgetPeriodYear.value}-${String(selectedBudgetPeriodMonth.value).padStart(2, "0")}`
 )
-
-const readLocalDashboardBudget = (): LocalLguBudgetDraft | null => {
-  try {
-    const raw = localStorage.getItem(localDashboardBudgetStorageKey.value)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as LocalLguBudgetDraft
-    return {
-      baseMonthlyBudget: Math.max(0, Number(parsed.baseMonthlyBudget ?? 0)),
-      rolloverAmount: Math.max(0, Number(parsed.rolloverAmount ?? 0))
-    }
-  } catch {
-    return null
-  }
-}
-
-const persistLocalDashboardBudget = (): void => {
-  localStorage.setItem(
-    localDashboardBudgetStorageKey.value,
-    JSON.stringify({
-      baseMonthlyBudget: Number(baseMonthlyBudget.value ?? 0),
-      rolloverAmount: Number(rolloverAmount.value ?? 0),
-      updatedAt: new Date().toISOString()
-    })
-  )
-}
 
 const applyBudgetValues = (payload: { base_budget?: number; rollover_amount?: number; baseMonthlyBudget?: number; rolloverAmount?: number }): void => {
   baseMonthlyBudget.value = Math.max(0, Number(payload.base_budget ?? payload.baseMonthlyBudget ?? 0))
@@ -2670,7 +2633,6 @@ const applyBudgetValues = (payload: { base_budget?: number; rollover_amount?: nu
 }
 
 const loadDashboardBudget = async (): Promise<void> => {
-  const localDraft = readLocalDashboardBudget()
   loadingDashboardBudget.value = true
   budgetSyncError.value = ""
   rolloverInput.value = 0
@@ -2691,17 +2653,16 @@ const loadDashboardBudget = async (): Promise<void> => {
       lguDashboardBudget.value = serverBudget
       applyBudgetValues(serverBudget)
       hasLocalOnlyBudgetDraft.value = false
-      persistLocalDashboardBudget()
       return
     }
 
     lguDashboardBudget.value = null
-    applyBudgetValues(localDraft ?? {})
-    hasLocalOnlyBudgetDraft.value = hasAnyBudgetDraft(localDraft)
+    applyBudgetValues({})
+    hasLocalOnlyBudgetDraft.value = false
   } catch (error: unknown) {
     lguDashboardBudget.value = null
-    applyBudgetValues(localDraft ?? {})
-    hasLocalOnlyBudgetDraft.value = hasAnyBudgetDraft(localDraft)
+    applyBudgetValues({})
+    hasLocalOnlyBudgetDraft.value = false
     budgetSyncError.value = extractApiErrorMessage(error, "Failed to load the live LGU budget")
   } finally {
     loadingDashboardBudget.value = false
@@ -2892,7 +2853,6 @@ const saveDashboardBudget = async (): Promise<void> => {
     errorToast(toast, "Select an LGU program first")
     return
   }
-  persistLocalDashboardBudget()
   savingDashboardBudget.value = true
   budgetSyncError.value = ""
   try {
@@ -2909,10 +2869,9 @@ const saveDashboardBudget = async (): Promise<void> => {
       applyBudgetValues(savedBudget)
     }
     hasLocalOnlyBudgetDraft.value = false
-    persistLocalDashboardBudget()
     successToast(toast, `LGU budget is now live for ${budgetMonthLabel.value}`)
   } catch (error: unknown) {
-    hasLocalOnlyBudgetDraft.value = true
+    hasLocalOnlyBudgetDraft.value = false
     const message = extractApiErrorMessage(error, "Failed to save the live LGU budget")
     budgetSyncError.value = message
     errorToast(toast, message)

@@ -68,10 +68,18 @@ export const primeVuePreset = definePreset(compactAuraPreset, {
     colorScheme: {
       light: {
         primary: {
-          color: "#1A4568",
+          color: "#242757",
           inverseColor: "#ffffff",
-          hoverColor: "#3e92cc",
-          activeColor: "#0F2236"
+          hoverColor: "#3C88B1",
+          activeColor: "#5E1869"
+        }
+      },
+      dark: {
+        primary: {
+          color: "#A3D9E8",
+          inverseColor: "#081018",
+          hoverColor: "#DB65C6",
+          activeColor: "#3C88B1"
         }
       }
     }

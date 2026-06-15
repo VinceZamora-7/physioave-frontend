@@ -211,6 +211,19 @@
                 {{ resolvePtSpecialtyName(data) }}
               </template>
             </Column>
+            <Column field="calendar_color" header="Color">
+              <template #body="{ data }">
+                <div class="flex items-center gap-2">
+                  <span
+                    class="h-5 w-5 rounded-full border border-[rgb(var(--app-border))] shadow-sm"
+                    :style="{ backgroundColor: resolvePtCalendarColor(data) }"
+                  />
+                  <span class="font-mono text-xs font-semibold uppercase text-[rgb(var(--app-fg))]/60">
+                    {{ resolvePtCalendarColor(data) }}
+                  </span>
+                </div>
+              </template>
+            </Column>
             <Column field="is_active" header="Status">
               <template #body="{ data }">
                 <Tag :value="data.is_active ? 'Active' : 'Inactive'" :severity="data.is_active ? 'success' : 'secondary'" />
@@ -626,6 +639,8 @@ const resolvePtRoleName = (staff: Staff): string =>
     : (staff.secondary_role_name || staff.role_name)
 const resolvePtSpecialtyName = (staff: Staff): string =>
   staff.specialty_tag_name || "Not assigned"
+const resolvePtCalendarColor = (staff: Staff): string =>
+  staff.calendar_color || "#2563EB"
 const careTeamStaffs = computed(() =>
   staffs.value.filter(staff =>
     isCareTeamProviderType(staff.appointment_provider_type)

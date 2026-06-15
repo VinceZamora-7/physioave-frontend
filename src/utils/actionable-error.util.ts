@@ -1,4 +1,5 @@
 import axios from "axios"
+import { APIError } from "@/utils/error-handler"
 
 export type ApiErrorMessageOptions = {
   baseMessage: string
@@ -12,6 +13,31 @@ const normalizeBaseMessage = (value: string): string => value.trim().replace(/[.
 
 export const getApiErrorMessage = (error: unknown, options: ApiErrorMessageOptions): string => {
   const baseMessage = `${normalizeBaseMessage(options.baseMessage)}.`
+
+  if (error instanceof APIError) {
+    if (error.status === 403) {
+      const permissionSentence = options.permissionHint
+        ? ` Ask an admin to grant ${options.permissionHint}.`
+        : ""
+      return `${baseMessage} This role does not have permission for this action.${permissionSentence}`
+    }
+
+    if (error.status === 401) {
+      return `${baseMessage} Your session has expired. Please log in again and retry.`
+    }
+
+    if (error.status === 404) {
+      return options.notFoundHint ? `${baseMessage} ${options.notFoundHint}` : `${baseMessage} The requested record was not found. Refresh and try again.`
+    }
+
+    if (error.status === 400 && error.message.trim()) {
+      return `${baseMessage} ${error.message}`
+    }
+
+    if (error.message.trim()) {
+      return `${baseMessage} ${error.message}`
+    }
+  }
 
   if (axios.isAxiosError(error)) {
     const status = error.response?.status

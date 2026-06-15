@@ -10,7 +10,7 @@
   >
     <div class="space-y-6">
       <!-- Simplified Header -->
-      <section class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 sm:p-5">
+      <section class="app-appointment-card app-appointment-card-secondary sm:p-5">
         <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div class="min-w-0">
             <h3 class="text-xl font-black sm:text-2xl">
@@ -21,7 +21,7 @@
             </p>
           </div>
 
-          <div class="flex gap-2">
+          <div class="flex flex-wrap gap-2">
             <Button
               v-if="canCreateFollowUp"
               label="Follow-up"
@@ -31,24 +31,21 @@
               size="small"
               @click="$emit('create-follow-up')"
             />
-            <div
-              v-if="isFollowUpMode"
-              class="rounded-xl bg-emerald-100 px-3 py-2 text-center ring-1 ring-emerald-200"
-            >
-              <span class="block text-[10px] font-black uppercase tracking-widest text-emerald-600">Follow-up</span>
-              <strong class="block text-sm font-black text-emerald-700">Uses existing credit</strong>
+            <div v-if="isFollowUpMode" class="app-appointment-summary-card px-3 py-2 text-center">
+              <span class="block text-[10px] font-black uppercase tracking-widest app-appointment-muted">Follow-up</span>
+              <strong class="block text-sm font-black app-appointment-value">Uses existing credit</strong>
             </div>
-            <div class="rounded-xl bg-violet-100 px-3 py-2 text-center ring-1 ring-violet-200">
-              <span class="block text-[10px] font-black uppercase tracking-widest text-violet-600">Branch</span>
-              <strong class="block text-sm font-black text-violet-700">{{ selectedClinic?.label || "All branches" }}</strong>
+            <div class="app-appointment-summary-card px-3 py-2 text-center">
+              <span class="block text-[10px] font-black uppercase tracking-widest app-appointment-muted">Branch</span>
+              <strong class="block text-sm font-black app-appointment-value">{{ selectedClinic?.label || "All branches" }}</strong>
             </div>
-            <div class="rounded-xl bg-cyan-100 px-3 py-2 text-center ring-1 ring-cyan-200">
-              <span class="block text-[10px] font-black uppercase tracking-widest text-cyan-600">Services</span>
-              <strong class="block text-sm font-black text-cyan-700">{{ selectedServices.length }}</strong>
+            <div class="app-appointment-summary-card px-3 py-2 text-center">
+              <span class="block text-[10px] font-black uppercase tracking-widest app-appointment-muted">Services</span>
+              <strong class="block text-sm font-black app-appointment-value">{{ selectedServices.length }}</strong>
             </div>
-            <div class="rounded-xl bg-fuchsia-100 px-3 py-2 text-center ring-1 ring-fuchsia-200">
-              <span class="block text-[10px] font-black uppercase tracking-widest text-fuchsia-600">Sessions</span>
-              <strong class="block text-sm font-black text-fuchsia-700">{{ sessionCount }}</strong>
+            <div class="app-appointment-summary-card px-3 py-2 text-center">
+              <span class="block text-[10px] font-black uppercase tracking-widest app-appointment-muted">Sessions</span>
+              <strong class="block text-sm font-black app-appointment-value">{{ sessionCount }}</strong>
             </div>
           </div>
         </div>
@@ -56,40 +53,46 @@
 
       <section class="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(18rem,0.85fr)_minmax(0,1.45fr)]">
         <!-- Section 1: Patient Data -->
-        <section class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 shadow-sm sm:p-5">
-          <FormSectionHeader index="1" title="Patient Data" description="Select the patient, branch, and starting appointment status." />
+        <section class="app-appointment-card sm:p-5">
+          <div class="flex items-start justify-between gap-3">
+            <FormSectionHeader index="1" title="Patient Data" description="Select the patient, branch, and starting appointment status." />
+            <span class="app-appointment-chip font-black uppercase tracking-widest">
+              Required
+            </span>
+          </div>
 
-          <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-1">
+          <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-1">
             <div class="space-y-1.5 md:col-span-2 xl:col-span-1">
-              <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">Patient</label>
-<Select
-  v-model="form.patient_id"
-  :options="patientOptions"
-  optionLabel="label"
-  optionValue="value"
-  filter
-  fluid
-  placeholder="Select patient"
-  class="py-3"
->
-  <template #option="{ option }">
-    {{ toTitleCase(option.label) }}
-  </template>
+              <label class="block text-xs font-black uppercase tracking-wider app-form-muted-label">Patient <span class="app-brand-required">*</span></label>
+              <Select
+                v-model="form.patient_id"
+                :options="patientOptions"
+                optionLabel="label"
+                optionValue="value"
+                filter
+                fluid
+                placeholder="Select patient"
+                class="py-3"
+              >
+                <template #option="{ option }">
+                  {{ toTitleCase(option.label) }}
+                </template>
 
-  <template #value="{ value }">
-    {{
-      toTitleCase(
-        patientOptions.find(p => p.value === value)?.label || ''
-      )
-    }}
-  </template>
-</Select>
+                <template #value="{ value }">
+                  {{
+                    toTitleCase(
+                      patientOptions.find(p => p.value === value)?.label || ''
+                    )
+                  }}
+                </template>
+              </Select>
+              <p class="text-xs font-semibold app-appointment-muted">Required before saving.</p>
             </div>
 
             <div class="space-y-1.5">
-              <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">
+              <label class="block text-xs font-black uppercase tracking-wider app-form-muted-label">
                 Clinic Branch
-                <span class="text-[10px] normal-case text-[rgb(var(--app-fg))]/40 ml-1">(Uses sidebar branch if available)</span>
+                <span class="ml-1 text-[10px] normal-case app-appointment-muted">(Uses sidebar branch if available)</span>
               </label>
               <Select
                 v-model="form.clinic_id"
@@ -132,15 +135,20 @@
         </section>
 
         <!-- Section 2: Billing Type and Planned Services -->
-        <section class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 shadow-sm sm:p-5">
-          <FormSectionHeader
-            index="2"
-            title="Billing Type and Planned Services"
-            description="Pick the billing path first. The service picker will adjust to what that billing type allows."
-          />
+        <section class="app-appointment-card app-appointment-card-secondary sm:p-5">
+          <div class="flex items-start justify-between gap-3">
+            <FormSectionHeader
+              index="2"
+              title="Billing Type and Planned Services"
+              description="Pick the billing path first. The service picker will adjust to what that billing type allows."
+            />
+            <span class="app-appointment-chip font-black uppercase tracking-widest">
+              Important
+            </span>
+          </div>
 
-          <div class="space-y-5">
-            <!-- Billing Type Cards (now update form directly) -->
+          <div class="mt-5 space-y-5">
+            <!-- Billing Type Cards -->
             <div class="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-4">
               <button
                 v-for="option in payerOptions"
@@ -150,8 +158,8 @@
                 :class="[
                   'group rounded-xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-lg',
                   selectedBillingTypeValue === String(option.value)
-                    ? 'border-violet-400 bg-violet-500/10 shadow-lg shadow-violet-500/10 ring-2 ring-violet-400/20'
-                    : 'border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] hover:border-violet-300/70'
+                    ? 'border-[rgb(var(--app-active-border))] bg-[rgb(var(--app-active-bg))] shadow-lg ring-2 ring-[rgba(var(--app-focus-ring),0.18)]'
+                    : 'border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] hover:border-[rgb(var(--app-hover-border))] hover:bg-[rgb(var(--app-hover-bg))]'
                 ]"
                 @click="form.payer_type = option.value; selectBillingType(option.value)"
                 @keydown.enter="form.payer_type = option.value; selectBillingType(option.value)"
@@ -161,10 +169,10 @@
                 <div class="flex items-start gap-3">
                   <span
                     :class="[
-                      'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-base transition',
-                      selectedBillingTypeValue === String(option.value)
-                        ? 'bg-violet-600 text-white'
-                        : 'bg-slate-100 text-violet-700 ring-1 ring-violet-100 group-hover:bg-violet-50'
+                            'app-brand-icon h-10 w-10 text-base transition',
+                            selectedBillingTypeValue === String(option.value)
+                              ? 'bg-[rgb(var(--app-primary))] text-[rgb(var(--app-button-primary-fg))]'
+                              : 'app-brand-icon-primary'
                     ]"
                   >
                     <i :class="billingTypeIcon(option.value)" />
@@ -179,13 +187,13 @@
               </button>
             </div>
 
-            <!-- Selected billing type display (removed fallback select) -->
+            <!-- Selected billing type display -->
             <div
               :class="[
                 'rounded-xl border p-4',
                 hasSelectedBillingType
-                  ? 'border-violet-200 bg-violet-50/70 dark:bg-violet-950/20'
-                  : 'border-amber-200 bg-amber-50/80 dark:bg-amber-950/20'
+                  ? 'border-[rgb(var(--app-active-border))] bg-[rgb(var(--app-active-bg))]'
+                  : 'border-[rgb(var(--patient-form-warning-border))] bg-[rgb(var(--patient-form-warning-bg))]'
               ]"
             >
               <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -205,7 +213,7 @@
                     <p class="text-[10px] font-black uppercase tracking-widest text-[rgb(var(--app-fg))]/45">Service category</p>
                     <h5 class="mt-1 text-base font-black text-[rgb(var(--app-fg))]">{{ currentCategoryLabel }}</h5>
                   </div>
-                  <span class="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black text-slate-600 ring-1 ring-[rgb(var(--app-border))] dark:bg-slate-800 dark:text-slate-300">
+                  <span class="app-appointment-chip font-black">
                     {{ currentServiceOptions.length }} option{{ currentServiceOptions.length === 1 ? "" : "s" }}
                   </span>
                 </div>
@@ -219,8 +227,8 @@
                       :class="[
                         'rounded-xl border p-3 text-left transition hover:-translate-y-0.5',
                         servicePicker.type === option.value
-                          ? 'border-cyan-400 bg-cyan-500/10 shadow-md shadow-cyan-500/10 ring-2 ring-cyan-400/20'
-                          : 'border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] hover:border-cyan-300/70'
+                          ? 'border-[rgb(var(--app-active-border))] bg-[rgb(var(--app-active-bg))] shadow-md ring-2 ring-[rgba(var(--app-focus-ring),0.18)]'
+                          : 'border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] hover:border-[rgb(var(--app-hover-border))] hover:bg-[rgb(var(--app-hover-bg))]'
                       ]"
                       @click="setServiceType(String(option.value))"
                     >
@@ -228,7 +236,7 @@
                         <span
                           :class="[
                             'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm',
-                            servicePicker.type === option.value ? 'bg-cyan-600 text-white' : 'bg-slate-100 text-cyan-700'
+                            servicePicker.type === option.value ? 'bg-[rgb(var(--app-secondary))] text-white' : 'app-brand-icon-secondary'
                           ]"
                         >
                           <i :class="serviceTypeIcon(String(option.value))" />
@@ -244,7 +252,7 @@
                   </div>
                 </div>
 
-                <!-- Service Preview (simplified) -->
+                <!-- Service Preview -->
                 <div class="mt-4 rounded-xl border border-dashed border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-3">
                   <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                     <strong class="text-sm text-[rgb(var(--app-fg))]">
@@ -299,12 +307,12 @@
                     <p class="text-[10px] font-black uppercase tracking-widest text-[rgb(var(--app-fg))]/45">Planned services</p>
                     <h5 class="mt-1 text-base font-black text-[rgb(var(--app-fg))]">Added to this appointment</h5>
                   </div>
-                  <span class="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black text-slate-600 ring-1 ring-[rgb(var(--app-border))] dark:bg-slate-800 dark:text-slate-300">
+                  <span class="app-appointment-chip font-black">
                     {{ selectedServices.length }} selected
                   </span>
                 </div>
 
-                <!-- Empty State (improved) -->
+                <!-- Empty State -->
                 <div
                   v-if="!selectedServices.length"
                   class="mt-4 rounded-xl border border-dashed border-[rgb(var(--app-border))] p-6 text-center"
@@ -324,10 +332,10 @@
                     <div class="flex items-start justify-between gap-3">
                       <div class="min-w-0">
                         <div class="flex flex-wrap items-center gap-2">
-                          <span class="rounded-full bg-white px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55 ring-1 ring-[rgb(var(--app-border))]">
+                          <span class="app-appointment-chip px-2 py-0.5 text-[10px] font-black uppercase tracking-wider">
                             {{ service.typeLabel }}
                           </span>
-                          <span class="rounded-full bg-cyan-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-cyan-700">
+                          <span class="app-appointment-chip px-2 py-0.5 text-[10px] font-black uppercase tracking-wider">
                             Qty {{ service.quantity }}
                           </span>
                         </div>
@@ -355,14 +363,14 @@
                     <!-- Included Services -->
                     <div
                       v-if="includedServicesForDisplay(service).length"
-                      class="mt-3 rounded-xl border border-cyan-100 bg-cyan-50/70 p-3 dark:border-cyan-900/50 dark:bg-cyan-950/20"
+                      class="mt-3 rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-3"
                     >
-                      <div class="text-[10px] font-black uppercase tracking-widest text-cyan-700 dark:text-cyan-300">Included services</div>
+                      <div class="text-[10px] font-black uppercase tracking-widest app-appointment-muted">Included services</div>
                       <div class="mt-2 space-y-1.5">
                         <div
                           v-for="(included, includedIndex) in includedServicesForDisplay(service)"
                           :key="'service.value-' + included.name + '-' + includedIndex"
-                          class="flex items-center justify-between gap-3 rounded-lg bg-white/75 px-3 py-1.5 text-xs text-[rgb(var(--app-fg))] ring-1 ring-cyan-100 dark:bg-slate-900/40 dark:ring-cyan-900/40"
+                          class="flex items-center justify-between gap-3 rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] px-3 py-1.5 text-xs text-[rgb(var(--app-fg))]"
                         >
                           <span class="min-w-0 truncate font-semibold">{{ included.name }}</span>
                           <strong class="shrink-0 font-black">Qty {{ included.quantity }}</strong>
@@ -376,249 +384,253 @@
           </div>
         </section>
 
-<!-- Section 3: Patient Care and Evaluation Visit -->
-<section class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 shadow-sm sm:p-5 xl:col-span-2">
-  <FormSectionHeader
-    index="3"
-    title="Patient Care and Evaluation Visit"
-    description="Assign staff and configure visit type. Clinical details are optional."
-  />
-
-  <div class="space-y-6">
-    <!-- Group 1: Clinical Staff -->
-    <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-4">
-      <div class="flex items-center gap-2 mb-4">
-        <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-600 text-white">
-          <i class="pi pi-users" />
-        </span>
-        <div>
-          <h4 class="text-sm font-black text-[rgb(var(--app-fg))]">Clinical Staff</h4>
-          <p class="text-xs text-[rgb(var(--app-fg))]/60">Assign physical therapists for this appointment</p>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <div class="space-y-1.5">
-          <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">
-            Main PT
-            <span class="text-[10px] normal-case text-[rgb(var(--app-fg))]/40 ml-1">(Required)</span>
-          </label>
-          <Select
-            v-model="mainPtStaffId"
-            :options="mainPtOptions"
-            optionLabel="label"
-            optionValue="value"
-            showClear
-            filter
-            fluid
-            placeholder="Select Physical Therapist"
-          />
-        </div>
-
-        <div class="space-y-1.5">
-          <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">Assistant PT</label>
-          <Select
-            v-model="assistantPtStaffId"
-            :options="assistantPtOptions"
-            optionLabel="label"
-            optionValue="value"
-            showClear
-            filter
-            fluid
-            placeholder="Select PT Assistant"
-          />
-        </div>
-
-        <div class="space-y-1.5">
-          <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">Intern PT</label>
-          <Select
-            v-model="internPtStaffId"
-            :options="internPtOptions"
-            optionLabel="label"
-            optionValue="value"
-            showClear
-            filter
-            fluid
-            placeholder="Select Intern"
-          />
-        </div>
-      </div>
-
-      <div class="mt-4 space-y-1.5">
-        <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">Referring Doctor</label>
-        <Select
-          v-model="form.referring_staff_id"
-          :options="doctorOptions"
-          optionLabel="label"
-          optionValue="value"
-          showClear
-          filter
-          fluid
-          placeholder="Optional - Select referring doctor if applicable"
-        />
-      </div>
-    </div>
-
-    <!-- Group 2: Visit Configuration -->
-    <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-4">
-      <div class="flex items-center gap-2 mb-4">
-        <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-600 text-white">
-          <i class="pi pi-calendar-check" />
-        </span>
-        <div>
-          <h4 class="text-sm font-black text-[rgb(var(--app-fg))]">Visit Configuration</h4>
-          <p class="text-xs text-[rgb(var(--app-fg))]/60">Define the type and phase of this visit</p>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <div class="space-y-1.5">
-          <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">Appointment Type</label>
-          <Select
-            v-model="form.appointment_type_id"
-            :options="appointmentTypeOptions"
-            optionLabel="label"
-            optionValue="value"
-            fluid
-            placeholder="Select type"
-          />
-        </div>
-
-        <div class="space-y-1.5">
-          <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">Visit Phase</label>
-          <Select
-            v-model="form.appointment_phase"
-            :options="phaseOptions"
-            optionLabel="label"
-            optionValue="value"
-            fluid
-            placeholder="Select phase"
-          />
-        </div>
-
-        <div class="space-y-1.5">
-          <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">Specialty</label>
-          <Select
-            v-model="form.specialty_tag_id"
-            :options="specialtyOptions"
-            optionLabel="label"
-            optionValue="value"
-            showClear
-            filter
-            fluid
-            placeholder="Optional specialty"
-          />
-        </div>
-
-        <div class="space-y-1.5">
-          <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">Clinic Area</label>
-          <Select
-            v-model="form.treatment_area_id"
-            :options="clinicAreaOptions"
-            optionLabel="label"
-            optionValue="value"
-            showClear
-            filter
-            fluid
-            placeholder="Optional treatment area"
-          />
-        </div>
-      </div>
-    </div>
-
-    <!-- Group 3: Clinical Details (Toggleable) -->
-    <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))]">
-      <!-- Toggle Button -->
-      <button
-        type="button"
-        class="flex w-full items-center justify-between p-4 transition hover:bg-[rgb(var(--app-bg))]"
-        @click="showClinicalDetails = !showClinicalDetails"
-      >
-        <div class="flex items-center gap-3">
-          <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-fuchsia-600 text-white">
-            <i class="pi pi-file-medical" />
-          </span>
-          <div>
-            <h4 class="text-sm font-black text-[rgb(var(--app-fg))]">Clinical Details</h4>
-            <p class="text-xs text-[rgb(var(--app-fg))]/60">
-              {{ showClinicalDetails ? 'Add diagnosis and notes' : 'Optional - Add diagnosis and notes' }}
-            </p>
+        <!-- Section 3: Patient Care and Evaluation Visit -->
+        <section class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 shadow-sm sm:p-5 xl:col-span-2">
+          <div class="flex items-start justify-between gap-3">
+            <FormSectionHeader
+              index="3"
+              title="Patient Care and Evaluation Visit"
+              description="Assign staff and configure visit type. Clinical details are optional."
+            />
+            <span class="app-appointment-chip font-black uppercase tracking-widest">
+              Optional
+            </span>
           </div>
-        </div>
 
-        <div class="flex items-center gap-2">
-          <span v-if="hasClinicalDetails" class="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-200">
-            Filled
-          </span>
-          <i :class="['pi', showClinicalDetails ? 'pi-chevron-down' : 'pi-chevron-right', 'text-[rgb(var(--app-fg))]/60 transition-transform']" />
-        </div>
-      </button>
-
-      <!-- Toggleable Content -->
-      <div v-show="showClinicalDetails" class="px-4 pb-4">
-        <div class="border-t border-[rgb(var(--app-border))] pt-4">
-          <div class="grid grid-cols-1 gap-6">
-            <!-- Diagnosis Row -->
-            <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4">
-              <div class="flex items-center gap-2 mb-3">
-                <i class="pi pi-heart text-[rgb(var(--app-fg))]/60" />
-                <h5 class="text-sm font-black text-[rgb(var(--app-fg))]">Doctor Diagnosis</h5>
+          <div class="space-y-6">
+            <!-- Group 1: Clinical Staff -->
+            <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-4">
+              <div class="mb-4 flex items-center gap-2">
+                <span class="app-brand-icon app-brand-icon-primary h-8 w-8">
+                  <i class="pi pi-users" />
+                </span>
+                <div>
+                  <h4 class="text-sm font-black text-[rgb(var(--app-fg))]">Clinical Staff</h4>
+                  <p class="text-xs text-[rgb(var(--app-fg))]/60">Assign physical therapists for this appointment</p>
+                </div>
               </div>
 
-              <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div class="space-y-1.5">
-                  <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">Diagnosis</label>
+                  <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">
+                    Main PT
+                    <span class="ml-1 text-[10px] normal-case app-brand-required">(Required)</span>
+                  </label>
                   <Select
-                    v-model="form.medical_diagnose_id"
-                    :options="medicalDiagnoseOptions"
+                    v-model="mainPtStaffId"
+                    :options="mainPtOptions"
                     optionLabel="label"
                     optionValue="value"
                     showClear
                     filter
                     fluid
-                    placeholder="Select diagnosis (optional)"
+                    placeholder="Select Physical Therapist"
                   />
                 </div>
 
                 <div class="space-y-1.5">
-                  <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">Laterality</label>
+                  <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">Assistant PT</label>
                   <Select
-                    v-model="form.diagnosis_laterality"
-                    :options="lateralityOptions"
+                    v-model="assistantPtStaffId"
+                    :options="assistantPtOptions"
                     optionLabel="label"
                     optionValue="value"
                     showClear
+                    filter
                     fluid
-                    placeholder="Select laterality (optional)"
+                    placeholder="Select PT Assistant"
+                  />
+                </div>
+
+                <div class="space-y-1.5">
+                  <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">Intern PT</label>
+                  <Select
+                    v-model="internPtStaffId"
+                    :options="internPtOptions"
+                    optionLabel="label"
+                    optionValue="value"
+                    showClear
+                    filter
+                    fluid
+                    placeholder="Select Intern"
+                  />
+                </div>
+              </div>
+
+              <div class="mt-4 space-y-1.5">
+                <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">Referring Doctor</label>
+                <Select
+                  v-model="form.referring_staff_id"
+                  :options="branchDoctorOptions"
+                  optionLabel="label"
+                  optionValue="value"
+                  showClear
+                  filter
+                  fluid
+                  placeholder="Optional - Select referring doctor if applicable"
+                />
+              </div>
+            </div>
+
+            <!-- Group 2: Visit Configuration -->
+            <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-4">
+              <div class="mb-4 flex items-center gap-2">
+                <span class="app-brand-icon app-brand-icon-secondary h-8 w-8">
+                  <i class="pi pi-calendar-check" />
+                </span>
+                <div>
+                  <h4 class="text-sm font-black text-[rgb(var(--app-fg))]">Visit Configuration</h4>
+                  <p class="text-xs text-[rgb(var(--app-fg))]/60">Define the type and phase of this visit</p>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <div class="space-y-1.5">
+                  <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">Appointment Type</label>
+                  <Select
+                    v-model="form.appointment_type_id"
+                    :options="appointmentTypeOptions"
+                    optionLabel="label"
+                    optionValue="value"
+                    fluid
+                    placeholder="Select type"
+                  />
+                </div>
+
+                <div class="space-y-1.5">
+                  <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">Visit Phase</label>
+                  <Select
+                    v-model="form.appointment_phase"
+                    :options="phaseOptions"
+                    optionLabel="label"
+                    optionValue="value"
+                    fluid
+                    placeholder="Select phase"
+                  />
+                </div>
+
+                <div class="space-y-1.5">
+                  <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">Specialty</label>
+                  <Select
+                    v-model="form.specialty_tag_id"
+                    :options="specialtyOptions"
+                    optionLabel="label"
+                    optionValue="value"
+                    showClear
+                    filter
+                    fluid
+                    placeholder="Optional specialty"
+                  />
+                </div>
+
+                <div class="space-y-1.5">
+                  <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">Clinic Area</label>
+                  <Select
+                    v-model="form.treatment_area_id"
+                    :options="clinicAreaOptions"
+                    optionLabel="label"
+                    optionValue="value"
+                    showClear
+                    filter
+                    fluid
+                    placeholder="Optional treatment area"
                   />
                 </div>
               </div>
             </div>
 
-            <!-- Notes Row -->
-            <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4">
-              <div class="flex items-center gap-2 mb-3">
-                <i class="pi pi-comment-dots text-[rgb(var(--app-fg))]/60" />
-                <h5 class="text-sm font-black text-[rgb(var(--app-fg))]">Clinical Notes</h5>
-              </div>
+            <!-- Group 3: Clinical Details (Toggleable) -->
+            <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))]">
+              <button
+                type="button"
+                class="flex w-full items-center justify-between p-4 transition hover:bg-[rgb(var(--app-bg))]"
+                @click="showClinicalDetails = !showClinicalDetails"
+              >
+                <div class="flex items-center gap-3">
+                  <span class="app-brand-icon app-brand-icon-accent h-8 w-8">
+                    <i class="pi pi-file-medical" />
+                  </span>
+                  <div>
+                    <h4 class="text-sm font-black text-[rgb(var(--app-fg))]">Clinical Details</h4>
+                    <p class="text-xs text-[rgb(var(--app-fg))]/60">
+                      {{ showClinicalDetails ? 'Add diagnosis and notes' : 'Optional - Add diagnosis and notes' }}
+                    </p>
+                  </div>
+                </div>
 
-              <Textarea
-                v-model="form.notes"
-                rows="5"
-                autoResize
-                fluid
-                placeholder="Add clinical observations, special considerations, or scheduling remarks..."
-              />
+                <div class="flex items-center gap-2">
+                  <span
+                    v-if="hasClinicalDetails"
+                    class="app-appointment-chip px-2 py-0.5 text-[10px] font-black"
+                  >
+                    Filled
+                  </span>
+                  <i :class="['pi', showClinicalDetails ? 'pi-chevron-down' : 'pi-chevron-right', 'text-[rgb(var(--app-fg))]/60 transition-transform']" />
+                </div>
+              </button>
+
+              <div v-show="showClinicalDetails" class="px-4 pb-4">
+                <div class="border-t border-[rgb(var(--app-border))] pt-4">
+                  <div class="grid grid-cols-1 gap-6">
+                    <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4">
+                      <div class="mb-3 flex items-center gap-2">
+                        <i class="pi pi-heart text-[rgb(var(--app-fg))]/60" />
+                        <h5 class="text-sm font-black text-[rgb(var(--app-fg))]">Doctor Diagnosis</h5>
+                      </div>
+
+                      <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div class="space-y-1.5">
+                          <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">Diagnosis</label>
+                          <Select
+                            v-model="form.medical_diagnose_id"
+                            :options="medicalDiagnoseOptions"
+                            optionLabel="label"
+                            optionValue="value"
+                            showClear
+                            filter
+                            fluid
+                            placeholder="Select diagnosis (optional)"
+                          />
+                        </div>
+
+                        <div class="space-y-1.5">
+                          <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">Laterality</label>
+                          <Select
+                            v-model="form.diagnosis_laterality"
+                            :options="lateralityOptions"
+                            optionLabel="label"
+                            optionValue="value"
+                            showClear
+                            fluid
+                            placeholder="Select laterality (optional)"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4">
+                      <div class="mb-3 flex items-center gap-2">
+                        <i class="pi pi-comment-dots text-[rgb(var(--app-fg))]/60" />
+                        <h5 class="text-sm font-black text-[rgb(var(--app-fg))]">Clinical Notes</h5>
+                      </div>
+
+                      <Textarea
+                        v-model="form.notes"
+                        rows="5"
+                        autoResize
+                        fluid
+                        placeholder="Add clinical observations, special considerations, or scheduling remarks..."
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
+        </section>
 
         <!-- Section 4: Schedule -->
-        <section class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 shadow-sm sm:p-5 xl:col-span-2">
+        <section class="app-appointment-card app-appointment-card-accent sm:p-5 xl:col-span-2">
           <div class="flex flex-col gap-3 border-b border-[rgb(var(--app-border))] pb-4 lg:flex-row lg:items-start lg:justify-between">
             <FormSectionHeader
               index="4"
@@ -627,50 +639,23 @@
               compact
             />
 
-            <div class="inline-flex w-fit rounded-full bg-fuchsia-100 px-3 py-1 text-xs font-black text-fuchsia-700 ring-1 ring-fuchsia-200">
+            <div class="app-appointment-chip inline-flex w-fit text-xs font-black">
               {{ sessionCount }} session{{ sessionCount === 1 ? "" : "s" }}
             </div>
           </div>
 
           <div class="mt-4 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(20rem,0.7fr)_minmax(0,1.3fr)]">
-            <!-- Left: Date controls -->
             <div class="space-y-4">
-              <!-- <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                <div class="space-y-1.5">
-                  <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">First Start</label>
-                  <DatePicker
-                    v-model="form.starts_at"
-                    showTime
-                    hourFormat="12"
-                    showIcon
-                    fluid
-                  />
-                </div>
-
-                <div class="space-y-1.5">
-                  <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">First End</label>
-                  <DatePicker
-                    v-model="form.ends_at"
-                    showTime
-                    hourFormat="12"
-                    showIcon
-                    fluid
-                  />
-                  <div class="text-xs text-[rgb(var(--app-fg))]/50">This becomes default duration for other sessions</div>
-                </div>
-              </div> -->
-
-              <!-- Session count info -->
-              <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-4">
+              <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4">
                 <div class="text-sm font-black text-[rgb(var(--app-fg))]">Session Dates</div>
-                <div class="mt-1 text-xs text-[rgb(var(--app-fg))]/60">
+                <div class="mt-1 text-xs app-appointment-muted">
                   Required: {{ sessionCount }} appointment{{ sessionCount === 1 ? "" : "s" }} - Sending {{ form.session_dates?.length || 0 }} date{{ (form.session_dates?.length || 0) === 1 ? "" : "s" }}
                 </div>
               </div>
 
               <label
                 v-if="!editingId && !isFollowUpMode"
-                class="flex cursor-pointer items-start gap-3 rounded-xl border border-violet-200 bg-violet-50/70 p-4 text-sm text-violet-950 ring-1 ring-violet-100 dark:border-violet-900/50 dark:bg-violet-950/20 dark:text-violet-100"
+                class="flex cursor-pointer items-start gap-3 rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 text-sm text-[rgb(var(--app-fg))] transition hover:bg-[rgb(var(--app-hover-bg))]"
               >
                 <Checkbox
                   v-model="form.add_initial_evaluation_appointment"
@@ -680,13 +665,12 @@
                 />
                 <span class="min-w-0">
                   <span class="block font-black">Add initial evaluation appointment</span>
-                  <span class="mt-1 block text-xs leading-5 text-violet-800/75 dark:text-violet-100/70">
+                  <span class="mt-1 block text-xs leading-5 app-appointment-muted">
                     Adds one extra appointment date before the main treatment sessions. Attendance will still consume the selected planned service credit.
                   </span>
                 </span>
               </label>
 
-              <!-- Generation buttons -->
               <div class="flex flex-wrap gap-2">
                 <Button
                   label="Weekly"
@@ -714,15 +698,12 @@
                 />
               </div>
 
-              <!-- Info box -->
-              <div class="rounded-xl border border-cyan-100 bg-cyan-50/80 p-4 text-sm text-cyan-900 dark:border-cyan-900/50 dark:bg-cyan-950/20 dark:text-cyan-100">
+              <div class="app-inline-banner text-sm">
                 <strong>Two booking options:</strong> click an available slot to auto-fill, or manually edit date/time on any session card.
               </div>
             </div>
 
-            <!-- Right: Session cards (consolidated) -->
             <div class="grid max-h-[30rem] grid-cols-1 gap-3 overflow-y-auto pr-1 md:grid-cols-2 2xl:grid-cols-3">
-              <!-- Empty State (improved) -->
               <div
                 v-if="!form.session_dates?.length"
                 class="rounded-xl border border-dashed border-[rgb(var(--app-border))] p-6 text-center md:col-span-2 2xl:col-span-3"
@@ -732,18 +713,16 @@
                 <p class="mt-1 text-xs text-[rgb(var(--app-fg))]/50">Set "First Start" time or click a generation button above</p>
               </div>
 
-              <!-- Session Cards -->
               <article
                 v-for="(_, index) in form.session_dates"
                 :key="index"
                 :class="[
                   'rounded-xl border p-3 transition hover:-translate-y-0.5 hover:shadow-md',
                   activeSessionIndex === index
-                    ? 'border-fuchsia-400 bg-fuchsia-500/10 ring-2 ring-fuchsia-400/20'
+                    ? 'border-[rgb(var(--app-active-border))] bg-[rgb(var(--app-active-bg))] ring-2 ring-[rgba(var(--app-focus-ring),0.18)]'
                     : 'border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))]'
                 ]"
               >
-                <!-- Clickable header -->
                 <button
                   type="button"
                   class="w-full text-left"
@@ -756,7 +735,6 @@
                   </small>
                 </button>
 
-                <!-- Manual date picker (inline) -->
                 <div class="mt-3 space-y-1.5">
                   <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">Date & Time</label>
                   <DatePicker
@@ -770,7 +748,6 @@
                   />
                 </div>
 
-                <!-- Check Slots button (icon only) -->
                 <Button
                   icon="pi pi-search"
                   size="small"
@@ -795,8 +772,8 @@
             />
 
             <div class="flex flex-wrap gap-2">
-              <span class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-700 ring-1 ring-emerald-200">{{ availableSlotCount }} available</span>
-              <span class="rounded-full bg-rose-100 px-3 py-1 text-xs font-black text-rose-700 ring-1 ring-rose-200">{{ takenSlotCount }} taken</span>
+              <span class="app-appointment-chip text-xs font-black">{{ availableSlotCount }} available</span>
+              <span class="app-appointment-chip text-xs font-black">{{ takenSlotCount }} taken</span>
             </div>
           </div>
 
@@ -805,25 +782,22 @@
             <div class="mt-1 text-xs text-[rgb(var(--app-fg))]/60">{{ availabilityScopeLabel }}</div>
           </div>
 
-          <!-- Warnings -->
           <div v-if="manualScheduleWarnings.length" class="mt-4 grid gap-2">
             <div
               v-for="warning in manualScheduleWarnings"
               :key="warning"
-              class="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-100"
+              class="app-brand-warning flex items-start gap-2 text-sm font-semibold"
             >
               <i class="pi pi-exclamation-triangle mt-0.5" />
               <span>{{ warning }}</span>
             </div>
           </div>
 
-          <!-- Loading -->
           <div v-if="isAvailabilityLoading" class="flex items-center gap-2 py-8 text-sm text-[rgb(var(--app-fg))]/60">
-            <i class="pi pi-spin pi-spinner text-violet-500" />
+            <i class="pi pi-spin pi-spinner text-[rgb(var(--app-secondary))]" />
             Loading available and taken time slots...
           </div>
 
-          <!-- No slots -->
           <div
             v-else-if="!availabilitySlots.length"
             class="py-8 text-center text-sm font-semibold text-[rgb(var(--app-fg))]/60"
@@ -833,7 +807,6 @@
             <p class="mt-1 text-xs">You can still manually set the date and time above</p>
           </div>
 
-          <!-- Slots grid -->
           <div v-else class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
             <article
               v-for="slot in availabilitySlots"
@@ -865,12 +838,11 @@
                 />
               </div>
 
-              <!-- Taken by -->
               <div v-if="slot.taken" class="mt-2 space-y-1.5">
                 <div
                   v-for="appointment in slot.takenBy"
                   :key="appointment.id"
-                  class="rounded-lg bg-white/70 p-1.5 text-xs shadow-sm ring-1 ring-black/5 dark:bg-slate-950/30"
+                  class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-1.5 text-xs shadow-sm"
                 >
                   <div class="font-black">{{ appointment.provider_name || appointment.doctor_name || "Unassigned PT" }}</div>
                   <div class="font-semibold">{{ appointment.patient_name || "Unnamed patient" }}</div>
@@ -883,18 +855,15 @@
       </section>
     </div>
 
-    <!-- Footer (fixed layout) -->
     <template #footer>
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-        <!-- Warning message (above buttons) -->
         <div v-if="blockingScheduleMessage" class="sm:w-full">
-          <div class="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-left text-xs font-semibold text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-100">
+          <div class="app-brand-warning text-left font-semibold">
             <i class="pi pi-exclamation-triangle mr-1 mt-0.5 inline" />
             {{ blockingScheduleMessage }}
           </div>
         </div>
 
-        <!-- Buttons -->
         <div class="flex gap-2 sm:justify-end">
           <Button
             label="Cancel"
@@ -933,6 +902,7 @@ type AppointmentProviderType = "PHYSICAL_THERAPIST" | "PT_ASSISTANT" | "INTERN" 
 type SelectOption = {
   label: string
   value: number | string | null
+  clinicId?: number | null
   providerType?: AppointmentProviderType | null
   secondaryProviderType?: AppointmentProviderType | null
 }
@@ -990,7 +960,7 @@ const FormSectionHeader = defineComponent({
         h(
           "span",
           {
-            class: "flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-sm font-black text-white shadow-lg shadow-slate-950/10"
+            class: "flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-[rgb(var(--app-primary))] text-sm font-black text-[rgb(var(--app-button-primary-fg))] shadow-lg shadow-black/10"
           },
           componentProps.index
         ),
@@ -1139,23 +1109,38 @@ const selectedServicePriceLabel = computed(() =>
 
 const hasSelectedBillingType = computed(() => Boolean(props.form.payer_type))
 
+const formBranchId = computed(() =>
+  props.form.clinic_id ?? props.activeBranchId ?? null
+)
+
+const optionMatchesFormBranch = (option: SelectOption): boolean =>
+  !formBranchId.value || Number(option.clinicId) === Number(formBranchId.value)
+
+const branchPtOptions = computed(() =>
+  props.ptOptions.filter(optionMatchesFormBranch)
+)
+
+const branchDoctorOptions = computed(() =>
+  props.doctorOptions.filter(optionMatchesFormBranch)
+)
+
 const providerOptionMatchesType = (option: SelectOption, providerType: AppointmentProviderType): boolean =>
   option.providerType === providerType || option.secondaryProviderType === providerType
 
 const mainPtOptions = computed(() =>
-  props.ptOptions.filter(option => providerOptionMatchesType(option, "PHYSICAL_THERAPIST"))
+  branchPtOptions.value.filter(option => providerOptionMatchesType(option, "PHYSICAL_THERAPIST"))
 )
 
 const assistantPtOptions = computed(() =>
-  props.ptOptions.filter(option => providerOptionMatchesType(option, "PT_ASSISTANT"))
+  branchPtOptions.value.filter(option => providerOptionMatchesType(option, "PT_ASSISTANT"))
 )
 
 const internPtOptions = computed(() =>
-  props.ptOptions.filter(option => providerOptionMatchesType(option, "INTERN"))
+  branchPtOptions.value.filter(option => providerOptionMatchesType(option, "INTERN"))
 )
 
 const selectedProviderMatchesType = (fieldName: string, providerType: AppointmentProviderType): boolean =>
-  props.ptOptions.some(option =>
+  branchPtOptions.value.some(option =>
     Number(option.value) === Number(props.form[fieldName])
     && providerOptionMatchesType(option, providerType)
   )
@@ -1310,7 +1295,7 @@ const isSelectedManualTimeWithinClinicHours = computed(() => {
 })
 
 const availabilityScopeLabel = computed(() => {
-  const selectedPt = props.ptOptions.find(option => Number(option.value) === Number(props.form.primary_provider_staff_id))
+  const selectedPt = branchPtOptions.value.find(option => Number(option.value) === Number(props.form.primary_provider_staff_id))
   if (selectedPt?.label) return `Checking PT: ${selectedPt.label}`
   return "Checking branch schedule"
 })

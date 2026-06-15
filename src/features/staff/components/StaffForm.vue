@@ -172,6 +172,34 @@
         </IftaLabel>
       </FormField>
 
+      <FormField v-if="showCalendarColorField" v-slot="$field" name="calendar_color">
+        <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-4 py-3">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <label for="calendar_color" class="text-sm font-medium">PT Calendar Color</label>
+              <p class="mt-1 text-xs text-[rgb(var(--app-fg))]/60">
+                Used for this PT name in the weekly appointment schedule.
+              </p>
+            </div>
+            <div class="flex items-center gap-3">
+              <input
+                id="calendar_color"
+                type="color"
+                class="h-10 w-12 shrink-0 cursor-pointer rounded border border-[rgb(var(--app-border))] bg-transparent p-0.5"
+                :value="calendarColor"
+                @input="setCalendarColor(($event.target as HTMLInputElement).value)"
+              />
+              <span class="font-mono text-sm font-semibold uppercase text-[rgb(var(--app-fg))]/70">
+                {{ calendarColor }}
+              </span>
+            </div>
+          </div>
+          <Message v-if="$field?.invalid" severity="error" size="small" variant="simple">
+            {{ $field.error.message }}
+          </Message>
+        </div>
+      </FormField>
+
       <FormField v-if="showSpecialtyField" v-slot="$field" name="specialty">
         <IftaLabel>
           <Select
@@ -302,6 +330,7 @@ const showInlineSpecialtyAdd = ref(false)
 const newSpecialtyName = ref("")
 const isAddingSpecialty = ref(false)
 const localAddedSpecialties = ref<SpecialtyTag[]>([])
+const calendarColor = ref("#2563EB")
 
 const allSpecialties = computed<SpecialtyTag[]>(() => {
   const base = specialties.value ?? []
@@ -364,8 +393,29 @@ const selectedRoleRequiresSpecialty = computed(() =>
   Boolean(selectedProviderRole.value?.requires_specialty_tag)
 )
 const canViewAllBranches = computed(() => Boolean(form.value?.states?.can_view_all_branches?.value))
+const showCalendarColorField = computed(() => isPtForm.value || Boolean(form.value?.states?.also_pt?.value))
 
 const resolver = ref(zodResolver(staffSchema))
+
+const normalizeCalendarColor = (value: unknown): string => {
+  const color = String(value ?? "").trim().toUpperCase()
+  return /^#[0-9A-F]{6}$/.test(color) ? color : "#2563EB"
+}
+
+const setCalendarColor = (value: unknown): void => {
+  calendarColor.value = normalizeCalendarColor(value)
+  form.value?.setValues({
+    name: String(form.value?.states?.name?.value ?? ""),
+    email: String(form.value?.states?.email?.value ?? ""),
+    clinic: form.value?.states?.clinic?.value,
+    can_view_all_branches: Boolean(form.value?.states?.can_view_all_branches?.value),
+    role: form.value?.states?.role?.value,
+    also_pt: Boolean(form.value?.states?.also_pt?.value),
+    secondary_role: form.value?.states?.secondary_role?.value,
+    calendar_color: calendarColor.value,
+    specialty: form.value?.states?.specialty?.value
+  })
+}
 
 const addInlineSpecialty = async (): Promise<void> => {
   const name = newSpecialtyName.value.trim()
@@ -381,6 +431,7 @@ const addInlineSpecialty = async (): Promise<void> => {
       role: form.value.states?.role?.value,
         also_pt: Boolean(form.value.states?.also_pt?.value),
         secondary_role: form.value.states?.secondary_role?.value,
+      calendar_color: calendarColor.value,
       specialty: existing,
     })
     showInlineSpecialtyAdd.value = false
@@ -405,6 +456,7 @@ const addInlineSpecialty = async (): Promise<void> => {
         role: form.value.states?.role?.value,
         also_pt: Boolean(form.value.states?.also_pt?.value),
         secondary_role: form.value.states?.secondary_role?.value,
+        calendar_color: calendarColor.value,
         specialty: created,
       })
     }
@@ -447,19 +499,27 @@ const onShow = async (): Promise<void> => {
     also_pt: Boolean(selectedStaff.value?.secondary_role_id),
     role: isPtForm.value ? (effectivePtRole ?? primaryRole) : primaryRole,
     secondary_role: ptRoles.value?.find(role => role.id === selectedStaff.value?.secondary_role_id),
-    specialty: specialties.value?.find(specialty => specialty.id === selectedStaff.value?.specialty_tag_id)
+    specialty: specialties.value?.find(specialty => specialty.id === selectedStaff.value?.specialty_tag_id),
+    calendar_color: normalizeCalendarColor(selectedStaff.value?.calendar_color)
   }
+  calendarColor.value = initialValues.calendar_color ?? "#2563EB"
   form.value?.setValues(initialValues)
 }
 
 const populateOnDraft = async (): Promise<void> => {
   const draft: StaffFormState | undefined = await props.draftService.get()
-  if (!draft) return
-  form.value?.setValues(draft)
+  if (!draft) {
+    calendarColor.value = "#2563EB"
+    form.value?.setValues({ calendar_color: "#2563EB" })
+    return
+  }
+  calendarColor.value = normalizeCalendarColor(draft.calendar_color)
+  form.value?.setValues({ ...draft, calendar_color: calendarColor.value })
 }
 
 const onSubmit = (event: FormSubmitEvent) => {
   if (!event.valid) return
+  event.values.calendar_color = calendarColor.value
   emit('onSubmit', event)
 }
 
@@ -506,6 +566,7 @@ watchDebounced(
       role: form.value?.states?.role?.value,
       also_pt: Boolean(form.value?.states?.also_pt?.value),
       secondary_role: form.value?.states?.secondary_role?.value,
+      calendar_color: calendarColor.value,
       specialty: form.value?.states?.specialty?.value
     })
   },

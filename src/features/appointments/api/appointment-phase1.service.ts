@@ -34,6 +34,7 @@ export interface AppointmentListItem {
 
   primary_provider_staff_id?: number
   provider_name?: string
+  provider_calendar_color?: string | null
   referring_staff_id?: number | null
   referring_staff_name?: string | null
   support_staff_id?: number | null
@@ -358,12 +359,12 @@ export interface AppointmentDailyLogItem {
   location_context: AppointmentLocationContext
   billing_status?: string
   signature_state: AppointmentDailyLogSignatureState
-  doctor_id?: number
-  doctor_name?: string
-  pt_confirmed_by_name?: string
-  support_staff_id?: number
-  support_staff_name?: string
-  support_staff_role_name?: string
+  doctor_id?: number | null
+  doctor_name?: string | null
+  pt_confirmed_by_name?: string | null
+  support_staff_id?: number | null
+  support_staff_name?: string | null
+  support_staff_role_name?: string | null
   [key: string]: string | number | boolean | null | undefined
 }
 
@@ -584,8 +585,31 @@ export const appointmentPhase1Service = {
     return data ?? []
   },
 
-  async getDailyLog(_params: AppointmentDailyLogParams): Promise<AppointmentDailyLogResponse> {
-    return { date: "", summary: {}, items: [], groups: [] }
+  async getDailyLog(params: AppointmentDailyLogParams): Promise<AppointmentDailyLogResponse> {
+    const date = String(params.date ?? new Date().toISOString().slice(0, 10))
+    const { data } = await pamsAPI.get<Pageable<AppointmentListItem>>("/appointments", {
+      params: {
+        ...params,
+        from_date: date,
+        to_date: date,
+      }
+    })
+
+    const items: AppointmentDailyLogItem[] = (data.content ?? []).map((appointment) => ({
+      ...appointment,
+      appointment_id: appointment.id,
+      signature_state: appointment.attendance_status === "COMPLETED" ? "FULLY_SIGNED" : "PENDING",
+      doctor_name: appointment.doctor_name ?? appointment.referring_doctor_name,
+    }))
+
+    return {
+      date,
+      summary: {
+        total: data.total_elements ?? items.length,
+      },
+      items,
+      groups: [],
+    }
   },
 
   async getById(id: number): Promise<AppointmentDetail> {

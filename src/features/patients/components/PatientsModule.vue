@@ -576,7 +576,7 @@ type ToggleDialogExpose = {
 }
 
 type OpenDialogExpose = {
-  open: () => void
+  open: (patient?: Patient) => void
 }
 
 const PatientForm = defineAsyncComponent(() => import("@/components/PatientForm.vue"))
@@ -1155,7 +1155,7 @@ const menuButtons = (patient: Patient): MenuItem[] => {
       icon: 'pi pi-receipt',
       command: () => {
         selectedPatientDetails.value = patient
-        patientBillingsDialog.value?.open()
+        patientBillingsDialog.value?.open(patient)
       },
     },
     {
@@ -1163,7 +1163,7 @@ const menuButtons = (patient: Patient): MenuItem[] => {
       icon: 'pi pi-calendar',
       command: () => {
         selectedPatientDetails.value = patient
-        patientAppointmentsDialog.value?.open()
+        patientAppointmentsDialog.value?.open(patient)
       },
     },
     {
@@ -1292,7 +1292,7 @@ const initializeDropdowns = async (): Promise<void> => {
         status: Status.ALL,
         name: undefined
       },
-      clinic_id: undefined
+      clinic_id: selectedClinicId.value
     }),
     philippineLocationTanstackService.getAllRegions(queryClient, regionRequestParams),
     createReferenceQueryService<MedicalCategory>(queryClient, ReferenceTanstackKey.MEDICAL_CATEGORIES, requestParams),
@@ -1350,6 +1350,11 @@ const ensureDropdownsLoaded = async (): Promise<void> => {
     dropdownsLoading.value = false
   }
 }
+
+watch(selectedClinicId, () => {
+  dropdownsReady.value = false
+  doctors.value = []
+})
 
 const handleReferenceUpdated = async (event: Event): Promise<void> => {
   const customEvent = event as CustomEvent<{ key?: string }>

@@ -126,6 +126,7 @@ const onSubmit = (event: FormSubmitEvent) => {
       const selectedProviderRole = isPtMode
         ? event.values.role
         : (event.values.also_pt ? event.values.secondary_role : event.values.role)
+      const shouldUseCalendarColor = isPtMode || Boolean(event.values.also_pt)
       const body: StaffRequestBody = {
         name: event.values.name,
         email: event.values.email,
@@ -136,6 +137,7 @@ const onSubmit = (event: FormSubmitEvent) => {
           ? (editingDualRolePt ? event.values.role?.id : undefined)
           : (event.values.also_pt ? event.values.secondary_role?.id : undefined),
         specialty_tag_id: selectedProviderRole?.appointment_provider_type !== "NONE" ? event.values.specialty?.id : undefined,
+        calendar_color: shouldUseCalendarColor ? (event.values.calendar_color ?? "#2563EB") : null,
       }
 
       if (selectedStaff.value?.id) {

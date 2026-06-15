@@ -2,7 +2,7 @@
   <Dialog
     v-model:visible="visible"
     modal
-    :header="`Appointments - ${patient?.full_name ?? ''}`"
+    :header="`Appointments - ${selectedPatient?.full_name ?? ''}`"
     :style="{ width: '78rem', maxWidth: '95vw' }"
     :draggable="false"
   >
@@ -102,19 +102,22 @@ const appointments = ref<AppointmentListItem[]>([])
 const totalRecords = ref(0)
 const page = ref(1)
 const pageSize = 15
+const selectedPatient = ref<Patient>()
 
-const open = (): void => {
+const open = (patient?: Patient): void => {
+  selectedPatient.value = patient ?? props.patient
   visible.value = true
 }
 
 defineExpose({open})
 
 const fetchAppointments = async (): Promise<void> => {
-  if (!props.patient) return
+  const patient = selectedPatient.value ?? props.patient
+  if (!patient) return
   try {
     isLoading.value = true
     const response = await appointmentPhase1Service.getAll({
-      patient_id: props.patient.id,
+      patient_id: patient.id,
       page: page.value,
       size: pageSize
     })
@@ -139,6 +142,7 @@ watch(visible, (isVisible) => {
   } else {
     appointments.value = []
     totalRecords.value = 0
+    selectedPatient.value = undefined
   }
 })
 

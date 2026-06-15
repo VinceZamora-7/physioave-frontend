@@ -5,6 +5,7 @@
 @import "./theme.css" layer(theme);
 @import "./base.css" layer(base);
 @import "./utilities.css" layer(utilities);
+@import "./theme-compat.css" layer(utilities);
 
 /* ✅ Tailwind v4 manual dark-mode variant */
 @custom-variant dark (&:where(.dark, .dark *));

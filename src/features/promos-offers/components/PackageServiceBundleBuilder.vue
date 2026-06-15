@@ -556,9 +556,6 @@ import {OfferResourceKey} from "@/utils/keys/resource-key"
 import {errorToast, successToast} from "@/utils/toast.util"
 import PromosCatalogManagerDialog from "@/features/promos-offers/components/PromosCatalogManagerDialog.vue"
 import {
-  // legacy local storage helpers are intentionally no longer used for services/bundles/packages
-} from "@/features/promos-offers/composables/promos-storage.composable"
-import {
   isLocalEditablePromosService,
   loadBackendPromosMasterCatalog
 } from "@/features/promos-offers/composables/promos-master-catalog.composable"

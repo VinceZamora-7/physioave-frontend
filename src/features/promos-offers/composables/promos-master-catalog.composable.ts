@@ -1,7 +1,8 @@
 import { machineService } from "@/services/machine.service"
 import { techniqueService } from "@/services/technique.service"
 import { Status } from "@/utils/global.type"
-import type { PromosServiceCatalogType } from "@/features/promos-offers/composables/promos-storage.composable"
+
+export type PromosServiceCatalogType = "machine" | "technique" | "evaluation" | "add-on-machine" | "add-on-technique" | "add-on-home-service"
 
 export interface PromosCatalogServiceItem {
   id: string

@@ -1,0 +1,133 @@
+/*
+  Compatibility layer for older templates that still use hardcoded Tailwind
+  neutral/brand utilities. New work should prefer app-* utility classes or
+  rgb(var(--app-*)) tokens directly.
+*/
+
+.bg-white,
+.bg-white\/60,
+.bg-white\/70,
+.bg-white\/80,
+.bg-white\/85,
+.bg-white\/90,
+.bg-white\/95,
+.bg-slate-50,
+.bg-slate-100,
+.bg-gray-50,
+.bg-gray-100,
+.bg-zinc-50,
+.bg-neutral-50 {
+  background-color: rgb(var(--app-card)) !important;
+}
+
+.bg-slate-50\/50,
+.bg-slate-50\/60,
+.bg-slate-50\/70,
+.bg-slate-50\/80,
+.bg-slate-100\/50,
+.bg-slate-100\/60,
+.bg-gray-50\/50,
+.bg-gray-50\/60 {
+  background-color: rgba(var(--app-surface-soft), 0.78) !important;
+}
+
+.hover\:bg-slate-50:hover,
+.hover\:bg-slate-100:hover,
+.hover\:bg-gray-50:hover,
+.hover\:bg-gray-100:hover {
+  background-color: rgb(var(--app-hover-bg)) !important;
+}
+
+.border-slate-100,
+.border-slate-200,
+.border-slate-300,
+.border-gray-100,
+.border-gray-200,
+.border-zinc-200,
+.border-neutral-200 {
+  border-color: rgb(var(--app-border)) !important;
+}
+
+.text-slate-950,
+.text-slate-900,
+.text-slate-800,
+.text-gray-950,
+.text-gray-900,
+.text-zinc-900,
+.text-neutral-900 {
+  color: rgb(var(--app-fg)) !important;
+}
+
+.text-slate-700,
+.text-slate-600,
+.text-gray-700,
+.text-gray-600,
+.text-zinc-700,
+.text-neutral-700 {
+  color: rgba(var(--app-fg), 0.72) !important;
+}
+
+.text-slate-500,
+.text-slate-400,
+.text-gray-500,
+.text-gray-400,
+.text-zinc-500,
+.text-neutral-500 {
+  color: rgba(var(--app-fg), 0.56) !important;
+}
+
+.from-\[\#242757\] {
+  --tw-gradient-from: rgb(var(--app-button-primary-from)) var(--tw-gradient-from-position) !important;
+}
+
+.via-\[\#5E1869\] {
+  --tw-gradient-via: rgb(var(--app-button-primary-via)) var(--tw-gradient-via-position) !important;
+}
+
+.to-\[\#A91D8B\] {
+  --tw-gradient-to: rgb(var(--app-button-primary-to)) var(--tw-gradient-to-position) !important;
+}
+
+.bg-\[\#3C88B1\]\/40 {
+  background-color: rgba(var(--app-secondary), 0.40) !important;
+}
+
+.bg-\[\#A91D8B\]\/35 {
+  background-color: rgba(var(--app-accent), 0.35) !important;
+}
+
+.hover\:bg-\[rgba\(60\,136\,177\,0\.10\)\]:hover {
+  background-color: rgba(var(--app-secondary), 0.10) !important;
+}
+
+html.dark .dark\:bg-slate-950\/60,
+html.dark .dark\:bg-slate-900\/80,
+html.dark .dark\:bg-slate-800,
+html.dark .dark\:bg-slate-800\/80,
+html.dark .dark\:bg-slate-700,
+html.dark .dark\:bg-slate-700\/30 {
+  background-color: rgb(var(--app-card)) !important;
+}
+
+html.dark .dark\:hover\:bg-slate-700:hover,
+html.dark .dark\:hover\:bg-slate-800:hover {
+  background-color: rgb(var(--app-hover-bg)) !important;
+}
+
+html.dark .dark\:border-slate-700,
+html.dark .dark\:border-slate-600,
+html.dark .dark\:border-gray-700 {
+  border-color: rgb(var(--app-border)) !important;
+}
+
+html.dark .dark\:text-slate-100,
+html.dark .dark\:text-gray-100 {
+  color: rgb(var(--app-fg)) !important;
+}
+
+html.dark .dark\:text-slate-300,
+html.dark .dark\:text-slate-400,
+html.dark .dark\:text-gray-300,
+html.dark .dark\:text-gray-400 {
+  color: rgba(var(--app-fg), 0.72) !important;
+}
