@@ -29,6 +29,7 @@ import {errorToast, successToast} from "@/utils/toast.util"
 import {clinicStore} from "@/stores/clinic.store"
 import {useAuthSessionStore} from "@/stores/auth-session.store"
 import {pamsAPI} from "@/utils/axios-interceptor"
+import {printDailyReport} from "@/features/reports/utils/daily-report-print.util"
 
 const toast = useToast()
 const confirm = useConfirm()
@@ -500,6 +501,22 @@ const resetToToday = (): void => {
   selectedDate.value = new Date()
 }
 
+const printSelectedDailyReport = (): void => {
+  try {
+    printDailyReport({
+      report: report.value,
+      eodReport: eodReport.value,
+      selectedDateLabel: selectedDateLabel.value,
+      selectedClinicName: selectedClinic.value?.name ?? null,
+      selectedClinicScheduleLabel: selectedClinicScheduleLabel.value,
+      selectedEodWindowLabel: selectedEodWindowLabel.value,
+      generatedBy: authSession.staffName
+    })
+  } catch (error: unknown) {
+    errorToast(toast, error instanceof Error ? error.message : "Daily report print window could not be opened.")
+  }
+}
+
 const openEodHistoryDetails = (item: EndOfDayHistoryItem): void => {
   selectedEodHistoryItem.value = item
   eodHistoryDetailsVisible.value = true
@@ -630,6 +647,7 @@ onMounted(async () => {
         <div class="flex flex-wrap gap-2">
           <Button label="Today" icon="pi pi-calendar" outlined :pt="ptOutlinedBtn" @click="resetToToday" />
           <Button label="Refresh" icon="pi pi-refresh" severity="secondary" outlined :loading="isLoading || isEodLoading" :pt="ptOutlinedBtn" @click="refreshAllReports" />
+          <Button label="Print Daily" icon="pi pi-print" severity="secondary" outlined :disabled="isLoading || isEodLoading" :pt="ptOutlinedBtn" @click="printSelectedDailyReport" />
         </div>
       </div>
     </section>
