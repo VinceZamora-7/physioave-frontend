@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {computed, nextTick, onMounted, ref, watch} from "vue"
 import {storeToRefs} from "pinia"
-import {useRoute} from "vue-router"
+import {useRoute, useRouter} from "vue-router"
 import {useConfirm} from "primevue/useconfirm"
 import {useToast} from "primevue/usetoast"
 import Button from "primevue/button"
@@ -34,6 +34,7 @@ import {printDailyReport} from "@/features/reports/utils/daily-report-print.util
 const toast = useToast()
 const confirm = useConfirm()
 const route = useRoute()
+const router = useRouter()
 const authSession = useAuthSessionStore()
 
 const isLoading = ref(false)
@@ -221,6 +222,13 @@ const toDateParam = (value: Date): string => {
   return `${year}-${month}-${day}`
 }
 
+const openDailyLogForSelectedDate = (): void => {
+  void router.push({
+    name: "patient-daily-log",
+    query: { date: toDateParam(selectedDate.value) }
+  })
+}
+
 const asCurrency = (value: number): string =>
   new Intl.NumberFormat("en-PH", {
     style: "currency",
@@ -249,6 +257,9 @@ const billingRouteSeverity = (value: string): "success" | "info" | "warn" | "con
   if (normalized === "PACKAGE") return "contrast"
   return "success"
 }
+
+const getBillingRecordId = (row: { id: number; public_id?: string | null }): string =>
+  row.public_id?.trim() || `BILLING-${row.id}`
 
 const getFinanceReportsErrorMessage = (error: unknown): string =>
   getApiErrorMessage(error, {
@@ -688,8 +699,18 @@ onMounted(async () => {
           <h2 class="app-section-title">End-of-Day Report</h2>
           <p class="text-sm opacity-70">The EOD report is automatically created only after all PT signatures are submitted for active same-day appointments.</p>
         </div>
-        <div class="text-sm opacity-70">
-          {{ selectedDateLabel }}
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div class="text-sm opacity-70">
+            {{ selectedDateLabel }}
+          </div>
+          <Button
+            label="Open Daily Log"
+            icon="pi pi-pen-to-square"
+            size="small"
+            severity="secondary"
+            outlined
+            @click="openDailyLogForSelectedDate"
+          />
         </div>
       </div>
 
@@ -899,10 +920,10 @@ onMounted(async () => {
             </template>
           </Column>
 
-          <Column header="PT Service" style="min-width: 220px">
+          <Column header="Billing Record ID" style="min-width: 180px">
             <template #body="{ data }">
               <div class="space-y-1">
-                <div class="font-medium">{{ data.pt_service }}</div>
+                <div class="font-medium">{{ getBillingRecordId(data) }}</div>
                 <div class="text-xs opacity-60">{{ formatTime(data.created_at) }}</div>
               </div>
             </template>
@@ -927,10 +948,6 @@ onMounted(async () => {
             <template #body="{ data }">{{ data.mode_of_payment || "--" }}</template>
           </Column>
 
-          <Column header="Ref No. / HMO / LGU" style="min-width: 200px">
-            <template #body="{ data }">{{ data.sponsor_reference || "--" }}</template>
-          </Column>
-
           <Column header="Balance" style="min-width: 120px">
             <template #body="{ data }">
               <span :class="data.balance > 0 ? 'text-amber-700 dark:text-amber-300 font-medium' : ''">
@@ -941,15 +958,6 @@ onMounted(async () => {
 
           <Column header="Due Date" style="min-width: 120px">
             <template #body="{ data }">{{ data.due_date || "--" }}</template>
-          </Column>
-
-          <Column header="Invoice No." style="min-width: 180px">
-            <template #body="{ data }">
-              <div class="space-y-1">
-                <div class="font-medium">{{ data.invoice_number }}</div>
-                <div class="text-xs opacity-60">{{ data.public_id }}</div>
-              </div>
-            </template>
           </Column>
         </DataTable>
       </div>

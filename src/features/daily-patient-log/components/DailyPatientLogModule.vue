@@ -112,10 +112,10 @@
           </template>
         </Column>
 
-        <Column header="PT / Doctor" style="min-width: 230px">
+        <Column header="Physical Therapyst" style="min-width: 230px">
           <template #body="{ data }">
             <div class="font-medium">{{ data.provider_name || "Unassigned PT" }}</div>
-            <div class="text-xs opacity-60">{{ data.doctor_name || data.referring_doctor_name || "No doctor listed" }}</div>
+
           </template>
         </Column>
 
@@ -149,20 +149,31 @@
 
         <Column header="PT Signature" style="min-width: 190px">
           <template #body="{ data }">
-            <button
-              v-if="ptSignatureFor(data)"
-              type="button"
-              class="group flex items-center gap-3 rounded-lg border border-[rgb(var(--app-border))] bg-white px-2 py-1.5 text-left transition hover:border-[rgb(var(--app-primary))]"
-              @click="openSignaturePreview(data, 'pt')"
-            >
-              <img
-                :src="ptSignatureFor(data)"
-                :alt="`${data.provider_name || 'PT'} signature`"
-                class="h-10 w-24 rounded border border-[rgb(var(--app-border))] bg-white object-contain"
+            <div class="flex flex-col items-start gap-2">
+              <button
+                v-if="ptSignatureFor(data)"
+                type="button"
+                class="group flex items-center gap-3 rounded-lg border border-[rgb(var(--app-border))] bg-white px-2 py-1.5 text-left transition hover:border-[rgb(var(--app-primary))]"
+                @click="openSignaturePreview(data, 'pt')"
+              >
+                <img
+                  :src="ptSignatureFor(data)"
+                  :alt="`${data.provider_name || 'PT'} signature`"
+                  class="h-10 w-24 rounded border border-[rgb(var(--app-border))] bg-white object-contain"
+                />
+                <span class="text-xs font-medium text-[rgb(var(--app-primary))] group-hover:underline">View</span>
+              </button>
+              <Tag v-else value="No signature" severity="warn" />
+              <Button
+                :label="ptSignatureFor(data) ? 'Update' : 'Sign'"
+                :icon="ptSignatureFor(data) ? 'pi pi-pencil' : 'pi pi-pen-to-square'"
+                size="small"
+                severity="secondary"
+                outlined
+                :disabled="isSavingPtSignature"
+                @click="openPtSignatureDialog(data)"
               />
-              <span class="text-xs font-medium text-[rgb(var(--app-primary))] group-hover:underline">View</span>
-            </button>
-            <Tag v-else value="No signature" severity="warn" />
+            </div>
           </template>
         </Column>
 
@@ -175,10 +186,24 @@
           </template>
         </Column>
 
-        <Column header="Appointment Record ID" style="min-width: 190px">
+        <Column header="Session Sequence" style="min-width: 190px">
           <template #body="{ data }">
-            <div class="font-medium">{{ appointmentRecordId(data) }}</div>
             <div class="text-xs opacity-60">{{ sessionLabel(data) }}</div>
+          </template>
+        </Column>
+
+        <Column header="Actions" style="min-width: 190px">
+          <template #body="{ data }">
+            <Button
+              label="Add Eval Log"
+              icon="pi pi-file-edit"
+              size="small"
+              severity="secondary"
+              outlined
+              :loading="isOpeningEvaluationVisitLog && selectedEvaluationLogAppointmentId === data.id"
+              :disabled="isOpeningEvaluationVisitLog"
+              @click="openEvaluationVisitLogShortcut(data)"
+            />
           </template>
         </Column>
       </DataTable>
@@ -209,12 +234,109 @@
         </div>
       </div>
     </Dialog>
+
+    <Dialog
+      v-model:visible="ptSignatureDialogVisible"
+      modal
+      header="Log PT Signature"
+      :style="{ width: 'min(720px, 94vw)' }"
+      :draggable="false"
+      @hide="resetPtSignatureDialog"
+    >
+      <div v-if="selectedPtSignatureRow" class="space-y-4">
+        <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3">
+          <div class="font-semibold text-[rgb(var(--app-fg))]">
+            {{ selectedPtSignatureRow.patient_name || "Patient" }}
+          </div>
+          <div class="text-xs opacity-60">
+            {{ formatTimeRange(selectedPtSignatureRow.starts_at, selectedPtSignatureRow.ends_at) }}
+            · {{ selectedPtSignatureRow.provider_name || "Unassigned PT" }}
+            · {{ appointmentRecordId(selectedPtSignatureRow) }}
+          </div>
+        </div>
+
+        <div class="overflow-hidden rounded-xl border border-[rgb(var(--app-border))] bg-white p-2">
+          <canvas
+            ref="ptSignatureCanvas"
+            class="block h-44 w-full touch-none rounded-lg bg-white"
+            @pointerdown="startPtSignature"
+            @pointermove="drawPtSignature"
+            @pointerup="stopPtSignature"
+            @pointercancel="stopPtSignature"
+            @pointerleave="stopPtSignature"
+            @contextmenu.prevent
+          />
+        </div>
+
+        <div class="flex flex-col gap-2 text-xs sm:flex-row sm:items-center sm:justify-between">
+          <p class="app-appointment-muted">Signature of PT / authorized staff</p>
+          <p v-if="ptSignatureError" class="font-medium text-red-500">{{ ptSignatureError }}</p>
+          <p v-else-if="hasPtSignatureDraft" class="font-medium text-green-600">Signature captured</p>
+          <p v-else class="font-medium text-orange-500">Draw the PT signature before saving</p>
+        </div>
+      </div>
+
+      <template #footer>
+        <Button
+          label="Cancel"
+          severity="secondary"
+          outlined
+          :disabled="isSavingPtSignature"
+          @click="ptSignatureDialogVisible = false"
+        />
+        <Button
+          label="Clear"
+          icon="pi pi-eraser"
+          severity="secondary"
+          outlined
+          :disabled="isSavingPtSignature"
+          @click="clearPtSignature"
+        />
+        <Button
+          label="Save PT Signature"
+          icon="pi pi-save"
+          :loading="isSavingPtSignature"
+          :disabled="isSavingPtSignature"
+          @click="savePtSignature"
+        />
+      </template>
+    </Dialog>
+
+    <Dialog
+      v-model:visible="evaluationVisitLogShortcutVisible"
+      modal
+      header="Evaluation Visit Log Shortcut"
+      :style="{ width: 'min(82rem, 96vw)' }"
+      :draggable="false"
+      @hide="selectedEvaluationVisitLogPatient = undefined"
+    >
+      <div v-if="selectedEvaluationVisitLogPatient" class="space-y-3">
+        <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3">
+          <div class="font-semibold text-[rgb(var(--app-fg))]">
+            {{ selectedEvaluationVisitLogPatient.full_name }}
+          </div>
+          <div class="text-xs opacity-60">
+            {{ selectedEvaluationVisitLogPatient.public_id || "Patient record" }}
+            - {{ selectedEvaluationVisitLogPatient.clinic_name || selectedClinic?.name || "No branch" }}
+          </div>
+        </div>
+
+        <PatientEvaluationVisitLogSection
+          ref="evaluationVisitLogSection"
+          :patient="selectedEvaluationVisitLogPatient"
+          :medical-category-options="medicalCategoryOptions"
+          :medical-diagnosis-options="medicalDiagnosisOptions"
+          :pt-case-impression-options="ptCaseImpressionOptions"
+        />
+      </div>
+    </Dialog>
   </main>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue"
+import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from "vue"
 import { storeToRefs } from "pinia"
+import { useRoute } from "vue-router"
 import Button from "primevue/button"
 import Column from "primevue/column"
 import DataTable from "primevue/datatable"
@@ -226,23 +348,67 @@ import { useToast } from "primevue/usetoast"
 import { clinicStore } from "@/stores/clinic.store"
 import {
   appointmentPhase1Service,
+  type AppointmentEncounterTicket,
   type AppointmentDailyLogItem,
+  type AppointmentPlannedService,
 } from "@/features/appointments/api/appointment-phase1.service"
-import { errorToast } from "@/utils/toast.util"
+import type { Patient } from "@/features/patients/types/patient"
+import { pamsAPI } from "@/utils/axios-interceptor"
+import { errorToast, successToast } from "@/utils/toast.util"
+
+type EvaluationVisitLogSectionExpose = {
+  openCreateDialog: (visitDate?: Date) => void
+  loadVisitLogs: () => Promise<void>
+}
+
+type ReferenceNameRow = {
+  name?: string | null
+}
+
+const PatientEvaluationVisitLogSection = defineAsyncComponent(() =>
+  import("@/features/patients/components/PatientEvaluationVisitLogSection.vue")
+)
 
 const toast = useToast()
+const route = useRoute()
 const branchStore = clinicStore()
 const { selectedClinicId, selectedClinic } = storeToRefs(branchStore)
 
-const selectedDate = ref(new Date())
+const dateFromQuery = (value: unknown): Date | null => {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
+  const [year, month, day] = value.split("-").map(Number)
+  const date = new Date(year, month - 1, day)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+const selectedDate = ref(dateFromQuery(route.query.date) ?? new Date())
 const search = ref("")
 const items = ref<AppointmentDailyLogItem[]>([])
+const encounterTicketsByAppointmentId = ref<Record<number, AppointmentEncounterTicket>>({})
+const plannedServicesByAppointmentId = ref<Record<number, AppointmentPlannedService[]>>({})
 const patientSignaturesByAppointmentId = ref<Record<number, string>>({})
 const ptSignaturesByAppointmentId = ref<Record<number, string>>({})
 const signaturePreviewVisible = ref(false)
 const selectedSignatureRow = ref<AppointmentDailyLogItem | null>(null)
 const selectedSignatureType = ref<"patient" | "pt">("patient")
 const isLoading = ref(false)
+const ptSignatureDialogVisible = ref(false)
+const selectedPtSignatureRow = ref<AppointmentDailyLogItem | null>(null)
+const ptSignatureCanvas = ref<HTMLCanvasElement | null>(null)
+const isDrawingPtSignature = ref(false)
+const hasPtSignatureDraft = ref(false)
+const ptSignatureError = ref("")
+const isSavingPtSignature = ref(false)
+const evaluationVisitLogShortcutVisible = ref(false)
+const selectedEvaluationVisitLogPatient = ref<Patient>()
+const selectedEvaluationLogAppointmentId = ref<number>()
+const evaluationVisitLogSection = ref<EvaluationVisitLogSectionExpose | null>(null)
+const isOpeningEvaluationVisitLog = ref(false)
+const evaluationVisitLogOptionsLoaded = ref(false)
+const medicalCategoryOptions = ref<string[]>([])
+const medicalDiagnosisOptions = ref<string[]>([])
+const ptCaseImpressionOptions = ref<string[]>([])
+const SYSTEM_PRINT_FONT_STACK = '"Poppins", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
 
 const selectedSignatureDataUrl = computed(() =>
   selectedSignatureRow.value
@@ -271,6 +437,93 @@ const selectedDateLabel = computed(() =>
     day: "numeric",
   })
 )
+
+const appointmentDate = (item: AppointmentDailyLogItem): Date => {
+  const date = item.starts_at ? new Date(item.starts_at) : selectedDate.value
+  return Number.isNaN(date.getTime()) ? selectedDate.value : date
+}
+
+const toShortcutPatient = (item: AppointmentDailyLogItem): Patient => ({
+  id: Number(item.patient_id ?? 0),
+  public_id: typeof item.patient_public_id === "string" ? item.patient_public_id : undefined,
+  first_name: String(item.patient_name || "Patient"),
+  middle_name: "",
+  last_name: "",
+  age: 0,
+  gender_id: 0,
+  civil_status_id: 0,
+  clinic_id: Number(item.clinic_id ?? selectedClinicId.value ?? 0),
+  phone_number: "",
+  folder: "",
+  gender_name: "",
+  civil_status_name: "",
+  clinic_name: String(item.clinic_name || selectedClinic.value?.name || ""),
+  is_active: true,
+  full_name: String(item.patient_name || "Patient"),
+} as Patient)
+
+const extractReferenceNames = (data: unknown): string[] => {
+  const rows = Array.isArray(data)
+    ? data
+    : Array.isArray((data as { content?: unknown[] })?.content)
+      ? (data as { content: unknown[] }).content
+      : []
+
+  return Array.from(
+    new Set(
+      rows
+        .map(row => String((row as ReferenceNameRow)?.name ?? "").trim())
+        .filter(Boolean)
+    )
+  ).sort((a, b) => a.localeCompare(b))
+}
+
+const loadEvaluationVisitLogOptions = async (): Promise<void> => {
+  if (evaluationVisitLogOptionsLoaded.value) return
+
+  const [categories, diagnoses, impressions] = await Promise.allSettled([
+    pamsAPI.get("/references/medical-categories", { params: { page: 1, size: 1000, status: "ACTIVE" } }),
+    pamsAPI.get("/references/medical-diagnoses", { params: { page: 1, size: 1000, status: "ACTIVE" } }),
+    pamsAPI.get("/references/pt-case-impressions", { params: { page: 1, size: 1000, status: "ACTIVE" } }),
+  ])
+
+  medicalCategoryOptions.value = categories.status === "fulfilled" ? extractReferenceNames(categories.value.data) : []
+  medicalDiagnosisOptions.value = diagnoses.status === "fulfilled" ? extractReferenceNames(diagnoses.value.data) : []
+  ptCaseImpressionOptions.value = impressions.status === "fulfilled" ? extractReferenceNames(impressions.value.data) : []
+  evaluationVisitLogOptionsLoaded.value = true
+}
+
+const openCreateVisitLogWhenReady = async (visitDate: Date): Promise<void> => {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    await nextTick()
+    if (evaluationVisitLogSection.value) {
+      evaluationVisitLogSection.value.openCreateDialog(visitDate)
+      return
+    }
+    await new Promise(resolve => window.setTimeout(resolve, 40))
+  }
+}
+
+const openEvaluationVisitLogShortcut = async (item: AppointmentDailyLogItem): Promise<void> => {
+  if (!item.patient_id) {
+    errorToast(toast, "Patient record is missing for this appointment")
+    return
+  }
+
+  try {
+    isOpeningEvaluationVisitLog.value = true
+    selectedEvaluationLogAppointmentId.value = item.id
+    await loadEvaluationVisitLogOptions()
+    selectedEvaluationVisitLogPatient.value = toShortcutPatient(item)
+    evaluationVisitLogShortcutVisible.value = true
+    await openCreateVisitLogWhenReady(appointmentDate(item))
+  } catch {
+    errorToast(toast, "Unable to open evaluation visit log shortcut")
+  } finally {
+    isOpeningEvaluationVisitLog.value = false
+    selectedEvaluationLogAppointmentId.value = undefined
+  }
+}
 
 const normalizeStatus = (value?: unknown): string =>
   String(value ?? "").trim().toUpperCase()
@@ -304,6 +557,8 @@ const summary = computed(() => {
 const loadDailyLog = async (): Promise<void> => {
   try {
     isLoading.value = true
+    encounterTicketsByAppointmentId.value = {}
+    plannedServicesByAppointmentId.value = {}
     patientSignaturesByAppointmentId.value = {}
     ptSignaturesByAppointmentId.value = {}
     const response = await appointmentPhase1Service.getDailyLog({
@@ -316,6 +571,8 @@ const loadDailyLog = async (): Promise<void> => {
     await loadPatientSignatures(items.value)
   } catch {
     items.value = []
+    encounterTicketsByAppointmentId.value = {}
+    plannedServicesByAppointmentId.value = {}
     patientSignaturesByAppointmentId.value = {}
     ptSignaturesByAppointmentId.value = {}
     errorToast(toast, "Failed to load daily patient log")
@@ -325,31 +582,58 @@ const loadDailyLog = async (): Promise<void> => {
 }
 
 const loadPatientSignatures = async (logItems: AppointmentDailyLogItem[]): Promise<void> => {
+  type DailyLogDetailEntry = {
+    id: number
+    ticket: AppointmentEncounterTicket | null
+    plannedServices: AppointmentPlannedService[]
+    patientSignature: string
+    ptSignature: string
+  }
+
   const entries = await Promise.all(
-    logItems.map(async (item): Promise<{ id: number; patientSignature: string; ptSignature: string } | null> => {
-      try {
-        const ticket = await appointmentPhase1Service.getEncounterTicket(item.id)
-        const patientSignature = String(ticket?.patient_signature_data_url ?? "").trim()
-        const ptSignature = String(ticket?.pt_signature_data_url ?? "").trim()
-        return patientSignature || ptSignature
-          ? { id: item.id, patientSignature, ptSignature }
-          : null
-      } catch {
+    logItems.map(async (item): Promise<DailyLogDetailEntry | null> => {
+      const [ticketResult, plannedServicesResult] = await Promise.allSettled([
+        appointmentPhase1Service.getEncounterTicket(item.id),
+        appointmentPhase1Service.getPlannedServices(item.id),
+      ])
+
+      const ticket = ticketResult.status === "fulfilled" ? ticketResult.value : null
+      const plannedServices = plannedServicesResult.status === "fulfilled" ? plannedServicesResult.value : []
+
+      if (!ticket && !plannedServices.length) {
         return null
       }
+
+      const patientSignature = String(ticket?.patient_signature_data_url ?? "").trim()
+      const ptSignature = String(ticket?.pt_signature_data_url ?? "").trim()
+      return { id: item.id, ticket, plannedServices, patientSignature, ptSignature }
     })
   )
 
+  encounterTicketsByAppointmentId.value = Object.fromEntries(
+    entries
+      .filter((entry): entry is DailyLogDetailEntry =>
+        entry !== null && entry.ticket !== null
+      )
+      .map(entry => [entry.id, entry.ticket as AppointmentEncounterTicket])
+  )
+  plannedServicesByAppointmentId.value = Object.fromEntries(
+    entries
+      .filter((entry): entry is DailyLogDetailEntry =>
+        entry !== null && entry.plannedServices.length > 0
+      )
+      .map(entry => [entry.id, entry.plannedServices])
+  )
   patientSignaturesByAppointmentId.value = Object.fromEntries(
     entries
-      .filter((entry): entry is { id: number; patientSignature: string; ptSignature: string } =>
+      .filter((entry): entry is DailyLogDetailEntry =>
         entry !== null && Boolean(entry.patientSignature)
       )
       .map(entry => [entry.id, entry.patientSignature])
   )
   ptSignaturesByAppointmentId.value = Object.fromEntries(
     entries
-      .filter((entry): entry is { id: number; patientSignature: string; ptSignature: string } =>
+      .filter((entry): entry is DailyLogDetailEntry =>
         entry !== null && Boolean(entry.ptSignature)
       )
       .map(entry => [entry.id, entry.ptSignature])
@@ -373,6 +657,184 @@ const openSignaturePreview = (item: AppointmentDailyLogItem, type: "patient" | "
   signaturePreviewVisible.value = true
 }
 
+const getCanvasContext = (canvas: HTMLCanvasElement | null): CanvasRenderingContext2D | null => {
+  if (!canvas) return null
+
+  const context = canvas.getContext("2d")
+  if (!context) return null
+
+  context.lineWidth = 2
+  context.lineCap = "round"
+  context.lineJoin = "round"
+  context.strokeStyle = "#111827"
+
+  return context
+}
+
+const getPointerPosition = (event: PointerEvent, canvas: HTMLCanvasElement | null): { x: number; y: number } | null => {
+  if (!canvas) return null
+
+  const rect = canvas.getBoundingClientRect()
+  return {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top,
+  }
+}
+
+const drawExistingSignature = (canvas: HTMLCanvasElement, dataUrl?: string | null): void => {
+  if (!dataUrl) return
+
+  const image = new Image()
+  image.onload = () => {
+    const context = canvas.getContext("2d")
+    if (!context) return
+
+    const rect = canvas.getBoundingClientRect()
+    context.drawImage(image, 0, 0, rect.width, rect.height)
+    hasPtSignatureDraft.value = true
+  }
+  image.src = dataUrl
+}
+
+const initializePtSignatureCanvas = (existingSignature?: string | null): void => {
+  const canvas = ptSignatureCanvas.value
+  if (!canvas) return
+
+  const rect = canvas.getBoundingClientRect()
+  const ratio = window.devicePixelRatio || 1
+
+  canvas.width = Math.max(1, Math.floor(rect.width * ratio))
+  canvas.height = Math.max(1, Math.floor(rect.height * ratio))
+
+  const context = canvas.getContext("2d")
+  if (!context) return
+
+  context.setTransform(ratio, 0, 0, ratio, 0, 0)
+  context.fillStyle = "#ffffff"
+  context.fillRect(0, 0, rect.width, rect.height)
+  context.lineWidth = 2
+  context.lineCap = "round"
+  context.lineJoin = "round"
+  context.strokeStyle = "#111827"
+
+  hasPtSignatureDraft.value = false
+  ptSignatureError.value = ""
+  drawExistingSignature(canvas, existingSignature)
+}
+
+const openPtSignatureDialog = async (item: AppointmentDailyLogItem): Promise<void> => {
+  selectedPtSignatureRow.value = item
+  ptSignatureDialogVisible.value = true
+  ptSignatureError.value = ""
+
+  await nextTick()
+  initializePtSignatureCanvas(ptSignatureFor(item))
+}
+
+const resetPtSignatureDialog = (): void => {
+  selectedPtSignatureRow.value = null
+  isDrawingPtSignature.value = false
+  hasPtSignatureDraft.value = false
+  ptSignatureError.value = ""
+}
+
+const startPtSignature = (event: PointerEvent): void => {
+  if (isSavingPtSignature.value) return
+
+  const canvas = ptSignatureCanvas.value
+  const context = getCanvasContext(canvas)
+  const position = getPointerPosition(event, canvas)
+
+  if (!canvas || !context || !position) return
+
+  canvas.setPointerCapture?.(event.pointerId)
+  isDrawingPtSignature.value = true
+  ptSignatureError.value = ""
+  context.beginPath()
+  context.moveTo(position.x, position.y)
+}
+
+const drawPtSignature = (event: PointerEvent): void => {
+  if (!isDrawingPtSignature.value || isSavingPtSignature.value) return
+
+  const context = getCanvasContext(ptSignatureCanvas.value)
+  const position = getPointerPosition(event, ptSignatureCanvas.value)
+  if (!context || !position) return
+
+  context.lineTo(position.x, position.y)
+  context.stroke()
+  hasPtSignatureDraft.value = true
+  ptSignatureError.value = ""
+}
+
+const stopPtSignature = (event?: PointerEvent): void => {
+  const canvas = ptSignatureCanvas.value
+  if (canvas && event) {
+    try {
+      canvas.releasePointerCapture?.(event.pointerId)
+    } catch {
+      // Pointer capture can already be released by the browser.
+    }
+  }
+
+  isDrawingPtSignature.value = false
+}
+
+const clearPtSignature = (): void => {
+  initializePtSignatureCanvas(null)
+}
+
+const savePtSignature = async (): Promise<void> => {
+  const appointment = selectedPtSignatureRow.value
+  const canvas = ptSignatureCanvas.value
+  if (!appointment || !canvas) return
+
+  if (!hasPtSignatureDraft.value) {
+    ptSignatureError.value = "PT signature is required."
+    return
+  }
+
+  const ptSignatureDataUrl = canvas.toDataURL("image/png")
+  const existingTicket = encounterTicketsByAppointmentId.value[appointment.id]
+  const patientSignatureDataUrl =
+    String(existingTicket?.patient_signature_data_url ?? patientSignatureFor(appointment) ?? "").trim() || undefined
+
+  try {
+    isSavingPtSignature.value = true
+    const ticket = await appointmentPhase1Service.processEncounterTicket(appointment.id, {
+      patient_signature_data_url: patientSignatureDataUrl,
+      patient_signature_signed_by: existingTicket?.patient_acknowledged_by || appointment.patient_name || null,
+      pt_signature_data_url: ptSignatureDataUrl,
+      pt_confirmed_at: new Date().toISOString(),
+      pt_completion_tag: "ATTENDANCE_CONFIRMED",
+      notes: existingTicket?.notes ?? null,
+    })
+
+    encounterTicketsByAppointmentId.value = {
+      ...encounterTicketsByAppointmentId.value,
+      [appointment.id]: ticket,
+    }
+    if (ticket.patient_signature_data_url) {
+      patientSignaturesByAppointmentId.value = {
+        ...patientSignaturesByAppointmentId.value,
+        [appointment.id]: ticket.patient_signature_data_url,
+      }
+    }
+    ptSignaturesByAppointmentId.value = {
+      ...ptSignaturesByAppointmentId.value,
+      [appointment.id]: ticket.pt_signature_data_url || ptSignatureDataUrl,
+    }
+
+    successToast(toast, "PT signature saved")
+    ptSignatureDialogVisible.value = false
+  } catch (error) {
+    const message = (error as { response?: { data?: { message?: unknown } } })?.response?.data?.message
+    errorToast(toast, message ? String(message) : "Failed to save PT signature")
+  } finally {
+    isSavingPtSignature.value = false
+  }
+}
+
 const openPdfWindow = (title: string): Window => {
   const printWindow = window.open("", "_blank")
   if (!printWindow || printWindow.closed) {
@@ -387,7 +849,7 @@ const openPdfWindow = (title: string): Window => {
         <title>${escapeHtml(title)}</title>
         <meta charset="utf-8" />
       </head>
-      <body style="font-family: Arial, sans-serif; padding: 24px;">Preparing PDF...</body>
+      <body style="font-family: ${SYSTEM_PRINT_FONT_STACK}; padding: 24px;">Preparing PDF...</body>
     </html>
   `)
   printWindow.document.close()
@@ -436,7 +898,6 @@ const exportDailyLogPdf = (): void => {
         </td>
         <td>
           <strong>${escapeHtml(item.patient_name || "Unnamed patient")}</strong>
-          <div class="muted">${escapeHtml(item.patient_public_id || `Patient #${item.patient_id}`)}</div>
         </td>
         <td>
           <strong>${escapeHtml(item.clinic_name || "No branch")}</strong>
@@ -444,21 +905,18 @@ const exportDailyLogPdf = (): void => {
         </td>
         <td>
           <strong>${escapeHtml(item.provider_name || "Unassigned PT")}</strong>
-          <div class="muted">${escapeHtml(item.doctor_name || item.referring_doctor_name || "No doctor listed")}</div>
         </td>
         <td>
           <strong>${escapeHtml(item.appointment_status || "Unknown")}</strong>
-          <div class="muted">${escapeHtml(attendanceLabel(item))}</div>
-        </td>
-        <td>
-          <strong>${escapeHtml(billingTypeLabel(item))}</strong>
-          <div class="muted">${escapeHtml(item.billing_status || "Unbilled")}</div>
         </td>
         <td class="signature-cell">${patientSignatureHtml}</td>
         <td class="signature-cell">${ptSignatureHtml}</td>
         <td>
-          <strong>${escapeHtml(appointmentRecordId(item))}</strong>
-          <div class="muted">${escapeHtml(sessionLabel(item))}</div>
+          <strong>${escapeHtml(billingTypeLabel(item))}</strong>
+          <div class="muted">${escapeHtml(item.billing_status || "Unbilled")}</div>
+        </td>
+        <td>
+          ${escapeHtml(sessionLabel(item))}
         </td>
       </tr>
     `
@@ -472,9 +930,12 @@ const exportDailyLogPdf = (): void => {
         <title>Daily Patient Log</title>
         <meta charset="utf-8" />
         <style>
+          @import url("https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap");
+
           @page { size: landscape; margin: 8mm; }
           * { box-sizing: border-box; }
           :root {
+            --system-font-family: ${SYSTEM_PRINT_FONT_STACK};
             --lgu-accent: #d31d6e;
             --lgu-accent-soft: #f3a8c8;
             --lgu-border: #e5e7eb;
@@ -487,10 +948,13 @@ const exportDailyLogPdf = (): void => {
             margin: 0;
             color: var(--lgu-text);
             background: #f5f5f5;
-            font-family: "Open Sans", "Segoe UI", Tahoma, Arial, sans-serif;
+            font-family: var(--system-font-family);
             font-size: 11px;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
+          }
+          button {
+            font: inherit;
           }
           .lgu-invoice-page {
             min-height: 100vh;
@@ -760,7 +1224,7 @@ const exportDailyLogPdf = (): void => {
               min-width: 0 !important;
               max-width: 100% !important;
               table-layout: fixed !important;
-              font-size: 7px !important;
+              font-size: 10px !important;
             }
             .summary-table th,
             .summary-table td {
@@ -775,7 +1239,7 @@ const exportDailyLogPdf = (): void => {
               width: 100% !important;
               padding: 5px !important;
               gap: 8px !important;
-              font-size: 8px !important;
+              font-size: 12px !important;
               line-height: 1.2 !important;
               background: #ffffff !important;
               border: 1px solid var(--lgu-accent) !important;
@@ -833,12 +1297,12 @@ const exportDailyLogPdf = (): void => {
                         <th>Time</th>
                         <th>Patient</th>
                         <th>Branch / Service</th>
-                        <th>PT / Doctor</th>
+                        <th>Physical Therapyst</th>
                         <th>Visit Status</th>
-                        <th>Billing</th>
                         <th>Patient Signature</th>
                         <th>PT Signature</th>
-                        <th>Appointment Record ID</th>
+                        <th>Billing</th>
+                        <th>Session Sequence</th>
                       </tr>
                     </thead>
                     <tbody>${rows}</tbody>
@@ -891,7 +1355,194 @@ const serviceLabel = (item: AppointmentDailyLogItem): string =>
 const billingTypeLabel = (item: AppointmentDailyLogItem): string =>
   String(item.billing_type ?? item.payer_type ?? "Self Pay").replace(/_/g, " ")
 
+type SessionQuantityRecord = Record<string, unknown>
+
+const SESSION_CHILD_KEYS = [
+  "line_items",
+  "lineItems",
+  "planned_services",
+  "plannedServices",
+  "consumed_services",
+  "consumedServices",
+  "included_services",
+  "includedServices",
+  "package_services",
+  "packageServices",
+  "bundle_services",
+  "bundleServices",
+  "bundle_items",
+  "bundleItems",
+  "package_items",
+  "packageItems",
+  "service_items",
+  "serviceItems",
+  "children",
+  "items",
+  "services",
+  "included",
+] as const
+
+const toSessionRecord = (value: unknown): SessionQuantityRecord | null =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? value as SessionQuantityRecord
+    : null
+
+const parseSessionRecordArray = (value: unknown): SessionQuantityRecord[] => {
+  if (Array.isArray(value)) {
+    return value.map(toSessionRecord).filter((record): record is SessionQuantityRecord => record !== null)
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    try {
+      return parseSessionRecordArray(JSON.parse(value) as unknown)
+    } catch {
+      return []
+    }
+  }
+
+  return []
+}
+
+const sessionNumberFromValues = (...values: unknown[]): number => {
+  for (const value of values) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed) && parsed > 0) return Math.floor(parsed)
+  }
+
+  return 0
+}
+
+const sessionNumberFromKeys = (record: SessionQuantityRecord | null | undefined, keys: string[]): number =>
+  record ? sessionNumberFromValues(...keys.map(key => record[key])) : 0
+
+const normalizedSessionText = (...values: unknown[]): string =>
+  values
+    .map(value => String(value ?? "").trim().toUpperCase())
+    .filter(Boolean)
+    .join(" ")
+
+const isBundleSessionRecord = (record: SessionQuantityRecord): boolean => {
+  const marker = normalizedSessionText(
+    record.type,
+    record.line_type,
+    record.source_type,
+    record.service_category,
+    record.bundle_name,
+    record.bundleName,
+    record.parent_line_type,
+    record.parentLineType,
+    record.item_name_snapshot,
+    record.service_name,
+    record.name
+  )
+
+  return marker.includes("BUNDLE")
+}
+
+const isBundleParentSessionRecord = (record: SessionQuantityRecord): boolean =>
+  normalizedSessionText(
+    record.type,
+    record.line_type,
+    record.service_category
+  )
+    .split(" ")
+    .includes("BUNDLE")
+
+const flattenSessionRecords = (values: unknown[]): SessionQuantityRecord[] => {
+  const seen = new Set<SessionQuantityRecord>()
+  const flattened: SessionQuantityRecord[] = []
+
+  const visit = (value: unknown): void => {
+    const records = parseSessionRecordArray(value)
+    if (records.length) {
+      records.forEach(visit)
+      return
+    }
+
+    const record = toSessionRecord(value)
+    if (!record || seen.has(record)) return
+
+    seen.add(record)
+    flattened.push(record)
+    SESSION_CHILD_KEYS.forEach(key => visit(record[key]))
+  }
+
+  values.forEach(visit)
+  return flattened
+}
+
+const plannedSessionQuantity = (record: SessionQuantityRecord): number =>
+  sessionNumberFromKeys(record, [
+    "planned_quantity",
+    "plannedQuantity",
+    "included_quantity",
+    "includedQuantity",
+    "selected_quantity",
+    "selectedQuantity",
+    "total_quantity",
+    "totalQuantity",
+    "total_qty",
+    "totalQty",
+    "bundle_qty",
+    "bundleQty",
+    "bundle_quantity",
+    "bundleQuantity",
+    "service_quantity",
+    "serviceQuantity",
+    "sessions",
+    "session_count",
+    "number_of_sessions",
+    "total_sessions",
+    "totalSessions",
+    "quantity",
+    "qty",
+  ])
+
+const appointmentSessionQuantity = (record: SessionQuantityRecord): number =>
+  sessionNumberFromKeys(record, [
+    "appointment_consumed_quantity",
+    "appointmentConsumedQuantity",
+    "appointmentConsumed",
+    "appointment_consumption_count",
+    "appointmentConsumptionCount",
+  ])
+
+const bundleSessionQuantityLabel = (item: AppointmentDailyLogItem): string => {
+  const ticket = encounterTicketsByAppointmentId.value[item.id]
+  const plannedServices = plannedServicesByAppointmentId.value[item.id] ?? []
+  const snapshot = toSessionRecord(ticket?.billing_snapshot)
+
+  const records = flattenSessionRecords([
+    plannedServices,
+    snapshot?.line_items,
+    snapshot?.lineItems,
+    snapshot?.planned_services,
+    snapshot?.plannedServices,
+    snapshot?.consumed_services,
+    snapshot?.consumedServices,
+    snapshot,
+  ])
+  const bundleRecords = records.filter(isBundleSessionRecord)
+  if (!bundleRecords.length) return ""
+
+  const bundleParentRecords = records.filter(isBundleParentSessionRecord)
+  const quantityRecords = bundleParentRecords.length ? bundleParentRecords : bundleRecords
+  const totalQuantity = Math.max(0, ...quantityRecords.map(plannedSessionQuantity))
+  if (totalQuantity <= 0) return ""
+
+  const visitQuantity = sessionNumberFromValues(
+    ...quantityRecords.map(appointmentSessionQuantity),
+    item.appointment_consumed_quantity,
+    item.appointment_consumption_count
+  )
+
+  return `Session ${visitQuantity} of ${totalQuantity}`
+}
+
 const sessionLabel = (item: AppointmentDailyLogItem): string => {
+  const bundleLabel = bundleSessionQuantityLabel(item)
+  if (bundleLabel) return bundleLabel
+
   if (item.session_sequence && item.total_sessions) {
     return `Session ${item.session_sequence} of ${item.total_sessions}`
   }
@@ -931,6 +1582,16 @@ const billingSeverity = (value?: string): "success" | "info" | "warn" | "danger"
 watch([selectedDateKey, selectedClinicId], () => {
   void loadDailyLog()
 })
+
+watch(
+  () => route.query.date,
+  (value) => {
+    const date = dateFromQuery(value)
+    if (!date) return
+    if (toDateKey(date) === selectedDateKey.value) return
+    selectedDate.value = date
+  }
+)
 
 onMounted(() => {
   void loadDailyLog()

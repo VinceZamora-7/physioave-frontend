@@ -1,7 +1,5 @@
 <template>
   <section class="app-section-card-comfy space-y-3">
-    <ConfirmDialog />
-
     <div class="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
       <div class="space-y-1">
         <h3 class="text-sm font-semibold">{{ title }}</h3>
@@ -242,7 +240,6 @@
 import { computed, onMounted, reactive, ref, watch } from "vue"
 import Button from "primevue/button"
 import Column from "primevue/column"
-import ConfirmDialog from "primevue/confirmdialog"
 import DataTable from "primevue/datatable"
 import Dialog from "primevue/dialog"
 import IftaLabel from "primevue/iftalabel"

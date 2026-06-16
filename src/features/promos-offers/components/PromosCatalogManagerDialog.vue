@@ -1,6 +1,4 @@
 <template>
-  <!-- Needed for useConfirm() inside this dialog -->
-  <ConfirmDialog />
   <Dialog
     v-model:visible="visibleProxy"
     modal
@@ -343,7 +341,6 @@ import { computed, reactive, ref, watch } from "vue"
 import { storeToRefs } from "pinia"
 import Button from "primevue/button"
 import Column from "primevue/column"
-import ConfirmDialog from "primevue/confirmdialog"
 import DataTable from "primevue/datatable"
 import Dialog from "primevue/dialog"
 import InputNumber from "primevue/inputnumber"

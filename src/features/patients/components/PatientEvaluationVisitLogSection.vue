@@ -18,7 +18,7 @@
           outlined
           @click="toggleExpanded"
         />
-        <Button v-if="isExpanded" label="Add Visit Entry" icon="pi pi-plus" @click="openCreateDialog" />
+        <Button v-if="isExpanded" label="Add Visit Entry" icon="pi pi-plus" @click="() => openCreateDialog()" />
       </div>
     </div>
 
@@ -373,9 +373,9 @@ type VisitLogFormState = {
   remove_digital_posture_attachment: boolean
 }
 
-const createEmptyForm = (): VisitLogFormState => ({
+const createEmptyForm = (visitDate: Date = new Date()): VisitLogFormState => ({
   id: null,
-  visit_date: new Date(),
+  visit_date: visitDate,
   medical_category: "",
   doctor_diagnosis: "",
   doctor_diagnosis_laterality: null,
@@ -498,14 +498,14 @@ const toggleExpanded = async (): Promise<void> => {
   }
 }
 
-const resetForm = (): void => {
-  form.value = createEmptyForm()
+const resetForm = (visitDate?: Date): void => {
+  form.value = createEmptyForm(visitDate ?? new Date())
   resetAncillaryAttachment()
   resetDigitalPostureAttachment()
 }
 
-const openCreateDialog = (): void => {
-  resetForm()
+const openCreateDialog = (visitDate?: Date): void => {
+  resetForm(visitDate)
   isDialogVisible.value = true
 }
 
@@ -660,5 +660,10 @@ watch(() => props.patient?.id, () => {
   visitLogs.value = []
   loadError.value = ""
   resetForm()
+})
+
+defineExpose({
+  openCreateDialog,
+  loadVisitLogs,
 })
 </script>
