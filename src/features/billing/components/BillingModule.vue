@@ -2032,11 +2032,14 @@ const normalizePackageServiceOffer = (value: unknown): LocalPackageOffer | null 
 }
 
 const formatPatientName = (patient: Partial<Patient>): string => {
+  const name = [patient.last_name, patient.first_name]
+    .map(part => part?.trim())
+    .filter((part): part is string => Boolean(part && part.toLowerCase() !== "null"))
+    .join(", ")
+  if (name) return name
   const fallback = (patient as {full_name?: string}).full_name
   if (fallback?.trim()) return fallback.trim()
-  return [patient.first_name, patient.middle_name, patient.last_name]
-    .filter((p): p is string => !!p && p.toLowerCase() !== "null")
-    .join(" ")
+  return "Unknown Patient"
 }
 
 // â”€â”€ Patient options â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

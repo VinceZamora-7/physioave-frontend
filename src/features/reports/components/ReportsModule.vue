@@ -67,8 +67,20 @@ const hasAnyPermission = (...permissions: string[]): boolean => {
 }
 
 const canViewEodReports = computed(() => hasAnyPermission("Appointment::READ"))
-const canViewFinanceReports = computed(() => hasAnyPermission("Appointment::MANAGE_BILL", "Patient::MANAGE_BILLS"))
-const canManageExpenses = computed(() => hasAnyPermission("Appointment::MANAGE_BILL", "Patient::MANAGE_BILLS"))
+const canViewFinanceReports = computed(() => hasAnyPermission(
+  "CashBill::READ",
+  "HMOBill::READ",
+  "Appointment::MANAGE_BILL",
+  "Patient::MANAGE_BILLS"
+))
+const canManageExpenses = computed(() => hasAnyPermission(
+  "CashBill::CREATE",
+  "CashBill::UPDATE",
+  "HMOBill::CREATE",
+  "HMOBill::UPDATE",
+  "Appointment::MANAGE_BILL",
+  "Patient::MANAGE_BILLS"
+))
 
 const selectedDateLabel = computed(() =>
   selectedDate.value.toLocaleDateString("en-PH", {

@@ -249,9 +249,10 @@ const toPascalCase = (str?: string): string => {
 
 const getDisplayFullName = (patient?: Patient): string => {
   if (!patient) return ""
-  const name = [patient.first_name, patient.middle_name, patient.last_name]
-    .filter((part): part is string => Boolean(part && part.trim()))
-    .join(" ")
+  const name = [patient.last_name, patient.first_name]
+    .map(part => part?.trim())
+    .filter((part): part is string => Boolean(part))
+    .join(", ")
   return name || "Unknown Patient"
 }
 

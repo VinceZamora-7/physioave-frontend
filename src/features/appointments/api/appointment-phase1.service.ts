@@ -89,6 +89,7 @@ export interface AppointmentListItem {
 
   reschedule_flag: boolean
   reschedule_count: number
+  reschedule_history_count?: number
   dropout_status?: string
   dropout_at?: string | null
   dropout_reason?: string | null

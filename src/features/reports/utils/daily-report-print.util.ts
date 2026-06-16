@@ -401,6 +401,7 @@ export const printDailyReport = (options: DailyReportPrintOptions): void => {
             background: var(--lgu-card);
             font-size: 9px;
             color: var(--lgu-text);
+            text-transform:uppercase;
           }
           th, td {
             border: 1px solid var(--lgu-border);

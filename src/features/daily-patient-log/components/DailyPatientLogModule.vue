@@ -13,7 +13,7 @@
           </div>
         </div>
 
-        <div class="grid w-full grid-cols-2 gap-3 sm:grid-cols-4 lg:w-auto">
+        <div class="grid w-full grid-cols-2 gap-3 sm:grid-cols-5 lg:w-auto">
           <article class="app-appointment-summary-card">
             <p class="app-appointment-muted text-xs font-medium uppercase tracking-wide">Total Logs</p>
             <p class="app-appointment-value mt-1 text-2xl font-semibold">{{ summary.total }}</p>
@@ -27,12 +27,25 @@
             <p class="app-appointment-value mt-1 text-2xl font-semibold">{{ summary.pending }}</p>
           </article>
           <article class="app-appointment-summary-card">
-            <p class="app-appointment-muted text-xs font-medium uppercase tracking-wide">Cancelled</p>
+            <p class="app-appointment-muted text-xs font-medium uppercase tracking-wide">Rescheduled</p>
+            <p class="app-appointment-value mt-1 text-2xl font-semibold">{{ summary.rescheduled }}</p>
+          </article>
+          <article class="app-appointment-summary-card">
+            <p class="app-appointment-muted text-xs font-medium uppercase tracking-wide">Canceled</p>
             <p class="app-appointment-value mt-1 text-2xl font-semibold">{{ summary.cancelled }}</p>
           </article>
         </div>
       </div>
     </section>
+
+    <Message
+      v-if="summary.pending > 0"
+      severity="warn"
+      :closable="false"
+    >
+      There {{ summary.pending === 1 ? "is" : "are" }} still {{ summary.pending }} pending
+      appointment{{ summary.pending === 1 ? "" : "s" }} for this EOD log.
+    </Message>
 
     <section class="app-appointment-card space-y-4 p-4 sm:p-5">
       <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -122,8 +135,7 @@
         <Column header="Visit Status" style="min-width: 180px">
           <template #body="{ data }">
             <div class="flex flex-wrap gap-2">
-              <Tag :value="data.appointment_status || 'Unknown'" :severity="statusSeverity(data.appointment_status)" />
-              <Tag :value="attendanceLabel(data)" :severity="attendanceSeverity(data)" />
+              <Tag :value="visitStatusLabel(data)" :severity="visitStatusSeverity(data)" />
             </div>
           </template>
         </Column>
@@ -343,6 +355,7 @@ import DataTable from "primevue/datatable"
 import DatePicker from "primevue/datepicker"
 import Dialog from "primevue/dialog"
 import InputText from "primevue/inputtext"
+import Message from "primevue/message"
 import Tag from "primevue/tag"
 import { useToast } from "primevue/usetoast"
 import { clinicStore } from "@/stores/clinic.store"
@@ -354,7 +367,7 @@ import {
 } from "@/features/appointments/api/appointment-phase1.service"
 import type { Patient } from "@/features/patients/types/patient"
 import { pamsAPI } from "@/utils/axios-interceptor"
-import { errorToast, successToast } from "@/utils/toast.util"
+import { errorToast, successToast, warningToast } from "@/utils/toast.util"
 
 type EvaluationVisitLogSectionExpose = {
   openCreateDialog: (visitDate?: Date) => void
@@ -538,21 +551,26 @@ const escapeHtml = (value: unknown): string =>
 
 const summary = computed(() => {
   const total = items.value.length
-  const completed = items.value.filter((item) =>
-    ["COMPLETED", "ATTENDED", "DONE"].includes(normalizeStatus(item.appointment_status)) ||
-    normalizeStatus(item.attendance_status) === "COMPLETED"
-  ).length
-  const cancelled = items.value.filter((item) =>
-    ["CANCELLED", "CANCELED"].includes(normalizeStatus(item.appointment_status))
-  ).length
+  const completed = items.value.filter((item) => visitStatusLabel(item) === "Completed").length
+  const cancelled = items.value.filter((item) => visitStatusLabel(item) === "Canceled").length
+  const rescheduled = items.value.filter((item) => visitStatusLabel(item) === "Rescheduled").length
 
   return {
     total,
     completed,
     cancelled,
-    pending: Math.max(0, total - completed - cancelled),
+    rescheduled,
+    pending: Math.max(0, total - completed - cancelled - rescheduled),
   }
 })
+
+const warnIfPendingAppointments = (): void => {
+  if (summary.value.pending <= 0) return
+  warningToast(
+    toast,
+    `There ${summary.value.pending === 1 ? "is" : "are"} still ${summary.value.pending} pending appointment${summary.value.pending === 1 ? "" : "s"} for this EOD log.`
+  )
+}
 
 const loadDailyLog = async (): Promise<void> => {
   try {
@@ -569,6 +587,7 @@ const loadDailyLog = async (): Promise<void> => {
     })
     items.value = response.items ?? []
     await loadPatientSignatures(items.value)
+    warnIfPendingAppointments()
   } catch {
     items.value = []
     encounterTicketsByAppointmentId.value = {}
@@ -863,6 +882,8 @@ const exportDailyLogPdf = (): void => {
     return
   }
 
+  warnIfPendingAppointments()
+
   let printWindow: Window
   try {
     printWindow = openPdfWindow("Daily Patient Log")
@@ -907,7 +928,7 @@ const exportDailyLogPdf = (): void => {
           <strong>${escapeHtml(item.provider_name || "Unassigned PT")}</strong>
         </td>
         <td>
-          <strong>${escapeHtml(item.appointment_status || "Unknown")}</strong>
+          <strong>${escapeHtml(visitStatusLabel(item))}</strong>
         </td>
         <td class="signature-cell">${patientSignatureHtml}</td>
         <td class="signature-cell">${ptSignatureHtml}</td>
@@ -1131,6 +1152,7 @@ const exportDailyLogPdf = (): void => {
             background: var(--lgu-card);
             border-top: 3px solid var(--lgu-accent);
             border-bottom: 3px solid var(--lgu-accent);
+            text-transform: uppercase;
           }
           tr { break-inside: avoid; }
           .muted {
@@ -1154,14 +1176,17 @@ const exportDailyLogPdf = (): void => {
           }
           .lgu-invoice-footer {
             display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
+            width: 100%;
+            justify-content: space-evenly;
             gap: 12px;
             margin-top: 14px;
             padding-top: 8px;
             border-top: 1px solid var(--lgu-border);
             font-size: 10px;
             color: var(--lgu-muted);
+            background: #1EA5D7;
+            color: #ffffff;
+            iotems-align: center;
           }
           .footer-link {
             color: inherit;
@@ -1280,10 +1305,11 @@ const exportDailyLogPdf = (): void => {
                   <div class="details-group">
                     <div class="line"><span class="label">Total Logs:</span><span class="value">${summary.value.total}</span></div>
                     <div class="line"><span class="label">Completed:</span><span class="value">${summary.value.completed}</span></div>
+                    <div class="line"><span class="label">Rescheduled:</span><span class="value">${summary.value.rescheduled}</span></div>
                   </div>
                   <div class="details-group">
                     <div class="line"><span class="label">Pending:</span><span class="value">${summary.value.pending}</span></div>
-                    <div class="line"><span class="label">Cancelled:</span><span class="value">${summary.value.cancelled}</span></div>
+                    <div class="line"><span class="label">Canceled:</span><span class="value">${summary.value.cancelled}</span></div>
                   </div>
                 </div>
               </div>
@@ -1549,25 +1575,24 @@ const sessionLabel = (item: AppointmentDailyLogItem): string => {
   return String(item.appointment_phase ?? "Single visit").replace(/_/g, " ")
 }
 
-const attendanceLabel = (item: AppointmentDailyLogItem): string => {
-  const status = normalizeStatus(item.attendance_status)
-  if (status === "COMPLETED") return "Attendance Done"
-  if (status === "CANCELED" || status === "CANCELLED") return "Attendance Cancelled"
-  return "Attendance Pending"
+const visitStatusLabel = (item: AppointmentDailyLogItem): "Completed" | "Pending" | "Canceled" | "Rescheduled" => {
+  const appointmentStatus = normalizeStatus(item.appointment_status)
+  if (["CANCELLED", "CANCELED", "NO SHOW", "NO_SHOW"].includes(appointmentStatus)) return "Canceled"
+  if (
+    Number(item.reschedule_history_count ?? 0) > 0 ||
+    Number(item.reschedule_count ?? 0) > 0 ||
+    appointmentStatus.includes("RESCHEDULE")
+  ) {
+    return "Rescheduled"
+  }
+  if (["COMPLETED", "ATTENDED", "DONE"].includes(appointmentStatus)) return "Completed"
+  return "Pending"
 }
 
-const statusSeverity = (value?: string): "success" | "info" | "warn" | "danger" | "secondary" => {
-  const status = normalizeStatus(value)
-  if (["COMPLETED", "ATTENDED", "DONE"].includes(status)) return "success"
-  if (["CANCELLED", "CANCELED", "NO SHOW", "NO_SHOW"].includes(status)) return "danger"
-  if (["RESCHEDULED"].includes(status)) return "warn"
-  return "info"
-}
-
-const attendanceSeverity = (item: AppointmentDailyLogItem): "success" | "warn" | "danger" | "secondary" => {
-  const status = normalizeStatus(item.attendance_status)
-  if (status === "COMPLETED") return "success"
-  if (status === "CANCELED" || status === "CANCELLED") return "danger"
+const visitStatusSeverity = (item: AppointmentDailyLogItem): "success" | "warn" | "danger" => {
+  const status = visitStatusLabel(item)
+  if (status === "Completed") return "success"
+  if (status === "Canceled") return "danger"
   return "warn"
 }
 
