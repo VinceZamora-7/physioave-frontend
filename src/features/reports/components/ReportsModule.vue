@@ -41,6 +41,7 @@ const isLoading = ref(false)
 const isSavingExpense = ref(false)
 const isEodLoading = ref(false)
 const isEodHistoryLoading = ref(false)
+const eodLoadError = ref<string | null>(null)
 const selectedDate = ref(new Date())
 const globalClinicStore = clinicStore()
 const {selectedClinicId, selectedClinic} = storeToRefs(globalClinicStore)
@@ -205,10 +206,15 @@ const monthlySummaryCards = computed(() => [
 const eodSummaryCards = computed(() => [
   {
     label: "EOD Report",
-    value: eodReport.value?.eod_report_generated ? "Generated" : "Waiting",
+    value: eodReportCardValue.value,
     caption: eodReport.value?.eod_report_generated
-      ? "Auto-created after all PT signatures are submitted"
-      : "Will auto-create once all PT signatures are complete"
+      ? "Auto-created after all blockers are cleared"
+      : eodReportStatusLabel.value
+  },
+  {
+    label: "Pending Appointments",
+    value: String(eodReport.value?.summary.pending_appointment_count ?? 0),
+    caption: "Same-day appointments that still need completion"
   },
   {
     label: "Pending PT Signatures",
@@ -373,22 +379,26 @@ const refreshEodReport = async (): Promise<void> => {
   if (!canViewEodReports.value) return
   if (!selectedClinicId.value) {
     eodReport.value = undefined
+    eodLoadError.value = null
     return
   }
 
   try {
     isEodLoading.value = true
+    eodLoadError.value = null
     eodReport.value = await appointmentPhase1Service.getPtEndOfDay(toDateParam(selectedDate.value), selectedClinicId.value)
   } catch (error: unknown) {
+    eodReport.value = undefined
+    eodLoadError.value = getApiErrorMessage(error, {
+      baseMessage: "End-of-day report could not be loaded",
+      permissionHint: "Reports access (Appointment Read)",
+      notFoundHint: "No end-of-day data was found for the selected date and clinic. Select another date/clinic, then click Refresh.",
+      invalidInputHint: "The selected date or clinic is invalid. Re-select both values and try again.",
+      retryHint: "Select date and clinic, then click Refresh."
+    })
     errorToast(
       toast,
-      getApiErrorMessage(error, {
-        baseMessage: "End-of-day report could not be loaded",
-        permissionHint: "Reports access (Appointment Read)",
-        notFoundHint: "No end-of-day data was found for the selected date and clinic. Select another date/clinic, then click Refresh.",
-        invalidInputHint: "The selected date or clinic is invalid. Re-select both values and try again.",
-        retryHint: "Select date and clinic, then click Refresh."
-      })
+      eodLoadError.value
     )
   } finally {
     isEodLoading.value = false
@@ -562,19 +572,45 @@ const formatMonthDay = (value: string): string =>
 
 const endOfDayStatusSeverity = (value: boolean): "success" | "warn" => (value ? "success" : "warn")
 
+const eodReportCardValue = computed(() => {
+  if (isEodLoading.value) return "Loading"
+  if (eodLoadError.value) return "Not Loaded"
+  if (!selectedClinicId.value) return "Select Branch"
+  if (!eodReport.value) return "Not Loaded"
+  return eodReport.value.eod_report_generated ? "Generated" : "Waiting"
+})
+
 const eodReportStatusLabel = computed(() => {
-  if (!eodReport.value?.summary.eligible_appointments) {
+  if (isEodLoading.value) return "Loading EOD report"
+  if (eodLoadError.value) return eodLoadError.value
+  if (!selectedClinicId.value) return "Select a branch to load EOD status"
+  const summary = eodReport.value?.summary
+  if (!summary) return "Waiting for report data"
+  if (eodReport.value?.eod_report_generated) return "EOD report generated automatically"
+  if (summary.pending_appointment_count > 0) {
+    return "Waiting for pending appointments"
+  }
+  if (summary.pending_pt_signature_count > 0) {
+    return "Waiting for PT signatures"
+  }
+  if (summary.pending_billing_count > 0) {
+    return "Waiting for billing clearance"
+  }
+  if (!summary.eligible_appointments) {
     return "No active appointments for selected day"
   }
-  return eodReport.value?.eod_report_generated
-    ? "EOD report generated automatically"
-    : "Waiting for all PT signatures"
+  return "Waiting"
 })
 
 const allAppointmentsDoneLabel = computed(() => {
-  if (!eodReport.value?.summary.eligible_appointments) return "No active appointments"
-  if (eodReport.value.summary.all_appointments_done) return "All appointments are done"
-  return `${eodReport.value.summary.pending_pt_signature_count} appointment${eodReport.value.summary.pending_pt_signature_count > 1 ? "s" : ""} pending PT signature`
+  const summary = eodReport.value?.summary
+  if (!summary) return "Waiting for report data"
+  if (!summary.eligible_appointments && !summary.pending_appointment_count) return "No active appointments"
+  if (summary.pending_appointment_count > 0) {
+    return `${summary.pending_appointment_count} appointment${summary.pending_appointment_count > 1 ? "s" : ""} still pending`
+  }
+  if (summary.all_appointments_done) return "All appointments are done"
+  return `${summary.pending_pt_signature_count} appointment${summary.pending_pt_signature_count > 1 ? "s" : ""} pending PT signature`
 })
 
 const allBillingsClearedLabel = computed(() => {

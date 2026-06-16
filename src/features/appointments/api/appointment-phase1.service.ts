@@ -305,6 +305,7 @@ export interface PtEndOfDayReport {
     window_ends_at: string
   }
   summary: {
+    pending_appointment_count: number
     pending_pt_signature_count: number
     pending_billing_count: number
     billing_cleared_appointments: number

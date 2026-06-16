@@ -131,6 +131,17 @@ const buildPendingPtRows = (eodReport?: PtEndOfDayReport): string => {
   `).join("")
 }
 
+const getEodStatusLabel = (eodReport?: PtEndOfDayReport): string => {
+  const summary = eodReport?.summary
+  if (!summary) return "Waiting for report data"
+  if (eodReport?.eod_report_generated) return "Generated"
+  if (summary.pending_appointment_count > 0) return "Waiting for pending appointments"
+  if (summary.pending_pt_signature_count > 0) return "Waiting for PT signatures"
+  if (summary.pending_billing_count > 0) return "Waiting for billing clearance"
+  if (!summary.eligible_appointments) return "No active appointments"
+  return "Waiting"
+}
+
 export const printDailyReport = (options: DailyReportPrintOptions): void => {
   const printWindow = openPrintWindow()
   const report = options.report
@@ -633,7 +644,8 @@ export const printDailyReport = (options: DailyReportPrintOptions): void => {
               <h2 class="section-title">End-of-Day Summary</h2>
               <div class="subtitle">${escapeHtml(options.selectedEodWindowLabel || "No branch EOD window loaded.")}</div>
               <div class="metrics eod">
-                ${summaryCell("EOD Status", options.eodReport?.eod_report_generated ? "Generated" : "Waiting")}
+                ${summaryCell("EOD Status", getEodStatusLabel(options.eodReport))}
+                ${summaryCell("Pending Appointments", String(eodSummary?.pending_appointment_count ?? 0))}
                 ${summaryCell("Pending PT Signatures", String(eodSummary?.pending_pt_signature_count ?? 0))}
                 ${summaryCell("Billing Cleared", `${eodSummary?.billing_cleared_appointments ?? 0}/${eodSummary?.eligible_appointments ?? 0}`)}
                 ${summaryCell("Eligible Appts", String(eodSummary?.eligible_appointments ?? 0))}
