@@ -151,7 +151,7 @@
                     :options="normalizedMedicalCategoryOptions"
                     showClear
                     fluid
-                    placeholder="Select medical category"
+                    placeholder="Select Medical Category"
                   />
                 </div>
               </div>
@@ -164,7 +164,7 @@
                     :options="normalizedMedicalDiagnosisOptions"
                     showClear
                     fluid
-                    placeholder="Select doctor diagnosis"
+                    placeholder="Select Doctor Diagnosis"
                   />
                 </div>
                 <div class="space-y-2">
@@ -181,7 +181,7 @@
                     :options="normalizedPtCaseImpressionOptions"
                     showClear
                     fluid
-                    placeholder="Select PT case impression"
+                    placeholder="Select PT Case Impression"
                   />
                 </div>
                 <div class="space-y-2">

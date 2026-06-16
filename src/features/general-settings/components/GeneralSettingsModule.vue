@@ -191,7 +191,7 @@
       <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 class="app-section-title">Patient Clinical Dropdowns</h3>
-          <p class="text-sm opacity-70">Manage the options shown in Patients â†’ Evaluation Visit Log.</p>
+          <p class="text-sm opacity-70">Manage the options shown in Patients Evaluation Visit Log.</p>
         </div>
       </div>
 
