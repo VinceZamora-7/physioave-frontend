@@ -487,15 +487,34 @@ const sidebarAccessOptions: SidebarAccessOption[] = [
     key: "patients",
     label: "Patient",
     description: "Open and manage patient records.",
-    // All Patient permissions — Patient::MANAGE_BILLS is shared with billing but billing uses it as its own
-    matcher: permission => permission.name.startsWith("Patient::")
+    matcher: permission =>
+      startsWithAny(permission.name, [
+        "Patient::READ",
+        "Patient::LOOKUP",
+        "Patient::CREATE",
+        "Patient::UPDATE",
+        "Patient::DELETE",
+        "Patient::MANAGE_APPOINTMENTS",
+        "Patient::MANAGE_ATTACHMENTS",
+        "Patient::MANAGE_MEDICAL_INFORMATION"
+      ])
   },
   {
     key: "appointments",
     label: "Appointments",
-    description: "Calendar, scheduling, and appointment actions.",
-    // Appointment read/write actions — MANAGE_BILL belongs to billing tab only
-    matcher: permission => startsWithAny(permission.name, ["Appointment::READ", "Appointment::LOOKUP", "Appointment::CREATE", "Appointment::UPDATE"])
+    description: "Calendar, scheduling, and in-page workflow actions.",
+    matcher: permission =>
+      startsWithAny(permission.name, [
+        "Appointment::READ",
+        "Appointment::LOOKUP",
+        "Appointment::CREATE",
+        "Appointment::UPDATE",
+        "Appointment::DELETE",
+        "Appointment::MANAGE_STATUS",
+        "Appointment::OVERRIDE_RESCHEDULE_LIMIT",
+        "Appointment::MANAGE_BILL",
+        "Patient::CREATE"
+      ])
   },
   {
     key: "patient-daily-log",
@@ -508,13 +527,10 @@ const sidebarAccessOptions: SidebarAccessOption[] = [
   {
     key: "billing",
     label: "Billing",
-    description: "Payment and billing workflows.",
-    // Billing supports bill-specific permissions while keeping legacy workflow flags.
+    description: "Open the billing workspace and bill-specific workflows.",
     matcher: permission =>
       permission.name.startsWith("CashBill::") ||
-      permission.name.startsWith("HMOBill::") ||
-      permission.name === "Appointment::MANAGE_BILL" ||
-      permission.name === "Patient::MANAGE_BILLS"
+      permission.name.startsWith("HMOBill::")
   },
   {
     key: "reports",
@@ -652,9 +668,9 @@ const getReadPermissionIdsForTab = (key: PermissionLevelKey): number[] => {
 
   return getPermissionIdsByNames(key, [
     "CashBill::READ",
+    "CashBill::LOOKUP",
     "HMOBill::READ",
-    "Appointment::MANAGE_BILL",
-    "Patient::MANAGE_BILLS"
+    "HMOBill::LOOKUP"
   ])
 }
 
@@ -681,7 +697,9 @@ const getEditPermissionIdsForTab = (key: PermissionLevelKey): number[] => {
         "Appointment::UPDATE",
         "Appointment::DELETE",
         "Appointment::MANAGE_STATUS",
-        "Appointment::OVERRIDE_RESCHEDULE_LIMIT"
+        "Appointment::OVERRIDE_RESCHEDULE_LIMIT",
+        "Appointment::MANAGE_BILL",
+        "Patient::CREATE"
       ])
     ]
   }
@@ -806,8 +824,20 @@ const syncSidebarAccessSelection = (): void => {
   const hasAppointmentWriteAssigned = hasMatchingAssigned(
     p => p.name === "Appointment::CREATE" || p.name === "Appointment::UPDATE"
   )
+  const hasAppointmentWorkflowAssigned = hasMatchingAssigned(
+    p =>
+      p.name === "Appointment::CREATE" ||
+      p.name === "Appointment::UPDATE" ||
+      p.name === "Appointment::DELETE" ||
+      p.name === "Appointment::MANAGE_STATUS" ||
+      p.name === "Appointment::OVERRIDE_RESCHEDULE_LIMIT" ||
+      p.name === "Appointment::MANAGE_BILL"
+  )
   const hasExclusivePatientAssigned = hasMatchingAssigned(
-    p => p.name === "Patient::LOOKUP" || p.name === "Patient::CREATE" || p.name === "Patient::UPDATE"
+    p => p.name === "Patient::LOOKUP" || p.name === "Patient::READ" || p.name === "Patient::UPDATE"
+  )
+  const hasPatientPageAssigned = hasMatchingAssigned(
+    p => p.name === "Patient::LOOKUP" || p.name === "Patient::READ" || p.name === "Patient::UPDATE" || p.name === "Patient::DELETE"
   )
 
   selectedSidebarAccess.value = sidebarAccessOptions
@@ -816,10 +846,13 @@ const syncSidebarAccessSelection = (): void => {
       if (!hasAny) return false
 
       switch (option.key) {
+        case "patients":
+          return hasPatientPageAssigned
+
         // appointments: only if write perms are assigned (CREATE or UPDATE).
         // If only READ/LOOKUP assigned → patient-daily-log gets credit instead.
         case "appointments":
-          return hasAppointmentWriteAssigned
+          return hasAppointmentWorkflowAssigned
 
         // patient-daily-log: only if READ/LOOKUP assigned but no write perms.
         // When appointments (write) is enabled, it already grants READ/LOOKUP access.

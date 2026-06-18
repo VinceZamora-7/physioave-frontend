@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {computed, nextTick, onMounted, ref, watch} from "vue"
 import {storeToRefs} from "pinia"
-import {useRoute} from "vue-router"
+import {useRoute, useRouter} from "vue-router"
 import {useConfirm} from "primevue/useconfirm"
 import {useToast} from "primevue/usetoast"
 import Button from "primevue/button"
@@ -34,12 +34,14 @@ import {printDailyReport} from "@/features/reports/utils/daily-report-print.util
 const toast = useToast()
 const confirm = useConfirm()
 const route = useRoute()
+const router = useRouter()
 const authSession = useAuthSessionStore()
 
 const isLoading = ref(false)
 const isSavingExpense = ref(false)
 const isEodLoading = ref(false)
 const isEodHistoryLoading = ref(false)
+const eodLoadError = ref<string | null>(null)
 const selectedDate = ref(new Date())
 const globalClinicStore = clinicStore()
 const {selectedClinicId, selectedClinic} = storeToRefs(globalClinicStore)
@@ -66,8 +68,20 @@ const hasAnyPermission = (...permissions: string[]): boolean => {
 }
 
 const canViewEodReports = computed(() => hasAnyPermission("Appointment::READ"))
-const canViewFinanceReports = computed(() => hasAnyPermission("Appointment::MANAGE_BILL", "Patient::MANAGE_BILLS"))
-const canManageExpenses = computed(() => hasAnyPermission("Appointment::MANAGE_BILL", "Patient::MANAGE_BILLS"))
+const canViewFinanceReports = computed(() => hasAnyPermission(
+  "CashBill::READ",
+  "HMOBill::READ",
+  "Appointment::MANAGE_BILL",
+  "Patient::MANAGE_BILLS"
+))
+const canManageExpenses = computed(() => hasAnyPermission(
+  "CashBill::CREATE",
+  "CashBill::UPDATE",
+  "HMOBill::CREATE",
+  "HMOBill::UPDATE",
+  "Appointment::MANAGE_BILL",
+  "Patient::MANAGE_BILLS"
+))
 
 const selectedDateLabel = computed(() =>
   selectedDate.value.toLocaleDateString("en-PH", {
@@ -192,10 +206,15 @@ const monthlySummaryCards = computed(() => [
 const eodSummaryCards = computed(() => [
   {
     label: "EOD Report",
-    value: eodReport.value?.eod_report_generated ? "Generated" : "Waiting",
+    value: eodReportCardValue.value,
     caption: eodReport.value?.eod_report_generated
-      ? "Auto-created after all PT signatures are submitted"
-      : "Will auto-create once all PT signatures are complete"
+      ? "Auto-created after all blockers are cleared"
+      : eodReportStatusLabel.value
+  },
+  {
+    label: "Pending Appointments",
+    value: String(eodReport.value?.summary.pending_appointment_count ?? 0),
+    caption: "Same-day appointments that still need completion"
   },
   {
     label: "Pending PT Signatures",
@@ -219,6 +238,13 @@ const toDateParam = (value: Date): string => {
   const month = String(value.getMonth() + 1).padStart(2, "0")
   const day = String(value.getDate()).padStart(2, "0")
   return `${year}-${month}-${day}`
+}
+
+const openDailyLogForSelectedDate = (): void => {
+  void router.push({
+    name: "patient-daily-log",
+    query: { date: toDateParam(selectedDate.value) }
+  })
 }
 
 const asCurrency = (value: number): string =>
@@ -249,6 +275,9 @@ const billingRouteSeverity = (value: string): "success" | "info" | "warn" | "con
   if (normalized === "PACKAGE") return "contrast"
   return "success"
 }
+
+const getBillingRecordId = (row: { id: number; public_id?: string | null }): string =>
+  row.public_id?.trim() || `BILLING-${row.id}`
 
 const getFinanceReportsErrorMessage = (error: unknown): string =>
   getApiErrorMessage(error, {
@@ -350,22 +379,26 @@ const refreshEodReport = async (): Promise<void> => {
   if (!canViewEodReports.value) return
   if (!selectedClinicId.value) {
     eodReport.value = undefined
+    eodLoadError.value = null
     return
   }
 
   try {
     isEodLoading.value = true
+    eodLoadError.value = null
     eodReport.value = await appointmentPhase1Service.getPtEndOfDay(toDateParam(selectedDate.value), selectedClinicId.value)
   } catch (error: unknown) {
+    eodReport.value = undefined
+    eodLoadError.value = getApiErrorMessage(error, {
+      baseMessage: "End-of-day report could not be loaded",
+      permissionHint: "Reports access (Appointment Read)",
+      notFoundHint: "No end-of-day data was found for the selected date and clinic. Select another date/clinic, then click Refresh.",
+      invalidInputHint: "The selected date or clinic is invalid. Re-select both values and try again.",
+      retryHint: "Select date and clinic, then click Refresh."
+    })
     errorToast(
       toast,
-      getApiErrorMessage(error, {
-        baseMessage: "End-of-day report could not be loaded",
-        permissionHint: "Reports access (Appointment Read)",
-        notFoundHint: "No end-of-day data was found for the selected date and clinic. Select another date/clinic, then click Refresh.",
-        invalidInputHint: "The selected date or clinic is invalid. Re-select both values and try again.",
-        retryHint: "Select date and clinic, then click Refresh."
-      })
+      eodLoadError.value
     )
   } finally {
     isEodLoading.value = false
@@ -539,19 +572,45 @@ const formatMonthDay = (value: string): string =>
 
 const endOfDayStatusSeverity = (value: boolean): "success" | "warn" => (value ? "success" : "warn")
 
+const eodReportCardValue = computed(() => {
+  if (isEodLoading.value) return "Loading"
+  if (eodLoadError.value) return "Not Loaded"
+  if (!selectedClinicId.value) return "Select Branch"
+  if (!eodReport.value) return "Not Loaded"
+  return eodReport.value.eod_report_generated ? "Generated" : "Waiting"
+})
+
 const eodReportStatusLabel = computed(() => {
-  if (!eodReport.value?.summary.eligible_appointments) {
+  if (isEodLoading.value) return "Loading EOD report"
+  if (eodLoadError.value) return eodLoadError.value
+  if (!selectedClinicId.value) return "Select a branch to load EOD status"
+  const summary = eodReport.value?.summary
+  if (!summary) return "Waiting for report data"
+  if (eodReport.value?.eod_report_generated) return "EOD report generated automatically"
+  if (summary.pending_appointment_count > 0) {
+    return "Waiting for pending appointments"
+  }
+  if (summary.pending_pt_signature_count > 0) {
+    return "Waiting for PT signatures"
+  }
+  if (summary.pending_billing_count > 0) {
+    return "Waiting for billing clearance"
+  }
+  if (!summary.eligible_appointments) {
     return "No active appointments for selected day"
   }
-  return eodReport.value?.eod_report_generated
-    ? "EOD report generated automatically"
-    : "Waiting for all PT signatures"
+  return "Waiting"
 })
 
 const allAppointmentsDoneLabel = computed(() => {
-  if (!eodReport.value?.summary.eligible_appointments) return "No active appointments"
-  if (eodReport.value.summary.all_appointments_done) return "All appointments are done"
-  return `${eodReport.value.summary.pending_pt_signature_count} appointment${eodReport.value.summary.pending_pt_signature_count > 1 ? "s" : ""} pending PT signature`
+  const summary = eodReport.value?.summary
+  if (!summary) return "Waiting for report data"
+  if (!summary.eligible_appointments && !summary.pending_appointment_count) return "No active appointments"
+  if (summary.pending_appointment_count > 0) {
+    return `${summary.pending_appointment_count} appointment${summary.pending_appointment_count > 1 ? "s" : ""} still pending`
+  }
+  if (summary.all_appointments_done) return "All appointments are done"
+  return `${summary.pending_pt_signature_count} appointment${summary.pending_pt_signature_count > 1 ? "s" : ""} pending PT signature`
 })
 
 const allBillingsClearedLabel = computed(() => {
@@ -559,6 +618,10 @@ const allBillingsClearedLabel = computed(() => {
   if (eodReport.value.summary.all_billings_cleared) return "All billings are cleared"
   return `${eodReport.value.summary.pending_billing_count} billing${eodReport.value.summary.pending_billing_count > 1 ? "s" : ""} pending clearance`
 })
+
+const canPrintDailyReport = computed(() =>
+  Boolean(eodReport.value?.eod_report_generated) && !isLoading.value && !isEodLoading.value
+)
 
 const scrollToRequestedSection = async (): Promise<void> => {
   const section = typeof route.query.section === "string" ? route.query.section : undefined
@@ -618,28 +681,28 @@ onMounted(async () => {
 
 <template>
   <main class="app-page-shell space-y-5">
-    <section class="app-hero-banner-vivid">
+    <section class="app-section-card-comfy space-y-3">
       <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div class="space-y-2">
           <div class="text-lg font-semibold tracking-tight">Finance, Closeout &amp; Analytics</div>
           <p class="max-w-3xl text-sm text-[rgb(var(--app-fg))]/70">
             Central workspace for same-day finance, monthly rollups, end-of-day closeout, audit history, and treatment analytics.
           </p>
-          <div class="flex flex-wrap gap-2 text-xs text-[rgb(var(--app-fg))]/65">
-            <span class="rounded-full border border-white/40 bg-white/60 px-3 py-1">
+          <div class="flex flex-wrap gap-2 text-xs">
+            <span class="app-filter-pill">
               Date: {{ selectedDateLabel }}
             </span>
-            <span class="rounded-full border border-white/40 bg-white/60 px-3 py-1">
+            <span class="app-filter-pill">
               Month: {{ selectedMonthLabel }}
             </span>
-            <span class="rounded-full border border-white/40 bg-white/60 px-3 py-1">
+            <span class="app-filter-pill">
               Income Rows: {{ report?.summary.income_entry_count ?? 0 }}
             </span>
-            <span class="rounded-full border border-white/40 bg-white/60 px-3 py-1">
+            <span class="app-filter-pill">
               Expense Rows: {{ report?.summary.expense_entry_count ?? 0 }}
             </span>
-            <span class="rounded-full border border-white/40 bg-white/60 px-3 py-1">
-              EOD: {{ eodReport?.eod_report_generated ? 'Generated' : 'Waiting' }}
+            <span class="app-filter-pill">
+              EOD: {{ eodReportCardValue }}
             </span>
           </div>
         </div>
@@ -647,7 +710,14 @@ onMounted(async () => {
         <div class="flex flex-wrap gap-2">
           <Button label="Today" icon="pi pi-calendar" outlined :pt="ptOutlinedBtn" @click="resetToToday" />
           <Button label="Refresh" icon="pi pi-refresh" severity="secondary" outlined :loading="isLoading || isEodLoading" :pt="ptOutlinedBtn" @click="refreshAllReports" />
-          <Button label="Print Daily" icon="pi pi-print" severity="secondary" outlined :disabled="isLoading || isEodLoading" :pt="ptOutlinedBtn" @click="printSelectedDailyReport" />
+          <Button
+            v-if="canPrintDailyReport"
+            label="Print Daily Report"
+            icon="pi pi-print"
+            size="large"
+            class="app-primary-action min-h-12 px-5 text-base font-semibold"
+            @click="printSelectedDailyReport"
+          />
         </div>
       </div>
     </section>
@@ -664,18 +734,18 @@ onMounted(async () => {
             dateFormat="mm/dd/yy"
           />
         </div>
-        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 text-sm opacity-75">
+        <div class="app-dashboard-panel text-sm">
           The income table uses saved billings for the selected day. The expense table is manually maintained so reception, cashier, or admin can capture same-day operational spending in one shared place.
         </div>
       </div>
 
-      <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 text-sm opacity-75">
+      <div class="app-dashboard-panel text-sm">
         {{ selectedClinicScheduleLabel }}
       </div>
     </section>
 
     <section class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-      <article v-for="card in summaryCards" :key="card.label" class="app-section-card-comfy space-y-1">
+      <article v-for="card in summaryCards" :key="card.label" class="app-dashboard-kpi-card space-y-1">
         <div class="text-xs uppercase tracking-wide opacity-55">{{ card.label }}</div>
         <div class="text-2xl font-semibold">{{ card.value }}</div>
         <div class="text-xs opacity-60">{{ card.caption }}</div>
@@ -688,17 +758,27 @@ onMounted(async () => {
           <h2 class="app-section-title">End-of-Day Report</h2>
           <p class="text-sm opacity-70">The EOD report is automatically created only after all PT signatures are submitted for active same-day appointments.</p>
         </div>
-        <div class="text-sm opacity-70">
-          {{ selectedDateLabel }}
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div class="text-sm opacity-70">
+            {{ selectedDateLabel }}
+          </div>
+          <Button
+            label="Open Daily Log"
+            icon="pi pi-pen-to-square"
+            size="small"
+            severity="secondary"
+            outlined
+            @click="openDailyLogForSelectedDate"
+          />
         </div>
       </div>
 
-      <div v-if="selectedEodWindowLabel" class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] px-4 py-3 text-sm opacity-80">
+      <div v-if="selectedEodWindowLabel" class="app-dashboard-panel text-sm">
         {{ selectedEodWindowLabel }}
       </div>
 
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <article v-for="card in eodSummaryCards" :key="card.label" class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <article v-for="card in eodSummaryCards" :key="card.label" class="app-dashboard-kpi-card">
           <div class="text-xs uppercase tracking-wide opacity-55">{{ card.label }}</div>
           <div class="mt-2 text-2xl font-semibold">{{ card.value }}</div>
           <div class="mt-1 text-xs opacity-60">{{ card.caption }}</div>
@@ -706,23 +786,31 @@ onMounted(async () => {
       </div>
 
       <div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
-        <article class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 space-y-2">
+        <article class="app-dashboard-panel space-y-2">
           <div class="text-xs uppercase tracking-wide opacity-55">Report Status</div>
           <Tag :value="eodReportStatusLabel" :severity="endOfDayStatusSeverity(Boolean(eodReport?.eod_report_generated))" />
           <div v-if="eodReport?.eod_generated_at" class="text-xs opacity-60">Generated at {{ formatDateTime(eodReport.eod_generated_at) }}</div>
+          <Button
+            v-if="canPrintDailyReport"
+            label="Print Daily Report"
+            icon="pi pi-print"
+            size="large"
+            class="app-primary-action mt-2 min-h-12 w-full text-base font-semibold"
+            @click="printSelectedDailyReport"
+          />
         </article>
-        <article class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 space-y-2">
+        <article class="app-dashboard-panel space-y-2">
           <div class="text-xs uppercase tracking-wide opacity-55">Appointments</div>
           <Tag :value="allAppointmentsDoneLabel" :severity="endOfDayStatusSeverity(Boolean(eodReport?.summary.all_appointments_done))" />
         </article>
-        <article class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 space-y-2">
+        <article class="app-dashboard-panel space-y-2">
           <div class="text-xs uppercase tracking-wide opacity-55">Billing</div>
           <Tag :value="allBillingsClearedLabel" :severity="endOfDayStatusSeverity(Boolean(eodReport?.summary.all_billings_cleared))" />
         </article>
       </div>
 
       <div class="overflow-x-auto">
-        <DataTable :value="eodReport?.pending_pt_signatures_by_pt ?? []" size="small" :loading="isEodLoading" scrollable>
+        <DataTable class="app-data-table" :value="eodReport?.pending_pt_signatures_by_pt ?? []" size="small" :loading="isEodLoading" scrollable>
           <template #empty>
             <div class="py-10 text-center text-sm opacity-70">No pending PT signatures. EOD can be generated automatically for {{ selectedDateLabel }}.</div>
           </template>
@@ -751,7 +839,7 @@ onMounted(async () => {
         </div>
 
         <div class="overflow-x-auto">
-          <DataTable :value="eodHistoryItems" size="small" :loading="isEodHistoryLoading" scrollable>
+          <DataTable class="app-data-table" :value="eodHistoryItems" size="small" :loading="isEodHistoryLoading" scrollable>
             <template #empty>
               <div class="py-10 text-center text-sm opacity-70">No generated EOD snapshots yet.</div>
             </template>
@@ -816,11 +904,11 @@ onMounted(async () => {
     >
       <div v-if="selectedEodHistoryItem" class="space-y-4">
         <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 space-y-1">
+          <div class="app-dashboard-panel space-y-1">
             <div class="text-xs uppercase tracking-wide opacity-55">Generated At</div>
             <div class="font-semibold">{{ formatDateTime(selectedEodHistoryItem.eod_generated_at) }}</div>
           </div>
-          <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 space-y-1">
+          <div class="app-dashboard-panel space-y-1">
             <div class="text-xs uppercase tracking-wide opacity-55">Generated By</div>
             <div class="font-semibold">{{ selectedEodHistoryItem.generated_by_name || 'System' }}</div>
             <div class="text-xs opacity-60">{{ selectedEodHistoryItem.generated_by_email || '--' }}</div>
@@ -828,15 +916,15 @@ onMounted(async () => {
         </div>
 
         <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
+          <div class="app-dashboard-kpi-card">
             <div class="text-xs uppercase tracking-wide opacity-55">Appointments</div>
             <div class="mt-2 text-lg font-semibold">{{ selectedEodHistoryItem.summary.pt_signed_appointments }}/{{ selectedEodHistoryItem.summary.eligible_appointments }} Signed</div>
           </div>
-          <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
+          <div class="app-dashboard-kpi-card">
             <div class="text-xs uppercase tracking-wide opacity-55">Billing</div>
             <div class="mt-2 text-lg font-semibold">{{ selectedEodHistoryItem.summary.billing_cleared_appointments }}/{{ selectedEodHistoryItem.summary.eligible_appointments }} Cleared</div>
           </div>
-          <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
+          <div class="app-dashboard-kpi-card">
             <div class="text-xs uppercase tracking-wide opacity-55">Status</div>
             <div class="mt-2">
               <Tag
@@ -850,7 +938,7 @@ onMounted(async () => {
         <div>
           <h4 class="text-sm font-semibold uppercase tracking-wide opacity-60">Pending PT Signature Blockers</h4>
           <div class="mt-2 overflow-x-auto">
-            <DataTable :value="selectedEodHistoryItem.pending_pt_signatures_by_pt ?? []" size="small" scrollable>
+            <DataTable class="app-data-table" :value="selectedEodHistoryItem.pending_pt_signatures_by_pt ?? []" size="small" scrollable>
               <template #empty>
                 <div class="py-6 text-center text-sm opacity-70">No pending PT signatures captured in this snapshot.</div>
               </template>
@@ -879,7 +967,7 @@ onMounted(async () => {
       </div>
 
       <div class="overflow-x-auto">
-        <DataTable :value="report?.incomes ?? []" size="small" :loading="isLoading" scrollable>
+        <DataTable class="app-data-table" :value="report?.incomes ?? []" size="small" :loading="isLoading" scrollable>
           <template #empty>
             <div class="py-10 text-center text-sm opacity-70">
               No billing activity was recorded for {{ selectedDateLabel }}.
@@ -899,10 +987,10 @@ onMounted(async () => {
             </template>
           </Column>
 
-          <Column header="PT Service" style="min-width: 220px">
+          <Column header="Billing Record ID" style="min-width: 180px">
             <template #body="{ data }">
               <div class="space-y-1">
-                <div class="font-medium">{{ data.pt_service }}</div>
+                <div class="font-medium">{{ getBillingRecordId(data) }}</div>
                 <div class="text-xs opacity-60">{{ formatTime(data.created_at) }}</div>
               </div>
             </template>
@@ -927,10 +1015,6 @@ onMounted(async () => {
             <template #body="{ data }">{{ data.mode_of_payment || "--" }}</template>
           </Column>
 
-          <Column header="Ref No. / HMO / LGU" style="min-width: 200px">
-            <template #body="{ data }">{{ data.sponsor_reference || "--" }}</template>
-          </Column>
-
           <Column header="Balance" style="min-width: 120px">
             <template #body="{ data }">
               <span :class="data.balance > 0 ? 'text-amber-700 dark:text-amber-300 font-medium' : ''">
@@ -941,15 +1025,6 @@ onMounted(async () => {
 
           <Column header="Due Date" style="min-width: 120px">
             <template #body="{ data }">{{ data.due_date || "--" }}</template>
-          </Column>
-
-          <Column header="Invoice No." style="min-width: 180px">
-            <template #body="{ data }">
-              <div class="space-y-1">
-                <div class="font-medium">{{ data.invoice_number }}</div>
-                <div class="text-xs opacity-60">{{ data.public_id }}</div>
-              </div>
-            </template>
           </Column>
         </DataTable>
       </div>
@@ -1009,7 +1084,7 @@ onMounted(async () => {
       </div>
 
       <div class="overflow-x-auto">
-        <DataTable :value="report?.expenses ?? []" size="small" :loading="isLoading" scrollable>
+        <DataTable class="app-data-table" :value="report?.expenses ?? []" size="small" :loading="isLoading" scrollable>
           <template #empty>
             <div class="py-10 text-center text-sm opacity-70">
               No expense entries yet for {{ selectedDateLabel }}.
@@ -1060,15 +1135,15 @@ onMounted(async () => {
     <section class="app-section-card-comfy space-y-3">
       <h2 class="app-section-title">Daily Totals</h2>
       <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
+        <div class="app-dashboard-kpi-card">
           <div class="text-xs uppercase tracking-wide opacity-55">Cash Collected</div>
           <div class="mt-2 text-2xl font-semibold">{{ asCurrency(report?.summary.cash_collected ?? 0) }}</div>
         </div>
-        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
+        <div class="app-dashboard-kpi-card">
           <div class="text-xs uppercase tracking-wide opacity-55">Expense Total</div>
           <div class="mt-2 text-2xl font-semibold">{{ asCurrency(report?.summary.expense_total ?? 0) }}</div>
         </div>
-        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
+        <div class="app-dashboard-kpi-card">
           <div class="text-xs uppercase tracking-wide opacity-55">Net Cash</div>
           <div class="mt-2 text-2xl font-semibold">{{ asCurrency(report?.summary.net_cash ?? 0) }}</div>
         </div>
@@ -1089,7 +1164,7 @@ onMounted(async () => {
       </div>
 
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <article v-for="card in monthlySummaryCards" :key="card.label" class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4">
+        <article v-for="card in monthlySummaryCards" :key="card.label" class="app-dashboard-kpi-card">
           <div class="text-xs uppercase tracking-wide opacity-55">{{ card.label }}</div>
           <div class="mt-2 text-2xl font-semibold">{{ card.value }}</div>
           <div class="mt-1 text-xs opacity-60">{{ card.caption }}</div>
@@ -1097,7 +1172,7 @@ onMounted(async () => {
       </div>
 
       <div class="overflow-x-auto">
-        <DataTable :value="monthlyReport?.days ?? []" size="small" :loading="isLoading" scrollable>
+        <DataTable class="app-data-table" :value="monthlyReport?.days ?? []" size="small" :loading="isLoading" scrollable>
           <template #empty>
             <div class="py-10 text-center text-sm opacity-70">No finance activity found for {{ selectedMonthLabel }}.</div>
           </template>

@@ -1090,6 +1090,10 @@ import {
 import { clinicService } from "@/features/clinics/api/clinic.service";
 import { patientService } from "@/features/patients/api/patient.service";
 import type { PatientContext } from "@/features/patients/types/patient";
+import {
+  serviceCatalogContextService,
+  type ServiceCatalogContext,
+} from "@/features/services/api/service-catalog-context.service";
 import type { PatientHMOInformation } from "@/models/hmo-information";
 import { staffService } from "@/features/staff/api/staff.service";
 import { ptPrimaryBtn } from "@/features/shared/table-header.styles";
@@ -2792,7 +2796,7 @@ const loadLookups = async (): Promise<void> => {
     treatmentAreas,
     medicalDiagnoses,
   ] = await Promise.all([
-    patientService.getAll({
+    patientService.getAllLookup({
       clinic_id: clinicId,
       pageable_request: {
         page: 1,
@@ -2835,9 +2839,9 @@ const loadLookups = async (): Promise<void> => {
   ]);
 
   patientOptions.value = (patients?.content ?? []).map((patient) => ({
-    label: patient.full_name,
+    label: patient.name,
     value: patient.id,
-    clinicId: patient.clinic_id == null ? null : Number(patient.clinic_id),
+    clinicId: (patient as { clinic_id?: number | null }).clinic_id == null ? null : Number((patient as { clinic_id?: number | null }).clinic_id),
   }));
   clinicOptions.value = (clinics?.content ?? []).map((clinic) => ({
     label: clinic.name,
@@ -3069,105 +3073,64 @@ const normalizeServiceRows = (
     })
     .filter((row) => Number.isFinite(row.value) && row.value > 0);
 
-const loadCatalogPage = async (
-  url: string,
-  params: Record<string, unknown> = {},
-): Promise<Array<Record<string, unknown>>> => {
-  const { data } = await pamsAPI.get(url, {
-    params: { page: 1, size: 500, status: "ACTIVE", ...params },
-  });
-  return data?.content ?? [];
-};
+const recordsFromUnknownArray = (
+  rows: unknown[] | undefined,
+): Array<Record<string, unknown>> =>
+  (rows ?? []).map(recordFromUnknown).filter((row): row is Record<string, unknown> => Boolean(row));
+
+const serviceCatalogFromContext = (
+  context: ServiceCatalogContext | undefined,
+): AppointmentServiceCatalog => ({
+  PACKAGE: normalizeServiceRows(
+    recordsFromUnknownArray(context?.package_offers),
+    "PACKAGE",
+    ["package_price", "price", "effective_price"],
+  ),
+  BUNDLE: normalizeServiceRows(
+    recordsFromUnknownArray(context?.bundles),
+    "BUNDLE",
+    ["bundled_price", "price", "effective_price"],
+  ),
+  MACHINE: normalizeServiceRows(
+    recordsFromUnknownArray(context?.services.machines),
+    "MACHINE",
+    ["effective_price", "price", "base_price"],
+  ),
+  TECHNIQUE: normalizeServiceRows(
+    recordsFromUnknownArray(context?.services.techniques),
+    "TECHNIQUE",
+    ["effective_price", "price", "base_price"],
+  ),
+  EVALUATION: normalizeServiceRows(
+    recordsFromUnknownArray(context?.services.evaluations),
+    "EVALUATION",
+    ["effective_price", "price", "base_price"],
+  ),
+  ADD_ON_MACHINE: normalizeServiceRows(
+    recordsFromUnknownArray(context?.services.add_on_machines),
+    "ADD_ON_MACHINE",
+    ["effective_price", "add_on_price", "price", "base_price"],
+  ),
+  ADD_ON_TECHNIQUE: normalizeServiceRows(
+    recordsFromUnknownArray(context?.services.add_on_techniques),
+    "ADD_ON_TECHNIQUE",
+    ["effective_price", "add_on_price", "price", "base_price"],
+  ),
+  ADD_ON_HOME_SERVICE: normalizeServiceRows(
+    recordsFromUnknownArray(context?.services.add_on_home_services),
+    "ADD_ON_HOME_SERVICE",
+    ["effective_price", "add_on_price", "price", "base_price"],
+  ),
+});
 
 const loadServiceCatalog = async (): Promise<void> => {
-  const [
-    packages,
-    bundles,
-    machines,
-    techniques,
-    evaluations,
-    addOnMachines,
-    addOnTechniques,
-    addOnHome,
-    lguPackages,
-    lguBundles,
-    lguMachines,
-    lguTechniques,
-    lguEvaluations,
-    lguAddOnMachines,
-    lguAddOnTechniques,
-    lguAddOnHome,
-  ] = await Promise.all([
-    loadCatalogPage("/package-service-offers", { scope: "GLOBAL" }),
-    loadCatalogPage("/service-bundles"),
-    loadCatalogPage("/machines"),
-    loadCatalogPage("/techniques"),
-    loadCatalogPage("/evaluations"),
-    loadCatalogPage("/add-on-machines"),
-    loadCatalogPage("/add-on-techniques"),
-    loadCatalogPage("/add-on-home-services"),
-    loadCatalogPage("/package-service-offers", { scope: "LGU" }),
-    loadCatalogPage("/lgu-service-bundles"),
-    loadCatalogPage("/lgu-machines"),
-    loadCatalogPage("/lgu-techniques"),
-    loadCatalogPage("/lgu-evaluations"),
-    loadCatalogPage("/lgu-add-on-machines"),
-    loadCatalogPage("/lgu-add-on-techniques"),
-    loadCatalogPage("/lgu-add-on-home-services"),
+  const [globalContext, lguContext] = await Promise.all([
+    serviceCatalogContextService.getContext({ scope: "GLOBAL" }),
+    serviceCatalogContextService.getContext({ scope: "LGU" }),
   ]);
 
-  globalServiceCatalog.value = {
-    PACKAGE: normalizeServiceRows(packages, "PACKAGE", [
-      "package_price",
-      "price",
-    ]),
-    BUNDLE: normalizeServiceRows(bundles, "BUNDLE", ["bundled_price", "price"]),
-    MACHINE: normalizeServiceRows(machines, "MACHINE", ["price"]),
-    TECHNIQUE: normalizeServiceRows(techniques, "TECHNIQUE", ["price"]),
-    EVALUATION: normalizeServiceRows(evaluations, "EVALUATION", ["price"]),
-    ADD_ON_MACHINE: normalizeServiceRows(addOnMachines, "ADD_ON_MACHINE", [
-      "add_on_price",
-      "price",
-    ]),
-    ADD_ON_TECHNIQUE: normalizeServiceRows(
-      addOnTechniques,
-      "ADD_ON_TECHNIQUE",
-      ["add_on_price", "price"],
-    ),
-    ADD_ON_HOME_SERVICE: normalizeServiceRows(
-      addOnHome,
-      "ADD_ON_HOME_SERVICE",
-      ["add_on_price", "price"],
-    ),
-  };
-
-  lguServiceCatalog.value = {
-    PACKAGE: normalizeServiceRows(lguPackages, "PACKAGE", [
-      "package_price",
-      "price",
-    ]),
-    BUNDLE: normalizeServiceRows(lguBundles, "BUNDLE", [
-      "bundled_price",
-      "price",
-    ]),
-    MACHINE: normalizeServiceRows(lguMachines, "MACHINE", ["price"]),
-    TECHNIQUE: normalizeServiceRows(lguTechniques, "TECHNIQUE", ["price"]),
-    EVALUATION: normalizeServiceRows(lguEvaluations, "EVALUATION", ["price"]),
-    ADD_ON_MACHINE: normalizeServiceRows(lguAddOnMachines, "ADD_ON_MACHINE", [
-      "add_on_price",
-      "price",
-    ]),
-    ADD_ON_TECHNIQUE: normalizeServiceRows(
-      lguAddOnTechniques,
-      "ADD_ON_TECHNIQUE",
-      ["add_on_price", "price"],
-    ),
-    ADD_ON_HOME_SERVICE: normalizeServiceRows(
-      lguAddOnHome,
-      "ADD_ON_HOME_SERVICE",
-      ["add_on_price", "price"],
-    ),
-  };
+  globalServiceCatalog.value = serviceCatalogFromContext(globalContext);
+  lguServiceCatalog.value = serviceCatalogFromContext(lguContext);
 };
 
 let liveFilterTimer: number | undefined;

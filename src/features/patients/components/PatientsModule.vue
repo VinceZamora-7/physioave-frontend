@@ -1111,8 +1111,8 @@ const onSubmit = async (event: FormSubmitEvent): Promise<void> => {
 
           const newPatientId = result?.id ?? 0
           if (newPatientId > 0) {
-            const fullName = [body.first_name, body.middle_name, body.last_name]
-              .filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
+            const fullName = [body.last_name, body.first_name]
+              .filter(Boolean).join(', ').replace(/\s+/g, ' ').trim()
             selectedPatient.value = {
               ...body,
               id: newPatientId,

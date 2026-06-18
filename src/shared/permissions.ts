@@ -4,11 +4,12 @@ export type RouteAccessRule = {
 
 export const MODULE_ACCESS_RULES = {
   dashboard: ["Dashboard::READ"],
-  patients: ["Patient::READ", "Patient::LOOKUP", "Patient::CREATE", "Patient::UPDATE"],
+  patients: ["Patient::READ", "Patient::LOOKUP"],
   appointments: ["Appointment::READ", "Appointment::LOOKUP", "Appointment::CREATE", "Appointment::UPDATE"],
   patientDailyLog: ["Appointment::READ", "Appointment::LOOKUP"],
-  billing: ["Appointment::MANAGE_BILL", "Patient::MANAGE_BILLS"],
-  reports: ["Appointment::READ", "Patient::READ", "Appointment::MANAGE_BILL", "Patient::MANAGE_BILLS"],
+  billing: ["CashBill::READ", "CashBill::LOOKUP", "HMOBill::READ", "HMOBill::LOOKUP"],
+  billingWorkflow: ["Appointment::MANAGE_BILL", "Patient::MANAGE_BILLS"],
+  reports: ["Appointment::READ", "Patient::READ", "CashBill::READ", "HMOBill::READ"],
   offersPromotions: ["Reference::LOOKUP", "Reference::READ", "Reference::CREATE", "Reference::UPDATE"],
   accessMatrix: ["AccessMatrix::READ"],
   adminSetup: ["Staff::READ", "Staff::LOOKUP", "Staff::CREATE", "Staff::UPDATE"],
@@ -32,37 +33,37 @@ export const ROUTE_ACCESS_RULES: Record<string, RouteAccessRule> = {
     anyOf: [...MODULE_ACCESS_RULES.billing],
   },
   "self-pay-single-invoice-print": {
-    anyOf: [...MODULE_ACCESS_RULES.billing],
+    anyOf: [...MODULE_ACCESS_RULES.billing, ...MODULE_ACCESS_RULES.billingWorkflow, "Appointment::READ", "Patient::READ"],
   },
   "self-pay-package-invoice-print": {
-    anyOf: [...MODULE_ACCESS_RULES.billing],
+    anyOf: [...MODULE_ACCESS_RULES.billing, ...MODULE_ACCESS_RULES.billingWorkflow, "Appointment::READ", "Patient::READ"],
   },
   "hmo-patient-billing-summary-print": {
-    anyOf: [...MODULE_ACCESS_RULES.billing],
+    anyOf: [...MODULE_ACCESS_RULES.billing, ...MODULE_ACCESS_RULES.billingWorkflow, "Appointment::READ", "Patient::READ"],
   },
   "hmo-patient-profile-print": {
-    anyOf: [...MODULE_ACCESS_RULES.billing],
+    anyOf: [...MODULE_ACCESS_RULES.billing, ...MODULE_ACCESS_RULES.billingWorkflow, "Appointment::READ", "Patient::READ"],
   },
   "hmo-attendance-treatment-print": {
-    anyOf: [...MODULE_ACCESS_RULES.billing],
+    anyOf: [...MODULE_ACCESS_RULES.billing, ...MODULE_ACCESS_RULES.billingWorkflow, "Appointment::READ", "Patient::READ"],
   },
   "lgu-patient-billing-summary-print": {
-    anyOf: [...MODULE_ACCESS_RULES.billing],
+    anyOf: [...MODULE_ACCESS_RULES.billing, ...MODULE_ACCESS_RULES.billingWorkflow, "Appointment::READ", "Patient::READ"],
   },
   "lgu-patient-profile-print": {
-    anyOf: [...MODULE_ACCESS_RULES.billing],
+    anyOf: [...MODULE_ACCESS_RULES.billing, ...MODULE_ACCESS_RULES.billingWorkflow, "Appointment::READ", "Patient::READ"],
   },
   "lgu-patient-invoice-billing-print": {
-    anyOf: [...MODULE_ACCESS_RULES.billing],
+    anyOf: [...MODULE_ACCESS_RULES.billing, ...MODULE_ACCESS_RULES.billingWorkflow, "Appointment::READ", "Patient::READ"],
   },
   "lgu-attendance-treatment-print": {
-    anyOf: [...MODULE_ACCESS_RULES.billing],
+    anyOf: [...MODULE_ACCESS_RULES.billing, ...MODULE_ACCESS_RULES.billingWorkflow, "Appointment::READ", "Patient::READ"],
   },
   "hmo-soa-print": {
-    anyOf: [...MODULE_ACCESS_RULES.billing],
+    anyOf: [...MODULE_ACCESS_RULES.billing, ...MODULE_ACCESS_RULES.billingWorkflow],
   },
   "lgu-soa-print": {
-    anyOf: [...MODULE_ACCESS_RULES.billing],
+    anyOf: [...MODULE_ACCESS_RULES.billing, ...MODULE_ACCESS_RULES.billingWorkflow],
   },
   reports: {
     anyOf: [...MODULE_ACCESS_RULES.reports],

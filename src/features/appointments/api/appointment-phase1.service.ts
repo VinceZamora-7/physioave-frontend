@@ -90,6 +90,7 @@ export interface AppointmentListItem {
 
   reschedule_flag: boolean
   reschedule_count: number
+  reschedule_history_count?: number
   dropout_status?: string
   dropout_at?: string | null
   dropout_reason?: string | null
@@ -305,6 +306,7 @@ export interface PtEndOfDayReport {
     window_ends_at: string
   }
   summary: {
+    pending_appointment_count: number
     pending_pt_signature_count: number
     pending_billing_count: number
     billing_cleared_appointments: number

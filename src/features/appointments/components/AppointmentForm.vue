@@ -1167,7 +1167,7 @@ const internPtStaffId = computed({
 })
 
 
-const SLOT_STEP_MINUTES = 30
+const SLOT_STEP_MINUTES = 60
 const DEFAULT_DURATION_MS = 60 * 60 * 1000
 const MIN_DURATION_MS = 15 * 60 * 1000
 
