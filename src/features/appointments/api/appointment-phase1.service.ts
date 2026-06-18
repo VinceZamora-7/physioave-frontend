@@ -9,6 +9,7 @@ export type AppointmentDailyLogSignatureState = "PENDING" | "PATIENT_SIGNED" | "
 export type AppointmentBillingType = "SELF_PAY_SINGLE" | "SELF_PAY_PACKAGE" | "HMO_BILLING" | "LGU_BILLING"
 export type AppointmentServiceType = "SINGLE" | "PACKAGE" | "HMO" | "LGU"
 export type AppointmentSponsorType = "HMO" | "LGU"
+export type AppointmentDropoutStatus = "DROPPED_OUT" | "CROSS_MONTH_DROPPED_OUT"
 export type AppointmentStatus = "Pending" | "Rescheduled" | "No show" | "Cancelled" | "Completed" | string
 export type QueryParams = Record<string, string | number | boolean | null | undefined>
 
@@ -409,7 +410,7 @@ export interface AppointmentEncounterTicketPayload extends Record<string, unknow
 export interface AppointmentPtCompletionPayload extends Record<string, unknown> {}
 export interface LguServiceConsumptionPayload extends Record<string, unknown> {}
 export interface DropoutStatusUpdatePayload extends Record<string, unknown> {
-  dropout_status?: "DROPPED_OUT"
+  dropout_status?: AppointmentDropoutStatus
   reason?: string | null
   dropout_reason?: string | null
 }

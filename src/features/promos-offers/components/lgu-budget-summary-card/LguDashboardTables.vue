@@ -57,7 +57,7 @@
 
           <Column header="Status" style="width: 170px">
             <template #body="{ data }">
-              <Tag :value="formatLguPatientStatus(data.lgu_patient_status)" :severity="lguPatientStatusSeverity(data.lgu_patient_status)" class="text-xs" />
+              <Tag :value="formatLguPatientStatus(resolveLguPatientStatus(data))" :severity="lguPatientStatusSeverity(resolveLguPatientStatus(data))" class="text-xs" />
             </template>
           </Column>
 
@@ -205,7 +205,7 @@ import Tag from "primevue/tag"
 import type { Patient } from "@/features/patients/types/patient"
 import type { LguDashboardHistoryItem } from "@/features/lgu-billing/api/lgu-billing.service"
 
-defineProps<{
+const props = defineProps<{
   lguTransactionHistory: LguDashboardHistoryItem[]
   loadingTransactionHistory: boolean
   transactionHistoryError: string
@@ -248,6 +248,29 @@ const getAvailedServiceTotal = (row: LguDashboardHistoryItem): number => {
 }
 
 const normalizeStatus = (value?: string | null): string => String(value ?? "").trim().toUpperCase()
+
+const isCrossMonthDroppedOutStatus = (value?: string | null): boolean =>
+  normalizeStatus(value) === "CROSS_MONTH_DROPPED_OUT"
+
+const isDroppedOutStatus = (value?: string | null): boolean => {
+  const normalized = normalizeStatus(value)
+  return normalized === "DROPPED_OUT" || normalized === "CROSS_MONTH_DROPPED_OUT"
+}
+
+const resolveLguPatientStatus = (patient: Patient): Patient["lgu_patient_status"] => {
+  const patientId = Number(patient.id)
+  const patientTransactions = props.lguTransactionHistory.filter(row => Number(row.patient_id ?? 0) === patientId)
+
+  if (isCrossMonthDroppedOutStatus(patient.lgu_patient_status) || patientTransactions.some(row => isCrossMonthDroppedOutStatus(row.program_status))) {
+    return "CROSS_MONTH_DROPPED_OUT"
+  }
+
+  if (isDroppedOutStatus(patient.lgu_patient_status) || patientTransactions.some(row => isDroppedOutStatus(row.program_status))) {
+    return "DROPPED_OUT"
+  }
+
+  return patient.lgu_patient_status ?? "ACTIVE"
+}
 
 const formatStatusLabel = (value?: string | null): string => {
   const normalized = normalizeStatus(value)

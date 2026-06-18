@@ -1077,6 +1077,7 @@ import {
 } from "@/features/appointments/api/appointment-billing.service";
 import {
   appointmentPhase1Service,
+  type AppointmentDropoutStatus,
   type AppointmentListItem,
   type AppointmentPlannedService,
   type AppointmentLocationContext,
@@ -2030,6 +2031,45 @@ const canDropOutActiveAppointment = computed(() => {
 
   return isLguAppointment(appointment) && canManageAppointmentBilling.value;
 });
+
+const getMonthDateRange = (date: Date): { from: Date; to: Date } => ({
+  from: new Date(date.getFullYear(), date.getMonth(), 1),
+  to: new Date(date.getFullYear(), date.getMonth() + 1, 0),
+});
+
+const resolveDropoutStatusForAppointment = async (
+  appointment: AppointmentListItem,
+): Promise<AppointmentDropoutStatus> => {
+  const appointmentStart = new Date(appointment.starts_at);
+  if (Number.isNaN(appointmentStart.getTime())) return "DROPPED_OUT";
+
+  const { from, to } = getMonthDateRange(appointmentStart);
+  const result = await appointmentPhase1Service.getAll({
+    page: 1,
+    size: 1000,
+    patient_id: appointment.patient_id,
+    from_date: toDateParam(from),
+    to_date: toDateParam(to),
+  });
+
+  const firstLguAppointmentThisMonth = (result.content ?? [])
+    .filter((item) => item.patient_id === appointment.patient_id)
+    .filter(isLguAppointment)
+    .filter((item) => {
+      const startsAt = new Date(item.starts_at);
+      return !Number.isNaN(startsAt.getTime());
+    })
+    .sort(
+      (left, right) =>
+        new Date(left.starts_at).getTime() -
+          new Date(right.starts_at).getTime() ||
+        Number(left.id) - Number(right.id),
+    )[0];
+
+  return firstLguAppointmentThisMonth?.id === appointment.id
+    ? "CROSS_MONTH_DROPPED_OUT"
+    : "DROPPED_OUT";
+};
 
 const toDateParam = (date: Date | null): string | undefined => {
   if (!date) return undefined;
@@ -4624,10 +4664,13 @@ const dropOutActiveAppointment = async (reason: string): Promise<void> => {
 
   try {
     isDroppingOut.value = true;
+    const dropoutStatus = await resolveDropoutStatusForAppointment(
+      activeAppointment.value,
+    );
     const summary = await appointmentPhase1Service.updateDropoutStatus(
       activeAppointment.value.id,
       {
-        dropout_status: "DROPPED_OUT",
+        dropout_status: dropoutStatus,
         reason,
       },
     );
@@ -4635,7 +4678,12 @@ const dropOutActiveAppointment = async (reason: string): Promise<void> => {
     attendanceItems.value = buildAttendanceItems(
       summary.planned_services ?? [],
     );
-    successToast(toast, "LGU patient marked as dropped out");
+    successToast(
+      toast,
+      dropoutStatus === "CROSS_MONTH_DROPPED_OUT"
+        ? "LGU patient marked as cross-month dropped out"
+        : "LGU patient marked as dropped out",
+    );
     await refreshAppointmentViews();
   } catch (error) {
     const message = (error as any)?.response?.data?.message;

@@ -2484,7 +2484,7 @@ const isUsedLedgerEntry = (entry: LguDashboardHistoryItem): boolean => {
   return billingStatus === "BILLED"
     || billingStatus === "PAID"
     || programStatus === "COMPLETED"
-    || programStatus === "DROPPED_OUT"
+    || isDroppedOutStatus(programStatus)
 }
 
 const usedLguFund = computed(() =>

@@ -913,7 +913,7 @@ const getSessionSources = (): Map<number, SessionSource> => {
         totalSessions,
         packageName: authorization.package_name || session.service_name || "—",
         serviceName: session.service_name || authorization.package_name || "—",
-        billingId: session.monthly_billing_id ?? session.dropout_billing_id ?? null
+        billingId: session.dropout_billing_id ?? session.monthly_billing_id ?? null
       })
     })
   })
