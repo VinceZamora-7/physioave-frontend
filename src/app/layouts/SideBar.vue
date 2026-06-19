@@ -329,16 +329,22 @@ const hasAdminNavigationAccess = computed(() =>
   })
 )
 
-const isPhysicalTherapistUser = computed(() => {
+const isTherapistProviderUser = computed(() => {
   const pt  = toStr(currentUser.value?.appointment_provider_type).toUpperCase()
   const spt = toStr(currentUser.value?.secondary_appointment_provider_type).toUpperCase()
   const role = displayRole.value.toLowerCase()
-  const ispt =
+  return (
     pt === "PHYSICAL_THERAPIST" ||
+    pt === "PT_ASSISTANT" ||
+    pt === "INTERN" ||
     spt === "PHYSICAL_THERAPIST" ||
+    spt === "PT_ASSISTANT" ||
+    spt === "INTERN" ||
     role.includes("physical therapist")
-  return ispt && !hasAdminNavigationAccess.value
+  )
 })
+
+const isPhysicalTherapistUser = computed(() => isTherapistProviderUser.value && !hasAdminNavigationAccess.value)
 
 const canAccessRoute = (name: string): boolean =>
   hasPermissionData.value && authSession.canAccessRoute(name)
@@ -350,7 +356,6 @@ const ptNavItems = computed(() =>
     { name: "appointments",      label: "Appointments",      icon: "pi-calendar-plus" },
     { name: "patient-daily-log", label: "Daily Patient Log", icon: "pi-list-check" },
     { name: "billing",           label: "Billing",           icon: "pi-wallet" },
-    { name: "reports",           label: "Reports",           icon: "pi-chart-bar" },
   ].filter((i) => canAccessRoute(i.name))
 )
 
@@ -361,7 +366,7 @@ const patientCareItems = computed(() =>
     { name: "patient-daily-log", label: "Daily Patient Log", icon: "pi-list-check" },
     { name: "billing",           label: "Billing",           icon: "pi-wallet" },
     { name: "reports",           label: "Reports",           icon: "pi-chart-bar" },
-  ].filter((i) => canAccessRoute(i.name))
+  ].filter((i) => canAccessRoute(i.name) && !(isTherapistProviderUser.value && i.name === "reports"))
 )
 
 const servicesItems = computed(() =>

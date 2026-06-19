@@ -21,6 +21,7 @@
             :statuses="statuses"
             :isLoading="isFilterLoading"
             :isExportLoading="isPatientExportLoading"
+            :canCreatePatient="canCreatePatient"
             @reset="resetFilters"
             @save="onSave"
             @export="onExportToExcelThrottleFn"
@@ -142,7 +143,7 @@
   </div>
 
   <!-- Contact Information -->
-  <div class="app-detail-card app-detail-card-secondary">
+  <div v-if="!isPtRestrictedUser" class="app-detail-card app-detail-card-secondary">
     <div class="mb-4 flex items-center gap-3">
       <div class="app-brand-icon app-brand-icon-secondary h-10 w-10">
         <i class="pi pi-phone text-base"></i>
@@ -216,7 +217,7 @@
   </div>
 </div>
 </div>
-          <div class="app-detail-card app-detail-card-secondary">
+          <div v-if="canManagePatientAttachments" class="app-detail-card app-detail-card-secondary">
             <div class="app-detail-card-copy mb-3 text-sm font-semibold uppercase tracking-wide">Attachments</div>
             <div class="app-muted-text mb-3 text-sm">
               Keep static patient attachments limited to identification files. Visit-based clinical files are now handled under Evaluation Visit Log.
@@ -237,7 +238,7 @@
 
           <div class="app-detail-card app-detail-card-primary">
             <div class="app-detail-card-copy mb-2 text-sm font-semibold uppercase tracking-wide">Call To Actions</div>
-            <Menu :model="menuButtons(selectedPatientDetails)" />
+            <Menu :model="patientDetailMenuButtons(selectedPatientDetails)" />
           </div>
         </div>
       </Dialog>
@@ -455,12 +456,14 @@
         <Button label="Close" text severity="secondary" @click="viewSponsorInfoVisible = false" />
         <Button
           v-if="!viewSponsorInfoData.length && !viewSponsorInfoLoading"
+          v-show="!isPtRestrictedUser"
           label="Register Sponsor Information"
           icon="pi pi-plus"
           @click="viewSponsorInfoVisible = false; registerSponsorInfoVisible = true"
         />
         <Button
           v-if="viewSponsorInfoData.length"
+          v-show="!isPtRestrictedUser"
           label="Edit"
           icon="pi pi-pencil"
           outlined
@@ -547,6 +550,7 @@ import type {Region, RegionRequestPayload} from "@/models/philippine-location.ts
 import {createReferenceQueryService} from "@/services/reference.tanstack.service.ts";
 import type {PatientFormState} from "@/features/patients/schema/patient.schema";
 import {clinicStore} from "@/stores/clinic.store.ts";
+import {useAuthSessionStore} from "@/stores/auth-session.store";
 import {usePaginationDebounce} from "@/composables/pagination-debounce.composable.ts";
 import PatientsTable from "@/features/patients/components/PatientsTable.vue";
 import PatientsTableHeader from "@/features/patients/components/PatientsTableHeader.vue";
@@ -570,6 +574,7 @@ import {staffService} from "@/features/staff/api/staff.service";
 import {pamsAPI} from "@/utils/axios-interceptor.ts";
 import {lguBillingService} from "@/features/lgu-billing/api/lgu-billing.service";
 import type {PatientHMOInformation} from "@/models/hmo-information.ts";
+import {isPtAppointmentProvider} from "@/utils/appointment-provider.util";
 
 type ToggleDialogExpose = {
   toggleDialog: () => void
@@ -685,6 +690,8 @@ const openEditFromView = (): void => {
 
 const useClinicStore = clinicStore()
 const { selectedClinicId } = storeToRefs(useClinicStore)
+const authSession = useAuthSessionStore()
+const {currentUser} = storeToRefs(authSession)
 const route = useRoute()
 
 const toast = useToast()
@@ -743,6 +750,22 @@ const isLoading = computed<boolean>(() =>
   isProvincesLoading.value ||
   isCitiesLoading.value ||
   isBaranggaysLoading.value)
+
+const isPtRestrictedUser = computed(() =>
+  isPtAppointmentProvider(currentUser.value) && !authSession.isOwnerEquivalent
+)
+
+const canCreatePatient = computed(() =>
+  !isPtRestrictedUser.value && (authSession.isOwnerEquivalent || authSession.hasAnyPermission("Patient::CREATE"))
+)
+
+const canEditPatient = computed(() =>
+  !isPtRestrictedUser.value && (authSession.isOwnerEquivalent || authSession.hasAnyPermission("Patient::UPDATE"))
+)
+
+const canManagePatientAttachments = computed(() =>
+  !isPtRestrictedUser.value && (authSession.isOwnerEquivalent || authSession.hasAnyPermission("Patient::MANAGE_ATTACHMENTS"))
+)
 
 const draftService = createDraftService<PatientFormState>(IndexedDBKey.PATIENT)
 
@@ -1020,6 +1043,10 @@ const {mutate: toggleStatusMutation} = patientTanstackService.toggleStatus()
 const folderSaveMutation = (): UUID => toUUID(crypto.randomUUID())
 
 const onSave = (): void => {
+  if (!canCreatePatient.value) {
+    errorToast(toast, "Physical Therapist users cannot create patients")
+    return
+  }
   void openCreatePatient()
 }
 
@@ -1141,8 +1168,7 @@ const onSubmit = async (event: FormSubmitEvent): Promise<void> => {
 }
 
 
-const menuButtons = (patient: Patient): MenuItem[] => {
-  return [
+const fullPatientMenuButtons = (patient: Patient): MenuItem[] => [
     {
       label: `Edit this record`,
       icon: 'pi pi-pen-to-square',
@@ -1230,6 +1256,26 @@ const menuButtons = (patient: Patient): MenuItem[] => {
       separator: true
     }
   ]
+
+const ptPatientMenuButtons = (patient: Patient): MenuItem[] => [
+  {
+    label: 'View Appointments',
+    icon: 'pi pi-calendar',
+    command: () => {
+      selectedPatientDetails.value = patient
+      patientAppointmentsDialog.value?.open(patient)
+    },
+  },
+]
+
+const patientDetailMenuButtons = (patient: Patient): MenuItem[] => {
+  if (isPtRestrictedUser.value) return ptPatientMenuButtons(patient)
+  return fullPatientMenuButtons(patient).filter((item) => {
+    if (item.label === "Edit this record" || item.label === "Toggle Status") {
+      return canEditPatient.value
+    }
+    return true
+  })
 }
 
 const onExportToExcelThrottleFn = useThrottleFn(async (): Promise<void> => {
@@ -1370,12 +1416,20 @@ const handleReferenceUpdated = async (event: Event): Promise<void> => {
 }
 
 const openCreatePatient = async (): Promise<void> => {
+  if (!canCreatePatient.value) {
+    errorToast(toast, "Physical Therapist users cannot create patients")
+    return
+  }
   selectedPatient.value = undefined
   await ensureDropdownsLoaded()
   patientForm.value?.toggleDialog()
 }
 
 const openEditPatient = async (patient: Patient): Promise<void> => {
+  if (!canEditPatient.value) {
+    errorToast(toast, "Physical Therapist users cannot edit patients")
+    return
+  }
   selectedPatient.value = patient
   await ensureDropdownsLoaded()
   patientForm.value?.toggleDialog()

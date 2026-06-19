@@ -33,6 +33,77 @@
         </article>
       </div>
 
+      <article class="app-dashboard-panel space-y-3">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 class="text-sm font-semibold">PT Documentation Reminder</h3>
+            <p class="app-muted-text mt-1 text-xs">
+              Complete today's Evaluation Visit Logs before the day ends.
+            </p>
+          </div>
+          <Tag
+            :value="`${ptDocumentationReminders?.reminder_count ?? 0} pending`"
+            :severity="(ptDocumentationReminders?.reminder_count ?? 0) > 0 ? 'warn' : 'success'"
+          />
+        </div>
+
+        <DataTable class="app-data-table" :value="ptDocumentationReminders?.reminders ?? []" size="small" :loading="isLoading">
+          <template #empty>
+            <div class="py-6 text-center text-sm opacity-70">No pending documentation for today.</div>
+          </template>
+          <Column field="patient_name" header="Patient">
+            <template #body="{ data }">
+              <button type="button" class="font-medium hover:underline" @click="openPatientDocumentation(data)">
+                {{ data.patient_name || "Unnamed patient" }}
+              </button>
+            </template>
+          </Column>
+          <Column field="starts_at" header="Schedule">
+            <template #body="{ data }">{{ formatTimeRange(data.starts_at, data.ends_at) }}</template>
+          </Column>
+          <Column field="appointment_phase" header="Phase" />
+          <Column field="appointment_status" header="Status">
+            <template #body="{ data }">
+              <Tag :value="data.appointment_status" severity="secondary" />
+            </template>
+          </Column>
+          <Column header="Action" style="width: 120px">
+            <template #body="{ data }">
+              <Button label="Open" size="small" text @click="openPatientDocumentation(data)" />
+            </template>
+          </Column>
+        </DataTable>
+      </article>
+
+      <article class="app-dashboard-panel space-y-3">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 class="text-sm font-semibold">Today's Assigned Appointments</h3>
+            <p class="app-muted-text mt-1 text-xs">Appointments assigned to you for today.</p>
+          </div>
+          <Tag
+            :value="`${ptTodayAssignedAppointments.length} assigned`"
+            :severity="ptTodayAssignedAppointments.length > 0 ? 'info' : 'secondary'"
+          />
+        </div>
+
+        <DataTable class="app-data-table" :value="ptTodayAssignedAppointments" size="small" :loading="isLoading">
+          <template #empty>
+            <div class="py-6 text-center text-sm opacity-70">No assigned appointments for today.</div>
+          </template>
+          <Column field="patient_name" header="Patient" />
+          <Column field="starts_at" header="Schedule">
+            <template #body="{ data }">{{ formatTimeRange(data.starts_at, data.ends_at) }}</template>
+          </Column>
+          <Column field="clinic_name" header="Branch" />
+          <Column field="appointment_status" header="Status">
+            <template #body="{ data }">
+              <Tag :value="data.appointment_status" severity="secondary" />
+            </template>
+          </Column>
+        </DataTable>
+      </article>
+
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <article class="app-dashboard-panel space-y-3">
           <h3 class="text-sm font-semibold">Weekly Attendance</h3>
@@ -283,14 +354,15 @@
 </template>
 
 <script setup lang="ts">
-import {computed, onMounted, ref, watch} from "vue"
+import {computed, onBeforeUnmount, onMounted, ref, watch} from "vue"
+import {useRouter} from "vue-router"
 import {storeToRefs} from "pinia"
 import Button from "primevue/button"
 import Column from "primevue/column"
 import DataTable from "primevue/datatable"
 import DatePicker from "primevue/datepicker"
 import Tag from "primevue/tag"
-import {errorToast} from "@/utils/toast.util"
+import {errorToast, infoToast} from "@/utils/toast.util"
 import {useToast} from "primevue/usetoast"
 import {getApiErrorMessage} from "@/utils/actionable-error.util"
 import {ptPrimaryBtn} from "@/features/shared/table-header.styles"
@@ -298,7 +370,10 @@ import {
   dashboardService,
   type DashboardConfidentialRevenue,
   type DashboardDistributionItem,
+  type DashboardPtAssignedAppointment,
   type DashboardPtAttendance,
+  type DashboardPtDocumentationReminderItem,
+  type DashboardPtDocumentationReminders,
   type DashboardRecentAppointment,
   type DashboardTrendItem,
 } from "@/features/dashboard/api/dashboard.service"
@@ -313,6 +388,7 @@ import {useAuthSessionStore} from "@/stores/auth-session.store"
 import {isPtAppointmentProvider} from "@/utils/appointment-provider.util"
 
 const toast = useToast()
+const router = useRouter()
 const isLoading = ref(false)
 const globalClinicStore = clinicStore()
 const { selectedClinicId, selectedClinic } = storeToRefs(globalClinicStore)
@@ -358,6 +434,8 @@ const billingDistribution = ref<Array<{
 const recentAppointments = ref<DashboardRecentAppointment[]>([])
 const ptPerformance = ref<Array<{pt_name: string; bookings: number; documentationReminderCount: number; redAlertCount: number}>>([])
 const ptAttendance = ref<DashboardPtAttendance>()
+const ptDocumentationReminders = ref<DashboardPtDocumentationReminders>()
+const ptTodayAssignedAppointments = ref<DashboardPtAssignedAppointment[]>([])
 const isDoctorSessionsLoading = ref(false)
 const doctorSessionsDateRange = ref<Date[] | null>(null)
 const doctorSessionsReport = ref<ReferringDoctorCompletedSessionsReport>()
@@ -365,6 +443,12 @@ const canViewConfidentialRevenueCards = ref(false)
 const hideSensitiveDashboardData = ref(localStorage.getItem("dashboard.hideSensitiveData") === "true")
 
 const formatDateTime = (value: string): string => new Date(value).toLocaleString()
+
+const formatTime = (value: string): string =>
+  new Date(value).toLocaleTimeString("en-PH", {hour: "numeric", minute: "2-digit"})
+
+const formatTimeRange = (startsAt: string, endsAt: string): string =>
+  `${formatTime(startsAt)} - ${formatTime(endsAt)}`
 
 const formatDate = (value: Date): string =>
   value.toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" })
@@ -447,6 +531,16 @@ const ptAttendanceCards = computed(() => [
     accent: "#A91D8B",
   },
 ])
+
+const openPatientDocumentation = (item: DashboardPtDocumentationReminderItem): void => {
+  void router.push({
+    name: "patients",
+    query: {
+      patientId: String(item.patient_id),
+      name: item.patient_name,
+    },
+  })
+}
 
 const loadConfidentialRevenue = async (): Promise<void> => {
   const result: DashboardConfidentialRevenue | undefined = await dashboardService.getConfidentialRevenue(selectedClinicId.value)
@@ -617,11 +711,72 @@ const loadPtAttendance = async (): Promise<void> => {
   ptAttendance.value = await dashboardService.getPtAttendance(selectedClinicId.value)
 }
 
+const loadPtDocumentationReminders = async (): Promise<void> => {
+  ptDocumentationReminders.value = await dashboardService.getPtDocumentationReminders(selectedClinicId.value)
+}
+
+const loadPtTodayAssignedAppointments = async (): Promise<void> => {
+  ptTodayAssignedAppointments.value = (await dashboardService.getPtTodayAssignedAppointments(selectedClinicId.value))?.appointments ?? []
+}
+
+let assignmentPollTimer: number | undefined
+const assignmentAlertSeenKeys = new Set<string>()
+const assignmentPollSince = ref(new Date().toISOString())
+
+const assignmentAlertKey = (appointment: DashboardPtAssignedAppointment): string =>
+  `${appointment.appointment_id}:${appointment.updated_at}`
+
+const showAssignmentAlert = (appointment: DashboardPtAssignedAppointment): void => {
+  infoToast(
+    toast,
+    `New appointment assigned: ${appointment.patient_name || "Unnamed patient"} (${formatDateTime(appointment.starts_at)})`
+  )
+}
+
+const pollPtAssignedAppointments = async (notify = true): Promise<void> => {
+  if (!isPtDashboard.value) return
+
+  const since = assignmentPollSince.value
+  const result = await dashboardService.getPtAssignedAppointments(since, selectedClinicId.value)
+  assignmentPollSince.value = result?.checked_at ?? new Date().toISOString()
+
+  const appointments = result?.appointments ?? []
+  for (const appointment of appointments.slice().reverse()) {
+    const key = assignmentAlertKey(appointment)
+    if (assignmentAlertSeenKeys.has(key)) continue
+    assignmentAlertSeenKeys.add(key)
+    if (notify) showAssignmentAlert(appointment)
+  }
+}
+
+const startPtAssignmentPolling = (): void => {
+  if (assignmentPollTimer !== undefined) {
+    window.clearInterval(assignmentPollTimer)
+  }
+  assignmentPollSince.value = new Date().toISOString()
+  void pollPtAssignedAppointments(false)
+  assignmentPollTimer = window.setInterval(() => {
+    void pollPtAssignedAppointments(true).catch((error: unknown) => {
+      console.warn("Failed to poll PT appointment assignments", error)
+    })
+  }, 30_000)
+}
+
+const stopPtAssignmentPolling = (): void => {
+  if (assignmentPollTimer === undefined) return
+  window.clearInterval(assignmentPollTimer)
+  assignmentPollTimer = undefined
+}
+
 const refreshDashboard = async (): Promise<void> => {
   try {
     isLoading.value = true
     if (isPtDashboard.value) {
-      await loadPtAttendance()
+      await Promise.all([
+        loadPtAttendance(),
+        loadPtDocumentationReminders(),
+        loadPtTodayAssignedAppointments(),
+      ])
       return
     }
 
@@ -676,6 +831,7 @@ onMounted(async () => {
 
   if (isPtDashboard.value) {
     void refreshDashboard()
+    startPtAssignmentPolling()
     return
   }
 
@@ -687,8 +843,15 @@ onMounted(async () => {
 // Refresh dashboard when clinic selection changes
 watch(selectedClinicId, () => {
   void refreshDashboard()
+  if (isPtDashboard.value) {
+    startPtAssignmentPolling()
+  }
   if (!isPtDashboard.value) {
     void refreshDoctorSessionsReport()
   }
+})
+
+onBeforeUnmount(() => {
+  stopPtAssignmentPolling()
 })
 </script>

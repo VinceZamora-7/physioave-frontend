@@ -1104,6 +1104,7 @@ import { pamsAPI } from "@/utils/axios-interceptor";
 import { errorHandler } from "@/utils/error-handler";
 import { Status } from "@/utils/global.type";
 import { errorToast, successToast } from "@/utils/toast.util";
+import { isPtAppointmentProvider } from "@/utils/appointment-provider.util";
 
 type SelectOption = { label: string; value: number | string | null };
 type PayerType = "SELF_PAY_SINGLE" | "SELF_PAY_PACKAGE" | "HMO" | "LGU";
@@ -1958,16 +1959,20 @@ const unbilledAppointmentsCount = computed(
 const canUseAppointmentPermission = (...permissions: string[]): boolean =>
   authSession.isOwnerEquivalent || authSession.hasAnyPermission(...permissions);
 
+const isPtRestrictedUser = computed(() =>
+  isPtAppointmentProvider(authSession.currentUser) && !authSession.isOwnerEquivalent
+);
+
 const canViewAppointmentDetails = computed(() =>
   canUseAppointmentPermission("Appointment::READ", "Appointment::LOOKUP"),
 );
 
 const canCreateAppointment = computed(() =>
-  canUseAppointmentPermission("Appointment::CREATE"),
+  !isPtRestrictedUser.value && canUseAppointmentPermission("Appointment::CREATE"),
 );
 
 const canEditAppointment = computed(() =>
-  canUseAppointmentPermission("Appointment::UPDATE"),
+  !isPtRestrictedUser.value && canUseAppointmentPermission("Appointment::UPDATE"),
 );
 
 const canRescheduleAppointment = computed(() => canEditAppointment.value);
@@ -1979,7 +1984,7 @@ const canRescheduleSpecificAppointment = (appointment?: AppointmentListItem | nu
   canRescheduleAppointment.value && !hasReachedRescheduleLimit(appointment);
 
 const canCancelAppointment = computed(() =>
-  canUseAppointmentPermission(
+  !isPtRestrictedUser.value && canUseAppointmentPermission(
     "Appointment::DELETE",
     "Appointment::MANAGE_STATUS",
   ),
@@ -1993,7 +1998,7 @@ const canMarkAttendance = computed(() =>
 );
 
 const canManageAppointmentBilling = computed(() =>
-  canUseAppointmentPermission(
+  !isPtRestrictedUser.value && canUseAppointmentPermission(
     "Appointment::MANAGE_BILL",
     "Patient::MANAGE_BILLS",
   ),
@@ -2669,6 +2674,7 @@ const buildAppointmentPayload = (date: Date): AppointmentCreatePayload => {
     patient_id: form.patient_id,
     clinic_id: clinicId,
     primary_provider_staff_id: form.primary_provider_staff_id,
+    support_staff_id: form.assistant_provider_staff_id ?? form.intern_provider_staff_id,
     referring_staff_id: form.referring_staff_id,
     appointment_type_id: form.appointment_type_id,
     appointment_status_id:

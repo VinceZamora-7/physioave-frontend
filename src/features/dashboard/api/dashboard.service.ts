@@ -50,6 +50,38 @@ export interface DashboardPtAttendance {
   monthly: DashboardPtAttendancePeriod
 }
 
+export interface DashboardPtDocumentationReminderItem {
+  appointment_id: number
+  patient_id: number
+  patient_name: string
+  starts_at: string
+  ends_at: string
+  appointment_status: string
+  appointment_phase: string
+}
+
+export interface DashboardPtDocumentationReminders {
+  date: string
+  reminder_count: number
+  reminders: DashboardPtDocumentationReminderItem[]
+}
+
+export interface DashboardPtAssignedAppointment {
+  appointment_id: number
+  patient_id: number
+  patient_name: string
+  starts_at: string
+  ends_at: string
+  clinic_name: string
+  appointment_status: string
+  updated_at: string
+}
+
+export interface DashboardPtAssignedAppointments {
+  checked_at: string
+  appointments: DashboardPtAssignedAppointment[]
+}
+
 const branchParams = (clinicId?: number): Record<string, unknown> =>
   clinicId ? {clinic_id: clinicId} : {all_branches: true}
 
@@ -90,8 +122,29 @@ export const dashboardService = {
   },
 
   async getPtAttendance(clinicId?: number): Promise<DashboardPtAttendance | undefined> {
-    const {data} = await pamsAPI.get<DashboardPtAttendance>("/dashboard/pt/attendance", {
+    const {data} = await pamsAPI.get<DashboardPtAttendance>("/pt-dashboard/attendance", {
       params: branchParams(clinicId),
+    })
+    return data
+  },
+
+  async getPtDocumentationReminders(clinicId?: number): Promise<DashboardPtDocumentationReminders | undefined> {
+    const {data} = await pamsAPI.get<DashboardPtDocumentationReminders>("/pt-dashboard/documentation-reminders", {
+      params: branchParams(clinicId),
+    })
+    return data
+  },
+
+  async getPtAssignedAppointments(since: string, clinicId?: number): Promise<DashboardPtAssignedAppointments | undefined> {
+    const {data} = await pamsAPI.get<DashboardPtAssignedAppointments>("/pt-dashboard/assigned-appointments", {
+      params: {since, limit: 10, ...branchParams(clinicId)},
+    })
+    return data
+  },
+
+  async getPtTodayAssignedAppointments(clinicId?: number): Promise<DashboardPtAssignedAppointments | undefined> {
+    const {data} = await pamsAPI.get<DashboardPtAssignedAppointments>("/pt-dashboard/assigned-appointments", {
+      params: {today: true, limit: 50, ...branchParams(clinicId)},
     })
     return data
   },

@@ -46,6 +46,7 @@
 
       <div class="app-table-header-actions">
         <Button
+          v-if="canCreatePatient"
           label="Add Patient"
           icon="pi pi-plus"
           severity="primary"
@@ -84,11 +85,14 @@ import { ptInputText, ptOutlinedBtn, ptPrimaryBtn, ptSelect } from "@/features/s
 import type { Status } from "@/utils/global.type"
 
 // 1. Define standard props
-defineProps<{
+withDefaults(defineProps<{
   statuses: Status[]
   isLoading: boolean
   isExportLoading: boolean
-}>()
+  canCreatePatient?: boolean
+}>(), {
+  canCreatePatient: true,
+})
 
 // 2. Define standard emits
 const emit = defineEmits<{
