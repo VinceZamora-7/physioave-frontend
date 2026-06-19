@@ -662,7 +662,8 @@ const getMonthRange = (): {from: string; to: string; days: number} => {
   }
 }
 
-const containsLgu = (name?: string): boolean => String(name ?? "").toUpperCase().includes("LGU")
+const isPayerType = (value: unknown, payerType: string): boolean =>
+  String(value ?? "").trim().toUpperCase() === payerType
 
 const loadMetrics = async (): Promise<void> => {
   const monthRange = getMonthRange()
@@ -670,7 +671,7 @@ const loadMetrics = async (): Promise<void> => {
   const [summaryResult, monthBillingsResult, monthHmoBillingsResult, monthAppointmentsResult] = await Promise.allSettled([
     dashboardService.getSummary(clinicId),
     billingPhase1Service.getAll({page: 1, size: 500, from_date: monthRange.from, to_date: monthRange.to, ...(clinicId ? {clinic_id: clinicId} : {})}),
-    billingPhase1Service.getAll({page: 1, size: 500, service_type: "HMO", from_date: monthRange.from, to_date: monthRange.to, ...(clinicId ? {clinic_id: clinicId} : {})}),
+    billingPhase1Service.getAll({page: 1, size: 500, billing_type: "HMO_BILLING", from_date: monthRange.from, to_date: monthRange.to, ...(clinicId ? {clinic_id: clinicId} : {})}),
     appointmentPhase1Service.getAll({page: 1, size: 500, ...(clinicId ? {clinic_id: clinicId} : {})}),
   ])
 
@@ -693,15 +694,16 @@ const loadMetrics = async (): Promise<void> => {
     : 0
 
   const paidRows = billingRows.filter(item => String(item.billing_status).toUpperCase() === "PAID")
-  const lguRows = billingRows.filter(item => containsLgu(item.package_name) || containsLgu(item.service_name))
+  const hmoAppointmentRows = monthAppointmentsRows.filter(item => isPayerType(item.payer_type, "HMO"))
+  const lguAppointmentRows = monthAppointmentsRows.filter(item => isPayerType(item.payer_type, "LGU"))
 
   metrics.value = {
-    monthlyTotalAppointments: monthAppointmentsRows.length,
+    monthlyTotalAppointments: summary?.monthly_total_appointments ?? monthAppointmentsRows.length,
     activePatients: summary?.active_patients ?? 0,
     appointmentsToday: summary?.appointments_today ?? 0,
     rescheduleCancellationIndex,
-    hmoBookingsMonthlyTotal: hmoRows.length,
-    lguBookingsMonthlyTotal: lguRows.length,
+    hmoBookingsMonthlyTotal: summary?.hmo_bookings_month_to_date ?? hmoAppointmentRows.length,
+    lguBookingsMonthlyTotal: summary?.lgu_bookings_month_to_date ?? lguAppointmentRows.length,
     pendingBillings: summary?.pending_billings ?? 0,
     paidBillings: summary?.paid_billings_month_to_date ?? paidRows.length,
     hmoRevenue: hmoRows.reduce((sum, item) => sum + Number(item.amount_paid || 0), 0),

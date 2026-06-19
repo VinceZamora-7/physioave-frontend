@@ -3,6 +3,9 @@ import {pamsAPI} from "@/utils/axios-interceptor"
 export interface DashboardSummary {
   active_patients: number
   appointments_today: number
+  monthly_total_appointments?: number
+  hmo_bookings_month_to_date?: number
+  lgu_bookings_month_to_date?: number
   pending_billings: number
   paid_billings_month_to_date: number
 }
