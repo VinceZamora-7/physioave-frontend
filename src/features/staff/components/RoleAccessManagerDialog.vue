@@ -482,7 +482,10 @@ const sidebarAccessOptions: SidebarAccessOption[] = [
     label: "Dashboard",
     description: "Overview and snapshot cards.",
     // Unique: Dashboard::* is only used by this tab
-    matcher: permission => permission.name.startsWith("Dashboard::")
+    matcher: permission =>
+      permission.name.startsWith("Dashboard::") &&
+      permission.name !== "Dashboard::VIEW_SUMMARY_CARDS" &&
+      permission.name !== "Dashboard::VIEW_CONFIDENTIAL_REVENUE"
   },
   {
     key: "patients",

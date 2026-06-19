@@ -401,20 +401,53 @@ const isLoading = ref(false)
 const globalClinicStore = clinicStore()
 const { selectedClinicId, selectedClinic } = storeToRefs(globalClinicStore)
 const authSession = useAuthSessionStore()
-const {currentUser, staffName, isOwnerEquivalent} = storeToRefs(authSession)
+const {currentUser, staffName, roleName} = storeToRefs(authSession)
 const isPtDashboard = computed(() => isPtAppointmentProvider(currentUser.value))
+const isOwnerRole = computed(() => roleName.value.trim().toLowerCase() === "owner")
 
 const canViewDashboardPermission = (permission: string): boolean =>
-  isOwnerEquivalent.value || authSession.hasAnyPermission(permission)
+  isOwnerRole.value || authSession.hasAnyPermission(permission)
 
-const canViewSummaryCards = computed(() => canViewDashboardPermission("Dashboard::VIEW_SUMMARY_CARDS"))
+const canViewDashboardCardPermission = (permission: string): boolean =>
+  canViewDashboardPermission(permission)
+const canViewMonthlyTotalAppointments = computed(() => canViewDashboardCardPermission("Dashboard::VIEW_MONTHLY_TOTAL_APPOINTMENTS"))
+const canViewActivePatients = computed(() => canViewDashboardCardPermission("Dashboard::VIEW_ACTIVE_PATIENTS"))
+const canViewAppointmentsToday = computed(() => canViewDashboardCardPermission("Dashboard::VIEW_APPOINTMENTS_TODAY"))
+const canViewReschedulingCancellationIndex = computed(() => canViewDashboardCardPermission("Dashboard::VIEW_RESCHEDULING_CANCELLATION_INDEX"))
+const canViewHmoBookingsMonthlyTotal = computed(() => canViewDashboardCardPermission("Dashboard::VIEW_HMO_BOOKINGS_MONTHLY_TOTAL"))
+const canViewLguBookingsMonthlyTotal = computed(() => canViewDashboardCardPermission("Dashboard::VIEW_LGU_BOOKINGS_MONTHLY_TOTAL"))
+const canViewPendingBillings = computed(() => canViewDashboardCardPermission("Dashboard::VIEW_PENDING_BILLINGS"))
+const canViewPaidBillings = computed(() => canViewDashboardCardPermission("Dashboard::VIEW_PAID_BILLINGS"))
+const canViewHmoRevenue = computed(() => canViewDashboardCardPermission("Dashboard::VIEW_HMO_REVENUE"))
+const canViewLguRevenue = computed(() => canViewDashboardCardPermission("Dashboard::VIEW_LGU_REVENUE"))
+const canViewOnlineMarketingRevenue = computed(() => canViewDashboardCardPermission("Dashboard::VIEW_ONLINE_MARKETING_REVENUE"))
+const canViewDirectMarketingRevenue = computed(() => canViewDashboardCardPermission("Dashboard::VIEW_DIRECT_MARKETING_REVENUE"))
+const canViewSummaryCards = computed(() =>
+  canViewMonthlyTotalAppointments.value ||
+  canViewActivePatients.value ||
+  canViewAppointmentsToday.value ||
+  canViewReschedulingCancellationIndex.value ||
+  canViewHmoBookingsMonthlyTotal.value ||
+  canViewLguBookingsMonthlyTotal.value ||
+  canViewPendingBillings.value ||
+  canViewPaidBillings.value ||
+  canViewHmoRevenue.value ||
+  canViewLguRevenue.value ||
+  canViewOnlineMarketingRevenue.value ||
+  canViewDirectMarketingRevenue.value
+)
+const canViewAnyConfidentialRevenueCard = computed(() =>
+  canViewLguRevenue.value ||
+  canViewOnlineMarketingRevenue.value ||
+  canViewDirectMarketingRevenue.value
+)
 const canViewMarketingChannels = computed(() => canViewDashboardPermission("Dashboard::VIEW_MARKETING_CHANNELS"))
 const canViewAppointmentTrend = computed(() => canViewDashboardPermission("Dashboard::VIEW_APPOINTMENT_TREND"))
 const canViewBillingDistribution = computed(() => canViewDashboardPermission("Dashboard::VIEW_BILLING_DISTRIBUTION"))
 const canViewRecentAppointments = computed(() => canViewDashboardPermission("Dashboard::VIEW_RECENT_APPOINTMENTS"))
 const canViewPtPerformance = computed(() => canViewDashboardPermission("Dashboard::VIEW_PT_PERFORMANCE"))
 const canViewReferringDoctorSessions = computed(() => canViewDashboardPermission("Dashboard::VIEW_REFERRING_DOCTOR_SESSIONS"))
-const canViewConfidentialRevenue = computed(() => canViewDashboardPermission("Dashboard::VIEW_CONFIDENTIAL_REVENUE"))
+const canViewConfidentialRevenue = computed(() => canViewAnyConfidentialRevenueCard.value)
 const canViewPtAttendance = computed(() => canViewDashboardPermission("Dashboard::VIEW_PT_ATTENDANCE"))
 const canViewPtDocumentationReminders = computed(() => canViewDashboardPermission("Dashboard::VIEW_PT_DOCUMENTATION_REMINDERS"))
 const canViewPtAssignedAppointments = computed(() => canViewDashboardPermission("Dashboard::VIEW_PT_ASSIGNED_APPOINTMENTS"))
@@ -530,25 +563,53 @@ const toggleSensitiveDashboardData = (): void => {
 const marketingChannelsOpen = ref(localStorage.getItem("dashboard.marketingChannelsOpen") !== "false")
 watch(marketingChannelsOpen, (val) => localStorage.setItem("dashboard.marketingChannelsOpen", String(val)))
 
-const kpiCards = computed(() => {
-  const cards = [
-    {label: "Monthly Total Appointments", value: metrics.value.monthlyTotalAppointments, accent: '#3b82f6'},
-    {label: "Active Patients", value: metrics.value.activePatients, accent: '#8b5cf6'},
-    {label: "Appointments Today", value: metrics.value.appointmentsToday, accent: '#06b6d4'},
-    {label: "Rescheduling/Cancellation Index", value: `${metrics.value.rescheduleCancellationIndex}%`, accent: '#f59e0b'},
-    {label: "HMO (Bookings) Monthly Total", value: metrics.value.hmoBookingsMonthlyTotal, accent: '#14b8a6'},
-    {label: "LGU (Bookings) Monthly Total", value: metrics.value.lguBookingsMonthlyTotal, accent: '#10b981'},
-    {label: "Pending Billings", value: metrics.value.pendingBillings, accent: '#f97316'},
-    {label: "Paid Billings", value: metrics.value.paidBillings, accent: '#22c55e'},
-    {label: "HMO Revenue", value: formatSensitiveCurrency(metrics.value.hmoRevenue), accent: '#14b8a6'},
-  ]
+type KpiCard = {
+  label: string
+  value: number | string
+  accent: string
+}
 
-  if (canViewConfidentialRevenue.value && canViewConfidentialRevenueCards.value) {
-    cards.push(
-      {label: "LGU Revenue", value: formatSensitiveCurrency(metrics.value.lguRevenue), accent: '#10b981'},
-      {label: "Online Marketing Revenue", value: formatSensitiveCurrency(metrics.value.onlineMarketingRevenue), accent: '#a855f7'},
-      {label: "Direct Marketing Revenue", value: formatSensitiveCurrency(metrics.value.directMarketingRevenue), accent: '#ec4899'},
-    )
+const kpiCards = computed<KpiCard[]>(() => {
+  const cards: KpiCard[] = []
+
+  if (canViewMonthlyTotalAppointments.value) {
+    cards.push({label: "Monthly Total Appointments", value: metrics.value.monthlyTotalAppointments, accent: '#3b82f6'})
+  }
+  if (canViewActivePatients.value) {
+    cards.push({label: "Active Patients", value: metrics.value.activePatients, accent: '#8b5cf6'})
+  }
+  if (canViewAppointmentsToday.value) {
+    cards.push({label: "Appointments Today", value: metrics.value.appointmentsToday, accent: '#06b6d4'})
+  }
+  if (canViewReschedulingCancellationIndex.value) {
+    cards.push({label: "Rescheduling/Cancellation Index", value: `${metrics.value.rescheduleCancellationIndex}%`, accent: '#f59e0b'})
+  }
+  if (canViewHmoBookingsMonthlyTotal.value) {
+    cards.push({label: "HMO (Bookings) Monthly Total", value: metrics.value.hmoBookingsMonthlyTotal, accent: '#14b8a6'})
+  }
+  if (canViewLguBookingsMonthlyTotal.value) {
+    cards.push({label: "LGU (Bookings) Monthly Total", value: metrics.value.lguBookingsMonthlyTotal, accent: '#10b981'})
+  }
+  if (canViewPendingBillings.value) {
+    cards.push({label: "Pending Billings", value: metrics.value.pendingBillings, accent: '#f97316'})
+  }
+  if (canViewPaidBillings.value) {
+    cards.push({label: "Paid Billings", value: metrics.value.paidBillings, accent: '#22c55e'})
+  }
+  if (canViewHmoRevenue.value) {
+    cards.push({label: "HMO Revenue", value: formatSensitiveCurrency(metrics.value.hmoRevenue), accent: '#14b8a6'})
+  }
+
+  if (canViewConfidentialRevenueCards.value) {
+    if (canViewLguRevenue.value) {
+      cards.push({label: "LGU Revenue", value: formatSensitiveCurrency(metrics.value.lguRevenue), accent: '#10b981'})
+    }
+    if (canViewOnlineMarketingRevenue.value) {
+      cards.push({label: "Online Marketing Revenue", value: formatSensitiveCurrency(metrics.value.onlineMarketingRevenue), accent: '#a855f7'})
+    }
+    if (canViewDirectMarketingRevenue.value) {
+      cards.push({label: "Direct Marketing Revenue", value: formatSensitiveCurrency(metrics.value.directMarketingRevenue), accent: '#ec4899'})
+    }
   }
 
   return cards
