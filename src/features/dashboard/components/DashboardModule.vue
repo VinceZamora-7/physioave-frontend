@@ -16,7 +16,7 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div v-if="canViewPtAttendance" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <article
           v-for="item in ptAttendanceCards"
           :key="item.label"
@@ -33,7 +33,7 @@
         </article>
       </div>
 
-      <article class="app-dashboard-panel space-y-3">
+      <article v-if="canViewPtDocumentationReminders" class="app-dashboard-panel space-y-3">
         <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h3 class="text-sm font-semibold">PT Documentation Reminder</h3>
@@ -75,7 +75,7 @@
         </DataTable>
       </article>
 
-      <article class="app-dashboard-panel space-y-3">
+      <article v-if="canViewPtAssignedAppointments" class="app-dashboard-panel space-y-3">
         <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h3 class="text-sm font-semibold">Today's Assigned Appointments</h3>
@@ -104,7 +104,7 @@
         </DataTable>
       </article>
 
-      <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div v-if="canViewPtAttendance" class="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <article class="app-dashboard-panel space-y-3">
           <h3 class="text-sm font-semibold">Weekly Attendance</h3>
           <DataTable class="app-data-table" :value="ptAttendance?.weekly.days ?? []" size="small" :loading="isLoading">
@@ -131,6 +131,10 @@
           </DataTable>
         </article>
       </div>
+
+      <article v-if="!hasAnyPtDashboardWidget" class="app-dashboard-panel py-8 text-center text-sm opacity-70">
+        No dashboard cards are enabled for this position yet.
+      </article>
     </section>
 
     <section v-if="!isPtDashboard" class="app-section-card-comfy  space-y-3">
@@ -159,7 +163,7 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+      <div v-if="canViewSummaryCards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
         <article
           v-for="item in kpiCards"
           :key="item.label"
@@ -175,7 +179,7 @@
         </article>
       </div>
 
-      <div class="app-dashboard-panel">
+      <div v-if="canViewMarketingChannels" class="app-dashboard-panel">
         <button
           class="flex w-full items-center justify-between text-left"
           @click="marketingChannelsOpen = !marketingChannelsOpen"
@@ -202,9 +206,13 @@
           </div>
         </div>
       </div>
+
+      <article v-if="!hasAnyAdminDashboardWidget" class="app-dashboard-panel py-8 text-center text-sm opacity-70">
+        No dashboard cards are enabled for this position yet.
+      </article>
     </section>
 
-    <section v-if="!isPtDashboard" class="app-section-card-comfy space-y-4">
+    <section v-if="!isPtDashboard && canViewAppointmentTrend" class="app-section-card-comfy space-y-4">
       <h3 class="app-section-title">7-Day Appointments Trend</h3>
       <div class="grid grid-cols-7 gap-2">
         <div v-for="item in appointmentTrend" :key="item.date" class="flex flex-col items-center gap-2">
@@ -221,8 +229,8 @@
       </div>
     </section>
 
-    <section v-if="!isPtDashboard" class="grid grid-cols-1 xl:grid-cols-2 gap-5">
-      <article class="app-section-card-comfy space-y-3">
+    <section v-if="!isPtDashboard && (canViewBillingDistribution || canViewRecentAppointments)" class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+      <article v-if="canViewBillingDistribution" class="app-section-card-comfy space-y-3">
         <h3 class="app-section-title">Billing Status Distribution</h3>
         <div class="space-y-2">
           <div v-for="item in billingDistribution" :key="item.label" class="space-y-1">
@@ -241,7 +249,7 @@
         </div>
       </article>
 
-      <article class="app-section-card-comfy space-y-3">
+      <article v-if="canViewRecentAppointments" class="app-section-card-comfy space-y-3">
         <h3 class="app-section-title">Recent Appointments</h3>
         <DataTable class="app-data-table" :value="recentAppointments" size="small" :loading="isLoading">
           <Column field="patient_name" header="Patient" />
@@ -254,7 +262,7 @@
       </article>
     </section>
 
-    <section v-if="!isPtDashboard" class="app-section-card-comfy space-y-3">
+    <section v-if="!isPtDashboard && canViewPtPerformance" class="app-section-card-comfy space-y-3">
       <div class="flex items-center gap-2 text-sm">
         <i class="app-section-icon pi pi-check-square" />
         <span class="font-medium">PT Performance (Monthly Bookings)</span>
@@ -284,7 +292,7 @@
       </DataTable>
     </section>
 
-    <section v-if="!isPtDashboard" class="app-section-card-comfy space-y-4">
+    <section v-if="!isPtDashboard && canViewReferringDoctorSessions" class="app-section-card-comfy space-y-4">
       <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h2 class="app-section-title">Completed Sessions by Referring Doctor</h2>
@@ -393,8 +401,37 @@ const isLoading = ref(false)
 const globalClinicStore = clinicStore()
 const { selectedClinicId, selectedClinic } = storeToRefs(globalClinicStore)
 const authSession = useAuthSessionStore()
-const {currentUser, staffName} = storeToRefs(authSession)
+const {currentUser, staffName, isOwnerEquivalent} = storeToRefs(authSession)
 const isPtDashboard = computed(() => isPtAppointmentProvider(currentUser.value))
+
+const canViewDashboardPermission = (permission: string): boolean =>
+  isOwnerEquivalent.value || authSession.hasAnyPermission(permission)
+
+const canViewSummaryCards = computed(() => canViewDashboardPermission("Dashboard::VIEW_SUMMARY_CARDS"))
+const canViewMarketingChannels = computed(() => canViewDashboardPermission("Dashboard::VIEW_MARKETING_CHANNELS"))
+const canViewAppointmentTrend = computed(() => canViewDashboardPermission("Dashboard::VIEW_APPOINTMENT_TREND"))
+const canViewBillingDistribution = computed(() => canViewDashboardPermission("Dashboard::VIEW_BILLING_DISTRIBUTION"))
+const canViewRecentAppointments = computed(() => canViewDashboardPermission("Dashboard::VIEW_RECENT_APPOINTMENTS"))
+const canViewPtPerformance = computed(() => canViewDashboardPermission("Dashboard::VIEW_PT_PERFORMANCE"))
+const canViewReferringDoctorSessions = computed(() => canViewDashboardPermission("Dashboard::VIEW_REFERRING_DOCTOR_SESSIONS"))
+const canViewConfidentialRevenue = computed(() => canViewDashboardPermission("Dashboard::VIEW_CONFIDENTIAL_REVENUE"))
+const canViewPtAttendance = computed(() => canViewDashboardPermission("Dashboard::VIEW_PT_ATTENDANCE"))
+const canViewPtDocumentationReminders = computed(() => canViewDashboardPermission("Dashboard::VIEW_PT_DOCUMENTATION_REMINDERS"))
+const canViewPtAssignedAppointments = computed(() => canViewDashboardPermission("Dashboard::VIEW_PT_ASSIGNED_APPOINTMENTS"))
+const hasAnyAdminDashboardWidget = computed(() =>
+  canViewSummaryCards.value ||
+  canViewMarketingChannels.value ||
+  canViewAppointmentTrend.value ||
+  canViewBillingDistribution.value ||
+  canViewRecentAppointments.value ||
+  canViewPtPerformance.value ||
+  canViewReferringDoctorSessions.value
+)
+const hasAnyPtDashboardWidget = computed(() =>
+  canViewPtAttendance.value ||
+  canViewPtDocumentationReminders.value ||
+  canViewPtAssignedAppointments.value
+)
 
 const metrics = ref({
   monthlyTotalAppointments: 0,
@@ -506,7 +543,7 @@ const kpiCards = computed(() => {
     {label: "HMO Revenue", value: formatSensitiveCurrency(metrics.value.hmoRevenue), accent: '#14b8a6'},
   ]
 
-  if (canViewConfidentialRevenueCards.value) {
+  if (canViewConfidentialRevenue.value && canViewConfidentialRevenueCards.value) {
     cards.push(
       {label: "LGU Revenue", value: formatSensitiveCurrency(metrics.value.lguRevenue), accent: '#10b981'},
       {label: "Online Marketing Revenue", value: formatSensitiveCurrency(metrics.value.onlineMarketingRevenue), accent: '#a855f7'},
@@ -569,16 +606,14 @@ const containsLgu = (name?: string): boolean => String(name ?? "").toUpperCase()
 const loadMetrics = async (): Promise<void> => {
   const monthRange = getMonthRange()
   const clinicId = selectedClinicId.value
-  const [summaryResult, monthlyTrendResult, monthBillingsResult, monthHmoBillingsResult, monthAppointmentsResult] = await Promise.allSettled([
+  const [summaryResult, monthBillingsResult, monthHmoBillingsResult, monthAppointmentsResult] = await Promise.allSettled([
     dashboardService.getSummary(clinicId),
-    dashboardService.getAppointmentTrend(monthRange.days, clinicId),
     billingPhase1Service.getAll({page: 1, size: 500, from_date: monthRange.from, to_date: monthRange.to, ...(clinicId ? {clinic_id: clinicId} : {})}),
     billingPhase1Service.getAll({page: 1, size: 500, service_type: "HMO", from_date: monthRange.from, to_date: monthRange.to, ...(clinicId ? {clinic_id: clinicId} : {})}),
     appointmentPhase1Service.getAll({page: 1, size: 500, ...(clinicId ? {clinic_id: clinicId} : {})}),
   ])
 
   const summary = summaryResult.status === "fulfilled" ? summaryResult.value : undefined
-  const monthlyTrend = monthlyTrendResult.status === "fulfilled" ? monthlyTrendResult.value : undefined
   const monthBillings = monthBillingsResult.status === "fulfilled" ? monthBillingsResult.value : undefined
   const monthHmoBillings = monthHmoBillingsResult.status === "fulfilled" ? monthHmoBillingsResult.value : undefined
   const monthAppointments = monthAppointmentsResult.status === "fulfilled" ? monthAppointmentsResult.value : undefined
@@ -600,7 +635,7 @@ const loadMetrics = async (): Promise<void> => {
   const lguRows = billingRows.filter(item => containsLgu(item.package_name) || containsLgu(item.service_name))
 
   metrics.value = {
-    monthlyTotalAppointments: (monthlyTrend ?? []).reduce((sum, item) => sum + item.count, 0),
+    monthlyTotalAppointments: monthAppointmentsRows.length,
     activePatients: summary?.active_patients ?? 0,
     appointmentsToday: summary?.appointments_today ?? 0,
     rescheduleCancellationIndex,
@@ -734,7 +769,7 @@ const showAssignmentAlert = (appointment: DashboardPtAssignedAppointment): void 
 }
 
 const pollPtAssignedAppointments = async (notify = true): Promise<void> => {
-  if (!isPtDashboard.value) return
+  if (!isPtDashboard.value || !canViewPtAssignedAppointments.value) return
 
   const since = assignmentPollSince.value
   const result = await dashboardService.getPtAssignedAppointments(since, selectedClinicId.value)
@@ -750,6 +785,10 @@ const pollPtAssignedAppointments = async (notify = true): Promise<void> => {
 }
 
 const startPtAssignmentPolling = (): void => {
+  if (!canViewPtAssignedAppointments.value) {
+    stopPtAssignmentPolling()
+    return
+  }
   if (assignmentPollTimer !== undefined) {
     window.clearInterval(assignmentPollTimer)
   }
@@ -772,25 +811,27 @@ const refreshDashboard = async (): Promise<void> => {
   try {
     isLoading.value = true
     if (isPtDashboard.value) {
-      await Promise.all([
-        loadPtAttendance(),
-        loadPtDocumentationReminders(),
-        loadPtTodayAssignedAppointments(),
-      ])
+      const ptTasks: Array<Promise<void>> = []
+      if (canViewPtAttendance.value) ptTasks.push(loadPtAttendance())
+      if (canViewPtDocumentationReminders.value) ptTasks.push(loadPtDocumentationReminders())
+      if (canViewPtAssignedAppointments.value) ptTasks.push(loadPtTodayAssignedAppointments())
+      await Promise.all(ptTasks)
       return
     }
 
-    const results = await Promise.allSettled([
-      loadMetrics(),
-      loadConfidentialRevenue(),
-      loadTrend(),
-      loadBillingDistribution(),
-      loadRecentAppointments(),
-      loadPtPerformance(),
-    ])
+    const tasks: Array<{ name: string; critical?: boolean; run: () => Promise<void> }> = []
+    if (canViewSummaryCards.value) tasks.push({ name: "summary", critical: true, run: loadMetrics })
+    if (canViewSummaryCards.value && canViewConfidentialRevenue.value) tasks.push({ name: "confidential-revenue", run: loadConfidentialRevenue })
+    if (canViewAppointmentTrend.value) tasks.push({ name: "trend", critical: true, run: loadTrend })
+    if (canViewBillingDistribution.value) tasks.push({ name: "billing-distribution", run: loadBillingDistribution })
+    if (canViewRecentAppointments.value) tasks.push({ name: "recent-appointments", run: loadRecentAppointments })
+    if (canViewPtPerformance.value) tasks.push({ name: "pt-performance", run: loadPtPerformance })
 
-    const confidentialRevenueResult = results[1]
-    if (confidentialRevenueResult.status === "rejected") {
+    const results = await Promise.allSettled(tasks.map(task => task.run()))
+
+    const confidentialRevenueIndex = tasks.findIndex(task => task.name === "confidential-revenue")
+    const confidentialRevenueResult = confidentialRevenueIndex >= 0 ? results[confidentialRevenueIndex] : undefined
+    if (confidentialRevenueResult?.status === "rejected") {
       canViewConfidentialRevenueCards.value = false
       metrics.value = {
         ...metrics.value,
@@ -803,8 +844,7 @@ const refreshDashboard = async (): Promise<void> => {
     const failedResults = results.filter(result => result.status === 'rejected')
     if (failedResults.length > 0) {
       console.warn('Some dashboard data failed to load:', failedResults)
-      // Only show error for critical failures (metrics and trend are most important).
-      const criticalFailures = [results[0], results[2]].filter(result => result.status === "rejected")
+      const criticalFailures = results.filter((result, index) => tasks[index]?.critical && result.status === "rejected")
       if (criticalFailures.length > 0) {
         errorToast(toast, "Failed to load some dashboard data")
       }
@@ -831,13 +871,13 @@ onMounted(async () => {
 
   if (isPtDashboard.value) {
     void refreshDashboard()
-    startPtAssignmentPolling()
+    if (canViewPtAssignedAppointments.value) startPtAssignmentPolling()
     return
   }
 
-  initializeDoctorSessionsDateRange()
+  if (canViewReferringDoctorSessions.value) initializeDoctorSessionsDateRange()
   void refreshDashboard()
-  void refreshDoctorSessionsReport()
+  if (canViewReferringDoctorSessions.value) void refreshDoctorSessionsReport()
 })
 
 // Refresh dashboard when clinic selection changes
@@ -846,7 +886,7 @@ watch(selectedClinicId, () => {
   if (isPtDashboard.value) {
     startPtAssignmentPolling()
   }
-  if (!isPtDashboard.value) {
+  if (!isPtDashboard.value && canViewReferringDoctorSessions.value) {
     void refreshDoctorSessionsReport()
   }
 })

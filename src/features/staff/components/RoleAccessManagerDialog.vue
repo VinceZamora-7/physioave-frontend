@@ -368,6 +368,7 @@ import { Status } from "@/utils/global.type"
 import { useAuthSessionStore } from "@/stores/auth-session.store"
 import { accessMatrixService } from "@/features/staff/api/access-matrix.service"
 import { accessMatrixTanstackService } from "@/features/staff/queries/access-matrix.tanstack.service"
+import { DASHBOARD_WIDGET_PERMISSIONS } from "@/shared/permissions"
 
 type ProviderScope = "ALL" | "ADMIN" | "PT"
 
@@ -480,8 +481,8 @@ const sidebarAccessOptions: SidebarAccessOption[] = [
     key: "dashboard",
     label: "Dashboard",
     description: "Overview and snapshot cards.",
-    // Unique: Dashboard::READ is only used by this tab
-    matcher: permission => permission.name === "Dashboard::READ"
+    // Unique: Dashboard::* is only used by this tab
+    matcher: permission => permission.name.startsWith("Dashboard::")
   },
   {
     key: "patients",
@@ -570,7 +571,7 @@ const sidebarAccessOptions: SidebarAccessOption[] = [
   }
 ]
 
-const PT_SIDEBAR_KEYS = new Set<SidebarAccessKey>(["patients", "appointments", "patient-daily-log"])
+const PT_SIDEBAR_KEYS = new Set<SidebarAccessKey>(["dashboard", "patients", "appointments", "patient-daily-log"])
 
 const visibleSidebarAccessOptions = computed<SidebarAccessOption[]>(() => {
   if (props.providerScope !== "PT") return sidebarAccessOptions
@@ -783,6 +784,19 @@ const getEffectivePermissionIdsForSidebarAccess = (key: SidebarAccessKey): numbe
   return selectedIds.filter(id => mappedSet.has(id))
 }
 
+const ensureDashboardReadPermission = (selectedPermissionIds: Set<number>): void => {
+  const dashboardReadPermission = getPermissionsForSidebarAccess("dashboard").find(permission => permission.name === "Dashboard::READ")
+  if (!dashboardReadPermission) return
+
+  const selectedDashboardWidgetPermissions = getPermissionsForSidebarAccess("dashboard")
+    .filter(permission => DASHBOARD_WIDGET_PERMISSIONS.includes(permission.name as typeof DASHBOARD_WIDGET_PERMISSIONS[number]))
+    .some(permission => selectedPermissionIds.has(permission.id))
+
+  if (selectedDashboardWidgetPermissions) {
+    selectedPermissionIds.add(dashboardReadPermission.id)
+  }
+}
+
 const syncAdvancedRulesSelection = (): void => {
   const assignedIds = assignedPermissionIdSet.value
   const next: Partial<Record<SidebarAccessKey, number[]>> = {}
@@ -899,7 +913,7 @@ const clearAllSidebarTabs = (): void => {
 }
 
 const applyPhysicalTherapistDefaults = (): void => {
-  const defaults: SidebarAccessKey[] = ["patients", "appointments", "patient-daily-log"]
+  const defaults: SidebarAccessKey[] = ["dashboard", "patients", "appointments", "patient-daily-log"]
   selectedSidebarAccess.value = defaults.filter(key => hasMappedPermissions(key))
   for (const key of selectedSidebarAccess.value) {
     setDefaultRulesForTab(key)
@@ -1163,6 +1177,10 @@ async function saveSidebarAccess(): Promise<void> {
     for (const permissionId of getEffectivePermissionIdsForSidebarAccess(option.key)) {
       selectedPermissionIds.add(permissionId)
     }
+  }
+
+  if (selectedKeys.has("dashboard")) {
+    ensureDashboardReadPermission(selectedPermissionIds)
   }
 
   const selectedTabsWithoutRules = sidebarAccessOptions

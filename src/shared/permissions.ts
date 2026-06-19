@@ -2,6 +2,20 @@ export type RouteAccessRule = {
   anyOf: string[]
 }
 
+export const DASHBOARD_WIDGET_PERMISSIONS = [
+  "Dashboard::VIEW_SUMMARY_CARDS",
+  "Dashboard::VIEW_MARKETING_CHANNELS",
+  "Dashboard::VIEW_APPOINTMENT_TREND",
+  "Dashboard::VIEW_BILLING_DISTRIBUTION",
+  "Dashboard::VIEW_RECENT_APPOINTMENTS",
+  "Dashboard::VIEW_PT_PERFORMANCE",
+  "Dashboard::VIEW_REFERRING_DOCTOR_SESSIONS",
+  "Dashboard::VIEW_CONFIDENTIAL_REVENUE",
+  "Dashboard::VIEW_PT_ATTENDANCE",
+  "Dashboard::VIEW_PT_DOCUMENTATION_REMINDERS",
+  "Dashboard::VIEW_PT_ASSIGNED_APPOINTMENTS",
+] as const
+
 export const MODULE_ACCESS_RULES = {
   dashboard: ["Dashboard::READ"],
   patients: ["Patient::READ", "Patient::LOOKUP"],
@@ -109,6 +123,7 @@ export const ROUTE_ACCESS_RULES: Record<string, RouteAccessRule> = {
 
 export const SYSTEM_ADMIN_PERMISSIONS = [
   "Dashboard::READ",
+  ...DASHBOARD_WIDGET_PERMISSIONS,
 
   "AccessMatrix::READ",
   "AccessMatrix::CREATE",
