@@ -527,11 +527,18 @@ const parseLineItems = (billing: BillingListItem): SelfPayLineItem[] => {
 const getBillingRecordId = (billing?: BillingListItem | null): string =>
   billing ? firstNonBlank(billing.public_id, `BILLING-${billing.id}`) : "N/A"
 
+const formatPrintableName = (value?: string | number | null, fallback = "N/A"): string => {
+  const name = String(value ?? "").trim()
+  return name ? name.toUpperCase() : fallback
+}
+
 const patientName = computed(() =>
-  firstNonBlank(
-    billingDetail.value?.patient_name,
-    billingDetail.value?.patient_public_id,
-    billingDetail.value?.patient_id,
+  formatPrintableName(
+    firstNonBlank(
+      billingDetail.value?.patient_name,
+      billingDetail.value?.patient_public_id,
+      billingDetail.value?.patient_id
+    ),
     "Patient"
   )
 )
@@ -545,11 +552,11 @@ const patientAge = computed(() =>
 )
 
 const physicalTherapist = computed(() =>
-  firstNonBlank(billingDetail.value?.physical_therapist, "N/A")
+  formatPrintableName(billingDetail.value?.physical_therapist, "N/A")
 )
 
 const doctor = computed(() =>
-  firstNonBlank(billingDetail.value?.doctor, "N/A")
+  formatPrintableName(billingDetail.value?.doctor, "N/A")
 )
 
 const diagnosis = computed(() =>

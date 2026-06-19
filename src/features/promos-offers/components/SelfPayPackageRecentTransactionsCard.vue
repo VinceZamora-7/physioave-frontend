@@ -43,7 +43,7 @@
           <Column header="Patient / Package" style="min-width: 260px">
             <template #body="{ data }">
               <div class="space-y-1">
-                <div class="font-semibold">{{ data.patient_name || 'No patient linked' }}</div>
+                <div class="font-semibold uppercase">{{ data.patient_name || 'No patient linked' }}</div>
                 <div class="text-xs text-[rgb(var(--app-fg))]/60">{{ data.package_name || data.service_name || 'Package Service' }}</div>
                 <div class="text-xs text-[rgb(var(--app-fg))]/60">{{ data.receipt_number ? `Receipt ${data.receipt_number}` : `Billing #${data.id}` }}</div>
               </div>

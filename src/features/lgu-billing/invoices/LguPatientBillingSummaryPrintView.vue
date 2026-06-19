@@ -153,20 +153,29 @@ const patientId = computed(() => parsePositiveNumber(route.query.patient_id))
 const dateFrom = computed(() => parseDateQuery(route.query.transaction_from ?? route.query.from))
 const dateTo = computed(() => parseDateQuery(route.query.transaction_to ?? route.query.to))
 
+const formatPatientName = (value?: string | null, fallback = "Patient"): string => {
+  const name = String(value ?? "").trim()
+  return name ? name.toUpperCase() : fallback
+}
+
 const patientName = computed(() =>
-  detail.value?.patient_name ||
-  billings.value[0]?.patient_name ||
-  String(route.query.patient_name ?? "Patient").trim() ||
-  "Patient"
+  formatPatientName(
+    detail.value?.patient_name ||
+    billings.value[0]?.patient_name ||
+    String(route.query.patient_name ?? "").trim()
+  )
 )
 
 const patientIdLabel = computed(() => patientId.value > 0 ? String(patientId.value) : "N/A")
 
 const lguProgramLabel = computed(() =>
-  firstNonBlank(
-    ...billings.value.map(item => item.lgu_program_name),
-    String(route.query.lgu_program_name ?? "")
-  ) || "LGU"
+  formatPatientName(
+    firstNonBlank(
+      ...billings.value.map(item => item.lgu_program_name),
+      String(route.query.lgu_program_name ?? "")
+    ),
+    "LGU"
+  )
 )
 
 const dateRangeLabel = computed(() => {

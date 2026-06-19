@@ -1,5 +1,6 @@
 export type DailyPatientLogPrintRow = {
   id: number
+  row_key: string
   time_range: string
   date_label: string
   patient_name: string
@@ -7,6 +8,7 @@ export type DailyPatientLogPrintRow = {
   service_label: string
   provider_name: string
   visit_status: string
+  reschedule_basis?: string
   patient_signature?: string
   pt_signature?: string
   missing_signature_types?: Array<"patient" | "pt">

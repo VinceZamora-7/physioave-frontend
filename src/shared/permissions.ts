@@ -68,6 +68,9 @@ export const ROUTE_ACCESS_RULES: Record<string, RouteAccessRule> = {
   "daily-report-print": {
     anyOf: [...MODULE_ACCESS_RULES.reports],
   },
+  "monthly-report-print": {
+    anyOf: [...MODULE_ACCESS_RULES.reports],
+  },
   "daily-patient-log-print": {
     anyOf: [...MODULE_ACCESS_RULES.patientDailyLog],
   },

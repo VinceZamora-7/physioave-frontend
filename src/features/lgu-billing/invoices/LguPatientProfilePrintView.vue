@@ -233,13 +233,16 @@ const parseDate = (value?: string | Date | null): Date | null => {
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
-const patientName = computed(() => detail.value?.patient_name || "Patient")
+const formatPatientName = (value?: string | null, fallback = "Patient"): string => {
+  const name = String(value ?? "").trim()
+  return name ? name.toUpperCase() : fallback
+}
+
+const patientName = computed(() => formatPatientName(detail.value?.patient_name))
 const lguSponsor = computed(() => sponsorInfo.value)
 
 const lguProgramLabel = computed(() =>
-  lguSponsor.value?.lgu_program_name ||
-  lguSponsor.value?.company_name ||
-  "LGU"
+  formatPatientName(lguSponsor.value?.lgu_program_name || lguSponsor.value?.company_name, "LGU")
 )
 
 const transactionFromDate = computed(() =>
@@ -267,14 +270,19 @@ const transactionPeriodLabel = computed(() => {
 
 const patientAddress = computed(() => billingDetail.value?.patient_address || NOT_AVAILABLE_LABEL)
 const patientAge = computed(() => billingDetail.value?.patient_age || NOT_AVAILABLE_LABEL)
-const physicalTherapistName = computed(() => billingDetail.value?.physical_therapist || NOT_AVAILABLE_LABEL)
-const doctorName = computed(() => billingDetail.value?.doctor || NOT_AVAILABLE_LABEL)
+const physicalTherapistName = computed(() =>
+  formatPatientName(billingDetail.value?.physical_therapist, NOT_AVAILABLE_LABEL)
+)
+const doctorName = computed(() => formatPatientName(billingDetail.value?.doctor, NOT_AVAILABLE_LABEL))
 const diagnosis = computed(() => billingDetail.value?.diagnosis || NOT_AVAILABLE_LABEL)
 
 const billingTo = computed(() =>
-  billingDetail.value?.lgu_program_name ||
-  lguSponsor.value?.company_name ||
-  lguProgramLabel.value
+  formatPatientName(
+    billingDetail.value?.lgu_program_name ||
+    lguSponsor.value?.company_name ||
+    lguProgramLabel.value,
+    "LGU"
+  )
 )
 
 const patientProgramStatus = computed(() =>

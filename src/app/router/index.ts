@@ -97,6 +97,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: "/reports/print/monthly",
+      name: "monthly-report-print",
+      component: () => import("@/features/reports/print/MonthlyReportPrintView.vue"),
+      meta: { requiresAuth: true, ownerOnly: true }
+    },
+    {
       path: "/daily-patient-log/print",
       name: "daily-patient-log-print",
       component: () => import("@/features/daily-patient-log/print/DailyPatientLogPrintView.vue"),
@@ -302,6 +308,13 @@ router.beforeEach(async (to) => {
   const routeName = String(to.name ?? "")
 
   if (!authSession.canAccessRoute(routeName)) {
+    const fallbackRouteName = resolveFallbackRouteName(routeName, authSession.hasAnyPermission)
+    return fallbackRouteName === "error"
+      ? { name: "error", query: { error: "forbidden" } }
+      : { name: fallbackRouteName }
+  }
+
+  if (to.meta.ownerOnly === true && !authSession.isOwnerEquivalent) {
     const fallbackRouteName = resolveFallbackRouteName(routeName, authSession.hasAnyPermission)
     return fallbackRouteName === "error"
       ? { name: "error", query: { error: "forbidden" } }

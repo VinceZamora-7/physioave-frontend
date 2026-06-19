@@ -51,6 +51,11 @@ const escapeHtml = (value: unknown): string =>
 const asCurrency = (value: number): string =>
   Number(value ?? 0).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
 
+const formatPrintableName = (value?: string | null, fallback = "N/A"): string => {
+  const name = String(value ?? "").trim()
+  return name ? name.toUpperCase() : fallback
+}
+
 const formatDateTime = (value?: string): string => {
   if (!value) return "N/A"
   const date = new Date(value)
@@ -352,7 +357,7 @@ export function renderBillingReceiptWindow(
             </div>
             <div class="meta-card">
               <div class="meta-label">Patient</div>
-              <div class="meta-value">${escapeHtml(receipt.patientName)}</div>
+              <div class="meta-value">${escapeHtml(formatPrintableName(receipt.patientName))}</div>
             </div>
             <div class="meta-card">
               <div class="meta-label">Patient Record ID</div>

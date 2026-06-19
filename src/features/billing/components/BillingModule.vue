@@ -26,7 +26,7 @@
           <div class="flex items-center gap-3 flex-wrap">
             <div class="flex-1 min-w-48">
               <IftaLabel>
-                <InputText v-model="tableFilterQuery" fluid placeholder="Patient name, label, receipt noâ€¦" />
+                <InputText v-model="tableFilterQuery" fluid placeholder="Patient name, Label, Receipt Number" />
                 <label>Search</label>
               </IftaLabel>
             </div>
@@ -149,7 +149,11 @@
               <div class="text-sm">{{ formatDate(data.created_at) }}</div>
             </template>
           </Column>
-          <Column field="patient_name" header="Patient" style="width: 160px" />
+          <Column field="patient_name" header="Patient" style="width: 160px">
+            <template #body="{data}">
+              <span class="uppercase">{{ data.patient_name || "—" }}</span>
+            </template>
+          </Column>
           <Column field="billing_type" header="Billing Type" style="width: 190px">
             <template #body="{data}">
               <div class="flex flex-col gap-1">
@@ -284,7 +288,17 @@
                   showClear
                   fluid
                   placeholder="Search patient"
-                />
+                >
+                  <template #option="{ option }">
+                    <span class="uppercase">{{ option.name }}</span>
+                  </template>
+                  <template #value="{ value, placeholder }">
+                    <span v-if="value !== null && value !== undefined" class="uppercase">
+                      {{ patientOptions.find(patient => patient.id === value)?.name || '' }}
+                    </span>
+                    <span v-else>{{ placeholder }}</span>
+                  </template>
+                </Select>
                 <label>Patient Name</label>
               </IftaLabel>
 
@@ -843,7 +857,7 @@
         <div class="order-2 grid grid-cols-1 gap-3 md:grid-cols-2 text-sm">
           <div :class="billingDetailCardClass">
             <div class="text-xs uppercase tracking-wide opacity-70">Patient</div>
-            <div class="font-medium">{{ selectedBillingDetail.patient_name || selectedBillingDetail.patient_public_id || selectedBillingDetail.patient_id }}</div>
+            <div class="font-medium uppercase">{{ selectedBillingDetail.patient_name || selectedBillingDetail.patient_public_id || selectedBillingDetail.patient_id }}</div>
             <div class="mt-1 text-xs opacity-60">{{ selectedBillingDetail.patient_public_id || "Patient record code pending" }}</div>
           </div>
           <div :class="billingDetailCardClass">
@@ -1075,7 +1089,7 @@
                   </div>
                   <div>
                     <div class="opacity-60 uppercase tracking-wide">Recorded By</div>
-                    <div class="font-medium truncate" :title="entry.recordedBy">{{ entry.recordedBy }}</div>
+                    <div class="font-medium truncate uppercase" :title="entry.recordedBy">{{ entry.recordedBy }}</div>
                   </div>
                   <div v-if="entry.paymentType">
                     <div class="opacity-60 uppercase tracking-wide">Type</div>
@@ -1340,7 +1354,7 @@
                 </div>
                 <div class="text-sm">
                   <div class="text-xs uppercase tracking-wide opacity-55">Authorized By</div>
-                  <div class="font-medium">{{ ticket.patient_acknowledged_by }}</div>
+                  <div class="font-medium uppercase">{{ ticket.patient_acknowledged_by }}</div>
                 </div>
               </div>
 
@@ -1456,7 +1470,27 @@
           </div>
           <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <IftaLabel class="xl:col-span-2">
-              <Select v-model="form.patient_id" :options="patientOptions" optionLabel="name" optionValue="id" filter showClear fluid placeholder="Select patient" :disabled="isEditingPaidBilling" />
+              <Select
+                v-model="form.patient_id"
+                :options="patientOptions"
+                optionLabel="name"
+                optionValue="id"
+                filter
+                showClear
+                fluid
+                placeholder="Select patient"
+                :disabled="isEditingPaidBilling"
+              >
+                <template #option="{ option }">
+                  <span class="uppercase">{{ option.name }}</span>
+                </template>
+                <template #value="{ value, placeholder }">
+                  <span v-if="value !== null && value !== undefined" class="uppercase">
+                    {{ patientOptions.find(patient => patient.id === value)?.name || '' }}
+                  </span>
+                  <span v-else>{{ placeholder }}</span>
+                </template>
+              </Select>
               <label>Patient Name</label>
             </IftaLabel>
             <IftaLabel>
@@ -1504,7 +1538,7 @@
               </div>
               <div>
                 <div class="opacity-60 uppercase tracking-wide">Recorded By</div>
-                <div class="font-medium truncate" :title="entry.recordedBy">{{ entry.recordedBy }}</div>
+                <div class="font-medium truncate uppercase" :title="entry.recordedBy">{{ entry.recordedBy }}</div>
               </div>
               <div v-if="entry.paymentType">
                 <div class="opacity-60 uppercase tracking-wide">Type</div>

@@ -164,15 +164,23 @@ const { printPage, goBack } = useHmoInvoicePrintActions()
 
 const rows = ref<ProfileRow[]>([])
 const error = ref("")
+const loadedPatientName = ref("")
 
 const patientId = computed(() => {
   const parsed = Number(String(route.query.patient_id ?? "").trim())
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 })
 
-const patientName = computed(() => String(route.query.patient_name ?? "Patient").trim() || "Patient")
+const formatPrintableName = (value?: string | null, fallback = "Patient"): string => {
+  const name = String(value ?? "").trim()
+  return name ? name.toUpperCase() : fallback
+}
+
+const patientName = computed(() =>
+  formatPrintableName(loadedPatientName.value || String(route.query.patient_name ?? ""), "Patient")
+)
 const patientIdLabel = computed(() => patientId.value > 0 ? String(patientId.value) : "N/A")
-const hmoLabel = computed(() => String(route.query.hmo_name ?? "HMO").trim() || "HMO")
+const hmoLabel = computed(() => formatPrintableName(String(route.query.hmo_name ?? ""), "HMO"))
 const dateFrom = computed(() => String(route.query.from ?? "").trim())
 const dateTo = computed(() => String(route.query.to ?? "").trim())
 const billingDateLabel = computed(() => {
@@ -214,6 +222,7 @@ const buildRows = (items: HmoRecentHistoryItem[]): ProfileRow[] =>
 const load = async (): Promise<void> => {
   error.value = ""
   rows.value = []
+  loadedPatientName.value = ""
 
   if (!patientId.value) {
     error.value = "Patient ID is required."
@@ -228,7 +237,9 @@ const load = async (): Promise<void> => {
       ...(route.query.hmo_id ? { hmo_id: Number(route.query.hmo_id) } : {})
     }) ?? []
 
-    rows.value = buildRows(data.filter(row => Number(row.patient_id) === patientId.value))
+    const patientRows = data.filter(row => Number(row.patient_id) === patientId.value)
+    loadedPatientName.value = String(patientRows[0]?.patient_name ?? "").trim()
+    rows.value = buildRows(patientRows)
   } catch (err: unknown) {
     error.value = err instanceof Error ? err.message : "Failed to load HMO patient profile"
   }

@@ -92,6 +92,7 @@
       <DataTable
         class="app-data-table"
         :value="items"
+        dataKey="daily_log_row_key"
         :loading="isLoading"
         size="small"
         paginator
@@ -135,8 +136,12 @@
 
         <Column header="Visit Status" style="min-width: 180px">
           <template #body="{ data }">
-            <div class="flex flex-wrap gap-2">
+            <div class="flex flex-wrap items-center gap-2">
               <Tag :value="visitStatusLabel(data)" :severity="visitStatusSeverity(data)" />
+              <Tag v-if="isRescheduledOriginal(data)" value="Original schedule" severity="info" />
+              <span v-if="rescheduleBasis(data)" class="text-xs opacity-60">
+                {{ rescheduleBasis(data) }}
+              </span>
             </div>
           </template>
         </Column>
@@ -1019,12 +1024,16 @@ const openDailyLogPrint = (
       billing_type: billingTypeLabel(item),
       billing_status: String(item.billing_status || "Unbilled"),
       session_label: sessionLabel(item),
+      row_key: String(item.daily_log_row_key || `${item.id}-${item.starts_at}`),
+      reschedule_basis: rescheduleBasis(item) || undefined,
     })),
   }
 
   const storageKey = `${DAILY_PATIENT_LOG_PRINT_STORAGE_PREFIX}${payloadKey}`
+  const serializedPayload = JSON.stringify(payload)
   try {
-    sessionStorage.setItem(storageKey, JSON.stringify(payload))
+    sessionStorage.setItem(storageKey, serializedPayload)
+    targetWindow?.sessionStorage.setItem(storageKey, serializedPayload)
   } catch {
     targetWindow?.close()
     errorToast(toast, "Unable to prepare the print view. Try exporting fewer patient logs.")
@@ -1129,8 +1138,11 @@ const formatTime = (value: string): string =>
 const formatTimeRange = (start: string, end: string): string =>
   `${formatTime(start)} - ${formatTime(end)}`
 
+const formatServiceLabel = (value: unknown): string =>
+  String(value ?? "Appointment").replace(/^Dr\.?\s+Consultation$/i, "Consultation")
+
 const serviceLabel = (item: AppointmentDailyLogItem): string =>
-  String(item.service_name ?? item.appointment_type ?? item.appointment_phase ?? "Appointment")
+  formatServiceLabel(item.service_name ?? item.appointment_type ?? item.appointment_phase)
 
 const billingTypeLabel = (item: AppointmentDailyLogItem): string =>
   String(item.billing_type ?? item.payer_type ?? "Self Pay").replace(/_/g, " ")
@@ -1330,17 +1342,64 @@ const sessionLabel = (item: AppointmentDailyLogItem): string => {
 }
 
 const visitStatusLabel = (item: AppointmentDailyLogItem): "Completed" | "Pending" | "Canceled" | "Rescheduled" => {
+  if (item.daily_log_status === "RESCHEDULED_ORIGINAL") return "Rescheduled"
+
   const appointmentStatus = normalizeStatus(item.appointment_status)
-  if (["CANCELLED", "CANCELED", "NO SHOW", "NO_SHOW"].includes(appointmentStatus)) return "Canceled"
+  const attendanceStatus = normalizeStatus(item.attendance_status)
   if (
+    ["CANCELLED", "CANCELED", "NO SHOW", "NO_SHOW"].includes(appointmentStatus) ||
+    ["CANCELLED", "CANCELED", "NO SHOW", "NO_SHOW"].includes(attendanceStatus)
+  ) return "Canceled"
+  if (
+    ["COMPLETED", "ATTENDED", "DONE"].includes(appointmentStatus) ||
+    ["COMPLETED", "ATTENDED", "DONE"].includes(attendanceStatus)
+  ) return "Completed"
+
+  const hasLegacyRescheduleStatus = !item.daily_log_status && (
     Number(item.reschedule_history_count ?? 0) > 0 ||
     Number(item.reschedule_count ?? 0) > 0 ||
     appointmentStatus.includes("RESCHEDULE")
-  ) {
+  )
+  if (hasLegacyRescheduleStatus) {
     return "Rescheduled"
   }
-  if (["COMPLETED", "ATTENDED", "DONE"].includes(appointmentStatus)) return "Completed"
+
   return "Pending"
+}
+
+const isRescheduledOriginal = (item: AppointmentDailyLogItem): boolean =>
+  item.daily_log_status === "RESCHEDULED_ORIGINAL"
+
+const rescheduleBasis = (item: AppointmentDailyLogItem): string => {
+  if (!isRescheduledOriginal(item)) return ""
+
+  const rescheduledTo = formatRescheduledTo(item)
+  const reason = String(item.daily_log_reschedule_reason ?? "").trim()
+  const basis = rescheduledTo ? `Rescheduled to ${rescheduledTo}` : "Rescheduled from this original appointment schedule"
+  return reason ? `${basis} - Reason: ${reason}` : basis
+}
+
+const formatRescheduledTo = (item: AppointmentDailyLogItem): string => {
+  const startsAt = String(item.daily_log_rescheduled_to ?? "").trim()
+  if (!startsAt) return ""
+
+  const startsDate = new Date(startsAt)
+  if (Number.isNaN(startsDate.getTime())) return ""
+
+  const dateLabel = startsDate.toLocaleDateString("en-PH", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  })
+  const timeLabel = formatTime(startsAt)
+
+  const endsAt = String(item.daily_log_rescheduled_to_end ?? "").trim()
+  if (!endsAt) return `${dateLabel} ${timeLabel}`
+
+  const endsDate = new Date(endsAt)
+  if (Number.isNaN(endsDate.getTime())) return `${dateLabel} ${timeLabel}`
+
+  return `${dateLabel} ${timeLabel} - ${formatTime(endsAt)}`
 }
 
 const visitStatusSeverity = (item: AppointmentDailyLogItem): "success" | "warn" | "danger" => {

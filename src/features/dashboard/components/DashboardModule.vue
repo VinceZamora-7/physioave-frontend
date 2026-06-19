@@ -1,6 +1,68 @@
 <template>
   <main class="app-page-shell space-y-5">
-    <section class="app-section-card-comfy  space-y-3">
+    <section v-if="isPtDashboard" class="app-section-card-comfy space-y-4">
+      <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <h2 class="app-section-title">Therapist Dashboard</h2>
+          <p class="app-muted-text text-sm">
+            Weekly and monthly attendance for {{ staffName || "your account" }}
+          </p>
+        </div>
+        <div class="flex flex-wrap items-end gap-2">
+          <span class="app-filter-pill">
+            Branch: {{ selectedClinic?.name || "All branches" }}
+          </span>
+          <Button label="Refresh" icon="pi pi-refresh" severity="secondary" outlined :loading="isLoading" @click="refreshDashboard" />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <article
+          v-for="item in ptAttendanceCards"
+          :key="item.label"
+          class="app-dashboard-kpi-card"
+          :style="{
+            borderLeftWidth: '4px',
+            borderLeftColor: item.accent,
+            background: `linear-gradient(135deg, ${item.accent}18, rgb(var(--app-surface)), ${item.accent}0a)`
+          }"
+        >
+          <p class="text-xs uppercase tracking-wide opacity-60">{{ item.label }}</p>
+          <p class="mt-1 text-2xl font-semibold" :style="{color: item.accent}">{{ item.value }}</p>
+          <p class="app-muted-text mt-1 text-xs">{{ item.range }}</p>
+        </article>
+      </div>
+
+      <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <article class="app-dashboard-panel space-y-3">
+          <h3 class="text-sm font-semibold">Weekly Attendance</h3>
+          <DataTable class="app-data-table" :value="ptAttendance?.weekly.days ?? []" size="small" :loading="isLoading">
+            <template #empty>
+              <div class="py-6 text-center text-sm opacity-70">No attendance found for this week.</div>
+            </template>
+            <Column field="date" header="Date">
+              <template #body="{ data }">{{ formatDateKey(data.date) }}</template>
+            </Column>
+            <Column field="count" header="Attendance" />
+          </DataTable>
+        </article>
+
+        <article class="app-dashboard-panel space-y-3">
+          <h3 class="text-sm font-semibold">Monthly Attendance</h3>
+          <DataTable class="app-data-table" :value="ptAttendance?.monthly.days ?? []" size="small" :loading="isLoading">
+            <template #empty>
+              <div class="py-6 text-center text-sm opacity-70">No attendance found for this month.</div>
+            </template>
+            <Column field="date" header="Date">
+              <template #body="{ data }">{{ formatDateKey(data.date) }}</template>
+            </Column>
+            <Column field="count" header="Attendance" />
+          </DataTable>
+        </article>
+      </div>
+    </section>
+
+    <section v-if="!isPtDashboard" class="app-section-card-comfy  space-y-3">
       <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div style="display: flex; align-items: center; gap: 8px;">
@@ -71,7 +133,7 @@
       </div>
     </section>
 
-    <section class="app-section-card-comfy space-y-4">
+    <section v-if="!isPtDashboard" class="app-section-card-comfy space-y-4">
       <h3 class="app-section-title">7-Day Appointments Trend</h3>
       <div class="grid grid-cols-7 gap-2">
         <div v-for="item in appointmentTrend" :key="item.date" class="flex flex-col items-center gap-2">
@@ -88,7 +150,7 @@
       </div>
     </section>
 
-    <section class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+    <section v-if="!isPtDashboard" class="grid grid-cols-1 xl:grid-cols-2 gap-5">
       <article class="app-section-card-comfy space-y-3">
         <h3 class="app-section-title">Billing Status Distribution</h3>
         <div class="space-y-2">
@@ -121,7 +183,7 @@
       </article>
     </section>
 
-    <section class="app-section-card-comfy space-y-3">
+    <section v-if="!isPtDashboard" class="app-section-card-comfy space-y-3">
       <div class="flex items-center gap-2 text-sm">
         <i class="app-section-icon pi pi-check-square" />
         <span class="font-medium">PT Performance (Monthly Bookings)</span>
@@ -151,7 +213,7 @@
       </DataTable>
     </section>
 
-    <section class="app-section-card-comfy space-y-4">
+    <section v-if="!isPtDashboard" class="app-section-card-comfy space-y-4">
       <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h2 class="app-section-title">Completed Sessions by Referring Doctor</h2>
@@ -236,6 +298,7 @@ import {
   dashboardService,
   type DashboardConfidentialRevenue,
   type DashboardDistributionItem,
+  type DashboardPtAttendance,
   type DashboardRecentAppointment,
   type DashboardTrendItem,
 } from "@/features/dashboard/api/dashboard.service"
@@ -246,11 +309,16 @@ import {
   type ReferringDoctorCompletedSessionsReport,
 } from "@/features/appointments/api/appointment-phase1.service"
 import { clinicStore } from "@/stores/clinic.store"
+import {useAuthSessionStore} from "@/stores/auth-session.store"
+import {isPtAppointmentProvider} from "@/utils/appointment-provider.util"
 
 const toast = useToast()
 const isLoading = ref(false)
 const globalClinicStore = clinicStore()
 const { selectedClinicId, selectedClinic } = storeToRefs(globalClinicStore)
+const authSession = useAuthSessionStore()
+const {currentUser, staffName} = storeToRefs(authSession)
+const isPtDashboard = computed(() => isPtAppointmentProvider(currentUser.value))
 
 const metrics = ref({
   monthlyTotalAppointments: 0,
@@ -289,6 +357,7 @@ const billingDistribution = ref<Array<{
 
 const recentAppointments = ref<DashboardRecentAppointment[]>([])
 const ptPerformance = ref<Array<{pt_name: string; bookings: number; documentationReminderCount: number; redAlertCount: number}>>([])
+const ptAttendance = ref<DashboardPtAttendance>()
 const isDoctorSessionsLoading = ref(false)
 const doctorSessionsDateRange = ref<Date[] | null>(null)
 const doctorSessionsReport = ref<ReferringDoctorCompletedSessionsReport>()
@@ -299,6 +368,20 @@ const formatDateTime = (value: string): string => new Date(value).toLocaleString
 
 const formatDate = (value: Date): string =>
   value.toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" })
+
+const formatDateKey = (value?: string): string => {
+  if (!value) return "-"
+  return new Date(`${value}T00:00:00`).toLocaleDateString("en-PH", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  })
+}
+
+const formatDateRange = (from?: string, to?: string): string => {
+  if (!from || !to) return "No date range"
+  return `${formatDateKey(from)} to ${formatDateKey(to)}`
+}
 
 const toDateParam = (value: Date): string => {
   const year = value.getFullYear()
@@ -349,6 +432,21 @@ const kpiCards = computed(() => {
 
   return cards
 })
+
+const ptAttendanceCards = computed(() => [
+  {
+    label: "Weekly Attendance",
+    value: ptAttendance.value?.weekly.attendance_count ?? 0,
+    range: formatDateRange(ptAttendance.value?.weekly.from, ptAttendance.value?.weekly.to),
+    accent: "#5E1869",
+  },
+  {
+    label: "Monthly Attendance",
+    value: ptAttendance.value?.monthly.attendance_count ?? 0,
+    range: formatDateRange(ptAttendance.value?.monthly.from, ptAttendance.value?.monthly.to),
+    accent: "#A91D8B",
+  },
+])
 
 const loadConfidentialRevenue = async (): Promise<void> => {
   const result: DashboardConfidentialRevenue | undefined = await dashboardService.getConfidentialRevenue(selectedClinicId.value)
@@ -515,9 +613,18 @@ const loadRecentAppointments = async (): Promise<void> => {
   recentAppointments.value = (await dashboardService.getRecentAppointments(8, selectedClinicId.value)) ?? []
 }
 
+const loadPtAttendance = async (): Promise<void> => {
+  ptAttendance.value = await dashboardService.getPtAttendance(selectedClinicId.value)
+}
+
 const refreshDashboard = async (): Promise<void> => {
   try {
     isLoading.value = true
+    if (isPtDashboard.value) {
+      await loadPtAttendance()
+      return
+    }
+
     const results = await Promise.allSettled([
       loadMetrics(),
       loadConfidentialRevenue(),
@@ -547,6 +654,8 @@ const refreshDashboard = async (): Promise<void> => {
         errorToast(toast, "Failed to load some dashboard data")
       }
     }
+  } catch (error: unknown) {
+    errorToast(toast, getApiErrorMessage(error, {baseMessage: "Dashboard data could not be loaded"}))
   } finally {
     isLoading.value = false
   }
@@ -554,10 +663,22 @@ const refreshDashboard = async (): Promise<void> => {
 
 onMounted(async () => {
   try {
+    await authSession.ensureLoaded()
+  } catch {
+    authSession.clear()
+  }
+
+  try {
     await globalClinicStore.loadClinics()
   } catch {
     errorToast(toast, "Failed to load clinic list")
   }
+
+  if (isPtDashboard.value) {
+    void refreshDashboard()
+    return
+  }
+
   initializeDoctorSessionsDateRange()
   void refreshDashboard()
   void refreshDoctorSessionsReport()
@@ -566,6 +687,8 @@ onMounted(async () => {
 // Refresh dashboard when clinic selection changes
 watch(selectedClinicId, () => {
   void refreshDashboard()
-  void refreshDoctorSessionsReport()
+  if (!isPtDashboard.value) {
+    void refreshDoctorSessionsReport()
+  }
 })
 </script>

@@ -38,7 +38,7 @@
           <Column header="Patient" style="min-width: 240px">
             <template #body="{ data }">
               <div class="space-y-1">
-                <div class="font-semibold text-[rgb(var(--app-fg))]">{{ data.full_name }}</div>
+                <div class="uppercase font-semibold text-[rgb(var(--app-fg))]">{{ data.full_name }}</div>
                 <div class="text-xs text-[rgb(var(--app-fg))]/60">{{ data.public_id || `PATIENT-${data.id}` }}</div>
                 <div class="text-xs text-[rgb(var(--app-fg))]/60">{{ data.phone_number || "No contact number" }}</div>
               </div>
@@ -135,7 +135,7 @@
           <Column header="Patient / Billing" style="min-width: 260px">
             <template #body="{ data }">
               <div class="space-y-1">
-                <div class="font-semibold text-[rgb(var(--app-fg))]">{{ data.patient_name || "No patient linked" }}</div>
+                <div class="font-semibold text-[rgb(var(--app-fg))]">{{ formatPatientName(data.patient_name, "No patient linked") }}</div>
                 <div class="text-xs text-[rgb(var(--app-fg))]/60">
                   Billing {{ data.phase1_billing_public_id || "N/A" }}
                   <span v-if="data.receipt_number"> - Receipt {{ data.receipt_number }}</span>
@@ -224,6 +224,11 @@ const props = defineProps<{
 }>()
 
 const transactionsVisible = ref(false)
+
+const formatPatientName = (value?: string | null, fallback = "Patient"): string => {
+  const name = String(value ?? "").trim()
+  return name ? name.toUpperCase() : fallback
+}
 
 const formatLguPatientStatus = (value?: Patient["lgu_patient_status"]): string => {
   if (value === "CROSS_MONTH_DROPPED_OUT") return "Cross Month Dropped Out"

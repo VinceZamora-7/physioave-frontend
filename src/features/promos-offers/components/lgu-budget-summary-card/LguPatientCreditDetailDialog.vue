@@ -1,5 +1,5 @@
 <template>
-  <Dialog v-model:visible="visibleModel" modal :header="selectedPatientDetail ? `${selectedPatientDetail.patient_name} - LGU Credit Detail` : 'LGU Credit Detail'" style="width: min(94vw, 980px)" :pt="{ content: { class: 'space-y-4' } }">
+  <Dialog v-model:visible="visibleModel" modal :header="selectedPatientDetail ? `${formatPatientName(selectedPatientDetail.patient_name)} - LGU Credit Detail` : 'LGU Credit Detail'" style="width: min(94vw, 980px)" :pt="{ content: { class: 'space-y-4' } }">
     <Message v-if="loadingPatientDetail" severity="secondary" :closable="false" size="small">Loading patient LGU credit details...</Message>
     <Message v-else-if="patientDetailError" severity="warn" :closable="false" size="small">{{ patientDetailError }}</Message>
 
@@ -202,6 +202,11 @@ const props = defineProps<{
 }>()
 
 const visibleModel = defineModel<boolean>("visible", { required: true })
+
+const formatPatientName = (value?: string | null, fallback = "Patient"): string => {
+  const name = String(value ?? "").trim()
+  return name ? name.toUpperCase() : fallback
+}
 
 const emit = defineEmits<{
   "print-attendance-record": []

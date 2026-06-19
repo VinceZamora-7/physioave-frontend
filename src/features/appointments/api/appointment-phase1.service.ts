@@ -91,6 +91,11 @@ export interface AppointmentListItem {
   reschedule_flag: boolean
   reschedule_count: number
   reschedule_history_count?: number
+  daily_log_status?: "SCHEDULED" | "RESCHEDULED_ORIGINAL"
+  daily_log_row_key?: string
+  daily_log_rescheduled_to?: string | null
+  daily_log_rescheduled_to_end?: string | null
+  daily_log_reschedule_reason?: string | null
   dropout_status?: string
   dropout_at?: string | null
   dropout_reason?: string | null
@@ -621,25 +626,32 @@ export const appointmentPhase1Service = {
 
   async getDailyLog(params: AppointmentDailyLogParams): Promise<AppointmentDailyLogResponse> {
     const date = String(params.date ?? new Date().toISOString().slice(0, 10))
-    const { data } = await pamsAPI.get<Pageable<AppointmentListItem>>("/appointments", {
+    const { data } = await pamsAPI.get<AppointmentDailyLogResponse>("/appointments/daily-log", {
       params: {
         ...params,
-        from_date: date,
-        to_date: date,
+        date,
       }
     })
 
-    const items: AppointmentDailyLogItem[] = (data.content ?? []).map((appointment) => ({
-      ...appointment,
-      appointment_id: appointment.id,
-      signature_state: appointment.attendance_status === "COMPLETED" ? "FULLY_SIGNED" : "PENDING",
-      doctor_name: appointment.doctor_name ?? appointment.referring_doctor_name,
-    }))
+    const items: AppointmentDailyLogItem[] = (data.items ?? []).map((appointment) => {
+      const doctorName = typeof appointment.doctor_name === "string"
+        ? appointment.doctor_name
+        : typeof appointment.referring_doctor_name === "string"
+          ? appointment.referring_doctor_name
+          : null
+
+      return {
+        ...appointment,
+        appointment_id: appointment.id,
+        signature_state: appointment.attendance_status === "COMPLETED" ? "FULLY_SIGNED" : "PENDING",
+        doctor_name: doctorName,
+      }
+    })
 
     return {
       date,
       summary: {
-        total: data.total_elements ?? items.length,
+        total: Number(data.summary?.total ?? items.length),
       },
       items,
       groups: [],

@@ -1100,6 +1100,11 @@ const escapeHtml = (value: unknown): string =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;")
 
+const formatPatientName = (value?: string | null, fallback = "Patient"): string => {
+  const name = String(value ?? "").trim()
+  return name ? name.toUpperCase() : fallback
+}
+
 type PatientLguDetailsExportContext = {
   patientDetails: Patient | null
   lguInformation: PatientHMOInformation | null
@@ -1613,7 +1618,7 @@ const getStatementOfAccountRows = (sessions = invoiceSessionOptions.value): Stat
     const programStatus = appointmentStatus ? formatLguStatus(appointmentStatus) : selectedPatientStatusLabel()
     const treatmentDate = new Date(option.appointmentDate).toLocaleDateString("en-PH")
     const baseRow = {
-      patientName: selectedPatientDetail.value?.patient_name ?? "-",
+      patientName: formatPatientName(selectedPatientDetail.value?.patient_name, "-"),
       referralFormNo: selectedBillingMonth.value,
       referenceNo: billing?.public_id || (option.billingId ? `BILLING-${option.billingId}` : "-"),
       programStatus
@@ -1760,7 +1765,7 @@ const renderProfileSummaryHtml = (context: PatientLguDetailsExportContext): stri
   if (!patient) return ""
   const details = context.patientDetails
   const lguName = context.lguInformation?.lgu_program_name || context.lguInformation?.company_name || selectedProgramName.value || "LGU"
-  const displayName = details?.full_name || patient.patient_name
+  const displayName = formatPatientName(details?.full_name || patient.patient_name)
   const profileVisual = context.profileImageDataUrl
     ? `<img src="${escapeHtml(context.profileImageDataUrl)}" alt="${escapeHtml(displayName)} profile" class="profile-photo" />`
     : `<div class="profile-photo-fallback">${escapeHtml(getPatientInitials(displayName))}</div>`
@@ -1791,6 +1796,7 @@ const renderProfileIdentityHtml = (context: PatientLguDetailsExportContext): str
   const patient = selectedPatientDetail.value
   const transaction = latestPatientTransaction(context)
   const appointmentBilling = latestAppointmentBillingDetail(context)
+  const patientName = formatPatientName(details?.full_name || patient?.patient_name, "—")
   return `
     <section class="profile-section">
       <h2>Patient Profile</h2>
@@ -1802,7 +1808,7 @@ const renderProfileIdentityHtml = (context: PatientLguDetailsExportContext): str
           Patient's Name:
         </th>
         <td style="width: 32%; padding: 8px 10px; vertical-align: top; font-weight: 500; word-break: break-word;">
-          ${details?.full_name || patient?.patient_name || "—"}
+          ${escapeHtml(patientName)}
         </td>
 
         <th style="width: 18%; background: #f3f4f6; padding: 8px 10px; text-align: left; vertical-align: top; font-weight: 700; white-space: nowrap;">
@@ -2093,7 +2099,7 @@ const renderDashboardStatementOfAccountRows = (rows: LguDashboardHistoryItem[]):
     renderedRows.push(`
       <tr${isPatientStart ? ' class="item-group-start"' : ""}>
         <td class="text-center">${isPatientStart ? itemNumber : ""}</td>
-        <td>${isPatientStart ? escapeHtml(row.patient_name || "N/A") : ""}</td>
+        <td>${isPatientStart ? escapeHtml(formatPatientName(row.patient_name, "N/A")) : ""}</td>
         <td>${isPatientStart ? escapeHtml(row.referral_form_no || "N/A") : ""}</td>
         <td>${shouldShowReferenceNo ? escapeHtml(referenceNo) : ""}</td>
         <td>${isPatientStart ? escapeHtml(row.program_status || row.billing_status || row.usage_status || "N/A") : ""}</td>
@@ -2145,7 +2151,7 @@ const renderLguPatientCopyHtml = (patients: Patient[]): string => {
     <tr>
       <td class="center">${index + 1}</td>
       <td>${escapeHtml(patient.public_id || `PATIENT-${patient.id}`)}</td>
-      <td>${escapeHtml(patient.full_name)}</td>
+      <td>${escapeHtml(formatPatientName(patient.full_name, "N/A"))}</td>
       <td class="center">${escapeHtml(patient.age ?? "N/A")}</td>
       <td>${escapeHtml(patient.gender_name || "N/A")}</td>
       <td>${escapeHtml(patient.phone_number || "N/A")}</td>
@@ -2281,7 +2287,7 @@ const buildEncounterTicketCards = (detail: BillingListItem): EncounterTicketPdfC
       return {
         slipNumber: ticket.slip_number || `ETS-${ticket.id}`,
         encounterTicketId: ticket.id,
-        patientName: snap?.patient_name || detail.patient_name || "Patient",
+        patientName: formatPatientName(snap?.patient_name || detail.patient_name),
         providerName: snap?.provider_name || detail.physical_therapist || "Unassigned",
         serviceName: snap?.service_name || detail.service_name || "Therapy Session",
         specialtyName: snap?.specialty_tag_name,

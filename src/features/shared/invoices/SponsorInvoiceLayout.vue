@@ -20,6 +20,7 @@
             <h1 class="lgu-invoice-title">
               <span>{{ title }}</span>
             </h1>
+            <p v-if="subtitle" class="lgu-invoice-subtitle">{{ subtitle }}</p>
           </div>
         </header>
 

@@ -66,7 +66,7 @@
     <!-- Weekly Schedule -->
     <div
       v-if="calendarView === 'weekly'"
-      class="relative overflow-hidden rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] shadow-sm"
+      class="relative overflow-hidden rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] shadow-sm uppercase"
     >
       <!-- Loading overlay -->
       <div

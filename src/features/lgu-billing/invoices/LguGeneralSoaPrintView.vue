@@ -605,10 +605,10 @@ const dateSigned = computed(() => new Date().toLocaleDateString("en-PH"))
 
 const partnerLabel = computed(() => {
   if (payer.value === "lgu") {
-    return programName.value ? `${programName.value}` : "LGU"
+    return formatPatientName(programName.value, "LGU")
   }
 
-  return hmoName.value ? `HMO - ${hmoName.value}` : "HMO"
+  return hmoName.value ? `HMO - ${formatPatientName(hmoName.value, "HMO")}` : "HMO"
 })
 
 const billingDateLabel = computed(() => {
@@ -741,8 +741,13 @@ const getTimestamp = (record: unknown): number => {
   return parseDate(rawDate)?.getTime() ?? 0
 }
 
+const formatPatientName = (value?: string | null, fallback = "Unknown Patient"): string => {
+  const name = String(value ?? "").trim()
+  return name ? name.toUpperCase() : fallback
+}
+
 const getPatientName = (item: unknown): string =>
-  getText(item, ["patient_name", "patientName"], "Unknown Patient")
+  formatPatientName(getText(item, ["patient_name", "patientName"], ""))
 
 const getReferralFormNo = (
   item: unknown,

@@ -35,6 +35,7 @@ const confirm = useConfirm()
 const route = useRoute()
 const router = useRouter()
 const authSession = useAuthSessionStore()
+const { isOwnerEquivalent } = storeToRefs(authSession)
 
 const isLoading = ref(false)
 const isSavingExpense = ref(false)
@@ -52,6 +53,7 @@ const eodHistoryDetailsVisible = ref(false)
 const selectedEodHistoryItem = ref<EndOfDayHistoryItem>()
 const eodSectionRef = ref<HTMLElement | null>(null)
 const monthlySectionRef = ref<HTMLElement | null>(null)
+const monthlyReportVisible = ref(false)
 const expenseForm = ref({
   expense_item_id: null as number | null,
   amount: 0,
@@ -81,6 +83,7 @@ const canManageExpenses = computed(() => hasAnyPermission(
   "Appointment::MANAGE_BILL",
   "Patient::MANAGE_BILLS"
 ))
+const canViewMonthlyReports = computed(() => canViewFinanceReports.value && isOwnerEquivalent.value)
 
 const selectedDateLabel = computed(() =>
   selectedDate.value.toLocaleDateString("en-PH", {
@@ -344,7 +347,9 @@ const refreshReport = async (): Promise<void> => {
     const monthParam = selectedMonthParam.value
     const [dailyReportResult, monthReportResult] = await Promise.allSettled([
       billingPhase1Service.getDailyIncomeExpense(dailyDate, clinicId),
-      billingPhase1Service.getMonthlyIncomeExpense(monthParam, dailyDate, clinicId)
+      canViewMonthlyReports.value
+        ? billingPhase1Service.getMonthlyIncomeExpense(monthParam, dailyDate, clinicId)
+        : Promise.resolve(createEmptyMonthlyReport(monthParam))
     ])
 
     if (dailyReportResult.status === "fulfilled") {
@@ -548,6 +553,24 @@ const printSelectedDailyReport = (): void => {
   }
 }
 
+const printSelectedMonthlyReport = (): void => {
+  if (!canViewMonthlyReports.value) return
+
+  const routeLocation = router.resolve({
+    name: "monthly-report-print",
+    query: {
+      month: selectedMonthParam.value,
+      date: toDateParam(selectedDate.value),
+      ...(selectedClinicId.value ? {clinic_id: selectedClinicId.value} : {}),
+      ...(selectedClinic.value?.name ? {clinic_name: selectedClinic.value.name} : {})
+    }
+  })
+  const printWindow = window.open(routeLocation.href, "_blank")
+  if (!printWindow) {
+    errorToast(toast, "Monthly report print page could not be opened. Allow pop-ups for this site, then try again.")
+  }
+}
+
 const openEodHistoryDetails = (item: EndOfDayHistoryItem): void => {
   selectedEodHistoryItem.value = item
   eodHistoryDetailsVisible.value = true
@@ -635,6 +658,7 @@ const scrollToRequestedSection = async (): Promise<void> => {
   }
 
   if (section === "monthly") {
+    monthlyReportVisible.value = true
     monthlySectionRef.value?.scrollIntoView({behavior: "smooth", block: "start"})
   }
 }
@@ -828,14 +852,14 @@ onMounted(async () => {
             <Column header="Patient" style="min-width: 260px">
               <template #body="{ data }">
                 <div class="space-y-1">
-                  <div class="font-semibold">{{ data.patient_name }}</div>
+                  <div class="font-semibold uppercase">{{ data.patient_name }}</div>
                   <div class="text-xs opacity-60">{{ data.patient_public_id || `Appointment #${data.appointment_id}` }}</div>
                 </div>
               </template>
             </Column>
 
             <Column header="Primary PT" style="min-width: 200px">
-              <template #body="{ data }">{{ data.pt_name }}</template>
+              <template #body="{ data }"><span class="uppercase">{{ data.pt_name }}</span></template>
             </Column>
 
             <Column header="Status" style="min-width: 180px">
@@ -872,7 +896,7 @@ onMounted(async () => {
           <Column header="Primary PT" style="min-width: 260px">
             <template #body="{ data }">
               <div class="space-y-1">
-                <div class="font-semibold">{{ data.pt_name }}</div>
+                <div class="font-semibold uppercase">{{ data.pt_name }}</div>
                 <div class="text-xs opacity-60">Eligible appointments: {{ data.eligible_appointment_count }}</div>
               </div>
             </template>
@@ -1035,7 +1059,7 @@ onMounted(async () => {
           <Column header="Patient Name" style="min-width: 220px">
             <template #body="{ data }">
               <div class="space-y-1">
-                <div class="font-semibold">{{ data.patient_name }}</div>
+                <div class="font-semibold uppercase">{{ data.patient_name }}</div>
                 <div class="text-xs opacity-60">{{ data.patient_public_id }}</div>
               </div>
             </template>
@@ -1204,7 +1228,7 @@ onMounted(async () => {
       </div>
     </section>
 
-    <section v-if="canViewFinanceReports" ref="monthlySectionRef" class="app-section-card-comfy space-y-4">
+    <section v-if="canViewMonthlyReports" ref="monthlySectionRef" class="app-section-card-comfy space-y-4">
       <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 class="app-section-title">Monthly Income &amp; Expenses</h2>
@@ -1214,19 +1238,37 @@ onMounted(async () => {
           <div class="text-sm opacity-70">
             {{ selectedMonthLabel }} · Active days {{ monthlyReport?.summary.active_day_count ?? 0 }}
           </div>
+          <Button
+            :label="monthlyReportVisible ? 'Hide Monthly Report' : 'Show Monthly Report'"
+            :icon="monthlyReportVisible ? 'pi pi-eye-slash' : 'pi pi-eye'"
+            class="bg-blue-400 text-white uppercase font-bold"
+            size="small"
+            outlined
+            @click="monthlyReportVisible = !monthlyReportVisible"
+          />
+          <Button
+            v-if="monthlyReportVisible"
+            label="Print Monthly Report"
+            icon="pi pi-print"
+            size="small"
+            outlined
+            :disabled="isLoading"
+            @click="printSelectedMonthlyReport"
+          />
         </div>
       </div>
 
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <article v-for="card in monthlySummaryCards" :key="card.label" class="app-dashboard-kpi-card">
-          <div class="text-xs uppercase tracking-wide opacity-55">{{ card.label }}</div>
-          <div class="mt-2 text-2xl font-semibold">{{ card.value }}</div>
-          <div class="mt-1 text-xs opacity-60">{{ card.caption }}</div>
-        </article>
-      </div>
+      <div v-show="monthlyReportVisible" class="space-y-4">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <article v-for="card in monthlySummaryCards" :key="card.label" class="app-dashboard-kpi-card">
+            <div class="text-xs uppercase tracking-wide opacity-55">{{ card.label }}</div>
+            <div class="mt-2 text-2xl font-semibold">{{ card.value }}</div>
+            <div class="mt-1 text-xs opacity-60">{{ card.caption }}</div>
+          </article>
+        </div>
 
-      <div class="overflow-x-auto">
-        <DataTable class="app-data-table" :value="monthlyReport?.days ?? []" size="small" :loading="isLoading" scrollable>
+        <div class="overflow-x-auto">
+          <DataTable class="app-data-table" :value="monthlyReport?.days ?? []" size="small" :loading="isLoading" scrollable>
           <template #empty>
             <div class="py-10 text-center text-sm opacity-70">No finance activity found for {{ selectedMonthLabel }}.</div>
           </template>
@@ -1275,7 +1317,8 @@ onMounted(async () => {
               </span>
             </template>
           </Column>
-        </DataTable>
+          </DataTable>
+        </div>
       </div>
     </section>
 

@@ -2784,6 +2784,9 @@ const resetForm = (): void => {
   resetServicePicker();
 };
 
+const formatAppointmentTypeLabel = (value: string): string =>
+  value.replace(/^Dr\.?\s+Consultation$/i, "Consultation");
+
 const loadLookups = async (): Promise<void> => {
   const clinicId = activeBranchId.value ?? undefined;
   const [
@@ -2861,7 +2864,10 @@ const loadLookups = async (): Promise<void> => {
       row.specialty_tag_id == null ? null : Number(row.specialty_tag_id),
   }));
   appointmentTypeOptions.value = (appointmentTypes.data?.content ?? []).map(
-    (row: { id: number; name: string }) => ({ label: row.name, value: row.id }),
+    (row: { id: number; name: string }) => ({
+      label: formatAppointmentTypeLabel(row.name),
+      value: row.id,
+    }),
   );
   appointmentStatusOptions.value = (
     appointmentStatuses.data?.content ?? []

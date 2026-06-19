@@ -210,7 +210,12 @@ const hmoId = computed(() => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
 })
 
-const partnerLabel = computed(() => hmoName.value || "HMO")
+const formatPrintableName = (value?: string | null, fallback = "N/A"): string => {
+  const name = String(value ?? "").trim()
+  return name ? name.toUpperCase() : fallback
+}
+
+const partnerLabel = computed(() => formatPrintableName(hmoName.value, "HMO"))
 
 const billingDateLabel = computed(() => {
   const endDate = dateTo.value ? new Date(dateTo.value) : null
@@ -451,7 +456,7 @@ const buildRows = (items: HmoSoaSourceItem[]): SoaDisplayRow[] => {
         referenceNo: string
         loaApprovalNo: string
       } => {
-        const patientName = item.patient_name || "Unknown Patient"
+        const patientName = formatPrintableName(item.patient_name, "Unknown Patient")
 
         const currentGroupKey = [
           patientName,

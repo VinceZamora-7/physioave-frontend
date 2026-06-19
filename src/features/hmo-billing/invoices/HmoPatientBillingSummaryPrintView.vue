@@ -211,8 +211,19 @@ const billingId = computed(() => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 })
 
+const formatPrintableName = (value?: string | null, fallback = "Patient"): string => {
+  const name = String(value ?? "").trim()
+  return name ? name.toUpperCase() : fallback
+}
+
 const patientName = computed(() =>
-  String(route.query.patient_name ?? "Patient").trim() || "Patient"
+  formatPrintableName(
+    firstNonBlank(
+      billingDetail.value?.patient_name,
+      route.query.patient_name
+    ),
+    "Patient"
+  )
 )
 
 const patientAddress = computed(() =>
@@ -226,11 +237,13 @@ const patientAge = computed(() =>
 const sponsorRecord = computed(() => sponsorInfo.value)
 
 const hmoLabel = computed(() =>
-  billingDetail.value?.hmo_name?.trim() ||
-  sponsorRecord.value?.company_name?.trim() ||
-  sponsorRecord.value?.hmo_name?.trim() ||
-  String(route.query.hmo_name ?? "HMO").trim() ||
-  "HMO"
+  formatPrintableName(
+    billingDetail.value?.hmo_name?.trim() ||
+    sponsorRecord.value?.company_name?.trim() ||
+    sponsorRecord.value?.hmo_name?.trim() ||
+    String(route.query.hmo_name ?? "").trim(),
+    "HMO"
+  )
 )
 
 const firstNonBlank = (...values: unknown[]): string => {
@@ -247,7 +260,7 @@ const sponsorHmoType = computed(() =>
 )
 
 const sponsorCompanyName = computed(() =>
-  sponsorRecord.value?.company_name?.trim() || hmoLabel.value
+  formatPrintableName(sponsorRecord.value?.company_name?.trim() || hmoLabel.value, hmoLabel.value)
 )
 
 const dateSigned = computed(() =>
@@ -300,14 +313,17 @@ const getTicketPhysicalTherapist = (billing?: BillingListItem | null): string =>
   )
 
 const physicalTherapist = computed(() =>
-  firstNonBlank(
-    billingDetail.value?.physical_therapist,
-    getTicketPhysicalTherapist(billingDetail.value)
-  ) || "N/A"
+  formatPrintableName(
+    firstNonBlank(
+      billingDetail.value?.physical_therapist,
+      getTicketPhysicalTherapist(billingDetail.value)
+    ),
+    "N/A"
+  )
 )
 
 const doctor = computed(() =>
-  billingDetail.value?.doctor?.trim() || "N/A"
+  formatPrintableName(billingDetail.value?.doctor?.trim(), "N/A")
 )
 
 const formatDiagnosis = (value?: string | null): string => {

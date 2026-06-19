@@ -410,12 +410,20 @@ const transactionFromDate = computed(() => parseDate(String(route.query.transact
 const transactionToDate = computed(() => parseDate(String(route.query.transaction_to ?? route.query.transaction_date ?? "")))
 const transactionPeriodEndDate = computed(() => transactionToDate.value ?? transactionFromDate.value ?? null)
 
-const patientName = computed(() => detail.value?.patient_name || getBillingText("patient_name") || "Patient")
+const formatPatientName = (value?: string | null, fallback = "Patient"): string => {
+  const name = String(value ?? "").trim()
+  return name ? name.toUpperCase() : fallback
+}
+
+const patientName = computed(() => formatPatientName(detail.value?.patient_name || getBillingText("patient_name")))
 const patientIdLabel = computed(() => patientId.value > 0 ? String(patientId.value) : String(billingDetail.value?.patient_id ?? NOT_AVAILABLE_LABEL))
 const lguSponsor = computed(() => sponsorInfo.value)
 
 const lguProgramLabel = computed(() =>
-  getSponsorText("lgu_program_name") || getSponsorText("company_name") || getBillingText("lgu_program_name") || "LGU"
+  formatPatientName(
+    getSponsorText("lgu_program_name") || getSponsorText("company_name") || getBillingText("lgu_program_name"),
+    "LGU"
+  )
 )
 
 const patientAddress = computed(() =>
@@ -427,11 +435,11 @@ const patientAge = computed(() =>
 )
 
 const physicalTherapistName = computed(() =>
-  getBillingText("physical_therapist_name") || getBillingText("physical_therapist") || NOT_AVAILABLE_LABEL
+  formatPatientName(getBillingText("physical_therapist_name") || getBillingText("physical_therapist"), NOT_AVAILABLE_LABEL)
 )
 
 const doctorName = computed(() =>
-  getBillingText("doctor_name") || getBillingText("doctor") || NOT_AVAILABLE_LABEL
+  formatPatientName(getBillingText("doctor_name") || getBillingText("doctor"), NOT_AVAILABLE_LABEL)
 )
 
 const diagnosis = computed(() =>
@@ -446,12 +454,14 @@ const patientProgramStatus = computed(() =>
 )
 
 const lguBillingToLabel = computed(() =>
-  getBillingText("lgu_name") ||
-  getBillingText("sponsor_name") ||
-  getSponsorText("company_name") ||
-  getSponsorText("lgu_program_name") ||
-  lguProgramLabel.value ||
-  NOT_AVAILABLE_LABEL
+  formatPatientName(
+    getBillingText("lgu_name") ||
+    getBillingText("sponsor_name") ||
+    getSponsorText("company_name") ||
+    getSponsorText("lgu_program_name") ||
+    lguProgramLabel.value,
+    NOT_AVAILABLE_LABEL
+  )
 )
 
 const referralFormNumberLabel = computed(() =>

@@ -335,7 +335,12 @@ const transactionPeriodEndDate = computed(() =>
   transactionToDate.value ?? transactionFromDate.value ?? null
 )
 
-const patientName = computed(() => detail.value?.patient_name || "Patient")
+const formatPatientName = (value?: string | null, fallback = "Patient"): string => {
+  const name = String(value ?? "").trim()
+  return name ? name.toUpperCase() : fallback
+}
+
+const patientName = computed(() => formatPatientName(detail.value?.patient_name))
 const patientIdLabel = computed(() =>
   patientId.value > 0
     ? String(patientId.value)
@@ -344,11 +349,11 @@ const patientIdLabel = computed(() =>
       : NOT_AVAILABLE_LABEL
 )
 const lguSponsor = computed(() => sponsorInfo.value)
-const lguProgramLabel = computed(() => lguSponsor.value?.lgu_program_name || lguSponsor.value?.company_name || "LGU")
+const lguProgramLabel = computed(() => formatPatientName(lguSponsor.value?.lgu_program_name || lguSponsor.value?.company_name, "LGU"))
 const patientAddress = computed(() => billingDetail.value?.patient_address || NOT_AVAILABLE_LABEL)
 const patientAge = computed(() => billingDetail.value?.patient_age || NOT_AVAILABLE_LABEL)
-const physicalTherapistName = computed(() => billingDetail.value?.physical_therapist || NOT_AVAILABLE_LABEL)
-const doctorName = computed(() => billingDetail.value?.doctor || NOT_AVAILABLE_LABEL)
+const physicalTherapistName = computed(() => formatPatientName(billingDetail.value?.physical_therapist, NOT_AVAILABLE_LABEL))
+const doctorName = computed(() => formatPatientName(billingDetail.value?.doctor, NOT_AVAILABLE_LABEL))
 const diagnosis = computed(() => billingDetail.value?.diagnosis || NOT_AVAILABLE_LABEL)
 const patientProgramStatus = computed(() =>
   formatLguPatientProgramStatus(

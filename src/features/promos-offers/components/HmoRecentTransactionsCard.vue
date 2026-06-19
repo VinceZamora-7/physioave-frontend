@@ -174,7 +174,7 @@
                   {{ getInitials(data.full_name) }}
                 </span>
                 <div class="min-w-0 space-y-1">
-                  <div class="truncate font-semibold text-[rgb(var(--app-fg))]">{{ data.full_name }}</div>
+                  <div class="uppercase truncate font-semibold text-[rgb(var(--app-fg))]">{{ data.full_name }}</div>
                   <div class="text-xs text-[rgb(var(--app-fg))]/60">{{ data.public_id || `PATIENT-${data.id}` }}</div>
                   <div class="text-xs text-[rgb(var(--app-fg))]/60">{{ data.phone_number || "No contact number" }}</div>
                 </div>
@@ -238,7 +238,7 @@
           <Column header="Patient / Billing" style="min-width: 250px">
             <template #body="{ data }">
               <div class="space-y-1">
-                <div class="font-semibold">{{ data.patient_name || "No patient linked" }}</div>
+                <div class="font-semibold">{{ formatPatientName(data.patient_name, "No patient linked") }}</div>
                 <div class="text-xs text-[rgb(var(--app-fg))]/60">BILLING-{{ data.id }}<span v-if="data.receipt_number"> · Receipt {{ data.receipt_number }}</span></div>
               </div>
             </template>
@@ -399,8 +399,33 @@ const selectedPeriodYear = computed(() => selectedMonth.value.getFullYear())
 const selectedPeriodMonth = computed(() => selectedMonth.value.getMonth() + 1)
 
 const selectedPatientName = computed(() =>
-  selectedPatient.value?.full_name || selectedPatient.value?.public_id || "Selected HMO Patient"
+  formatPatientName(resolvePatientName(selectedPatient.value), "Selected HMO Patient")
 )
+
+const firstNonBlank = (...values: unknown[]): string => {
+  for (const value of values) {
+    const text = String(value ?? "").trim()
+    if (text) return text
+  }
+  return ""
+}
+
+const resolvePatientName = (patient?: Patient | null): string => {
+  if (!patient) return ""
+
+  const assembledName = [
+    patient.first_name,
+    patient.middle_name,
+    patient.last_name,
+  ].map(part => String(part ?? "").trim()).filter(Boolean).join(" ")
+
+  return firstNonBlank(patient.full_name, assembledName, patient.public_id)
+}
+
+const formatPatientName = (value?: string | null, fallback = "Patient"): string => {
+  const name = String(value ?? "").trim()
+  return name ? name.toUpperCase() : fallback
+}
 
 const asCurrency = (value: number): string =>
   Number(value ?? 0).toLocaleString("en-PH", { style: "currency", currency: "PHP" })

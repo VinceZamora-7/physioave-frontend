@@ -193,15 +193,23 @@ const { printPage, goBack } = useHmoInvoicePrintActions()
 const attendedRows = ref<AttendanceRow[]>([])
 const billingRows = ref<BillingRow[]>([])
 const error = ref("")
+const loadedPatientName = ref("")
 
 const patientId = computed(() => {
   const parsed = Number(String(route.query.patient_id ?? "").trim())
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 })
 
-const patientName = computed(() => String(route.query.patient_name ?? "Patient").trim() || "Patient")
+const formatPrintableName = (value?: string | null, fallback = "Patient"): string => {
+  const name = String(value ?? "").trim()
+  return name ? name.toUpperCase() : fallback
+}
+
+const patientName = computed(() =>
+  formatPrintableName(loadedPatientName.value || String(route.query.patient_name ?? ""), "Patient")
+)
 const patientIdLabel = computed(() => patientId.value > 0 ? String(patientId.value) : "N/A")
-const hmoLabel = computed(() => String(route.query.hmo_name ?? "HMO").trim() || "HMO")
+const hmoLabel = computed(() => formatPrintableName(String(route.query.hmo_name ?? ""), "HMO"))
 const dateFrom = computed(() => String(route.query.from ?? "").trim())
 const dateTo = computed(() => String(route.query.to ?? "").trim())
 const billingDateLabel = computed(() => {
@@ -265,6 +273,7 @@ const load = async (): Promise<void> => {
   error.value = ""
   attendedRows.value = []
   billingRows.value = []
+  loadedPatientName.value = ""
 
   if (!patientId.value) {
     error.value = "Patient ID is required."
@@ -282,6 +291,7 @@ const load = async (): Promise<void> => {
     })
 
     const billings = data?.content ?? []
+    loadedPatientName.value = String(billings[0]?.patient_name ?? "").trim()
     billingRows.value = buildBillingRows(billings)
     attendedRows.value = buildAttendanceRows(billings)
   } catch (err: unknown) {

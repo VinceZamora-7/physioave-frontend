@@ -31,6 +31,25 @@ export interface DashboardConfidentialRevenue {
   direct_marketing_revenue: number
 }
 
+export interface DashboardPtAttendanceDay {
+  date: string
+  count: number
+}
+
+export interface DashboardPtAttendancePeriod {
+  from: string
+  to: string
+  attendance_count: number
+  days: DashboardPtAttendanceDay[]
+}
+
+export interface DashboardPtAttendance {
+  staff_id: number
+  staff_name: string
+  weekly: DashboardPtAttendancePeriod
+  monthly: DashboardPtAttendancePeriod
+}
+
 const branchParams = (clinicId?: number): Record<string, unknown> =>
   clinicId ? {clinic_id: clinicId} : {all_branches: true}
 
@@ -65,6 +84,13 @@ export const dashboardService = {
 
   async getConfidentialRevenue(clinicId?: number): Promise<DashboardConfidentialRevenue | undefined> {
     const {data} = await pamsAPI.get<DashboardConfidentialRevenue>("/dashboard/confidential-revenue", {
+      params: branchParams(clinicId),
+    })
+    return data
+  },
+
+  async getPtAttendance(clinicId?: number): Promise<DashboardPtAttendance | undefined> {
+    const {data} = await pamsAPI.get<DashboardPtAttendance>("/dashboard/pt/attendance", {
       params: branchParams(clinicId),
     })
     return data

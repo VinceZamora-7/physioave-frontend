@@ -1,8 +1,12 @@
 <template>
-  <SponsorInvoiceLayout title="Daily Patient Log" :has-error="!!error">
+  <SponsorInvoiceLayout
+    title="Daily Patient Log"
+    :subtitle="`Treatment and signature log for ${payload?.selected_date_label || '--'}`"
+    :has-error="!!error"
+  >
     <template #meta>
       <strong>Date:</strong><span>{{ payload?.selected_date_label || "--" }}</span>
-      <strong>Branch:</strong><span>{{ payload?.clinic_name || "All branches" }}</span>
+      <strong>Branch:</strong><span>{{ formatPrintableName(payload?.clinic_name, "All branches") }}</span>
       <strong>Generated:</strong><span>{{ payload?.generated_at || "--" }}</span>
     </template>
 
@@ -23,7 +27,6 @@
           <div class="line"><span class="label">Rescheduled:</span><span class="value">{{ payload.summary.rescheduled }}</span></div>
         </div>
         <div class="details-group">
-          <div class="line"><span class="label">Pending:</span><span class="value">{{ payload.summary.pending }}</span></div>
           <div class="line"><span class="label">Canceled:</span><span class="value">{{ payload.summary.cancelled }}</span></div>
         </div>
       </div>
@@ -31,13 +34,11 @@
 
     <div v-if="payload?.signature_exception" class="signature-exception">
       <strong>Missing Signature Exception</strong>
-      <span>{{ payload.signature_exception.reason_label }} — {{ payload.signature_exception.explanation }}</span>
+      <span>{{ payload.signature_exception.reason_label }} - {{ payload.signature_exception.explanation }}</span>
       <span>
-        Approved by {{ payload.signature_exception.approved_by }}
-        ({{ payload.signature_exception.approved_role || "Authorized staff" }})
+        Approved by {{ formatPrintableName(payload.signature_exception.approved_by, "Authorized staff") }}
         on {{ payload.signature_exception.approved_at }}
       </span>
-      <span>Audit reference: {{ payload.signature_exception.reference }}</span>
     </div>
 
     <div v-if="payload" class="table-wrap">
@@ -47,7 +48,7 @@
             <th class="number-column">No.</th>
             <th>Time</th>
             <th>Patient</th>
-            <th>Branch / Service</th>
+            <th>Service</th>
             <th>Physical Therapist</th>
             <th>Visit Status</th>
             <th>Patient Signature</th>
@@ -60,22 +61,29 @@
           <tr v-if="!payload.rows.length">
             <td colspan="10" class="empty-row">No patient logs found for this date.</td>
           </tr>
-          <tr v-for="(row, index) in payload.rows" :key="row.id">
-            <td class="text-center">{{ index + 1 }}</td>
+          <tr v-for="(row, index) in payload.rows" :key="row.row_key">
+            <td class="text-center number-column">{{ index + 1 }}</td>
             <td>
               <strong>{{ row.time_range }}</strong>
               <span>{{ row.date_label }}</span>
             </td>
-            <td><strong>{{ row.patient_name }}</strong></td>
+            <td><strong>{{ formatPrintableName(row.patient_name, "Unnamed patient") }}</strong></td>
             <td>
-              <strong>{{ row.clinic_name }}</strong>
-              <span>{{ row.service_label }}</span>
+              <strong>{{ formatServiceLabel(row.service_label) }}</strong>
             </td>
-            <td><strong>{{ row.provider_name }}</strong></td>
-            <td><strong>{{ formatVisitStatus(row.visit_status) }}</strong></td>
+            <td><strong>{{ formatPrintableName(row.provider_name, "Unassigned PT") }}</strong></td>
+            <td>
+              <strong>{{ formatVisitStatus(row.visit_status) }}</strong>
+              <span v-if="row.reschedule_basis" class="reschedule-basis">{{ row.reschedule_basis }}</span>
+            </td>
             <td class="signature-cell">
               <img v-if="row.patient_signature" class="signature" :src="row.patient_signature" alt="Patient signature" />
-              <span v-else>{{ signatureFallback(row, "patient") }}</span>
+              <div v-else class="signature-missing">
+                <strong>{{ signatureFallback(row, "patient") }}</strong>
+                <span v-if="signatureMissingReason(row, 'patient')">
+                  Reason: {{ signatureMissingReason(row, "patient") }}
+                </span>
+              </div>
             </td>
             <td class="signature-cell">
               <img v-if="row.pt_signature" class="signature" :src="row.pt_signature" alt="PT signature" />
@@ -110,10 +118,18 @@ const { printPage, goBack } = useSponsorInvoicePrintActions()
 const payload = ref<DailyPatientLogPrintPayload>()
 const error = ref("")
 
+const formatPrintableName = (value?: string | null, fallback = "N/A"): string => {
+  const name = String(value ?? "").trim()
+  return name ? name.toUpperCase() : fallback
+}
+
+const formatServiceLabel = (value?: string | null): string =>
+  String(value || "Appointment").replace(/^Dr\.?\s+Consultation$/i, "Consultation")
+
 const formatVisitStatus = (status: string): string => {
   const normalizedStatus = status.trim().toUpperCase()
 
-  if (normalizedStatus.includes("RESCHEDULE")) return "Reschedule"
+  if (normalizedStatus.includes("RESCHEDULE")) return "Rescheduled"
   if (["CANCELLED", "CANCELED", "NO SHOW", "NO_SHOW"].includes(normalizedStatus)) return "Cancelled"
   if (["COMPLETED", "ATTENDED", "DONE"].includes(normalizedStatus)) return "Completed"
 
@@ -125,9 +141,23 @@ const signatureFallback = (
   signatureType: "patient" | "pt"
 ): string => {
   if (row.missing_signature_types?.includes(signatureType)) {
-    return "Unavailable — exception documented"
+    return "Unavailable - exception documented"
   }
   return formatVisitStatus(row.visit_status) === "Completed" ? "No signature" : "Not required"
+}
+
+const signatureMissingReason = (
+  row: DailyPatientLogPrintRow,
+  signatureType: "patient" | "pt"
+): string => {
+  if (!row.missing_signature_types?.includes(signatureType)) return ""
+
+  const exception = payload.value?.signature_exception
+  if (!exception) return ""
+
+  const reason = exception.reason_label.trim()
+  const explanation = exception.explanation.trim()
+  return [reason, explanation].filter(Boolean).join(": ")
 }
 
 onMounted(() => {
@@ -179,7 +209,12 @@ onMounted(() => {
 }
 
 .number-column {
-  width: 32px;
+  width: 24px !important;
+  min-width: 24px !important;
+  max-width: 24px !important;
+  padding-left: 2px !important;
+  padding-right: 2px !important;
+  white-space: nowrap;
 }
 
 .signature-exception {
@@ -201,6 +236,42 @@ onMounted(() => {
 .signature-cell {
   text-align: center;
   vertical-align: middle !important;
+}
+
+.reschedule-basis-tag {
+  display: inline-block !important;
+  width: fit-content;
+  margin-top: 3px;
+  padding: 1px 4px;
+  border: 1px solid #2563eb;
+  border-radius: 999px;
+  color: #1d4ed8 !important;
+  font-size: 7px !important;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.reschedule-basis {
+  color: #374151;
+  font-size: 7px !important;
+  line-height: 1.2;
+}
+
+.signature-missing {
+  display: grid;
+  gap: 2px;
+  color: #374151;
+  font-size: 8px;
+  line-height: 1.2;
+}
+
+.signature-missing strong {
+  color: #111827;
+  font-size: 8px;
+}
+
+.signature-missing span {
+  margin-top: 0;
 }
 
 .signature {
@@ -228,6 +299,14 @@ onMounted(() => {
 
   .daily-log-table td span {
     font-size: 6.5px !important;
+  }
+
+  .number-column {
+    width: 18px !important;
+    min-width: 18px !important;
+    max-width: 18px !important;
+    padding-left: 1px !important;
+    padding-right: 1px !important;
   }
 
   .signature {
