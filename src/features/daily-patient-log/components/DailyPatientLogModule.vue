@@ -82,6 +82,7 @@
             icon="pi pi-file-pdf"
             severity="secondary"
             outlined
+            :loading="isApprovingSignatureException"
             :disabled="!items.length || isLoading"
             @click="exportDailyLogPdf"
           />
@@ -222,6 +223,82 @@
     </section>
 
     <Dialog
+      v-model:visible="signatureExceptionVisible"
+      modal
+      header="Document Missing Signature Exception"
+      :style="{ width: 'min(640px, 94vw)' }"
+    >
+      <div class="space-y-5">
+        <Message severity="warn" :closable="false">
+          {{ missingSignatureRows.length }} completed visit{{ missingSignatureRows.length === 1 ? "" : "s" }}
+          {{ missingSignatureRows.length === 1 ? "is" : "are" }} missing a patient or PT signature.
+          Printing requires a documented exception and creates a permanent audit entry.
+        </Message>
+
+        <div class="max-h-52 overflow-auto rounded-xl border border-[rgb(var(--app-border))]">
+          <div
+            v-for="row in missingSignatureRows"
+            :key="row.item.id"
+            class="flex items-start justify-between gap-4 border-b border-[rgb(var(--app-border))] px-4 py-3 last:border-b-0"
+          >
+            <div>
+              <div class="font-medium text-[rgb(var(--app-fg))]">{{ row.item.patient_name || "Unnamed patient" }}</div>
+              <div class="text-xs opacity-60">{{ formatTimeRange(row.item.starts_at, row.item.ends_at) }}</div>
+            </div>
+            <Tag
+              :value="row.missingTypes.map(type => type === 'patient' ? 'Patient' : 'PT').join(' + ')"
+              severity="warn"
+            />
+          </div>
+        </div>
+
+        <label class="block space-y-2">
+          <span class="text-sm font-medium">Reason</span>
+          <Select
+            v-model="signatureExceptionReason"
+            :options="signatureExceptionReasonOptions"
+            option-label="label"
+            option-value="value"
+            placeholder="Select a reason"
+            class="w-full"
+          />
+        </label>
+
+        <label class="block space-y-2">
+          <span class="text-sm font-medium">Required explanation</span>
+          <Textarea
+            v-model="signatureExceptionExplanation"
+            rows="4"
+            maxlength="1000"
+            class="w-full"
+            placeholder="Describe what happened and why the signatures can no longer be obtained."
+          />
+          <span class="block text-xs opacity-60">Minimum 10 characters. This note will appear on the printout and in the audit log.</span>
+        </label>
+
+        <Message v-if="signatureExceptionError" severity="error" :closable="false">
+          {{ signatureExceptionError }}
+        </Message>
+      </div>
+
+      <template #footer>
+        <Button
+          label="Cancel"
+          severity="secondary"
+          outlined
+          :disabled="isApprovingSignatureException"
+          @click="signatureExceptionVisible = false"
+        />
+        <Button
+          label="Approve Exception & Print"
+          icon="pi pi-print"
+          :loading="isApprovingSignatureException"
+          @click="approveSignatureExceptionAndPrint"
+        />
+      </template>
+    </Dialog>
+
+    <Dialog
       v-model:visible="signaturePreviewVisible"
       modal
       :header="signaturePreviewHeader"
@@ -262,8 +339,8 @@
           </div>
           <div class="text-xs opacity-60">
             {{ formatTimeRange(selectedPtSignatureRow.starts_at, selectedPtSignatureRow.ends_at) }}
-            · {{ selectedPtSignatureRow.provider_name || "Unassigned PT" }}
-            · {{ appointmentRecordId(selectedPtSignatureRow) }}
+            Â· {{ selectedPtSignatureRow.provider_name || "Unassigned PT" }}
+            Â· {{ appointmentRecordId(selectedPtSignatureRow) }}
           </div>
         </div>
 
@@ -348,7 +425,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from "vue"
 import { storeToRefs } from "pinia"
-import { useRoute } from "vue-router"
+import { useRoute, useRouter } from "vue-router"
 import Button from "primevue/button"
 import Column from "primevue/column"
 import DataTable from "primevue/datatable"
@@ -356,11 +433,15 @@ import DatePicker from "primevue/datepicker"
 import Dialog from "primevue/dialog"
 import InputText from "primevue/inputtext"
 import Message from "primevue/message"
+import Select from "primevue/select"
 import Tag from "primevue/tag"
+import Textarea from "primevue/textarea"
 import { useToast } from "primevue/usetoast"
 import { clinicStore } from "@/stores/clinic.store"
+import { useAuthSessionStore } from "@/stores/auth-session.store"
 import {
   appointmentPhase1Service,
+  type DailyLogPrintExceptionApproval,
   type AppointmentEncounterTicket,
   type AppointmentDailyLogItem,
   type AppointmentPlannedService,
@@ -368,6 +449,10 @@ import {
 import type { Patient } from "@/features/patients/types/patient"
 import { pamsAPI } from "@/utils/axios-interceptor"
 import { errorToast, successToast, warningToast } from "@/utils/toast.util"
+import {
+  DAILY_PATIENT_LOG_PRINT_STORAGE_PREFIX,
+  type DailyPatientLogPrintPayload
+} from "@/features/daily-patient-log/print/daily-patient-log-print"
 
 type EvaluationVisitLogSectionExpose = {
   openCreateDialog: (visitDate?: Date) => void
@@ -384,7 +469,9 @@ const PatientEvaluationVisitLogSection = defineAsyncComponent(() =>
 
 const toast = useToast()
 const route = useRoute()
+const router = useRouter()
 const branchStore = clinicStore()
+const authSession = useAuthSessionStore()
 const { selectedClinicId, selectedClinic } = storeToRefs(branchStore)
 
 const dateFromQuery = (value: unknown): Date | null => {
@@ -412,6 +499,11 @@ const isDrawingPtSignature = ref(false)
 const hasPtSignatureDraft = ref(false)
 const ptSignatureError = ref("")
 const isSavingPtSignature = ref(false)
+const signatureExceptionVisible = ref(false)
+const signatureExceptionReason = ref("")
+const signatureExceptionExplanation = ref("")
+const signatureExceptionError = ref("")
+const isApprovingSignatureException = ref(false)
 const evaluationVisitLogShortcutVisible = ref(false)
 const selectedEvaluationVisitLogPatient = ref<Patient>()
 const selectedEvaluationLogAppointmentId = ref<number>()
@@ -421,7 +513,14 @@ const evaluationVisitLogOptionsLoaded = ref(false)
 const medicalCategoryOptions = ref<string[]>([])
 const medicalDiagnosisOptions = ref<string[]>([])
 const ptCaseImpressionOptions = ref<string[]>([])
-const SYSTEM_PRINT_FONT_STACK = '"Poppins", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+
+const signatureExceptionReasonOptions = [
+  { label: "Patient left before signing", value: "PATIENT_LEFT" },
+  { label: "Patient declined to sign", value: "PATIENT_DECLINED" },
+  { label: "PT unavailable to sign", value: "PT_UNAVAILABLE" },
+  { label: "Technical issue prevented signing", value: "TECHNICAL_ISSUE" },
+  { label: "Other documented reason", value: "OTHER" },
+]
 
 const selectedSignatureDataUrl = computed(() =>
   selectedSignatureRow.value
@@ -541,13 +640,6 @@ const openEvaluationVisitLogShortcut = async (item: AppointmentDailyLogItem): Pr
 const normalizeStatus = (value?: unknown): string =>
   String(value ?? "").trim().toUpperCase()
 
-const escapeHtml = (value: unknown): string =>
-  String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;")
 
 const summary = computed(() => {
   const total = items.value.length
@@ -563,6 +655,18 @@ const summary = computed(() => {
     pending: Math.max(0, total - completed - cancelled - rescheduled),
   }
 })
+
+const missingSignatureRows = computed(() =>
+  items.value
+    .filter(item => visitStatusLabel(item) === "Completed")
+    .map(item => {
+      const missingTypes: Array<"patient" | "pt"> = []
+      if (!patientSignatureFor(item)) missingTypes.push("patient")
+      if (!ptSignatureFor(item)) missingTypes.push("pt")
+      return { item, missingTypes }
+    })
+    .filter(row => row.missingTypes.length > 0)
+)
 
 const warnIfPendingAppointments = (): void => {
   if (summary.value.pending <= 0) return
@@ -854,26 +958,93 @@ const savePtSignature = async (): Promise<void> => {
   }
 }
 
-const openPdfWindow = (title: string): Window => {
-  const printWindow = window.open("", "_blank")
-  if (!printWindow || printWindow.closed) {
-    throw new Error("Unable to open PDF window. Allow pop-ups for this site, then try again.")
+const openDailyLogPrint = (
+  signatureException?: DailyLogPrintExceptionApproval,
+  targetWindow?: Window | null
+): void => {
+  if (!items.value.length) {
+    errorToast(toast, "No patient logs to export")
+    targetWindow?.close()
+    return
   }
 
-  printWindow.document.open()
-  printWindow.document.write(`
-    <!doctype html>
-    <html>
-      <head>
-        <title>${escapeHtml(title)}</title>
-        <meta charset="utf-8" />
-      </head>
-      <body style="font-family: ${SYSTEM_PRINT_FONT_STACK}; padding: 24px;">Preparing PDF...</body>
-    </html>
-  `)
-  printWindow.document.close()
+  warnIfPendingAppointments()
 
-  return printWindow
+  const missingSignaturesByAppointmentId = new Map(
+    (signatureException?.missing_signatures ?? []).map(row => [
+      row.appointment_id,
+      row.missing_signature_types,
+    ])
+  )
+  const payloadKey = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  const payload: DailyPatientLogPrintPayload = {
+    selected_date_label: selectedDateLabel.value,
+    clinic_name: selectedClinic.value?.name || "All branches",
+    generated_at: new Date().toLocaleString("en-PH", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }),
+    summary: { ...summary.value },
+    signature_exception: signatureException
+      ? {
+        reference: signatureException.reference,
+        reason_label: signatureException.reason_label,
+        explanation: signatureException.explanation,
+        approved_by: signatureException.approved_by,
+        approved_role: signatureException.approved_role,
+        approved_at: new Date(signatureException.approved_at).toLocaleString("en-PH", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        }),
+      }
+      : undefined,
+    rows: items.value.map((item) => ({
+      id: item.id,
+      time_range: formatTimeRange(item.starts_at, item.ends_at),
+      date_label: formatDate(item.starts_at),
+      patient_name: item.patient_name || "Unnamed patient",
+      clinic_name: item.clinic_name || "No branch",
+      service_label: serviceLabel(item),
+      provider_name: String(item.provider_name || "Unassigned PT"),
+      visit_status: visitStatusLabel(item),
+      patient_signature: patientSignatureFor(item) || undefined,
+      pt_signature: ptSignatureFor(item) || undefined,
+      missing_signature_types: missingSignaturesByAppointmentId.get(item.id),
+      billing_type: billingTypeLabel(item),
+      billing_status: String(item.billing_status || "Unbilled"),
+      session_label: sessionLabel(item),
+    })),
+  }
+
+  const storageKey = `${DAILY_PATIENT_LOG_PRINT_STORAGE_PREFIX}${payloadKey}`
+  try {
+    sessionStorage.setItem(storageKey, JSON.stringify(payload))
+  } catch {
+    targetWindow?.close()
+    errorToast(toast, "Unable to prepare the print view. Try exporting fewer patient logs.")
+    return
+  }
+
+  const printUrl = router.resolve({
+    name: "daily-patient-log-print",
+    query: { payload_key: payloadKey },
+  }).href
+  if (targetWindow) {
+    targetWindow.location.href = printUrl
+    return
+  }
+
+  const printWindow = window.open(printUrl, "_blank")
+  if (!printWindow) {
+    sessionStorage.removeItem(storageKey)
+    errorToast(toast, "Unable to open print view. Allow pop-ups for this site, then try again.")
+  }
 }
 
 const exportDailyLogPdf = (): void => {
@@ -882,477 +1053,60 @@ const exportDailyLogPdf = (): void => {
     return
   }
 
-  warnIfPendingAppointments()
-
-  let printWindow: Window
-  try {
-    printWindow = openPdfWindow("Daily Patient Log")
-  } catch (error) {
-    errorToast(toast, error instanceof Error ? error.message : "Unable to open PDF window")
+  if (!missingSignatureRows.value.length) {
+    openDailyLogPrint()
     return
   }
 
-  const generatedAt = new Date().toLocaleString("en-PH", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  })
+  if (!authSession.hasAnyPermission("Appointment::UPDATE")) {
+    errorToast(toast, "Completed visits have missing signatures. An authorized staff member must approve a print exception.")
+    return
+  }
 
-  const rows = items.value.map((item, index) => {
-    const patientSignature = patientSignatureFor(item)
-    const ptSignature = ptSignatureFor(item)
-    const patientSignatureHtml = patientSignature
-      ? `<img class="signature" src="${escapeHtml(patientSignature)}" alt="Patient signature" />`
-      : `<span class="muted">No signature</span>`
-    const ptSignatureHtml = ptSignature
-      ? `<img class="signature" src="${escapeHtml(ptSignature)}" alt="PT signature" />`
-      : `<span class="muted">No signature</span>`
+  signatureExceptionReason.value = ""
+  signatureExceptionExplanation.value = ""
+  signatureExceptionError.value = ""
+  signatureExceptionVisible.value = true
+}
 
-    return `
-      <tr>
-        <td>${index + 1}</td>
-        <td>
-          <strong>${escapeHtml(formatTimeRange(item.starts_at, item.ends_at))}</strong>
-          <div class="muted">${escapeHtml(formatDate(item.starts_at))}</div>
-        </td>
-        <td>
-          <strong>${escapeHtml(item.patient_name || "Unnamed patient")}</strong>
-        </td>
-        <td>
-          <strong>${escapeHtml(item.clinic_name || "No branch")}</strong>
-          <div class="muted">${escapeHtml(serviceLabel(item))}</div>
-        </td>
-        <td>
-          <strong>${escapeHtml(item.provider_name || "Unassigned PT")}</strong>
-        </td>
-        <td>
-          <strong>${escapeHtml(visitStatusLabel(item))}</strong>
-        </td>
-        <td class="signature-cell">${patientSignatureHtml}</td>
-        <td class="signature-cell">${ptSignatureHtml}</td>
-        <td>
-          <strong>${escapeHtml(billingTypeLabel(item))}</strong>
-          <div class="muted">${escapeHtml(item.billing_status || "Unbilled")}</div>
-        </td>
-        <td>
-          ${escapeHtml(sessionLabel(item))}
-        </td>
-      </tr>
-    `
-  }).join("")
+const approveSignatureExceptionAndPrint = async (): Promise<void> => {
+  signatureExceptionError.value = ""
+  const explanation = signatureExceptionExplanation.value.trim()
+  if (!signatureExceptionReason.value) {
+    signatureExceptionError.value = "Select a reason for the missing signatures."
+    return
+  }
+  if (explanation.length < 10) {
+    signatureExceptionError.value = "Provide an explanation of at least 10 characters."
+    return
+  }
 
-  printWindow.document.open()
-  printWindow.document.write(`
-    <!doctype html>
-    <html>
-      <head>
-        <title>Daily Patient Log</title>
-        <meta charset="utf-8" />
-        <style>
-          @import url("https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap");
+  const printWindow = window.open("about:blank", "_blank")
+  if (!printWindow) {
+    signatureExceptionError.value = "Allow pop-ups for this site, then try again."
+    return
+  }
 
-          @page { size: landscape; margin: 8mm; }
-          * { box-sizing: border-box; }
-          :root {
-            --system-font-family: ${SYSTEM_PRINT_FONT_STACK};
-            --lgu-accent: #d31d6e;
-            --lgu-accent-soft: #f3a8c8;
-            --lgu-border: #e5e7eb;
-            --lgu-text: #000000;
-            --lgu-muted: #374151;
-            --lgu-card: #ffffff;
-            --lgu-soft-bg: #f8fafc;
-          }
-          body {
-            margin: 0;
-            color: var(--lgu-text);
-            background: #f5f5f5;
-            font-family: var(--system-font-family);
-            font-size: 11px;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-          button {
-            font: inherit;
-          }
-          .lgu-invoice-page {
-            min-height: 100vh;
-            background: #f5f5f5;
-            color: var(--lgu-text);
-          }
-          .lgu-invoice-container {
-            width: 100%;
-            max-width: 1100px;
-            margin: 0 auto;
-            padding: 16px;
-          }
-          .lgu-invoice-sheet {
-            width: 100%;
-            max-width: 297mm;
-            min-height: 190mm;
-            margin: 0 auto;
-            padding: 12px 16px 10px;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
-            background: #ffffff;
-            color: #000000;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-          }
-          .lgu-invoice-top {
-            width: 100%;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            margin-bottom: 8px;
-          }
-          .lgu-invoice-heading {
-            width: 100%;
-            min-width: 0;
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 16px;
-          }
-          .lgu-invoice-logo {
-            display: block;
-            height: 90px;
-            width: auto;
-            flex-shrink: 0;
-            object-fit: contain;
-          }
-          .lgu-invoice-meta-grid {
-            display: grid;
-            grid-template-columns: auto minmax(0, 1fr);
-            gap: 2px 8px;
-            min-width: min(320px, 100%);
-            max-width: 420px;
-            font-size: 12px;
-            line-height: 1.25;
-            font-weight: 600;
-          }
-          .lgu-invoice-meta-grid strong {
-            white-space: nowrap;
-            font-weight: 800;
-            letter-spacing: 0.06em;
-          }
-          .lgu-invoice-meta-grid span {
-            min-width: 0;
-            word-break: break-word;
-            overflow-wrap: anywhere;
-          }
-          .lgu-invoice-title-block {
-            width: 100%;
-            text-align: center;
-          }
-          .lgu-invoice-title {
-            width: 100%;
-            margin: 2px 0 0;
-            text-align: center;
-            font-size: 24px;
-            line-height: 1.1;
-            letter-spacing: 0.05em;
-            font-weight: 800;
-            color: #111827;
-          }
-          .lgu-invoice-title span {
-            text-decoration: underline;
-            text-decoration-thickness: 1.5px;
-            text-underline-offset: 3px;
-          }
-          .lgu-invoice-toolbar {
-            display: flex;
-            gap: 8px;
-            justify-content: flex-end;
-            margin: 8px 0 10px;
-          }
-          .print-action {
-            display: flex;
-            gap: 8px;
-            justify-content: flex-end;
-          }
-          .print-action button {
-            min-width: 80px;
-            border: 1px solid var(--lgu-accent);
-            border-radius: 6px;
-            background: var(--lgu-accent);
-            color: white;
-            padding: 8px 12px;
-            font-weight: 700;
-            cursor: pointer;
-          }
-          .lgu-invoice-details {
-            margin: 15px 0;
-            width: 100%;
-          }
-          .details-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 10px;
-            width: 100%;
-            padding: 8px;
-            border: 1px solid var(--lgu-accent);
-            background: var(--lgu-card);
-            font-size: 11px;
-            line-height: 1.35;
-          }
-          .details-group {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            min-width: 0;
-          }
-          .line {
-            display: grid;
-            grid-template-columns: minmax(95px, 32%) minmax(0, 1fr);
-            gap: 6px;
-            min-width: 0;
-          }
-          .label {
-            font-weight: 800;
-            color: var(--lgu-text);
-          }
-          .value {
-            min-width: 0;
-            word-break: break-word;
-            overflow-wrap: anywhere;
-          }
-          .lgu-invoice-body {
-            width: 100%;
-            margin-top: 10px;
-          }
-          .table-wrap {
-            width: 100%;
-            max-width: 100%;
-            overflow-x: auto;
-          }
-          .summary-table {
-            width: 100%;
-            min-width: 980px;
-            table-layout: fixed;
-            border-collapse: collapse;
-            margin-top: 6px;
-            background: var(--lgu-card);
-            font-size: 9px;
-            color: var(--lgu-text);
-          }
-          th, td {
-            padding: 4px 5px;
-            vertical-align: top;
-            border: 1px solid var(--lgu-border);
-            word-break: break-word;
-            overflow-wrap: anywhere;
-          }
-          th {
-            text-align: center;
-            font-weight: 800;
-            font-size: 8px;
-            line-height: 1.12;
-            background: var(--lgu-card);
-            border-top: 3px solid var(--lgu-accent);
-            border-bottom: 3px solid var(--lgu-accent);
-            text-transform: uppercase;
-          }
-          tr { break-inside: avoid; }
-          .muted {
-            margin-top: 2px;
-            color: var(--lgu-muted);
-            font-size: 9px;
-          }
-          .signature-cell {
-            text-align: center;
-            vertical-align: middle;
-          }
-          .signature {
-            display: block;
-            width: 108px;
-            height: 44px;
-            object-fit: contain;
-            margin: 0 auto;
-            border: 1px solid var(--lgu-border);
-            border-radius: 4px;
-            background: white;
-          }
-          .lgu-invoice-footer {
-            display: flex;
-            width: 100%;
-            justify-content: space-evenly;
-            gap: 12px;
-            margin-top: 14px;
-            padding-top: 8px;
-            border-top: 1px solid var(--lgu-border);
-            font-size: 10px;
-            color: var(--lgu-muted);
-            background: #1EA5D7;
-            color: #ffffff;
-            iotems-align: center;
-          }
-          .footer-link {
-            color: inherit;
-            text-decoration: none;
-          }
-          @media print {
-            html,
-            body {
-              width: auto !important;
-              min-width: 0 !important;
-              max-width: none !important;
-              height: auto !important;
-              min-height: 0 !important;
-              margin: 0 !important;
-              padding: 0 !important;
-              overflow: visible !important;
-              background: #ffffff !important;
-            }
-            .print-action,
-            .lgu-invoice-toolbar {
-              display: none !important;
-            }
-            .lgu-invoice-page {
-              width: auto !important;
-              min-width: 0 !important;
-              max-width: none !important;
-              min-height: 0 !important;
-              margin: 0 !important;
-              padding: 0 !important;
-              overflow: visible !important;
-              background: #ffffff !important;
-            }
-            .lgu-invoice-container {
-              width: 100% !important;
-              max-width: none !important;
-              margin: 0 !important;
-              padding: 0 !important;
-            }
-            .lgu-invoice-sheet {
-              width: 100% !important;
-              min-width: 0 !important;
-              max-width: none !important;
-              min-height: 0 !important;
-              height: auto !important;
-              margin: 0 auto !important;
-              padding: 5mm !important;
-              overflow: visible !important;
-              border: none !important;
-              border-radius: 0 !important;
-              box-shadow: none !important;
-              background: #ffffff !important;
-            }
-            .table-wrap {
-              width: 100% !important;
-              max-width: 100% !important;
-              overflow: visible !important;
-            }
-            .summary-table {
-              width: 100% !important;
-              min-width: 0 !important;
-              max-width: 100% !important;
-              table-layout: fixed !important;
-              font-size: 10px !important;
-            }
-            .summary-table th,
-            .summary-table td {
-              padding: 2px 3px !important;
-              font-size: inherit !important;
-              line-height: 1.12 !important;
-              white-space: normal !important;
-              word-break: break-word !important;
-              overflow-wrap: anywhere !important;
-            }
-            .details-grid {
-              width: 100% !important;
-              padding: 5px !important;
-              gap: 8px !important;
-              font-size: 12px !important;
-              line-height: 1.2 !important;
-              background: #ffffff !important;
-              border: 1px solid var(--lgu-accent) !important;
-            }
-            .signature {
-              width: 86px !important;
-              height: 34px !important;
-            }
-          }
-        </style>
-      </head>
-      <body>
-        <main class="lgu-invoice-page">
-          <section class="lgu-invoice-container">
-            <article class="lgu-invoice-sheet" role="article">
-              <header class="lgu-invoice-top">
-                <div class="lgu-invoice-heading">
-                  <img class="lgu-invoice-logo" src="/physioave-logo-dark-updated.png" alt="PhysioAve Logo" />
-                  <div class="lgu-invoice-meta-grid">
-                    <strong>Date:</strong><span>${escapeHtml(selectedDateLabel.value)}</span>
-                    <strong>Branch:</strong><span>${escapeHtml(selectedClinic.value?.name || "All branches")}</span>
-                    <strong>Generated:</strong><span>${escapeHtml(generatedAt)}</span>
-                  </div>
-                </div>
-                <div class="lgu-invoice-title-block">
-                  <h1 class="lgu-invoice-title"><span>Daily Patient Log</span></h1>
-                </div>
-              </header>
-
-              <div class="lgu-invoice-toolbar">
-                <div class="print-action">
-                  <button onclick="window.print()">Print / Save PDF</button>
-                </div>
-              </div>
-
-              <div class="lgu-invoice-details">
-                <div class="details-grid">
-                  <div class="details-group">
-                    <div class="line"><span class="label">Total Logs:</span><span class="value">${summary.value.total}</span></div>
-                    <div class="line"><span class="label">Completed:</span><span class="value">${summary.value.completed}</span></div>
-                    <div class="line"><span class="label">Rescheduled:</span><span class="value">${summary.value.rescheduled}</span></div>
-                  </div>
-                  <div class="details-group">
-                    <div class="line"><span class="label">Pending:</span><span class="value">${summary.value.pending}</span></div>
-                    <div class="line"><span class="label">Canceled:</span><span class="value">${summary.value.cancelled}</span></div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="lgu-invoice-body">
-                <div class="table-wrap">
-                  <table class="summary-table">
-                    <thead>
-                      <tr>
-                        <th style="width: 32px;">No.</th>
-                        <th>Time</th>
-                        <th>Patient</th>
-                        <th>Branch / Service</th>
-                        <th>Physical Therapyst</th>
-                        <th>Visit Status</th>
-                        <th>Patient Signature</th>
-                        <th>PT Signature</th>
-                        <th>Billing</th>
-                        <th>Session Sequence</th>
-                      </tr>
-                    </thead>
-                    <tbody>${rows}</tbody>
-                  </table>
-                </div>
-              </div>
-
-              <footer class="lgu-invoice-footer" role="contentinfo">
-                <a href="https://www.physioave.com" class="footer-link">www.physioave.com</a>
-                <a href="tel:+639655712455" class="footer-link">+63-965-571-2455</a>
-                <a href="mailto:admin@physioave.com" class="footer-link">admin@physioave.com</a>
-              </footer>
-            </article>
-          </section>
-        </main>
-        <script>
-          window.addEventListener("load", () => {
-            window.setTimeout(() => window.print(), 250)
-          })
-        <\/script>
-      </body>
-    </html>
-  `)
-  printWindow.document.close()
+  try {
+    isApprovingSignatureException.value = true
+    const approval = await appointmentPhase1Service.approveDailyLogPrintException({
+      appointment_ids: missingSignatureRows.value.map(row => row.item.id),
+      selected_date: toDateKey(selectedDate.value),
+      clinic_id: selectedClinicId.value || undefined,
+      reason_code: signatureExceptionReason.value,
+      explanation,
+    })
+    signatureExceptionVisible.value = false
+    openDailyLogPrint(approval, printWindow)
+  } catch (error) {
+    printWindow.close()
+    const message = (error as { response?: { data?: { message?: unknown } } })?.response?.data?.message
+    signatureExceptionError.value = message
+      ? String(message)
+      : "Unable to approve the missing-signature exception."
+  } finally {
+    isApprovingSignatureException.value = false
+  }
 }
 
 const formatDate = (value: string): string =>

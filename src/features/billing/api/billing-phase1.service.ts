@@ -297,6 +297,25 @@ export interface DailyExpenseEntry {
   created_at: string
 }
 
+export interface DailyCompletedAppointment {
+  id: number
+  starts_at: string
+  patient_id: number
+  patient_public_id: string
+  patient_name: string
+  appointment_status: string
+  attendance_status?: string
+  payer_type?: string
+  pt_name: string
+  billing_id?: number | null
+  billing_number?: string
+  billing_status?: string
+  billing_document_date?: string
+  amount_paid: number
+  completed_service_amount: number
+  included_in_daily_income: boolean
+}
+
 export interface DailyIncomeExpenseReport {
   selected_date: string
   summary: {
@@ -313,6 +332,7 @@ export interface DailyIncomeExpenseReport {
     net_cash: number
   }
   incomes: DailyIncomeExpenseRow[]
+  completed_appointments?: DailyCompletedAppointment[]
   expenses: DailyExpenseEntry[]
 }
 

@@ -316,6 +316,16 @@ export interface PtEndOfDayReport {
   }
   appointments?: AppointmentListItem[]
   pending_pt_signatures_by_pt?: Array<Record<string, unknown>>
+  pending_eod_blockers?: Array<{
+    appointment_id: number
+    starts_at: string
+    patient_public_id?: string | null
+    patient_name: string
+    pt_name: string
+    appointment_status: string
+    payer_type?: string | null
+    blockers: string[]
+  }>
 }
 
 export interface EndOfDayHistoryItem {
@@ -410,6 +420,27 @@ export interface ReschedulePayload extends Record<string, unknown> {
 }
 export interface AppointmentEncounterTicketPayload extends Record<string, unknown> {}
 export interface AppointmentPtCompletionPayload extends Record<string, unknown> {}
+export interface DailyLogPrintExceptionPayload {
+  appointment_ids: number[]
+  selected_date: string
+  clinic_id?: number
+  reason_code: string
+  explanation: string
+}
+
+export interface DailyLogPrintExceptionApproval {
+  reference: string
+  approved_at: string
+  approved_by: string
+  approved_role: string
+  reason_code: string
+  reason_label: string
+  explanation: string
+  missing_signatures: Array<{
+    appointment_id: number
+    missing_signature_types: Array<"patient" | "pt">
+  }>
+}
 export interface LguServiceConsumptionPayload extends Record<string, unknown> {}
 export interface DropoutStatusUpdatePayload extends Record<string, unknown> {
   dropout_status?: AppointmentDropoutStatus
@@ -668,6 +699,16 @@ export const appointmentPhase1Service = {
 
   async processEncounterTicket(id: number, payload: AppointmentEncounterTicketPayload): Promise<AppointmentEncounterTicket> {
     const { data } = await pamsAPI.post<AppointmentEncounterTicket>(`/appointments/${id}/encounter-ticket`, payload)
+    return data
+  },
+
+  async approveDailyLogPrintException(
+    payload: DailyLogPrintExceptionPayload
+  ): Promise<DailyLogPrintExceptionApproval> {
+    const { data } = await pamsAPI.post<DailyLogPrintExceptionApproval>(
+      "/appointments/daily-log-print-exceptions",
+      payload
+    )
     return data
   },
 

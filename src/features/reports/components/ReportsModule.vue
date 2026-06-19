@@ -29,7 +29,6 @@ import {errorToast, successToast} from "@/utils/toast.util"
 import {clinicStore} from "@/stores/clinic.store"
 import {useAuthSessionStore} from "@/stores/auth-session.store"
 import {pamsAPI} from "@/utils/axios-interceptor"
-import {printDailyReport} from "@/features/reports/utils/daily-report-print.util"
 
 const toast = useToast()
 const confirm = useConfirm()
@@ -535,18 +534,17 @@ const resetToToday = (): void => {
 }
 
 const printSelectedDailyReport = (): void => {
-  try {
-    printDailyReport({
-      report: report.value,
-      eodReport: eodReport.value,
-      selectedDateLabel: selectedDateLabel.value,
-      selectedClinicName: selectedClinic.value?.name ?? null,
-      selectedClinicScheduleLabel: selectedClinicScheduleLabel.value,
-      selectedEodWindowLabel: selectedEodWindowLabel.value,
-      generatedBy: authSession.staffName
-    })
-  } catch (error: unknown) {
-    errorToast(toast, error instanceof Error ? error.message : "Daily report print window could not be opened.")
+  const routeLocation = router.resolve({
+    name: "daily-report-print",
+    query: {
+      date: toDateParam(selectedDate.value),
+      ...(selectedClinicId.value ? {clinic_id: selectedClinicId.value} : {}),
+      ...(selectedClinic.value?.name ? {clinic_name: selectedClinic.value.name} : {})
+    }
+  })
+  const printWindow = window.open(routeLocation.href, "_blank")
+  if (!printWindow) {
+    errorToast(toast, "Daily report print page could not be opened. Allow pop-ups for this site, then try again.")
   }
 }
 
@@ -618,6 +616,8 @@ const allBillingsClearedLabel = computed(() => {
   if (eodReport.value.summary.all_billings_cleared) return "All billings are cleared"
   return `${eodReport.value.summary.pending_billing_count} billing${eodReport.value.summary.pending_billing_count > 1 ? "s" : ""} pending clearance`
 })
+
+const pendingEodBlockers = computed(() => eodReport.value?.pending_eod_blockers ?? [])
 
 const canPrintDailyReport = computed(() =>
   Boolean(eodReport.value?.eod_report_generated) && !isLoading.value && !isEodLoading.value
@@ -807,6 +807,60 @@ onMounted(async () => {
           <div class="text-xs uppercase tracking-wide opacity-55">Billing</div>
           <Tag :value="allBillingsClearedLabel" :severity="endOfDayStatusSeverity(Boolean(eodReport?.summary.all_billings_cleared))" />
         </article>
+      </div>
+
+      <div class="space-y-3">
+        <div class="flex flex-col gap-1 lg:flex-row lg:items-center lg:justify-between">
+          <h3 class="text-base font-semibold tracking-tight">Pending EOD Blockers</h3>
+          <div class="text-sm opacity-70">{{ pendingEodBlockers.length }} appointment{{ pendingEodBlockers.length === 1 ? "" : "s" }} needing action</div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <DataTable class="app-data-table" :value="pendingEodBlockers" size="small" :loading="isEodLoading" scrollable>
+            <template #empty>
+              <div class="py-10 text-center text-sm opacity-70">No appointment blockers for {{ selectedDateLabel }}.</div>
+            </template>
+
+            <Column header="Time" style="min-width: 120px">
+              <template #body="{ data }">{{ formatTime(data.starts_at) }}</template>
+            </Column>
+
+            <Column header="Patient" style="min-width: 260px">
+              <template #body="{ data }">
+                <div class="space-y-1">
+                  <div class="font-semibold">{{ data.patient_name }}</div>
+                  <div class="text-xs opacity-60">{{ data.patient_public_id || `Appointment #${data.appointment_id}` }}</div>
+                </div>
+              </template>
+            </Column>
+
+            <Column header="Primary PT" style="min-width: 200px">
+              <template #body="{ data }">{{ data.pt_name }}</template>
+            </Column>
+
+            <Column header="Status" style="min-width: 180px">
+              <template #body="{ data }">
+                <div class="flex flex-wrap gap-2">
+                  <Tag :value="data.appointment_status" severity="secondary" />
+                  <Tag v-if="data.payer_type" :value="data.payer_type" :severity="data.payer_type === 'LGU' ? 'info' : 'secondary'" />
+                </div>
+              </template>
+            </Column>
+
+            <Column header="Blocking EOD" style="min-width: 280px">
+              <template #body="{ data }">
+                <div class="flex flex-wrap gap-2">
+                  <Tag
+                    v-for="blocker in data.blockers"
+                    :key="`${data.appointment_id}-${blocker}`"
+                    :value="blocker"
+                    severity="warn"
+                  />
+                </div>
+              </template>
+            </Column>
+          </DataTable>
+        </div>
       </div>
 
       <div class="overflow-x-auto">

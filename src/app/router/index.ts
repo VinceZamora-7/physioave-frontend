@@ -91,6 +91,18 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: "/reports/print/daily",
+      name: "daily-report-print",
+      component: () => import("@/features/reports/print/DailyReportPrintView.vue"),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: "/daily-patient-log/print",
+      name: "daily-patient-log-print",
+      component: () => import("@/features/daily-patient-log/print/DailyPatientLogPrintView.vue"),
+      meta: { requiresAuth: true }
+    },
+    {
       path: "/home",
       name: "home",
       component: () => import("@/app/layouts/HomeLayout.vue"),

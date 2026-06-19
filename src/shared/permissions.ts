@@ -65,6 +65,12 @@ export const ROUTE_ACCESS_RULES: Record<string, RouteAccessRule> = {
   "lgu-soa-print": {
     anyOf: [...MODULE_ACCESS_RULES.billing, ...MODULE_ACCESS_RULES.billingWorkflow],
   },
+  "daily-report-print": {
+    anyOf: [...MODULE_ACCESS_RULES.reports],
+  },
+  "daily-patient-log-print": {
+    anyOf: [...MODULE_ACCESS_RULES.patientDailyLog],
+  },
   reports: {
     anyOf: [...MODULE_ACCESS_RULES.reports],
   },
