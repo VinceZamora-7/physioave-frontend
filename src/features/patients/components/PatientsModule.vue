@@ -224,8 +224,10 @@
             </div>
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:max-w-xl">
               <Button label="Profile Image" icon="pi pi-camera" severity="info" outlined @click="patientProfileImageDialog?.open()" />
-              <Button label="Valid ID" icon="pi pi-paperclip" severity="secondary" outlined @click="openPatientAttachmentDialog('valid-id', selectedPatientDetails)" />
-              <Button label="HMO ID" icon="pi pi-paperclip" severity="secondary" outlined @click="openPatientAttachmentDialog('hmo-id', selectedPatientDetails)" />
+              <Button label="Valid ID Front" icon="pi pi-paperclip" severity="secondary" outlined @click="openPatientAttachmentDialog('valid-id-front', selectedPatientDetails)" />
+              <Button label="Valid ID Back" icon="pi pi-paperclip" severity="secondary" outlined @click="openPatientAttachmentDialog('valid-id-back', selectedPatientDetails)" />
+              <Button label="HMO ID Front" icon="pi pi-paperclip" severity="secondary" outlined @click="openPatientAttachmentDialog('hmo-id-front', selectedPatientDetails)" />
+              <Button label="HMO ID Back" icon="pi pi-paperclip" severity="secondary" outlined @click="openPatientAttachmentDialog('hmo-id-back', selectedPatientDetails)" />
             </div>
           </div>
 
@@ -276,8 +278,16 @@
       v-bind="patientValidIdAttachmentProps"/>
 
     <PatientAttachmentDialog
+      ref="patientValidIdBackAttachmentDialog"
+      v-bind="patientValidIdBackAttachmentProps"/>
+
+    <PatientAttachmentDialog
       ref="patientHMOValidIdAttachmentDialog"
       v-bind="patientHMOValidIdAttachmentProps"/>
+
+    <PatientAttachmentDialog
+      ref="patientHMOValidIdBackAttachmentDialog"
+      v-bind="patientHMOValidIdBackAttachmentProps"/>
 
     <PatientProfileImageDialog
       ref="patientProfileImageDialog"
@@ -602,7 +612,9 @@ const patientMedicalHistoryDialog = useTemplateRef<ToggleDialogExpose>('patientM
 const patientMedicalImagingDialog = useTemplateRef<ToggleDialogExpose>('patientMedicalImagingDialog')
 
 const patientValidIdAttachmentDialog = useTemplateRef<ToggleDialogExpose>('patientValidIdAttachmentDialog')
+const patientValidIdBackAttachmentDialog = useTemplateRef<ToggleDialogExpose>('patientValidIdBackAttachmentDialog')
 const patientHMOValidIdAttachmentDialog = useTemplateRef<ToggleDialogExpose>('patientHMOValidIdAttachmentDialog')
+const patientHMOValidIdBackAttachmentDialog = useTemplateRef<ToggleDialogExpose>('patientHMOValidIdBackAttachmentDialog')
 const patientProfileImageDialog = useTemplateRef<OpenDialogExpose>('patientProfileImageDialog')
 const patientBillingsDialog = useTemplateRef<OpenDialogExpose>('patientBillingsDialog')
 const patientAppointmentsDialog = useTemplateRef<OpenDialogExpose>('patientAppointmentsDialog')
@@ -830,19 +842,26 @@ watch(patientDetailsVisible, (visible) => {
 })
 
 const openPatientAttachmentDialog = (
-  attachmentType: "valid-id" | "hmo-id",
+  attachmentType: "valid-id-front" | "valid-id-back" | "hmo-id-front" | "hmo-id-back",
   patient?: Patient
 ): void => {
   if (!patient) return
   selectedPatient.value = patient
 
-  if (attachmentType === "valid-id") {
+  if (attachmentType === "valid-id-front") {
     patientValidIdAttachmentDialog.value?.toggleDialog()
     return
   }
-  if (attachmentType === "hmo-id") {
+  if (attachmentType === "valid-id-back") {
+    patientValidIdBackAttachmentDialog.value?.toggleDialog()
+    return
+  }
+  if (attachmentType === "hmo-id-front") {
     patientHMOValidIdAttachmentDialog.value?.toggleDialog()
     return
+  }
+  if (attachmentType === "hmo-id-back") {
+    patientHMOValidIdBackAttachmentDialog.value?.toggleDialog()
   }
 }
 
@@ -1006,14 +1025,26 @@ const patientMedicalImagingDialogProps = computed(() => ({
 }) satisfies PatientMedicalImagingDialogProps)
 
 const patientValidIdAttachmentProps = computed(() => ({
-  header: `Add ${selectedPatient.value?.full_name} valid id`,
+  header: `Add ${selectedPatient.value?.full_name} valid id front`,
   patientAttachmentTanstackKey: PatientAttachmentTanstackKey.VALID_ID,
   patient: selectedPatient.value
 }) satisfies PatientAttachmentDialogFormProps)
 
+const patientValidIdBackAttachmentProps = computed(() => ({
+  header: `Add ${selectedPatient.value?.full_name} valid id back`,
+  patientAttachmentTanstackKey: PatientAttachmentTanstackKey.VALID_ID_BACK,
+  patient: selectedPatient.value
+}) satisfies PatientAttachmentDialogFormProps)
+
 const patientHMOValidIdAttachmentProps = computed(() => ({
-  header: `Add ${selectedPatient.value?.full_name} hmo valid id`,
+  header: `Add ${selectedPatient.value?.full_name} hmo id front`,
   patientAttachmentTanstackKey: PatientAttachmentTanstackKey.HMO_ID,
+  patient: selectedPatient.value
+}) satisfies PatientAttachmentDialogFormProps)
+
+const patientHMOValidIdBackAttachmentProps = computed(() => ({
+  header: `Add ${selectedPatient.value?.full_name} hmo id back`,
+  patientAttachmentTanstackKey: PatientAttachmentTanstackKey.HMO_ID_BACK,
   patient: selectedPatient.value
 }) satisfies PatientAttachmentDialogFormProps)
 

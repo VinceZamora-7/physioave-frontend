@@ -166,7 +166,10 @@ const isLoading = useIsLoading(patientAttachmentTanstackKey.value)
 const attachmentTanstackService = createPatientAttachmentTanstackService(patientAttachmentTanstackKey.value)
 
 const patientId = computed<number | undefined>(() => patient.value?.id)
-const isValidIdAttachment = computed(() => patientAttachmentTanstackKey.value === PatientAttachmentTanstackKey.VALID_ID)
+const isValidIdAttachment = computed(() =>
+  patientAttachmentTanstackKey.value === PatientAttachmentTanstackKey.VALID_ID ||
+  patientAttachmentTanstackKey.value === PatientAttachmentTanstackKey.VALID_ID_BACK
+)
 const acceptedTypes = computed(() => isValidIdAttachment.value
   ? '.jpg,.jpeg,.png,image/jpeg,image/jpg,image/pjpeg,image/png'
   : acceptedFileTypes)
@@ -216,23 +219,12 @@ const loadAttachmentPreview = async (force = false): Promise<void> => {
   attachmentPreviewError.value = null
 
   try {
-    let response: { data: Blob }
-
-    if (isValidIdAttachment.value) {
-      response = await pamsAPI.get<Blob>(
-        `/patients/${patient.value.id}/attachments/valid-id/file?t=${Date.now()}`,
-        {
-          responseType: 'blob'
-        }
-      )
-    } else {
-      response = await pamsAPI.get<Blob>(
-        `/patients/${patient.value.id}/attachments/${patientAttachmentTanstackKey.value}/file?t=${Date.now()}`,
-        {
-          responseType: 'blob'
-        }
-      )
-    }
+    const response = await pamsAPI.get<Blob>(
+      `/patients/${patient.value.id}/attachments/${patientAttachmentTanstackKey.value}/file?t=${Date.now()}`,
+      {
+        responseType: 'blob'
+      }
+    )
 
     attachmentPreviewMediaType.value = response.data.type || patientAttachment.value.media_type || null
 

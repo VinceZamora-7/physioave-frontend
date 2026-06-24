@@ -152,10 +152,6 @@ import { useQueryClient } from "@tanstack/vue-query"
 import Button from "primevue/button"
 import { billingPhase1Service, type BillingListItem } from "@/features/billing/api/billing-phase1.service"
 import { billingContextTanstackService } from "@/features/billing/queries/billing-context.tanstack.service"
-import {
-  patientEvaluationVisitLogService,
-  type PatientEvaluationVisitLogItem
-} from "@/features/patients/api/patient-evaluation-visit-log.service"
 import { patientTanstackService } from "@/features/patients/queries/patient.tanstack.service"
 import type { PatientHMOInformation } from "@/models/hmo-information"
 import HmoInvoiceLayout from "./HmoInvoiceLayout.vue"
@@ -194,7 +190,6 @@ const rows = ref<BillingSummaryRow[]>([])
 const error = ref("")
 const sponsorInfo = ref<PatientHMOInformation | null>(null)
 const billingDetail = ref<BillingSummarySource | null>(null)
-const evaluationVisitLogs = ref<PatientEvaluationVisitLogItem[]>([])
 
 const patientId = computed(() => {
   const parsed = Number(String(route.query.patient_id ?? "").trim())
@@ -347,26 +342,8 @@ const formatDiagnosis = (value?: string | null): string => {
   return laterality ? `${name} (${laterality})` : name
 }
 
-const latestEvaluationVisitLog = computed(() => {
-  return [...evaluationVisitLogs.value].sort((left, right) => {
-    const leftTime = new Date(`${left.visit_date}T00:00:00`).getTime()
-    const rightTime = new Date(`${right.visit_date}T00:00:00`).getTime()
-
-    if (leftTime !== rightTime) return rightTime - leftTime
-    return Number(right.id) - Number(left.id)
-  })[0] ?? null
-})
-
 const diagnosisSource = computed(() => {
-  const billingDiagnosis = String(billingDetail.value?.diagnosis ?? "").trim()
-  if (billingDiagnosis) return billingDiagnosis
-
-  const visitDiagnosis = String(latestEvaluationVisitLog.value?.doctor_diagnosis ?? "").trim()
-  const visitLaterality = String(latestEvaluationVisitLog.value?.doctor_diagnosis_laterality ?? "").trim()
-
-  if (!visitDiagnosis) return ""
-
-  return visitLaterality ? `(${visitLaterality}) ${visitDiagnosis}` : visitDiagnosis
+  return String(billingDetail.value?.diagnosis ?? "").trim()
 })
 
 const diagnosisParts = computed(() => {
@@ -438,15 +415,7 @@ const diagnosis = computed(() => {
   const value = String(diagnosisSource.value ?? "").trim()
   if (!value) return "N/A"
 
-  if (billingDetail.value?.diagnosis) {
-    return formatDiagnosis(billingDetail.value.diagnosis)
-  }
-
-  const visitDiagnosis = String(latestEvaluationVisitLog.value?.doctor_diagnosis ?? "").trim()
-  if (!visitDiagnosis) return "N/A"
-
-  const laterality = String(latestEvaluationVisitLog.value?.doctor_diagnosis_laterality ?? "").trim()
-  return laterality ? `${visitDiagnosis} (${laterality})` : visitDiagnosis
+  return formatDiagnosis(value)
 })
 
 const formatCurrency = (value?: number | null): string =>
@@ -513,14 +482,10 @@ const buildRows = (items: BillingSummarySource[]): BillingSummaryRow[] => {
     const lineItems = parseLineItems(item)
     const referenceNo = getBillingRecordId(item)
     const billingStatus = formatHmoStatus(item.billing_status)
-    const appointmentLaterality = formatLateralityForTable(
-      item.diagnosis_laterality ||
-      latestEvaluationVisitLog.value?.doctor_diagnosis_laterality
-    )
+    const appointmentLaterality = formatLateralityForTable(item.diagnosis_laterality)
     const appointmentBodyArea = normalizeBodyArea(
       firstNonBlank(
         item.diagnosis,
-        latestEvaluationVisitLog.value?.doctor_diagnosis,
         diagnosisParts.value.bodyArea
       )
     )
@@ -599,10 +564,7 @@ const load = async (): Promise<void> => {
 
       billingDetail.value = detail
 
-      const [patientContext, visitLogs] = await Promise.all([
-        patientTanstackService.fetchContext(queryClient, Number(detail.patient_id)),
-        patientEvaluationVisitLogService.getAll(Number(detail.patient_id))
-      ])
+      const patientContext = await patientTanstackService.fetchContext(queryClient, Number(detail.patient_id))
 
       const sponsorRecords = patientContext?.sponsor_information ?? []
 
@@ -612,12 +574,11 @@ const load = async (): Promise<void> => {
         sponsorRecords[0] ??
         null
 
-      evaluationVisitLogs.value = visitLogs ?? []
       rows.value = buildRows([detail])
       return
     }
 
-    const [result, patientContext, visitLogs] = await Promise.all([
+    const [result, patientContext] = await Promise.all([
       billingPhase1Service.getAll({
         patient_id: patientId.value,
         billing_type: "HMO_BILLING",
@@ -626,8 +587,7 @@ const load = async (): Promise<void> => {
         page: 1,
         size: 5000
       }),
-      patientTanstackService.fetchContext(queryClient, patientId.value),
-      patientEvaluationVisitLogService.getAll(patientId.value)
+      patientTanstackService.fetchContext(queryClient, patientId.value)
     ])
 
     const sponsorRecords = patientContext?.sponsor_information ?? []
@@ -637,8 +597,6 @@ const load = async (): Promise<void> => {
       sponsorRecords.find(record => record.sponsor_context === "HMO") ??
       sponsorRecords[0] ??
       null
-
-    evaluationVisitLogs.value = visitLogs ?? []
 
     const detailedItems = await enrichBillingItems((result?.content ?? []) as BillingListItem[])
 

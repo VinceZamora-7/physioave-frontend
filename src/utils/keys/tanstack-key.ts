@@ -113,7 +113,9 @@ export enum MachineTanstackKey {
 
 export enum PatientAttachmentTanstackKey {
   VALID_ID = 'valid-id',
+  VALID_ID_BACK = 'valid-id-back',
   HMO_ID = 'hmo-valid-id',
+  HMO_ID_BACK = 'hmo-valid-id-back',
   LABORATORY = 'laboratory',
   REHAB_PRESCRIPTION = 'rehab-prescription',
   PRESCRIPTION = 'prescription',

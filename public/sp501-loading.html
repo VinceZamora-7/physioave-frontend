@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PhysioAve Signature Pad</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+
+      body {
+        align-items: center;
+        background: #f8fafc;
+        color: #0f172a;
+        display: flex;
+        font-family: Arial, Helvetica, sans-serif;
+        justify-content: center;
+        overflow: hidden;
+      }
+
+      .screen {
+        align-items: center;
+        display: flex;
+        flex-direction: column;
+        gap: 26px;
+        height: 480px;
+        justify-content: center;
+        padding: 40px;
+        text-align: center;
+        width: 800px;
+      }
+
+      .logo {
+        display: block;
+        max-height: 150px;
+        max-width: 520px;
+        object-fit: contain;
+      }
+
+      .loader {
+        animation: spin 1s linear infinite;
+        border: 5px solid #dbeafe;
+        border-top-color: #2563eb;
+        border-radius: 999px;
+        height: 54px;
+        width: 54px;
+      }
+
+      .status {
+        font-size: 24px;
+        font-weight: 700;
+      }
+
+      .hint {
+        color: #475569;
+        font-size: 18px;
+      }
+
+      body.logo-only .loader,
+      body.logo-only .message {
+        display: none;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="screen" aria-label="Signature pad waiting screen">
+      <img class="logo" src="/physioave-logo-dark-updated.png" alt="PhysioAve" />
+      <div class="loader" aria-hidden="true"></div>
+      <div class="message">
+        <div class="status">Signature captured</div>
+        <div class="hint">Please wait for the next step.</div>
+      </div>
+    </main>
+    <script>
+      const params = new URLSearchParams(window.location.search)
+      if (params.get("state") !== "captured") {
+        document.body.classList.add("logo-only")
+      } else {
+        window.setTimeout(() => {
+          document.body.classList.add("logo-only")
+        }, 5000)
+      }
+    </script>
+  </body>
+</html>

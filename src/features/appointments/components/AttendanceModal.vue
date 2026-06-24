@@ -69,15 +69,37 @@
             </p>
           </div>
 
-          <Button
-            label="Clear Patient Signature"
-            icon="pi pi-eraser"
-            severity="secondary"
-            outlined
-            size="small"
-            :disabled="isSaving || isTicketLocked"
-            @click="clearSignature"
-          />
+          <div class="flex flex-wrap gap-2">
+            <Button
+              label="Sign on SP501"
+              icon="pi pi-pen-to-square"
+              severity="secondary"
+              outlined
+              size="small"
+              :loading="isPatientSp501Busy"
+              :disabled="isSaving || isTicketLocked || isStaffSp501Busy"
+              @click="beginPatientSp501Signature"
+            />
+            <Button
+              label="Manual Capture"
+              icon="pi pi-download"
+              severity="secondary"
+              outlined
+              size="small"
+              :loading="isPatientSp501Busy"
+              :disabled="isSaving || isTicketLocked || isStaffSp501Busy"
+              @click="capturePatientSp501Signature"
+            />
+            <Button
+              label="Clear Patient Signature"
+              icon="pi pi-eraser"
+              severity="secondary"
+              outlined
+              size="small"
+              :disabled="isSaving || isTicketLocked"
+              @click="clearSignature"
+            />
+          </div>
         </div>
 
         <div
@@ -121,15 +143,37 @@
             </p>
           </div>
 
-          <Button
-            label="Clear Staff Signature"
-            icon="pi pi-eraser"
-            severity="secondary"
-            outlined
-            size="small"
-            :disabled="isSaving"
-            @click="clearStaffSignature"
-          />
+          <div class="flex flex-wrap gap-2">
+            <Button
+              label="Sign on SP501"
+              icon="pi pi-pen-to-square"
+              severity="secondary"
+              outlined
+              size="small"
+              :loading="isStaffSp501Busy"
+              :disabled="isSaving || isPatientSp501Busy"
+              @click="beginStaffSp501Signature"
+            />
+            <Button
+              label="Manual Capture"
+              icon="pi pi-download"
+              severity="secondary"
+              outlined
+              size="small"
+              :loading="isStaffSp501Busy"
+              :disabled="isSaving || isPatientSp501Busy"
+              @click="captureStaffSp501Signature"
+            />
+            <Button
+              label="Clear Staff Signature"
+              icon="pi pi-eraser"
+              severity="secondary"
+              outlined
+              size="small"
+              :disabled="isSaving"
+              @click="clearStaffSignature"
+            />
+          </div>
         </div>
 
         <div class="overflow-hidden rounded-xl border border-[rgb(var(--app-border))] bg-white p-2">
@@ -277,12 +321,15 @@ import DataTable from "primevue/datatable"
 import Dialog from "primevue/dialog"
 import InputNumber from "primevue/inputnumber"
 import Textarea from "primevue/textarea"
+import { useToast } from "primevue/usetoast"
 import { ptPrimaryBtn } from "@/features/shared/table-header.styles"
 import type {
   AppointmentEncounterTicket,
   AppointmentListItem,
   AppointmentPlannedService
 } from "@/features/appointments/api/appointment-phase1.service"
+import { infoToast, successToast, errorToast } from "@/utils/toast.util"
+import { sp501SignaturePad } from "@/utils/sp501-signature-pad.util"
 
 type AttendanceItem = AppointmentPlannedService & {
   selected: boolean
@@ -336,15 +383,20 @@ const props = defineProps<{
   formatTime: (value: string) => string
 }>()
 
+const toast = useToast()
 const dropoutReason = ref("")
 const signatureCanvas = ref<HTMLCanvasElement | null>(null)
 const staffSignatureCanvas = ref<HTMLCanvasElement | null>(null)
 const isSigning = ref(false)
 const isStaffSigning = ref(false)
+const isPatientSp501Busy = ref(false)
+const isStaffSp501Busy = ref(false)
 const hasSignature = ref(false)
 const hasStaffSignature = ref(false)
 const signatureError = ref("")
 const staffSignatureError = ref("")
+const patientSignatureDataUrl = ref<string | null>(null)
+const staffSignatureDataUrl = ref<string | null>(null)
 const encounterNotes = ref("")
 
 const isTicketLocked = computed(() => Boolean(props.encounterTicket?.record_locked))
@@ -480,10 +532,12 @@ const initializeSignatureCanvas = (): void => {
     () => {
       hasSignature.value = true
       signatureError.value = ""
+      patientSignatureDataUrl.value = props.encounterTicket?.patient_signature_data_url ?? null
     },
     () => {
       hasSignature.value = false
       signatureError.value = ""
+      patientSignatureDataUrl.value = null
     }
   )
 }
@@ -495,10 +549,12 @@ const initializeStaffSignatureCanvas = (): void => {
     () => {
       hasStaffSignature.value = true
       staffSignatureError.value = ""
+      staffSignatureDataUrl.value = props.encounterTicket?.pt_signature_data_url ?? null
     },
     () => {
       hasStaffSignature.value = false
       staffSignatureError.value = ""
+      staffSignatureDataUrl.value = null
     }
   )
 }
@@ -511,6 +567,7 @@ const initializeSignatureCanvases = (): void => {
 const resetPatientSignatureState = (): void => {
   hasSignature.value = false
   signatureError.value = ""
+  patientSignatureDataUrl.value = null
 }
 
 const startSignature = (event: PointerEvent): void => {
@@ -526,6 +583,7 @@ const startSignature = (event: PointerEvent): void => {
 
   isSigning.value = true
   signatureError.value = ""
+  patientSignatureDataUrl.value = null
 
   context.beginPath()
   context.moveTo(position.x, position.y)
@@ -544,6 +602,7 @@ const drawSignature = (event: PointerEvent): void => {
 
   hasSignature.value = true
   signatureError.value = ""
+  patientSignatureDataUrl.value = null
 }
 
 const stopSignature = (event?: PointerEvent): void => {
@@ -564,6 +623,79 @@ const clearSignature = (): void => {
   initializeCanvas(signatureCanvas.value, null, () => {}, resetPatientSignatureState)
 }
 
+const drawSignatureDataUrl = (
+  canvas: HTMLCanvasElement | null,
+  dataUrl: string,
+  markCaptured: () => void
+): void => {
+  if (!canvas) return
+
+  const context = canvas.getContext("2d")
+  if (!context) return
+
+  const rect = canvas.getBoundingClientRect()
+  const image = new Image()
+  image.onload = () => {
+    context.fillStyle = "#ffffff"
+    context.fillRect(0, 0, rect.width, rect.height)
+    context.drawImage(image, 0, 0, rect.width, rect.height)
+    markCaptured()
+  }
+  image.src = dataUrl
+}
+
+const beginPatientSp501Signature = async (): Promise<void> => {
+  if (props.isSaving || isTicketLocked.value) return
+
+  try {
+    isPatientSp501Busy.value = true
+    await sp501SignaturePad.beginSignature(undefined, {
+      onLiveSignature: (dataUrl) => {
+        drawSignatureDataUrl(signatureCanvas.value, dataUrl, () => {})
+      },
+      onSignatureComplete: (dataUrl) => {
+        patientSignatureDataUrl.value = dataUrl
+        drawSignatureDataUrl(signatureCanvas.value, dataUrl, () => {
+          hasSignature.value = true
+          signatureError.value = ""
+        })
+        successToast(toast, "Patient signature captured from SP501")
+      },
+      onError: (error) => {
+        signatureError.value = error.message || "Unable to capture SP501 signature."
+        errorToast(toast, signatureError.value)
+      },
+    })
+    signatureError.value = ""
+    infoToast(toast, "Sign on the SP501 pad, then tap Save on the pad.")
+  } catch (error) {
+    signatureError.value = (error as Error).message || "Unable to start SP501 signature."
+    errorToast(toast, signatureError.value)
+  } finally {
+    isPatientSp501Busy.value = false
+  }
+}
+
+const capturePatientSp501Signature = async (): Promise<void> => {
+  if (props.isSaving || isTicketLocked.value) return
+
+  try {
+    isPatientSp501Busy.value = true
+    const dataUrl = await sp501SignaturePad.captureSignature()
+    patientSignatureDataUrl.value = dataUrl
+    drawSignatureDataUrl(signatureCanvas.value, dataUrl, () => {
+      hasSignature.value = true
+      signatureError.value = ""
+    })
+    successToast(toast, "Patient signature captured from SP501")
+  } catch (error) {
+    signatureError.value = (error as Error).message || "Unable to capture SP501 signature."
+    errorToast(toast, signatureError.value)
+  } finally {
+    isPatientSp501Busy.value = false
+  }
+}
+
 const startStaffSignature = (event: PointerEvent): void => {
   if (props.isSaving) return
 
@@ -576,6 +708,7 @@ const startStaffSignature = (event: PointerEvent): void => {
   canvas.setPointerCapture?.(event.pointerId)
   isStaffSigning.value = true
   staffSignatureError.value = ""
+  staffSignatureDataUrl.value = null
 
   context.beginPath()
   context.moveTo(position.x, position.y)
@@ -594,6 +727,7 @@ const drawStaffSignature = (event: PointerEvent): void => {
 
   hasStaffSignature.value = true
   staffSignatureError.value = ""
+  staffSignatureDataUrl.value = null
 }
 
 const stopStaffSignature = (event?: PointerEvent): void => {
@@ -618,15 +752,68 @@ const clearStaffSignature = (): void => {
     () => {
       hasStaffSignature.value = false
       staffSignatureError.value = ""
+      staffSignatureDataUrl.value = null
     }
   )
 }
 
+const beginStaffSp501Signature = async (): Promise<void> => {
+  if (props.isSaving) return
+
+  try {
+    isStaffSp501Busy.value = true
+    await sp501SignaturePad.beginSignature(undefined, {
+      onLiveSignature: (dataUrl) => {
+        drawSignatureDataUrl(staffSignatureCanvas.value, dataUrl, () => {})
+      },
+      onSignatureComplete: (dataUrl) => {
+        staffSignatureDataUrl.value = dataUrl
+        drawSignatureDataUrl(staffSignatureCanvas.value, dataUrl, () => {
+          hasStaffSignature.value = true
+          staffSignatureError.value = ""
+        })
+        successToast(toast, "Staff signature captured from SP501")
+      },
+      onError: (error) => {
+        staffSignatureError.value = error.message || "Unable to capture SP501 signature."
+        errorToast(toast, staffSignatureError.value)
+      },
+    })
+    staffSignatureError.value = ""
+    infoToast(toast, "Sign on the SP501 pad, then tap Save on the pad.")
+  } catch (error) {
+    staffSignatureError.value = (error as Error).message || "Unable to start SP501 signature."
+    errorToast(toast, staffSignatureError.value)
+  } finally {
+    isStaffSp501Busy.value = false
+  }
+}
+
+const captureStaffSp501Signature = async (): Promise<void> => {
+  if (props.isSaving) return
+
+  try {
+    isStaffSp501Busy.value = true
+    const dataUrl = await sp501SignaturePad.captureSignature()
+    staffSignatureDataUrl.value = dataUrl
+    drawSignatureDataUrl(staffSignatureCanvas.value, dataUrl, () => {
+      hasStaffSignature.value = true
+      staffSignatureError.value = ""
+    })
+    successToast(toast, "Staff signature captured from SP501")
+  } catch (error) {
+    staffSignatureError.value = (error as Error).message || "Unable to capture SP501 signature."
+    errorToast(toast, staffSignatureError.value)
+  } finally {
+    isStaffSp501Busy.value = false
+  }
+}
+
 const buildEncounterTicketPayload = (): AttendanceSignaturePayload => ({
-  patient_signature_data_url: hasSignature.value ? signatureCanvas.value?.toDataURL("image/png") ?? null : null,
+  patient_signature_data_url: hasSignature.value ? patientSignatureDataUrl.value || signatureCanvas.value?.toDataURL("image/png") || null : null,
   patient_signature_signed_at: hasSignature.value ? new Date().toISOString() : null,
   patient_signature_signed_by: props.appointment?.patient_name ?? null,
-  pt_signature_data_url: hasStaffSignature.value ? staffSignatureCanvas.value?.toDataURL("image/png") ?? null : null,
+  pt_signature_data_url: hasStaffSignature.value ? staffSignatureDataUrl.value || staffSignatureCanvas.value?.toDataURL("image/png") || null : null,
   pt_confirmed_at: hasStaffSignature.value ? new Date().toISOString() : null,
   pt_completion_tag: "ATTENDANCE_CONFIRMED",
   notes: encounterNotes.value.trim() || null
@@ -673,5 +860,6 @@ watch(
 onBeforeUnmount(() => {
   isSigning.value = false
   isStaffSigning.value = false
+  void sp501SignaturePad.returnToIdlePage()
 })
 </script>

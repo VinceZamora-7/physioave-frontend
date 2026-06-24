@@ -387,10 +387,28 @@
           @click="clearPtSignature"
         />
         <Button
+          label="Sign on SP501"
+          icon="pi pi-pen-to-square"
+          severity="secondary"
+          outlined
+          :loading="isPtSp501Busy"
+          :disabled="isSavingPtSignature"
+          @click="beginPtSp501Signature"
+        />
+        <Button
+          label="Manual Capture"
+          icon="pi pi-download"
+          severity="secondary"
+          outlined
+          :loading="isPtSp501Busy"
+          :disabled="isSavingPtSignature"
+          @click="capturePtSp501Signature"
+        />
+        <Button
           label="Save PT Signature"
           icon="pi pi-save"
           :loading="isSavingPtSignature"
-          :disabled="isSavingPtSignature"
+          :disabled="isSavingPtSignature || isPtSp501Busy"
           @click="savePtSignature"
         />
       </template>
@@ -453,7 +471,8 @@ import {
 } from "@/features/appointments/api/appointment-phase1.service"
 import type { Patient } from "@/features/patients/types/patient"
 import { pamsAPI } from "@/utils/axios-interceptor"
-import { errorToast, successToast, warningToast } from "@/utils/toast.util"
+import { errorToast, infoToast, successToast, warningToast } from "@/utils/toast.util"
+import { sp501SignaturePad } from "@/utils/sp501-signature-pad.util"
 import {
   DAILY_PATIENT_LOG_PRINT_STORAGE_PREFIX,
   type DailyPatientLogPrintPayload
@@ -504,6 +523,7 @@ const isDrawingPtSignature = ref(false)
 const hasPtSignatureDraft = ref(false)
 const ptSignatureError = ref("")
 const isSavingPtSignature = ref(false)
+const isPtSp501Busy = ref(false)
 const signatureExceptionVisible = ref(false)
 const signatureExceptionReason = ref("")
 const signatureExceptionExplanation = ref("")
@@ -910,6 +930,70 @@ const stopPtSignature = (event?: PointerEvent): void => {
 
 const clearPtSignature = (): void => {
   initializePtSignatureCanvas(null)
+}
+
+const drawPtSignatureDataUrl = (dataUrl: string, markCaptured = true): void => {
+  const canvas = ptSignatureCanvas.value
+  if (!canvas) return
+
+  const context = canvas.getContext("2d")
+  if (!context) return
+
+  const rect = canvas.getBoundingClientRect()
+  const image = new Image()
+  image.onload = () => {
+    context.fillStyle = "#ffffff"
+    context.fillRect(0, 0, rect.width, rect.height)
+    context.drawImage(image, 0, 0, rect.width, rect.height)
+    if (markCaptured) {
+      hasPtSignatureDraft.value = true
+      ptSignatureError.value = ""
+    }
+  }
+  image.src = dataUrl
+}
+
+const beginPtSp501Signature = async (): Promise<void> => {
+  try {
+    isPtSp501Busy.value = true
+    await sp501SignaturePad.beginSignature(undefined, {
+      onLiveSignature: (dataUrl) => {
+        drawPtSignatureDataUrl(dataUrl, false)
+      },
+      onSignatureComplete: (dataUrl) => {
+        drawPtSignatureDataUrl(dataUrl)
+        successToast(toast, "PT signature captured from SP501")
+      },
+      onError: (error) => {
+        const message = error.message || "Unable to capture SP501 signature."
+        ptSignatureError.value = message
+        errorToast(toast, message)
+      },
+    })
+    ptSignatureError.value = ""
+    infoToast(toast, "Sign on the SP501 pad, then tap Save on the pad.")
+  } catch (error) {
+    const message = (error as Error).message || "Unable to start SP501 signature."
+    ptSignatureError.value = message
+    errorToast(toast, message)
+  } finally {
+    isPtSp501Busy.value = false
+  }
+}
+
+const capturePtSp501Signature = async (): Promise<void> => {
+  try {
+    isPtSp501Busy.value = true
+    const dataUrl = await sp501SignaturePad.captureSignature()
+    drawPtSignatureDataUrl(dataUrl)
+    successToast(toast, "PT signature captured from SP501")
+  } catch (error) {
+    const message = (error as Error).message || "Unable to capture SP501 signature."
+    ptSignatureError.value = message
+    errorToast(toast, message)
+  } finally {
+    isPtSp501Busy.value = false
+  }
 }
 
 const savePtSignature = async (): Promise<void> => {

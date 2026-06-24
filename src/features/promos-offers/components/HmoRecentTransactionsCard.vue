@@ -300,7 +300,7 @@
                 size="small"
                 outlined
                 class="w-full justify-center"
-                :disabled="!selectedPatientBillings.length || loadingPatientBillings"
+                :disabled="(printable.requiresBillings && !selectedPatientBillings.length) || loadingPatientBillings"
                 @click="printHmoPrintable(printable.event)"
               />
             </div>
@@ -467,7 +467,11 @@ const totalOutstanding = computed(() =>
   Math.max(0, Number((totalAmount.value - totalPaid.value).toFixed(2)))
 )
 
-type HmoPrintableEvent = "print-patient-profile" | "print-patient-billing-summary" | "print-attendance-record"
+type HmoPrintableEvent =
+  | "print-patient-profile"
+  | "print-hmo-profile-summary"
+  | "print-patient-billing-summary"
+  | "print-attendance-record"
 
 const hmoPrintables = [
   // {
@@ -480,7 +484,15 @@ const hmoPrintables = [
     title: "Patient Billing Summary",
     buttonLabel: "Patient Billing Summary",
     icon: "pi pi-receipt",
-    event: "print-patient-billing-summary" as HmoPrintableEvent
+    event: "print-patient-billing-summary" as HmoPrintableEvent,
+    requiresBillings: true
+  },
+  {
+    title: "HMO Profile Summary",
+    buttonLabel: "HMO Profile Summary",
+    icon: "pi pi-id-card",
+    event: "print-hmo-profile-summary" as HmoPrintableEvent,
+    requiresBillings: false
   },
   // {
   //   title: "Attendance & Treatment Record",
@@ -490,17 +502,26 @@ const hmoPrintables = [
   // }
 ]
 
-const openHmoPrintRoute = (routeName: "hmo-patient-profile-print" | "hmo-patient-billing-summary-print" | "hmo-attendance-treatment-print"): Window | null => {
+const openHmoPrintRoute = (
+  routeName:
+    | "hmo-patient-profile-print"
+    | "hmo-profile-summary-print"
+    | "hmo-patient-billing-summary-print"
+    | "hmo-attendance-treatment-print"
+): Window | null => {
   if (!selectedPatient.value) return null
 
   const { from, to } = getSelectedMonthRange()
+  const patientHmoId = Number(selectedPatient.value.hmo_id ?? 0)
+  const printableHmoId = selectedHmoId.value ?? (Number.isFinite(patientHmoId) && patientHmoId > 0 ? patientHmoId : undefined)
+  const printableHmoName = selectedHmoName.value || selectedPatient.value.hmo_name || selectedPatient.value.sponsor_company_name
   const href = router.resolve({
     name: routeName,
     query: {
       patient_id: String(selectedPatient.value.id),
       patient_name: selectedPatientName.value,
-      hmo_id: selectedHmoId.value ? String(selectedHmoId.value) : undefined,
-      hmo_name: selectedHmoName.value,
+      hmo_id: printableHmoId ? String(printableHmoId) : undefined,
+      hmo_name: printableHmoName || undefined,
       from: formatYmd(from),
       to: formatYmd(to),
       autoprint: "1"
@@ -693,6 +714,12 @@ const printPatientIndividualBilling = async (): Promise<void> => {
   if (!openHmoPrintRoute("hmo-patient-profile-print")) return
 }
 
+const printHmoProfileSummary = async (): Promise<void> => {
+  if (!openHmoPrintRoute("hmo-profile-summary-print")) {
+    patientBillingError.value = "Unable to open HMO profile summary. Allow pop-ups for this site, then try again."
+  }
+}
+
 const printPatientHmoInvoice = async (): Promise<void> => {
   if (!selectedPatient.value || !selectedPatientBillings.value.length) return
   if (!openHmoPrintRoute("hmo-patient-billing-summary-print")) {
@@ -711,6 +738,10 @@ const printPatientAttendanceRecord = async (): Promise<void> => {
 const printHmoPrintable = (event: HmoPrintableEvent): void => {
   if (event === "print-patient-profile") {
     void printPatientIndividualBilling()
+    return
+  }
+  if (event === "print-hmo-profile-summary") {
+    void printHmoProfileSummary()
     return
   }
   if (event === "print-patient-billing-summary") {
