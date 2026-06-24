@@ -33,6 +33,20 @@
           <label for="patientStatus" class="opacity-70">Status</label>
         </IftaLabel>
 
+        <IftaLabel class="w-full sm:w-44">
+          <Select
+            v-model="selectedBranchScope"
+            input-id="patientBranchScope"
+            :options="branchScopeOptions"
+            optionLabel="label"
+            optionValue="value"
+            :loading="isLoading"
+            class="w-full"
+            :pt="ptSelect"
+          />
+          <label for="patientBranchScope" class="opacity-70">Patient Scope</label>
+        </IftaLabel>
+
         <Button
           label="Reset Filters"
           icon="pi pi-filter-slash"
@@ -84,6 +98,13 @@ import { ptInputText, ptOutlinedBtn, ptPrimaryBtn, ptSelect } from "@/features/s
 
 import type { Status } from "@/utils/global.type"
 
+type PatientBranchScope = "CURRENT_BRANCH" | "ALL_BRANCHES"
+
+const branchScopeOptions: Array<{ label: string; value: PatientBranchScope }> = [
+  { label: "This branch", value: "CURRENT_BRANCH" },
+  { label: "All branches", value: "ALL_BRANCHES" },
+]
+
 // 1. Define standard props
 withDefaults(defineProps<{
   statuses: Status[]
@@ -104,4 +125,5 @@ const emit = defineEmits<{
 // 3. Use Vue 3.4+ defineModel for two-way binding (Replaces the manual computed get/set)
 const selectedSearch = defineModel<string>("selectedSearch")
 const selectedStatus = defineModel<Status>("selectedStatus", { required: true })
+const selectedBranchScope = defineModel<PatientBranchScope>("selectedBranchScope", { required: true })
 </script>

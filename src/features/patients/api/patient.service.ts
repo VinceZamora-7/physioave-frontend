@@ -2,6 +2,7 @@ import type {Pageable} from "@/models/paging.ts";
 import type {
   Patient,
   PatientContext,
+  PatientDuplicateCheckResponse,
   PatientEditRequestPayload,
   PatientExportRequestParams,
   PatientRequestBody,
@@ -20,6 +21,8 @@ interface PatientService {
   export(request: PatientExportRequestParams): Promise<AxiosResponse<Blob> | undefined>
 
   getAllLookup(params: PatientRequestParams): Promise<Pageable<Lookup> | undefined>
+
+  checkDuplicates(body: PatientRequestBody): Promise<PatientDuplicateCheckResponse | undefined>
 
   save(body: PatientRequestBody): Promise<{id: number; public_id?: string} | undefined>
 
@@ -79,6 +82,15 @@ export const patientService: PatientService = {
       })
 
       return paginatedPatients
+    } catch (error: unknown) {
+      errorHandler(error)
+    }
+  },
+
+  async checkDuplicates(body: PatientRequestBody): Promise<PatientDuplicateCheckResponse | undefined> {
+    try {
+      const {data: response} = await pamsAPI.post<PatientDuplicateCheckResponse, AxiosResponse<PatientDuplicateCheckResponse>, PatientRequestBody>(`${ResourceKey.PATIENTS}/duplicate-check`, body)
+      return response
     } catch (error: unknown) {
       errorHandler(error)
     }

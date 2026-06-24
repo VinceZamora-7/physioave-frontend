@@ -2806,7 +2806,7 @@ const loadLookups = async (): Promise<void> => {
     medicalDiagnoses,
   ] = await Promise.all([
     patientService.getAllLookup({
-      clinic_id: clinicId,
+      clinic_id: undefined,
       pageable_request: {
         page: 1,
         size: 500,

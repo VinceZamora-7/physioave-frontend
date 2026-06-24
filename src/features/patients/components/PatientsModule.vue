@@ -18,6 +18,7 @@
           <PatientsTableHeader
             v-model:selectedSearch="selectedSearch"
             v-model:selectedStatus="selectedStatus"
+            v-model:selectedBranchScope="selectedBranchScope"
             :statuses="statuses"
             :isLoading="isFilterLoading"
             :isExportLoading="isPatientExportLoading"
@@ -250,6 +251,102 @@
       v-bind="patientFormProps"
       @on-submit="onSubmit"
     />
+
+    <Dialog
+      v-model:visible="duplicateReviewVisible"
+      modal
+      header="Possible Duplicate Patient"
+      :style="{ width: '46rem', maxWidth: '95vw' }"
+      :draggable="false"
+    >
+      <div class="space-y-4 text-sm">
+        <Message severity="warn" :closable="false">
+          We found patient records that may already belong to this person. Review them before creating a new patient record.
+        </Message>
+        <Message v-if="hasBlockingDuplicateIdentifier" severity="error" :closable="false">
+          A matching unique identifier already exists: {{ blockingDuplicateReasons.join(", ") }}. Use the existing patient record instead.
+        </Message>
+
+        <div class="space-y-3">
+          <article
+            v-for="candidate in duplicateCandidates"
+            :key="candidate.id"
+            class="rounded-lg border border-surface-200 bg-surface-0 p-4 shadow-sm"
+          >
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <strong class="text-base">{{ candidate.full_name }}</strong>
+                  <Tag
+                    :severity="duplicateConfidenceSeverity(candidate.duplicate_confidence)"
+                    :value="`${candidate.duplicate_confidence} MATCH`"
+                  />
+                  <Tag
+                    :severity="candidate.is_active ? 'success' : 'danger'"
+                    :value="candidate.is_active ? 'Active' : 'Inactive'"
+                  />
+                </div>
+                <div class="mt-1 text-xs opacity-70">
+                  {{ candidate.public_id }} • {{ candidate.clinic_name }}
+                </div>
+              </div>
+
+              <div class="text-left text-xs sm:text-right">
+                <div class="font-semibold">{{ candidate.duplicate_score }}% match score</div>
+                <div class="opacity-70">{{ candidate.gender_name }}, {{ candidate.age }} years old</div>
+              </div>
+            </div>
+
+            <div class="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+              <div><span class="font-semibold">Phone:</span> {{ candidate.phone_number }}</div>
+              <div><span class="font-semibold">Email:</span> {{ candidate.email ?? "N/A" }}</div>
+              <div class="sm:col-span-2">
+                <span class="font-semibold">Address:</span>
+                {{ formatDuplicateCandidateAddress(candidate) }}
+              </div>
+            </div>
+
+            <div class="mt-3 flex flex-wrap gap-2">
+              <Tag
+                v-for="reason in candidate.duplicate_reasons"
+                :key="`${candidate.id}-${reason}`"
+                severity="secondary"
+                :value="reason"
+              />
+            </div>
+
+            <div class="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button
+                label="Use Existing Record"
+                icon="pi pi-folder-open"
+                severity="primary"
+                :loading="duplicateReviewLoading"
+                @click="useExistingDuplicateCandidate(candidate)"
+              />
+            </div>
+          </article>
+        </div>
+
+        <div class="flex flex-col gap-2 border-t border-surface-200 pt-4 sm:flex-row sm:justify-end">
+          <Button
+            label="Back to Form"
+            icon="pi pi-arrow-left"
+            severity="secondary"
+            outlined
+            :disabled="duplicateReviewLoading"
+            @click="duplicateReviewVisible = false"
+          />
+          <Button
+            label="Create New Patient Anyway"
+            icon="pi pi-check"
+            severity="warning"
+            :disabled="hasBlockingDuplicateIdentifier"
+            :loading="duplicateReviewLoading"
+            @click="createPendingDuplicateAnyway"
+          />
+        </div>
+      </div>
+    </Dialog>
 
     <PatientHMOInformationForm
       ref="patientHMOInformationForm"
@@ -496,6 +593,7 @@ import {useQueryClient} from "@tanstack/vue-query";
 import {useRoute} from "vue-router";
 import type {
   Patient,
+  PatientDuplicateCandidate,
   PatientEditRequestPayload,
   PatientExportRequestParams,
   PatientRequestBody,
@@ -579,6 +677,7 @@ import {
 } from "@/utils/keys/tanstack-key.ts";
 import {IndexedDBKey} from "@/utils/keys/indexeddb-key.ts";
 import {patientTanstackService} from "@/features/patients/queries/patient.tanstack.service";
+import {patientService} from "@/features/patients/api/patient.service";
 import {hmoService} from "@/features/hmos/api/hmo.service";
 import {staffService} from "@/features/staff/api/staff.service";
 import {pamsAPI} from "@/utils/axios-interceptor.ts";
@@ -787,6 +886,24 @@ const selectedPatientProfileImageUrl = ref<string>()
 const patientDetailsVisible = ref<boolean>(false)
 const pendingPatientDrillDownId = ref<number>()
 const pendingPatientDrillDownName = ref<string>()
+const duplicateReviewVisible = ref(false)
+const duplicateReviewLoading = ref(false)
+const duplicateCandidates = ref<PatientDuplicateCandidate[]>([])
+const pendingDuplicateBody = ref<PatientRequestBody | null>(null)
+const pendingDuplicateReset = ref<(() => void) | null>(null)
+const blockingDuplicateReasons = computed(() => {
+  const reasons = new Set<string>()
+  duplicateCandidates.value.forEach(candidate => {
+    candidate.duplicate_reasons.forEach(reason => {
+      if (["Same phone number", "Same email address", "Same Facebook link"].includes(reason)) {
+        reasons.add(reason)
+      }
+    })
+  })
+
+  return Array.from(reasons)
+})
+const hasBlockingDuplicateIdentifier = computed(() => blockingDuplicateReasons.value.length > 0)
 
 const revokeSelectedPatientProfileImageUrl = (): void => {
   if (selectedPatientProfileImageUrl.value) {
@@ -921,6 +1038,8 @@ const formatReferralChannel = (channel?: ReferralChannel): string => {
 
 const selectedSearch = ref<string | undefined>()
 const selectedStatus = ref<Status>(defaultStatus)
+type PatientBranchScope = "CURRENT_BRANCH" | "ALL_BRANCHES"
+const selectedBranchScope = ref<PatientBranchScope>("CURRENT_BRANCH")
 const {
   page,
   pageSize,
@@ -928,7 +1047,7 @@ const {
 } = usePaginationDebounce<Pageable<Patient> | undefined>()
 
 watchDebounced(
-  [selectedClinicId, selectedSearch, selectedStatus],
+  [selectedClinicId, selectedSearch, selectedStatus, selectedBranchScope],
   (): void => {
     page.value = 1
     void refetch()
@@ -939,6 +1058,7 @@ watchDebounced(
 const resetFilters = (): void => {
   selectedSearch.value = undefined
   selectedStatus.value = defaultStatus
+  selectedBranchScope.value = "CURRENT_BRANCH"
 }
 
 const genders = ref<Gender[]>([])
@@ -1055,7 +1175,7 @@ const requestParams = computed(() => ({
     name: selectedSearch.value?.trim() || undefined,
     status: selectedStatus.value
   },
-  clinic_id: selectedClinicId.value,
+  clinic_id: selectedBranchScope.value === "ALL_BRANCHES" ? undefined : selectedClinicId.value,
 }) satisfies PatientRequestParams)
 
 const {
@@ -1079,6 +1199,90 @@ const onSave = (): void => {
     return
   }
   void openCreatePatient()
+}
+
+const createPatientRecord = (body: PatientRequestBody, resetFn: () => void): void => {
+  saveMutation(body, {
+    async onSuccess(result) {
+      patientForm.value?.toggleDialog()
+      duplicateReviewVisible.value = false
+      pendingDuplicateBody.value = null
+      pendingDuplicateReset.value = null
+      duplicateCandidates.value = []
+      successToast(toast, 'Save success')
+      resetFn()
+      await Promise.all([
+        resetQueries(),
+        draftService.delete()
+      ])
+
+      const newPatientId = result?.id ?? 0
+      if (newPatientId > 0) {
+        const fullName = [body.last_name, body.first_name]
+          .filter(Boolean).join(', ').replace(/\s+/g, ' ').trim()
+        selectedPatient.value = {
+          ...body,
+          id: newPatientId,
+          public_id: result?.public_id,
+          full_name: fullName,
+          gender_name: '',
+          civil_status_name: '',
+          clinic_name: '',
+          is_active: true,
+        }
+        registerSponsorInfoVisible.value = true
+      }
+    },
+    async onError(error: APIError) {
+      errorToast(toast, getApiErrorMessage(error, {
+        baseMessage: "Patient save failed",
+        permissionHint: "Patient access (Can Edit) in Role Access",
+        invalidInputHint: "Some patient form values are invalid. Review required fields and try again.",
+        retryHint: "Please try again."
+      }))
+      await resetQueries()
+    },
+  })
+}
+
+const duplicateConfidenceSeverity = (confidence: PatientDuplicateCandidate["duplicate_confidence"]): "danger" | "warn" | "info" => {
+  if (confidence === "HIGH") return "danger"
+  if (confidence === "MEDIUM") return "warn"
+  return "info"
+}
+
+const formatDuplicateCandidateAddress = (candidate: PatientDuplicateCandidate): string => {
+  const address = [
+    candidate.baranggay_name,
+    candidate.city_name,
+    candidate.province_name,
+    candidate.region_name
+  ].filter(Boolean).join(", ")
+
+  return address || "N/A"
+}
+
+const createPendingDuplicateAnyway = (): void => {
+  if (!pendingDuplicateBody.value) return
+  duplicateReviewLoading.value = true
+  createPatientRecord(pendingDuplicateBody.value, pendingDuplicateReset.value ?? (() => undefined))
+  duplicateReviewLoading.value = false
+}
+
+const useExistingDuplicateCandidate = async (candidate: PatientDuplicateCandidate): Promise<void> => {
+  try {
+    duplicateReviewLoading.value = true
+    const existingPatient = await patientService.getById(candidate.id)
+    if (!existingPatient) return
+    duplicateReviewVisible.value = false
+    pendingDuplicateBody.value = null
+    pendingDuplicateReset.value = null
+    duplicateCandidates.value = []
+    patientForm.value?.toggleDialog()
+    await onPatientRowClick(existingPatient)
+  } finally {
+    duplicateReviewLoading.value = false
+  }
 }
 
 const onSubmit = async (event: FormSubmitEvent): Promise<void> => {
@@ -1157,43 +1361,19 @@ const onSubmit = async (event: FormSubmitEvent): Promise<void> => {
         return
       }
 
-      saveMutation(body, {
-        async onSuccess(result) {
-          patientForm.value?.toggleDialog()
-          successToast(toast, 'Save success')
-          event.reset()
-          await Promise.all([
-            resetQueries(),
-            draftService.delete()
-          ])
+      duplicateReviewLoading.value = true
+      const duplicateCheck = await patientService.checkDuplicates(body)
+      duplicateReviewLoading.value = false
 
-          const newPatientId = result?.id ?? 0
-          if (newPatientId > 0) {
-            const fullName = [body.last_name, body.first_name]
-              .filter(Boolean).join(', ').replace(/\s+/g, ' ').trim()
-            selectedPatient.value = {
-              ...body,
-              id: newPatientId,
-              public_id: result?.public_id,
-              full_name: fullName,
-              gender_name: '',
-              civil_status_name: '',
-              clinic_name: '',
-              is_active: true,
-            }
-            registerSponsorInfoVisible.value = true
-          }
-        },
-        async onError(error: APIError) {
-          errorToast(toast, getApiErrorMessage(error, {
-            baseMessage: "Patient save failed",
-            permissionHint: "Patient access (Can Edit) in Role Access",
-            invalidInputHint: "Some patient form values are invalid. Review required fields and try again.",
-            retryHint: "Please try again."
-          }))
-          await resetQueries()
-        },
-      })
+      if (duplicateCheck?.matches?.length) {
+        pendingDuplicateBody.value = body
+        pendingDuplicateReset.value = () => event.reset()
+        duplicateCandidates.value = duplicateCheck.matches
+        duplicateReviewVisible.value = true
+        return
+      }
+
+      createPatientRecord(body, () => event.reset())
     }
   })
 }
@@ -1311,7 +1491,7 @@ const patientDetailMenuButtons = (patient: Patient): MenuItem[] => {
 
 const onExportToExcelThrottleFn = useThrottleFn(async (): Promise<void> => {
   const params: PatientExportRequestParams = {
-    clinic_id: selectedClinicId.value,
+    clinic_id: selectedBranchScope.value === "ALL_BRANCHES" ? undefined : selectedClinicId.value,
     page_request: {
       name: selectedSearch.value?.trim() || undefined,
       status: selectedStatus.value

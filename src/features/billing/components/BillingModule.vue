@@ -2080,14 +2080,14 @@ const formatPatientName = (patient: Partial<Patient>): string => {
 const loadPatientOptions = async (): Promise<void> => {
   const lookupResponse = await patientService.getAllLookup({
     pageable_request: {page: defaultPage, size: 1000, name: undefined, status: Status.ACTIVE},
-    clinic_id: selectedClinicId.value
+    clinic_id: undefined
   })
   if ((lookupResponse?.content?.length ?? 0) > 0) {
     patientOptions.value = lookupResponse?.content ?? []; return
   }
   const allPatientsResponse = await patientService.getAll({
     pageable_request: {page: defaultPage, size: 1000, name: undefined, status: Status.ACTIVE},
-    clinic_id: selectedClinicId.value
+    clinic_id: undefined
   })
   patientOptions.value = (allPatientsResponse?.content ?? []).map(patient => ({id: patient.id, name: formatPatientName(patient)}))
 }

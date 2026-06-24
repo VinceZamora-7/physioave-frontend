@@ -86,3 +86,33 @@ export interface PatientExportRequestParams {
   clinic_id: number | undefined,
   page_request: PageRequestWithNameAndStatus
 }
+
+export interface PatientDuplicateCandidate {
+  id: number
+  public_id: string
+  full_name: string
+  first_name: string
+  middle_name?: string
+  last_name: string
+  age: number
+  gender_id: number
+  gender_name: string
+  clinic_id: number
+  clinic_name: string
+  phone_number: string
+  email?: string
+  fb_link?: string
+  region_name?: string
+  province_name?: string
+  city_name?: string
+  baranggay_name?: string
+  is_active: boolean
+  duplicate_score: number
+  duplicate_confidence: "HIGH" | "MEDIUM" | "LOW"
+  duplicate_reasons: string[]
+}
+
+export interface PatientDuplicateCheckResponse {
+  has_matches: boolean
+  matches: PatientDuplicateCandidate[]
+}
