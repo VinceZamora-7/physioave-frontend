@@ -302,14 +302,26 @@
                 </div>
 
                 <!-- Selected Services Header -->
-                <div class="flex items-start justify-between gap-3">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <p class="text-[10px] font-black uppercase tracking-widest text-[rgb(var(--app-fg))]/45">Planned services</p>
                     <h5 class="mt-1 text-base font-black text-[rgb(var(--app-fg))]">Added to this appointment</h5>
                   </div>
-                  <span class="app-appointment-chip font-black">
-                    {{ selectedServices.length }} selected
-                  </span>
+                  <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+                    <Button
+                      label="Use Last Services"
+                      icon="pi pi-history"
+                      severity="secondary"
+                      outlined
+                      size="small"
+                      :loading="isCopyingLastServices"
+                      :disabled="Boolean(editingId) || !form.patient_id || isCopyingLastServices"
+                      @click="$emit('use-last-services')"
+                    />
+                    <span class="app-appointment-chip font-black">
+                      {{ selectedServices.length }} selected
+                    </span>
+                  </div>
                 </div>
 
                 <!-- Empty State -->
@@ -977,6 +989,7 @@ const props = defineProps<{
   visible: boolean
   editingId: number | null
   isSaving: boolean
+  isCopyingLastServices: boolean
   isFollowUpMode?: boolean
   canCreateFollowUp?: boolean
   form: Record<string, any>
@@ -1022,6 +1035,7 @@ const emit = defineEmits<{
   "generate-session-dates": [mode: SessionMode]
   "add-picked-service": []
   "remove-selected-service": [index: number]
+  "use-last-services": []
   "create-follow-up": []
   save: []
 }>()

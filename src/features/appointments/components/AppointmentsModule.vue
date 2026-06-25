@@ -980,6 +980,7 @@
       v-model:visible="formVisible"
       :editing-id="editingId"
       :is-saving="isSaving"
+      :is-copying-last-services="isCopyingLastServices"
       :is-follow-up-mode="Boolean(followUpSourceAppointment)"
       :can-create-follow-up="Boolean(editingId && form.credit_account_id && !followUpSourceAppointment)"
       :form="form"
@@ -1009,6 +1010,7 @@
       @generate-session-dates="generateSessionDates"
       @add-picked-service="addPickedService"
       @remove-selected-service="removeSelectedService"
+      @use-last-services="useLastPatientServices"
       @create-follow-up="openFollowUpAppointmentFromForm"
       @save="saveAppointment"
     />
@@ -1224,6 +1226,7 @@ const isBillingActionLoading = ref(false);
 const isTenderSaving = ref(false);
 const isPaymentMethodsLoading = ref(false);
 const isRescheduling = ref(false);
+const isCopyingLastServices = ref(false);
 
 const formVisible = ref(false);
 const detailsVisible = ref(false);
@@ -2446,6 +2449,78 @@ const serviceSessionQuantity = (service: SelectedService): number => {
 
 const servicePayloadQuantity = (service: SelectedService): number =>
   service.type === "PACKAGE" ? 1 : Math.max(1, Number(service.quantity ?? 1));
+
+const serviceCatalogForBillingType = (
+  billingType: PayerType | null,
+): AppointmentServiceCatalog =>
+  billingType === "LGU" ? lguServiceCatalog.value : globalServiceCatalog.value;
+
+const isSupportedServiceSelectionType = (
+  value: unknown,
+): value is AppointmentServiceSelectionType =>
+  allServiceTypeOptions.some((option) => option.value === value);
+
+const normalizeServiceName = (value: unknown): string =>
+  String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+
+const plannedServiceQuantity = (
+  service: AppointmentPlannedService,
+  option: ServiceOption,
+): number => {
+  if (option.type === "PACKAGE") return 1;
+
+  return Math.max(
+    1,
+    Number(
+      service.selected_quantity ??
+        service.planned_quantity ??
+        service.included_quantity ??
+        option.inheritedQuantity ??
+        1,
+    ),
+  );
+};
+
+const plannedServiceToSelectedService = (
+  service: AppointmentPlannedService,
+  billingType: PayerType,
+): SelectedService | null => {
+  if (!isSupportedServiceSelectionType(service.type)) return null;
+
+  const allowed = new Set(getAllowedServiceTypes(billingType));
+  if (!allowed.has(service.type)) return null;
+
+  const catalogOptions = serviceCatalogForBillingType(billingType)[service.type] ?? [];
+  const serviceId = Number(service.service_id ?? 0);
+  const serviceName = normalizeServiceName(service.service_name);
+  const option =
+    (serviceId > 0
+      ? catalogOptions.find((item) => Number(item.value) === serviceId)
+      : undefined) ??
+    catalogOptions.find((item) => normalizeServiceName(item.label) === serviceName);
+
+  if (!option) return null;
+
+  return {
+    ...option,
+    name: option.label,
+    quantity: plannedServiceQuantity(service, option),
+    typeLabel: serviceTypeLabel(option.type),
+  };
+};
+
+const isTopLevelPlannedService = (
+  service: AppointmentPlannedService,
+): boolean => {
+  if (service.type === "PACKAGE" || service.type === "BUNDLE") {
+    return service.line_type === "PARENT" || !service.parent_credit_item_id;
+  }
+
+  return !service.parent_credit_item_id;
+};
 
 const fallbackSessionCountFromSelectedServices = (): number => {
   const packageOrBundleServices = selectedServices.value.filter(
@@ -4442,6 +4517,92 @@ const addPickedService = (): void => {
 const removeSelectedService = (index: number): void => {
   selectedServices.value.splice(index, 1);
   void refreshSessionPreview();
+};
+
+const payerTypeFromAppointment = (
+  value: unknown,
+): PayerType | null => {
+  const normalized = normalizePayerType(value);
+  return payerOptions.some((option) => option.value === normalized)
+    ? (normalized as PayerType)
+    : null;
+};
+
+const useLastPatientServices = async (): Promise<void> => {
+  if (editingId.value) {
+    errorToast(toast, "Use this option when creating a new appointment.");
+    return;
+  }
+
+  const patientId = Number(form.patient_id ?? 0);
+  if (!patientId) {
+    errorToast(toast, "Select a patient first.");
+    return;
+  }
+
+  try {
+    isCopyingLastServices.value = true;
+
+    const contextPatientId = Number(selectedPatientContext.value?.patient?.id ?? 0);
+    if (contextPatientId !== patientId) {
+      await loadSelectedPatientContext(patientId);
+    }
+
+    const result = await appointmentPhase1Service.getAll({
+      page: 1,
+      size: 10,
+      patient_id: patientId,
+    });
+
+    const previousAppointments = (result.content ?? [])
+      .filter((appointment) => Number(appointment.id) !== Number(editingId.value))
+      .filter((appointment) => Number(appointment.patient_id) === patientId);
+
+    for (const appointment of previousAppointments) {
+      const summary = await appointmentPhase1Service.getFlowSummary(appointment.id);
+      const billingType = payerTypeFromAppointment(
+        summary.appointment?.payer_type ?? appointment.payer_type,
+      );
+
+      if (!billingType) continue;
+
+      if (!isAppointmentPayerTypeAllowed(billingType)) {
+        errorToast(
+          toast,
+          "The patient's last billing type is not currently allowed.",
+        );
+        return;
+      }
+
+      const copyableServices = (summary.planned_services ?? [])
+        .filter(isTopLevelPlannedService)
+        .map((service) => plannedServiceToSelectedService(service, billingType))
+        .filter((service): service is SelectedService => Boolean(service));
+
+      if (!copyableServices.length) continue;
+
+      form.payer_type = billingType;
+      selectedServices.value = copyableServices;
+
+      if (copyableServices.some((service) => homeCareAddOnTypes.has(service.type))) {
+        form.location_context = "HOME_CARE";
+      }
+
+      resetServicePicker(billingType);
+      await refreshSessionPreview();
+      successToast(
+        toast,
+        `Copied ${copyableServices.length} service${copyableServices.length === 1 ? "" : "s"} from ${formatDate(appointment.starts_at)}.`,
+      );
+      return;
+    }
+
+    errorToast(toast, "No previous planned services found for this patient.");
+  } catch {
+    errorToast(toast, "Failed to copy the patient's last services.");
+  } finally {
+    isCopyingLastServices.value = false;
+  }
 };
 
 const saveServices = async (): Promise<void> => {
