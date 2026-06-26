@@ -103,7 +103,7 @@
                 </td>
                 <td>{{ row.billing_route }}</td>
                 <td class="text-right">{{ asCurrency(row.payment_amount) }}</td>
-                <td class="text-right">{{ asCurrency(row.collected_amount) }}</td>
+                <td class="text-right">{{ asCurrency(row.tendered_today ?? row.collected_amount) }}</td>
                 <td>{{ row.mode_of_payment || "--" }}</td>
                 <td class="text-right">{{ asCurrency(row.balance) }}</td>
               </tr>
@@ -158,10 +158,6 @@
           <div class="daily-report-metric">
             <div class="daily-report-metric__label">Net Cash</div>
             <div class="daily-report-metric__value">{{ asCurrency(summary.net_cash) }}</div>
-          </div>
-          <div class="daily-report-metric">
-            <div class="daily-report-metric__label">Cash Collected</div>
-            <div class="daily-report-metric__value">{{ asCurrency(summary.cash_collected) }}</div>
           </div>
           <div class="daily-report-metric">
             <div class="daily-report-metric__label">Expense Total</div>
@@ -262,6 +258,11 @@ const summary = computed(() => report.value?.summary ?? {
   partial_billing_count: 0,
   gross_income: 0,
   cash_collected: 0,
+  tendered_today_total: 0,
+  tendered_cash: 0,
+  tendered_ewallet: 0,
+  tendered_debit_credit: 0,
+  tendered_other: 0,
   outstanding_balance: 0,
   incomplete_billing_balance: 0,
   expense_total: 0,
@@ -294,12 +295,13 @@ const pendingPtRows = computed<PendingPtRow[]>(() =>
 
 const financeMetrics = computed<Metric[]>(() => [
   { label: "Gross Charges", value: asCurrency(summary.value.gross_income) },
-  { label: "Cash Collected", value: asCurrency(summary.value.cash_collected) },
+  { label: "Cash", value: asCurrency(summary.value.tendered_cash) },
+  { label: "E-wallets", value: asCurrency(summary.value.tendered_ewallet) },
+  { label: "Debit/Credit", value: asCurrency(summary.value.tendered_debit_credit) },
   { label: "Self-Pay Outstanding", value: asCurrency(outstandingByRoute.value.selfPay) },
   { label: "HMO Outstanding", value: asCurrency(outstandingByRoute.value.hmo) },
   { label: "LGU Outstanding", value: asCurrency(outstandingByRoute.value.lgu) },
   { label: "Expenses", value: asCurrency(summary.value.expense_total) },
-  { label: "Net Income", value: asCurrency(summary.value.gross_income - summary.value.expense_total) },
   { label: "Net Cash", value: asCurrency(summary.value.net_cash) }
 ])
 

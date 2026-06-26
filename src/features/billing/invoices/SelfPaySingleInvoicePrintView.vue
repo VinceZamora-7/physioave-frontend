@@ -578,11 +578,38 @@ const billingTypeLabel = computed(() =>
   String(billingDetail.value?.billing_type ?? "Self Pay").replace(/_/g, " ")
 )
 
+const normalizePaymentMethodLabel = (value?: string | null): string => {
+  const normalized = String(value ?? "").trim().toLowerCase()
+  if (!normalized) return ""
+  const methodMap: Record<string, string> = {
+    cash: "Cash",
+    gcash: "E-wallet",
+    maya: "E-wallet",
+    "e-wallet": "E-wallet",
+    "e-wallets": "E-wallet",
+    ewallet: "E-wallet",
+    ewallets: "E-wallet",
+    "e wallet": "E-wallet",
+    "e wallets": "E-wallet",
+    card: "Debit/Credit",
+    credit: "Debit/Credit",
+    "credit card": "Debit/Credit",
+    debit: "Debit/Credit",
+    "debit card": "Debit/Credit",
+    "debit/credit": "Debit/Credit",
+    "debit / credit": "Debit/Credit",
+    other: "Other"
+  }
+  return methodMap[normalized] ?? String(value ?? "").trim()
+}
+
 const paymentMethodLabel = computed(() =>
-  firstNonBlank(
-    billingDetail.value?.payment_method_name,
-    billingDetail.value?.payment_reference,
-    "Self Pay"
+  normalizePaymentMethodLabel(
+    firstNonBlank(
+      billingDetail.value?.payment_method_name,
+      billingDetail.value?.payment_reference,
+      "Self Pay"
+    )
   )
 )
 

@@ -42,16 +42,14 @@
                 <th class="text-right">Income Rows</th>
                 <th class="text-right">Expense Rows</th>
                 <th class="text-right">Gross</th>
-                <th class="text-right">Cash</th>
                 <th class="text-right">Outstanding</th>
                 <th class="text-right">Expenses</th>
-                <th class="text-right">Net Income</th>
                 <th class="text-right">Net Cash</th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="!days.length">
-                <td colspan="10" class="empty-row">No finance activity found for this month.</td>
+                <td colspan="8" class="empty-row">No finance activity found for this month.</td>
               </tr>
               <tr v-for="(row, index) in days" :key="row.report_date">
                 <td class="text-center report-number-column">{{ index + 1 }}</td>
@@ -59,10 +57,8 @@
                 <td class="text-right">{{ row.income_entry_count }}</td>
                 <td class="text-right">{{ row.expense_entry_count }}</td>
                 <td class="text-right">{{ asCurrency(row.gross_income) }}</td>
-                <td class="text-right">{{ asCurrency(row.cash_collected) }}</td>
                 <td class="text-right">{{ asCurrency(row.outstanding_balance) }}</td>
                 <td class="text-right">{{ asCurrency(row.expense_total) }}</td>
-                <td class="text-right">{{ asCurrency(row.gross_income - row.expense_total) }}</td>
                 <td class="text-right">{{ asCurrency(row.net_cash) }}</td>
               </tr>
             </tbody>
@@ -153,6 +149,10 @@ const emptySummary = {
   partial_billing_count: 0,
   gross_income: 0,
   cash_collected: 0,
+  tendered_cash: 0,
+  tendered_ewallet: 0,
+  tendered_debit_credit: 0,
+  tendered_other: 0,
   outstanding_balance: 0,
   incomplete_billing_balance: 0,
   expense_total: 0,
@@ -164,11 +164,12 @@ const days = computed<MonthlyIncomeExpenseDay[]>(() => report.value?.days ?? [])
 
 const financeMetrics = computed<Metric[]>(() => [
   { label: "Gross Charges", value: asCurrency(summary.value.gross_income) },
-  { label: "Cash Collected", value: asCurrency(summary.value.cash_collected) },
+  { label: "Cash", value: asCurrency(summary.value.tendered_cash) },
+  { label: "E-wallets", value: asCurrency(summary.value.tendered_ewallet) },
+  { label: "Debit/Credit", value: asCurrency(summary.value.tendered_debit_credit) },
   { label: "Outstanding", value: asCurrency(summary.value.outstanding_balance) },
   { label: "Incomplete Billings", value: `${summary.value.incomplete_billing_count} / ${asCurrency(summary.value.incomplete_billing_balance)}` },
   { label: "Expenses", value: asCurrency(summary.value.expense_total) },
-  { label: "Net Income", value: asCurrency(summary.value.gross_income - summary.value.expense_total) },
   { label: "Net Cash", value: asCurrency(summary.value.net_cash) },
   { label: "Active Days", value: String(summary.value.active_day_count) }
 ])

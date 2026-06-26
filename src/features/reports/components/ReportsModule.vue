@@ -126,9 +126,19 @@ const summaryCards = computed(() => [
     caption: "Only PARTIAL, BILLED, and PAID records"
   },
   {
-    label: "Cash Collected",
-    value: asCurrency(report.value?.summary.cash_collected ?? 0),
-    caption: "Actual payments received today"
+    label: "Cash",
+    value: asCurrency(report.value?.summary.tendered_cash ?? 0),
+    caption: "Cash tendered today"
+  },
+  {
+    label: "E-wallets",
+    value: asCurrency(report.value?.summary.tendered_ewallet ?? 0),
+    caption: "E-wallet tendered today"
+  },
+  {
+    label: "Debit/Credit",
+    value: asCurrency(report.value?.summary.tendered_debit_credit ?? 0),
+    caption: "Card tendered today"
   },
   {
     label: "Outstanding",
@@ -151,11 +161,6 @@ const summaryCards = computed(() => [
     caption: "Manually entered operating expenses"
   },
   {
-    label: "Net Income",
-    value: asCurrency((report.value?.summary.gross_income ?? 0) - (report.value?.summary.expense_total ?? 0)),
-    caption: "Gross charges minus expenses"
-  },
-  {
     label: "Net Cash",
     value: asCurrency(report.value?.summary.net_cash ?? 0),
     caption: "Cash collected minus expenses"
@@ -169,9 +174,19 @@ const monthlySummaryCards = computed(() => [
     caption: "Only PARTIAL, BILLED, and PAID records"
   },
   {
-    label: "Cash Collected",
-    value: asCurrency(monthlyReport.value?.summary.cash_collected ?? 0),
-    caption: "Payments received within the month"
+    label: "Cash",
+    value: asCurrency(monthlyReport.value?.summary.tendered_cash ?? 0),
+    caption: "Cash tendered within the month"
+  },
+  {
+    label: "E-wallets",
+    value: asCurrency(monthlyReport.value?.summary.tendered_ewallet ?? 0),
+    caption: "E-wallet tendered within the month"
+  },
+  {
+    label: "Debit/Credit",
+    value: asCurrency(monthlyReport.value?.summary.tendered_debit_credit ?? 0),
+    caption: "Card tendered within the month"
   },
   {
     label: "Outstanding",
@@ -192,11 +207,6 @@ const monthlySummaryCards = computed(() => [
     label: "Expenses",
     value: asCurrency(monthlyReport.value?.summary.expense_total ?? 0),
     caption: "Operating expenses logged this month"
-  },
-  {
-    label: "Net Income",
-    value: asCurrency((monthlyReport.value?.summary.gross_income ?? 0) - (monthlyReport.value?.summary.expense_total ?? 0)),
-    caption: "Gross charges minus monthly expenses"
   },
   {
     label: "Net Cash",
@@ -308,6 +318,11 @@ const createEmptyDailyReport = (date: string): DailyIncomeExpenseReport => ({
     partial_billing_count: 0,
     gross_income: 0,
     cash_collected: 0,
+    tendered_today_total: 0,
+    tendered_cash: 0,
+    tendered_ewallet: 0,
+    tendered_debit_credit: 0,
+    tendered_other: 0,
     outstanding_balance: 0,
     incomplete_billing_balance: 0,
     expense_total: 0,
@@ -330,6 +345,10 @@ const createEmptyMonthlyReport = (month: string): MonthlyIncomeExpenseReport => 
     partial_billing_count: 0,
     gross_income: 0,
     cash_collected: 0,
+    tendered_cash: 0,
+    tendered_ewallet: 0,
+    tendered_debit_credit: 0,
+    tendered_other: 0,
     outstanding_balance: 0,
     incomplete_billing_balance: 0,
     expense_total: 0,
@@ -1040,7 +1059,7 @@ onMounted(async () => {
           <p class="text-sm opacity-70">Matches the paper sheet columns, but uses live billing records and calculated balances.</p>
         </div>
         <div class="text-sm opacity-70">
-          Gross {{ asCurrency(report?.summary.gross_income ?? 0) }} · Cash {{ asCurrency(report?.summary.cash_collected ?? 0) }}
+          Gross {{ asCurrency(report?.summary.gross_income ?? 0) }} · Tendered {{ asCurrency(report?.summary.tendered_today_total ?? 0) }}
         </div>
       </div>
 
@@ -1080,11 +1099,11 @@ onMounted(async () => {
             </template>
           </Column>
 
-          <Column header="Payment" style="min-width: 150px">
+          <Column header="Price / Tendered Today" style="min-width: 170px">
             <template #body="{ data }">
               <div class="space-y-1">
                 <div class="font-medium">{{ asCurrency(data.payment_amount) }}</div>
-                <div class="text-xs opacity-60">Collected {{ asCurrency(data.collected_amount) }}</div>
+                <div class="text-xs opacity-60">Tendered today {{ asCurrency(data.tendered_today ?? data.collected_amount) }}</div>
               </div>
             </template>
           </Column>
@@ -1212,11 +1231,7 @@ onMounted(async () => {
 
     <section class="app-section-card-comfy space-y-3">
       <h2 class="app-section-title">Daily Totals</h2>
-      <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div class="app-dashboard-kpi-card">
-          <div class="text-xs uppercase tracking-wide opacity-55">Cash Collected</div>
-          <div class="mt-2 text-2xl font-semibold">{{ asCurrency(report?.summary.cash_collected ?? 0) }}</div>
-        </div>
+      <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div class="app-dashboard-kpi-card">
           <div class="text-xs uppercase tracking-wide opacity-55">Expense Total</div>
           <div class="mt-2 text-2xl font-semibold">{{ asCurrency(report?.summary.expense_total ?? 0) }}</div>
@@ -1290,24 +1305,12 @@ onMounted(async () => {
             <template #body="{ data }">{{ asCurrency(data.gross_income) }}</template>
           </Column>
 
-          <Column header="Cash" style="min-width: 140px">
-            <template #body="{ data }">{{ asCurrency(data.cash_collected) }}</template>
-          </Column>
-
           <Column header="Outstanding" style="min-width: 140px">
             <template #body="{ data }">{{ asCurrency(data.outstanding_balance) }}</template>
           </Column>
 
           <Column header="Expenses" style="min-width: 140px">
             <template #body="{ data }">{{ asCurrency(data.expense_total) }}</template>
-          </Column>
-
-          <Column header="Net Income" style="min-width: 140px">
-            <template #body="{ data }">
-              <span :class="(data.gross_income - data.expense_total) < 0 ? 'font-medium text-rose-600' : 'font-medium text-emerald-700'">
-                {{ asCurrency(data.gross_income - data.expense_total) }}
-              </span>
-            </template>
           </Column>
 
           <Column header="Net Cash" style="min-width: 140px">

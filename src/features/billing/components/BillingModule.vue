@@ -216,7 +216,7 @@
                   v-tooltip.top="getLguAppointmentInvoiceTooltip(data)"
                   @click="printLguAppointmentInvoice(data)"
                 />
-                <Button size="small" text icon="pi pi-pencil" v-tooltip.top="isBillingStatusLocked(resolveBillingRuntimeStatus(data)) ? 'Open in locked mode' : 'Edit'" @click="loadBillingForEdit(data.representative_billing_id ?? data.id)" />
+                <Button size="small" text icon="pi pi-pencil" v-tooltip.top="billingEditTooltip(resolveBillingRuntimeStatus(data))" @click="loadBillingForEdit(data.representative_billing_id ?? data.id)" />
               </div>
             </template>
           </Column>
@@ -729,7 +729,7 @@
                       v-if="Number(form.amount_tendered ?? 0) > 0 && Number(form.amount_tendered ?? 0) < posSummary.totalDue"
                       class="text-xs text-orange-600 dark:text-orange-400 mt-1"
                     >
-                      Insufficient â€” short by {{ asCurrency(posSummary.totalDue - Number(form.amount_tendered ?? 0)) }}
+                      Partial payment - remaining {{ asCurrency(posSummary.totalDue - Number(form.amount_tendered ?? 0)) }}
                     </div>
                   </div>
                 </template>
@@ -1031,7 +1031,7 @@
   :disabled="!canPrintLguAppointmentInvoice(billing)"
   @click="printLguAppointmentInvoice(billing)"
 />
-                <Button size="small" text icon="pi pi-pencil" v-tooltip.top="isBillingStatusLocked(resolveBillingRuntimeStatus(billing)) ? 'Open in locked mode' : 'Edit billing'" @click="loadBillingForEdit(billing.id)" />
+                <Button size="small" text icon="pi pi-pencil" v-tooltip.top="billingEditTooltip(resolveBillingRuntimeStatus(billing))" @click="loadBillingForEdit(billing.id)" />
               </span>
             </div>
           </div>
@@ -1131,7 +1131,7 @@
                 </IftaLabel>
 
                 <IftaLabel>
-                  <InputText v-model="billingTenderReferenceNo" fluid placeholder="e.g. GCash Ref #" />
+                  <InputText v-model="billingTenderReferenceNo" fluid placeholder="e.g. wallet or card ref #" />
                   <label>Reference Number</label>
                 </IftaLabel>
 
@@ -1156,7 +1156,7 @@
                   v-if="billingTenderInputAmount > 0 && billingTenderInputAmount < selectedBillingOutstanding"
                   class="text-xs text-orange-600 dark:text-orange-400 self-center"
                 >
-                  Insufficient â€” short by {{ asCurrency(selectedBillingOutstanding - billingTenderInputAmount) }}
+                  Partial payment - remaining {{ asCurrency(selectedBillingOutstanding - billingTenderInputAmount) }}
                 </div>
               </div>
 
@@ -1459,8 +1459,30 @@
     >
       <div class="space-y-5 pb-6">
 
-        <Message v-if="isEditingPaidBilling" class="h-14 py-2 px-2" severity="warn" :closable="false">
-          This billing is paid. You can still open and review this record, but updates are locked.
+        <Message
+          v-if="isEditingLockedBilling"
+          class="py-2 px-2"
+          :severity="canOverrideLockedBillingEdit ? 'info' : 'warn'"
+          :closable="false"
+        >
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              {{
+                canOverrideLockedBillingEdit
+                  ? 'Owner override active. This billing is locked for regular users, but you can update it.'
+                  : 'This billing is already locked. You can still open and review this record, but updates are locked.'
+              }}
+            </span>
+            <Button
+              v-if="canOfferLockedBillingOverride && !canOverrideLockedBillingEdit"
+              label="Override Lock"
+              icon="pi pi-lock-open"
+              size="small"
+              severity="warn"
+              outlined
+              @click="enableLockedBillingOverride"
+            />
+          </div>
         </Message>
 
         <section class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 space-y-3">
@@ -1511,7 +1533,7 @@
         <section v-if="editingBillingId" class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-4 space-y-3">
           <div>
             <h4 class="text-sm font-semibold">Accounting Â· Payment History</h4>
-            <p class="mt-0.5 text-xs opacity-60">Immutable payment ledger for this billing. Entries cannot be edited or deleted.</p>
+            <p class="mt-0.5 text-xs opacity-60">Tendered and applied amounts stay ledgered. Owner or billing editors can correct method, reference, and notes.</p>
           </div>
 
           <div v-if="editBillingPaymentLog.length === 0" class="rounded-lg border border-dashed border-[rgb(var(--app-border))] px-4 py-5 text-center text-sm opacity-60">
@@ -1551,6 +1573,58 @@
               <div v-if="entry.changeGiven > 0">
                 <div class="opacity-60 uppercase tracking-wide">Change Given</div>
                 <div class="font-medium text-green-600">{{ asCurrency(entry.changeGiven) }}</div>
+              </div>
+              <div class="col-span-2 md:col-span-4">
+                <div
+                  v-if="editingPaymentLogEntryId === entry.id"
+                  class="mt-2 grid gap-2 rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3 md:grid-cols-[minmax(0,12rem)_minmax(0,1fr)_minmax(0,1fr)_auto]"
+                >
+                  <IftaLabel>
+                    <Select
+                      v-model="paymentLogEditForm.paymentType"
+                      :options="selfPayPaymentOptions"
+                      optionLabel="label"
+                      optionValue="value"
+                      fluid
+                    />
+                    <label>Payment Type</label>
+                  </IftaLabel>
+                  <IftaLabel>
+                    <InputText v-model="paymentLogEditForm.referenceNo" fluid placeholder="Reference number" />
+                    <label>Reference No.</label>
+                  </IftaLabel>
+                  <IftaLabel>
+                    <InputText v-model="paymentLogEditForm.note" fluid placeholder="Optional note" />
+                    <label>Note</label>
+                  </IftaLabel>
+                  <div class="flex items-center justify-end gap-1">
+                    <Button
+                      icon="pi pi-check"
+                      size="small"
+                      :loading="savingPaymentLogEntryId === entry.id"
+                      :disabled="savingPaymentLogEntryId === entry.id"
+                      @click="savePaymentLogCorrection(entry)"
+                    />
+                    <Button
+                      icon="pi pi-times"
+                      size="small"
+                      severity="secondary"
+                      text
+                      :disabled="savingPaymentLogEntryId === entry.id"
+                      @click="cancelPaymentLogCorrection"
+                    />
+                  </div>
+                </div>
+                <div v-else class="mt-2 flex justify-end">
+                  <Button
+                    label="Correct Tender Info"
+                    icon="pi pi-pencil"
+                    size="small"
+                    text
+                    :disabled="!canEditReceipt"
+                    @click="startPaymentLogCorrection(entry)"
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -1702,7 +1776,7 @@
 
         <div class="flex justify-end gap-2">
           <Button label="Cancel" text @click="billingEditDrawerVisible = false" />
-          <Button label="Update Billing" icon="pi pi-save" :disabled="isEditingPaidBilling" v-tooltip.top="isEditingPaidBilling ? 'Paid billing is locked' : 'Save updates'" @click="createBilling" />
+          <Button label="Update Billing" icon="pi pi-save" :disabled="isEditingPaidBilling" v-tooltip.top="isEditingPaidBilling ? 'Billing is locked' : 'Save updates'" @click="createBilling" />
         </div>
       </div>
     </Drawer>
@@ -1761,7 +1835,7 @@
 </template>
 
 <script setup lang="ts">
-import {computed, nextTick, onMounted, ref, watch} from "vue"
+import {computed, nextTick, onMounted, reactive, ref, watch} from "vue"
 import {useRoute, useRouter} from "vue-router"
 import {storeToRefs} from "pinia"
 import {useQueryClient} from "@tanstack/vue-query"
@@ -1859,6 +1933,14 @@ const billingDetailsVisible = ref(false)
 const selectedBillingPaymentLog = ref<BillingPaymentLogEntry[]>([])
 const editBillingPaymentLog = ref<BillingPaymentLogEntry[]>([])
 const billingEditDrawerVisible = ref(false)
+const lockedBillingOverrideEnabled = ref(false)
+const editingPaymentLogEntryId = ref<number | null>(null)
+const savingPaymentLogEntryId = ref<number | null>(null)
+const paymentLogEditForm = reactive({
+  paymentType: "",
+  referenceNo: "",
+  note: "",
+})
 const overlayActivated = ref(false)
 const overlayEntryMode = ref<"detail" | "edit" | "tender">("detail")
 const selectedBillingDetail = ref<BillingListItem>()
@@ -1937,14 +2019,30 @@ const localPackageOffers = ref<LocalPackageOffer[]>([])
 const sessionServices    = ref<BillingPickerLookup[]>([])
 const patientOptions     = ref<Lookup[]>([])
 const canEditReceipt     = computed(() =>
+  authSession.isOwnerEquivalent ||
   authSession.hasAnyPermission("CashBill::UPDATE", "HMOBill::UPDATE", "CashBill::CREATE", "HMOBill::CREATE")
 )
 
 const isBillingStatusPaid = (value?: string): boolean => normalizeBillingStatusLabel(value) === "PAID"
 const isBillingStatusLocked = (value?: string): boolean =>
-  ["PAID", "VOID", "CANCELLED", "DROPPED_OUT", "CROSS_MONTH_DROPPED_OUT"].includes(normalizeBillingStatusLabel(value))
+  ["BILLED", "PARTIALLY_PAID", "PAID", "VOID", "CANCELLED", "DROPPED_OUT", "CROSS_MONTH_DROPPED_OUT"].includes(normalizeBillingStatusLabel(value))
 const isSelectedBillingPaid = computed(() => isBillingStatusPaid(selectedBillingDetail.value?.billing_status))
-const isEditingPaidBilling = computed(() => isBillingStatusLocked(editingBillingStatus.value))
+const canOfferLockedBillingOverride = computed(() => authSession.isOwnerEquivalent && isEditingLockedBilling.value)
+const canOverrideLockedBillingEdit = computed(() =>
+  authSession.isOwnerEquivalent &&
+  isEditingLockedBilling.value &&
+  lockedBillingOverrideEnabled.value
+)
+const isEditingLockedBilling = computed(() => isBillingStatusLocked(editingBillingStatus.value))
+const isEditingPaidBilling = computed(() =>
+  isEditingLockedBilling.value && !canOverrideLockedBillingEdit.value
+)
+const billingEditTooltip = (status?: string): string => {
+  if (!isBillingStatusLocked(status)) return "Edit billing"
+  return authSession.isOwnerEquivalent
+    ? "Open locked billing; Owner override available"
+    : "Open in locked mode"
+}
 
 // â”€â”€ Normalisation helpers (unchanged from original) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const toOptionalStringId = (value: unknown): string | undefined => {
@@ -2812,7 +2910,27 @@ const normalizeBillingTypeValue = (value?: string): BillingType|undefined => {
 const normalizePaymentType = (value?: string): string => {
   const n = String(value ?? "").trim().toLowerCase()
   if (!n) return ""
-  const map: Record<string,string> = {cash:"Cash",gcash:"GCash","e-wallet":"E-wallet",ewallet:"E-wallet","e wallet":"E-wallet",hmo:"HMO",lgu:"LGU",other:"Other"}
+  const map: Record<string,string> = {
+    cash: "Cash",
+    card: "Debit/Credit",
+    credit: "Debit/Credit",
+    "credit card": "Debit/Credit",
+    debit: "Debit/Credit",
+    "debit card": "Debit/Credit",
+    "debit/credit": "Debit/Credit",
+    "debit / credit": "Debit/Credit",
+    gcash: "E-wallet",
+    maya: "E-wallet",
+    "e-wallet": "E-wallet",
+    "e-wallets": "E-wallet",
+    ewallet: "E-wallet",
+    ewallets: "E-wallet",
+    "e wallet": "E-wallet",
+    "e wallets": "E-wallet",
+    hmo: "HMO",
+    lgu: "LGU",
+    other: "Other"
+  }
   return map[n] ?? String(value ?? "").trim()
 }
 
@@ -3268,8 +3386,8 @@ const resetTableFilters = (): void => {
 // â”€â”€ Static options â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const selfPayPaymentOptions = [
   {label: "Cash",     value: "Cash"},
-  {label: "GCash",    value: "GCash"},
   {label: "E-wallet", value: "E-wallet"},
+  {label: "Debit/Credit", value: "Debit/Credit"},
   {label: "Other",    value: "Other"},
 ]
 const discountTypeOptions: Array<{label:string;value:DiscountType}> = [
@@ -3836,6 +3954,9 @@ const resetBillingForm = (): void => {
   posExpanded.value = false
   editingBillingId.value = undefined; editingBillingStatus.value = undefined; selectedLines.value = []
   editBillingPaymentLog.value = []
+  lockedBillingOverrideEnabled.value = false
+  editingPaymentLogEntryId.value = null
+  savingPaymentLogEntryId.value = null
   selectedLineType.value = "machine"; selectedLineId.value = undefined; selectedLineQty.value = 1
   selectedPackageOfferId.value = undefined; activeLguBudgetSummary.value = null
   loadingLguBudgetSummary.value = false; lguBudgetSummaryError.value = ""
@@ -3843,6 +3964,11 @@ const resetBillingForm = (): void => {
   manualDiscountValue.value = 0; manualDiscountReason.value = ""; seniorDiscountTargetKey.value = null
   createBundleDialogVisible.value = false; createBundleName.value = ""; createBundleDiscountedPrice.value = 0
   form.value = {billing_type: "SELF_PAY_SINGLE", service_type: "SINGLE", amount_paid: 0, amount_tendered: 0, payment_type: undefined, senior_pwd_id_presented: false}
+}
+
+const enableLockedBillingOverride = (): void => {
+  if (!canOfferLockedBillingOverride.value) return
+  lockedBillingOverrideEnabled.value = true
 }
 
 const openNewBillingForm = async (): Promise<void> => {
@@ -3950,7 +4076,7 @@ const createBilling = async (): Promise<void> => {
     if (editedBillingId) {
       const currentDetail = (await fetchBillingContextDetail(editedBillingId)).detail
       if (!currentDetail) { errorToast(toast, "Billing record could not be reloaded for security check"); return }
-      if (isBillingStatusLocked(resolveBillingRuntimeStatus(currentDetail))) {
+      if (isBillingStatusLocked(resolveBillingRuntimeStatus(currentDetail)) && !canOverrideLockedBillingEdit.value) {
         errorToast(toast, "Locked billings can no longer be edited")
         return
       }
@@ -3974,6 +4100,9 @@ const createBilling = async (): Promise<void> => {
 
 // â”€â”€ Load for edit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const loadBillingForEdit = async (billingId: number): Promise<void> => {
+  lockedBillingOverrideEnabled.value = false
+  editingPaymentLogEntryId.value = null
+  savingPaymentLogEntryId.value = null
   const {detail, paymentLog} = await fetchBillingContextDetail(billingId)
   if (!detail) return
   editingBillingId.value = detail.id
@@ -4171,6 +4300,55 @@ const openReceiptEditor = async (): Promise<void> => {
   resetBillingForm()
   await loadBillingForEdit(selectedBillingDetail.value.id)
   billingEditDrawerVisible.value = true
+}
+
+const startPaymentLogCorrection = (entry: BillingPaymentLogEntry): void => {
+  if (!canEditReceipt.value) return
+  editingPaymentLogEntryId.value = entry.id
+  paymentLogEditForm.paymentType = normalizePaymentType(entry.paymentType) || "Cash"
+  paymentLogEditForm.referenceNo = entry.referenceNo ?? ""
+  paymentLogEditForm.note = entry.note ?? ""
+}
+
+const cancelPaymentLogCorrection = (): void => {
+  editingPaymentLogEntryId.value = null
+  paymentLogEditForm.paymentType = ""
+  paymentLogEditForm.referenceNo = ""
+  paymentLogEditForm.note = ""
+}
+
+const savePaymentLogCorrection = async (entry: BillingPaymentLogEntry): Promise<void> => {
+  const billingId = editingBillingId.value
+  if (!billingId || !canEditReceipt.value) return
+
+  const paymentType = paymentLogEditForm.paymentType.trim()
+  if (!paymentType) {
+    errorToast(toast, "Select a payment type")
+    return
+  }
+
+  try {
+    savingPaymentLogEntryId.value = entry.id
+    await billingPhase1Service.updatePaymentLog(billingId, entry.id, {
+      paymentType,
+      referenceNo: paymentLogEditForm.referenceNo.trim() || null,
+      note: paymentLogEditForm.note.trim() || null,
+    })
+    await invalidateBillingContext(billingId)
+    const {detail, paymentLog} = await fetchBillingContextDetail(billingId)
+    if (detail) {
+      selectedBillingDetail.value = detail
+      editingBillingStatus.value = resolveBillingRuntimeStatus(detail)
+    }
+    editBillingPaymentLog.value = paymentLog
+    selectedBillingPaymentLog.value = paymentLog
+    cancelPaymentLogCorrection()
+    successToast(toast, "Tender history updated")
+  } catch (e) {
+    errorToast(toast, extractApiErrorMessage(e, "Failed to update tender history"))
+  } finally {
+    savingPaymentLogEntryId.value = null
+  }
 }
 
 // â”€â”€ Save tender â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

@@ -157,7 +157,7 @@
         <Column
           field="patient_name"
           header="Patient Details"
-          style="min-width: 240px"
+          style="min-width: 240px;"
         >
           <template #body="{ data }">
             <button
@@ -167,7 +167,7 @@
               @click="openDetailsDialog(data)"
             >
               <div
-                class="font-semibold text-[rgb(var(--app-fg))] hover:underline"
+                class="font-semibold text-[rgb(var(--app-fg))] hover:underline uppercase"
               >
                 {{ data.patient_name || "Unnamed patient" }}
               </div>
@@ -202,7 +202,7 @@
             />
           </template>
         </Column>
-        <Column field="provider_name" header="PT" style="min-width: 180px">
+        <Column field="provider_name" header="PT" style="min-width: 180px; text-transform: uppercase;">
           <template #body="{ data }">{{
             data.provider_name || "Unassigned"
           }}</template>
@@ -772,7 +772,7 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
+          <div class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-4">
             <div>
               <p class="app-appointment-muted text-xs uppercase tracking-wide">
                 Estimated Discount
@@ -791,12 +791,27 @@
             </div>
             <div>
               <p class="app-appointment-muted text-xs uppercase tracking-wide">
+                Applied
+              </p>
+              <p class="app-appointment-value font-semibold">
+                {{ formatCurrency(tenderDiscountSummary.applied) }}
+              </p>
+            </div>
+            <div>
+              <p class="app-appointment-muted text-xs uppercase tracking-wide">
                 Change
               </p>
               <p class="font-semibold text-green-600">
                 {{ formatCurrency(tenderDiscountSummary.change) }}
               </p>
             </div>
+          </div>
+
+          <div
+            v-if="tenderDiscountSummary.applied > 0 && tenderDiscountSummary.remainingAfter > 0"
+            class="text-xs text-orange-600 dark:text-orange-400"
+          >
+            Partial payment - remaining {{ formatCurrency(tenderDiscountSummary.remainingAfter) }}
           </div>
         </section>
 
@@ -1901,14 +1916,15 @@ const tenderDiscountSummary = computed(() => {
     0,
     subtotal - discount + Number(document?.totals.tax ?? 0),
   );
+  const amountDue = Math.max(0, totalAfterDiscount - paid);
+  const amountTendered = Number(tenderForm.amount_tendered ?? 0);
+  const applied = Math.min(amountDue, Math.max(0, amountTendered));
   return {
     discount,
-    amountDue: Math.max(0, totalAfterDiscount - paid),
-    change: Math.max(
-      0,
-      Number(tenderForm.amount_tendered ?? 0) -
-        Math.max(0, totalAfterDiscount - paid),
-    ),
+    amountDue,
+    applied,
+    remainingAfter: Math.max(0, amountDue - applied),
+    change: Math.max(0, amountTendered - amountDue),
   };
 });
 

@@ -278,6 +278,7 @@ export interface DailyIncomeExpenseRow {
   pt_service: string
   billing_route: string
   payment_amount: number
+  tendered_today: number
   collected_amount: number
   mode_of_payment?: string
   sponsor_reference?: string
@@ -326,6 +327,11 @@ export interface DailyIncomeExpenseReport {
     partial_billing_count: number
     gross_income: number
     cash_collected: number
+    tendered_today_total: number
+    tendered_cash: number
+    tendered_ewallet: number
+    tendered_debit_credit: number
+    tendered_other: number
     outstanding_balance: number
     incomplete_billing_balance: number
     expense_total: number
@@ -342,6 +348,10 @@ export interface MonthlyIncomeExpenseDay {
   expense_entry_count: number
   gross_income: number
   cash_collected: number
+  tendered_cash: number
+  tendered_ewallet: number
+  tendered_debit_credit: number
+  tendered_other: number
   outstanding_balance: number
   expense_total: number
   net_cash: number
@@ -360,6 +370,10 @@ export interface MonthlyIncomeExpenseReport {
     partial_billing_count: number
     gross_income: number
     cash_collected: number
+    tendered_cash: number
+    tendered_ewallet: number
+    tendered_debit_credit: number
+    tendered_other: number
     outstanding_balance: number
     incomplete_billing_balance: number
     expense_total: number
@@ -396,6 +410,12 @@ export interface RecordPaymentRequest {
   paymentType: string
   referenceNo?: string
   note?: string
+}
+
+export interface UpdatePaymentLogRequest {
+  paymentType: string
+  referenceNo?: string | null
+  note?: string | null
 }
 
 export type PackageGroupPaymentPayload = {
@@ -481,6 +501,9 @@ export const billingPhase1Service = {
   },
   async recordPayment(id: number, payload: RecordPaymentRequest): Promise<void> {
     await pamsAPI.post(`/billings/${id}/payment-log`, payload)
+  },
+  async updatePaymentLog(id: number, lineId: number, payload: UpdatePaymentLogRequest): Promise<void> {
+    await pamsAPI.put(`/billings/${id}/payment-log/${lineId}`, payload)
   },
   async delete(id: number): Promise<void> {
     await pamsAPI.delete(`/billings/${id}`)
