@@ -1,7 +1,6 @@
 <template>
   <SponsorInvoiceLayout
     title="Daily Patient Log"
-    :subtitle="`Treatment and signature log for ${payload?.selected_date_label || '--'}`"
     :has-error="!!error"
   >
     <template #meta>

@@ -411,6 +411,7 @@ export interface AppointmentCreatePayload extends Record<string, unknown> {
   service_type?: AppointmentServiceType
   services?: AppointmentServiceCreatePayload[]
   session_schedules?: AppointmentSessionSchedulePayload[]
+  total_sessions?: number
   credit_account_id?: number | null
   root_appointment_id?: number | null
   add_initial_evaluation_appointment?: boolean

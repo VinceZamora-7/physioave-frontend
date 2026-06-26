@@ -358,7 +358,7 @@
                           v-if="isPackageLikeService(service) && includedServicesForDisplay(service).length"
                           class="mt-1 text-xs font-semibold text-[rgb(var(--app-fg))]/60"
                         >
-                          Sessions: {{ sessionQuantityForDisplay(service) }} from bundle
+                          Included qty: {{ sessionQuantityForDisplay(service) }}
                         </div>
                       </div>
 
@@ -685,6 +685,13 @@
 
               <div class="flex flex-wrap gap-2">
                 <Button
+                  label="Add Session"
+                  icon="pi pi-plus"
+                  size="small"
+                  class="app-primary-action"
+                  @click="$emit('add-session-date')"
+                />
+                <Button
                   label="Weekly"
                   icon="pi pi-calendar-plus"
                   severity="secondary"
@@ -767,6 +774,17 @@
                   outlined
                   class="mt-2 w-full"
                   @click="selectSession(index)"
+                />
+
+                <Button
+                  v-if="index > 0"
+                  label="Remove Session"
+                  icon="pi pi-trash"
+                  size="small"
+                  severity="danger"
+                  text
+                  class="mt-1 w-full"
+                  @click="$emit('remove-session-date', index)"
                 />
               </article>
             </div>
@@ -1033,6 +1051,8 @@ const hasClinicalDetails = computed(() =>
 const emit = defineEmits<{
   "update:visible": [value: boolean]
   "generate-session-dates": [mode: SessionMode]
+  "add-session-date": []
+  "remove-session-date": [index: number]
   "add-picked-service": []
   "remove-selected-service": [index: number]
   "use-last-services": []

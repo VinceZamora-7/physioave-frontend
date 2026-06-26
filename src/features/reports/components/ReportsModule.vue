@@ -234,9 +234,9 @@ const eodSummaryCards = computed(() => [
     caption: "Appointments still missing PT completion sign-off"
   },
   {
-    label: "Billings Cleared",
+    label: "Report-Cleared Visits",
     value: `${eodReport.value?.summary.billing_cleared_appointments ?? 0}/${eodReport.value?.summary.eligible_appointments ?? 0}`,
-    caption: "Cleared billings for the same eligible appointments"
+    caption: "Self-pay billed, or HMO/LGU attendance signed"
   },
   {
     label: "Eligible Appointments",
@@ -634,7 +634,7 @@ const eodReportStatusLabel = computed(() => {
     return "Waiting for PT signatures"
   }
   if (summary.pending_billing_count > 0) {
-    return "Waiting for billing clearance"
+    return "Waiting for self-pay billing clearance"
   }
   if (!summary.eligible_appointments) {
     return "No active appointments for selected day"
@@ -655,8 +655,8 @@ const allAppointmentsDoneLabel = computed(() => {
 
 const allBillingsClearedLabel = computed(() => {
   if (!eodReport.value?.summary.eligible_appointments) return "No billing to clear"
-  if (eodReport.value.summary.all_billings_cleared) return "All billings are cleared"
-  return `${eodReport.value.summary.pending_billing_count} billing${eodReport.value.summary.pending_billing_count > 1 ? "s" : ""} pending clearance`
+  if (eodReport.value.summary.all_billings_cleared) return "Report billing requirements are clear"
+  return `${eodReport.value.summary.pending_billing_count} self-pay billing${eodReport.value.summary.pending_billing_count > 1 ? "s" : ""} pending clearance`
 })
 
 const pendingEodBlockers = computed(() => eodReport.value?.pending_eod_blockers ?? [])
@@ -1099,12 +1099,9 @@ onMounted(async () => {
             </template>
           </Column>
 
-          <Column header="Price / Tendered Today" style="min-width: 170px">
+          <Column header="Tendered Today" style="min-width: 150px">
             <template #body="{ data }">
-              <div class="space-y-1">
-                <div class="font-medium">{{ asCurrency(data.payment_amount) }}</div>
-                <div class="text-xs opacity-60">Tendered today {{ asCurrency(data.tendered_today ?? data.collected_amount) }}</div>
-              </div>
+              <div class="font-medium">{{ asCurrency(data.tendered_today ?? 0) }}</div>
             </template>
           </Column>
 

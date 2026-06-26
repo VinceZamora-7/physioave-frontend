@@ -82,7 +82,6 @@
                 <th class="text-left">Patient</th>
                 <th class="text-left">Billing Record ID</th>
                 <th class="text-left">Billing Type</th>
-                <th class="text-right">Price</th>
                 <th class="text-right">Tendered Today</th>
                 <th class="text-left">Mode of Payment</th>
                 <th class="text-right">Balance</th>
@@ -90,7 +89,7 @@
             </thead>
             <tbody>
               <tr v-if="!incomes.length">
-                <td colspan="8" class="empty-row">No billing activity recorded for this date.</td>
+                <td colspan="7" class="empty-row">No billing activity recorded for this date.</td>
               </tr>
               <tr v-for="(row, index) in incomes" :key="row.id">
                 <td class="text-center report-number-column">{{ index + 1 }}</td>
@@ -102,8 +101,7 @@
                   <span>{{ formatTime(row.created_at) }}</span>
                 </td>
                 <td>{{ row.billing_route }}</td>
-                <td class="text-right">{{ asCurrency(row.payment_amount) }}</td>
-                <td class="text-right">{{ asCurrency(row.tendered_today ?? row.collected_amount) }}</td>
+                <td class="text-right">{{ asCurrency(row.tendered_today ?? 0) }}</td>
                 <td>{{ row.mode_of_payment || "--" }}</td>
                 <td class="text-right">{{ asCurrency(row.balance) }}</td>
               </tr>
@@ -312,7 +310,7 @@ const eodMetrics = computed<Metric[]>(() => {
     { label: "Pending Appointments", value: String(eodSummary?.pending_appointment_count ?? 0) },
     { label: "Pending PT Signatures", value: String(eodSummary?.pending_pt_signature_count ?? 0) },
     {
-      label: "Billing Cleared",
+      label: "Report-Cleared Visits",
       value: `${eodSummary?.billing_cleared_appointments ?? 0}/${eodSummary?.eligible_appointments ?? 0}`
     },
     { label: "Eligible Appts", value: String(eodSummary?.eligible_appointments ?? 0) }
@@ -386,7 +384,7 @@ const getEodStatusLabel = (current?: PtEndOfDayReport): string => {
   if (current?.eod_report_generated) return "Generated"
   if (eodSummary.pending_appointment_count > 0) return "Waiting for pending appointments"
   if (eodSummary.pending_pt_signature_count > 0) return "Waiting for PT signatures"
-  if (eodSummary.pending_billing_count > 0) return "Waiting for billing clearance"
+  if (eodSummary.pending_billing_count > 0) return "Waiting for self-pay billing clearance"
   if (!eodSummary.eligible_appointments) return "No active appointments"
   return "Waiting"
 }

@@ -347,25 +347,39 @@
       <div class="space-y-3">
         <IftaLabel>
           <Select
+            v-model="rateForm.serviceCategory"
+            :options="rateCategoryOptions"
+            optionLabel="label"
+            optionValue="value"
+            showClear
+            fluid
+            placeholder="Choose service type"
+            @update:modelValue="onRateCategorySelected"
+          />
+          <label>Service Type</label>
+        </IftaLabel>
+
+        <IftaLabel v-if="rateForm.serviceCategory">
+          <Select
             v-model="rateForm.serviceId"
-            :options="machineRateOptions"
+            :options="filteredRateServiceOptions"
             optionLabel="name"
             optionValue="id"
             showClear
             filter
             fluid
-            placeholder="Select service from catalog (optional)"
+            placeholder="Select service from catalog"
             @update:modelValue="onRateServiceSelected"
           />
-          <label>Catalog Service</label>
+          <label>{{ selectedRateCategoryLabel }} Service</label>
         </IftaLabel>
 
-        <IftaLabel>
-          <InputText v-model="rateForm.serviceName" fluid placeholder="Enter service name" />
-          <label>Service Name</label>
+        <IftaLabel v-if="rateForm.serviceId">
+          <InputText v-model="rateForm.serviceName" fluid disabled />
+          <label>Selected Service</label>
         </IftaLabel>
 
-        <IftaLabel>
+        <IftaLabel v-if="rateForm.serviceId">
           <InputNumber
             v-model="rateForm.rate"
             mode="currency"
@@ -379,7 +393,12 @@
       </div>
       <template #footer>
         <Button label="Cancel" text @click="rateDialogVisible = false" />
-        <Button label="Save Rate" icon="pi pi-check" @click="saveRate" />
+        <Button
+          label="Save Rate"
+          icon="pi pi-check"
+          :disabled="!rateForm.serviceCategory || !rateForm.serviceId"
+          @click="saveRate"
+        />
       </template>
     </Dialog>
 
@@ -401,7 +420,10 @@ import Select from "primevue/select"
 import Tag from "primevue/tag"
 import { useConfirm } from "primevue/useconfirm"
 import { useToast } from "primevue/usetoast"
+import { hmoAddOnRateService, type HmoAddOnType } from "@/services/hmo-add-on-rate.service"
+import { hmoEvaluationRateService } from "@/services/hmo-evaluation-rate.service"
 import { hmoMachineRateService } from "@/services/hmo-machine-rate.service"
+import { hmoTechniqueRateService } from "@/services/hmo-technique-rate.service"
 import { hmoService } from "@/services/hmo.service"
 import { Status } from "@/utils/global.type"
 import { errorToast, successToast } from "@/utils/toast.util"
@@ -434,6 +456,8 @@ interface HmoProfile {
 
 interface HmoPriceListRate {
   serviceId?: string
+  serviceType?: ServiceType
+  addOnType?: HmoAddOnType
   serviceName: string
   rate: number
 }
@@ -479,7 +503,6 @@ const allServices = computed<HmoService[]>(() => [
   ...techniqueServices.value,
   ...customServices.value
 ])
-const machineCatalog = ref<Array<{ id: number; name: string; price: number }>>([])
 const hmoProfiles = ref<HmoProfile[]>([])
 const selectedProfileId = ref<string>()
 const selectedProfileRates = ref<HmoPriceListRate[]>([])
@@ -494,10 +517,12 @@ const profileForm = reactive<{
 })
 
 const rateForm = reactive<{
+  serviceCategory?: ServiceCatalogFilter
   serviceId?: string
   serviceName: string
   rate: number
 }>({
+  serviceCategory: undefined,
   serviceId: undefined,
   serviceName: "",
   rate: 0
@@ -511,12 +536,35 @@ const selectedProfileName = computed(() =>
   activeProfiles.value.find(profile => profile.id === selectedProfileId.value)?.name
 )
 
-const machineRateOptions = computed(() =>
-  machineCatalog.value.map(machine => ({
-    id: String(machine.id),
-    name: machine.name,
-    price: machine.price
-  }))
+const hmoRateOptions = computed(() =>
+  allServices.value
+    .filter(service => service.status !== "Inactive")
+    .map(service => ({
+      id: service.id,
+      name: `${formatType(service.type)} - ${service.name}`,
+      serviceName: service.name,
+      serviceType: service.type,
+      price: service.price
+    }))
+)
+
+const rateCategoryOptions: Array<{ label: string; value: ServiceCatalogFilter }> = [
+  { label: "Machine", value: "machine" },
+  { label: "Technique", value: "technique" },
+  { label: "Evaluation", value: "evaluation" },
+  { label: "Add-On", value: "add-ons" }
+]
+
+const selectedRateCategoryLabel = computed(() =>
+  rateCategoryOptions.find(option => option.value === rateForm.serviceCategory)?.label ?? "Catalog"
+)
+
+const filteredRateServiceOptions = computed(() =>
+  rateForm.serviceCategory
+    ? hmoRateOptions.value.filter(option =>
+        normalizeServiceCatalogFilter(option.serviceType) === rateForm.serviceCategory
+      )
+    : []
 )
 
 const selectedProfileRateMap = computed(() => {
@@ -699,21 +747,6 @@ const loadServices = async (): Promise<void> => {
   }
 }
 
-const loadMachineCatalog = async (): Promise<void> => {
-  try {
-    const context = await serviceCatalogContextTanstackService.fetchContext(queryClient, {scope: "GLOBAL"})
-    machineCatalog.value = (context?.services.machines ?? [])
-      .filter(machine => machine.is_active)
-      .map(machine => ({
-        id: Number(machine.id),
-        name: machine.name,
-        price: Number(machine.price ?? 0)
-      }))
-  } catch {
-    machineCatalog.value = []
-  }
-}
-
 const loadSelectedProfileRates = async (): Promise<void> => {
   if (!selectedProfileId.value) {
     selectedProfileRates.value = []
@@ -727,13 +760,29 @@ const loadSelectedProfileRates = async (): Promise<void> => {
   }
 
   const catalogContext = await serviceCatalogContextTanstackService.fetchContext(queryClient, {scope: "HMO", hmo_id: hmoId})
-  selectedProfileRates.value = (catalogContext?.services.machines ?? [])
-    .filter(machine => machine.hmo_rate != null)
-    .map(machine => ({
-      serviceId: String(machine.id),
-      serviceName: machine.name,
-      rate: Number(machine.hmo_rate)
-    }))
+  const mapRates = (
+    items: ServiceCatalogItem[],
+    serviceType: ServiceType,
+    addOnType?: HmoAddOnType
+  ): HmoPriceListRate[] =>
+    items
+      .filter(item => item.hmo_rate != null)
+      .map(item => ({
+        serviceId: `${serviceType}-${item.id}`,
+        serviceType,
+        addOnType,
+        serviceName: item.name,
+        rate: Number(item.hmo_rate)
+      }))
+
+  selectedProfileRates.value = [
+    ...mapRates(catalogContext?.services.machines ?? [], "machine"),
+    ...mapRates(catalogContext?.services.techniques ?? [], "technique"),
+    ...mapRates(catalogContext?.services.evaluations ?? [], "evaluation"),
+    ...mapRates(catalogContext?.services.add_on_machines ?? [], "add-on-machine", "ADD_ON_MACHINE"),
+    ...mapRates(catalogContext?.services.add_on_techniques ?? [], "add-on-technique", "ADD_ON_TECHNIQUE"),
+    ...mapRates(catalogContext?.services.add_on_home_services ?? [], "add-on-home-service", "ADD_ON_HOME_SERVICE"),
+  ].sort((left, right) => left.serviceName.localeCompare(right.serviceName))
 }
 
 const loadProfilesAndRates = async (): Promise<void> => {
@@ -797,12 +846,99 @@ const getRateServiceLabel = (rate: HmoPriceListRate): string => {
   return rate.serviceName
 }
 
+const hmoAddOnTypeForServiceType = (serviceType: ServiceType): HmoAddOnType | null => {
+  if (serviceType === "add-on-machine") return "ADD_ON_MACHINE"
+  if (serviceType === "add-on-technique") return "ADD_ON_TECHNIQUE"
+  if (serviceType === "add-on-home-service") return "ADD_ON_HOME_SERVICE"
+  return null
+}
+
+const selectedRateService = (serviceId?: string): HmoService | null =>
+  serviceId ? allServices.value.find(service => service.id === serviceId) ?? null : null
+
+const serviceNumericId = (service: HmoService): number => {
+  const prefixes: Record<ServiceType, string> = {
+    machine: "machine-",
+    technique: "technique-",
+    evaluation: "evaluation-",
+    "add-on-machine": "add-on-machine-",
+    "add-on-technique": "add-on-technique-",
+    "add-on-home-service": "add-on-home-service-"
+  }
+  return parseNumericId(service.id, prefixes[service.type])
+}
+
+const serviceNumericIdFromRate = (rate: HmoPriceListRate): number => {
+  const type = rate.serviceType
+  if (!type || !rate.serviceId) return 0
+  const prefixes: Record<ServiceType, string> = {
+    machine: "machine-",
+    technique: "technique-",
+    evaluation: "evaluation-",
+    "add-on-machine": "add-on-machine-",
+    "add-on-technique": "add-on-technique-",
+    "add-on-home-service": "add-on-home-service-"
+  }
+  return parseNumericId(rate.serviceId, prefixes[type])
+}
+
+const saveCustomRateForService = async (hmoId: number, service: HmoService, rate: number): Promise<void> => {
+  const serviceId = serviceNumericId(service)
+  if (!serviceId) throw new Error("Selected service is invalid")
+
+  if (service.type === "machine") {
+    await hmoMachineRateService.upsert(hmoId, serviceId, rate)
+    return
+  }
+  if (service.type === "technique") {
+    await hmoTechniqueRateService.upsert(hmoId, serviceId, rate)
+    return
+  }
+  if (service.type === "evaluation") {
+    await hmoEvaluationRateService.upsert(hmoId, serviceId, rate)
+    return
+  }
+
+  const addOnType = hmoAddOnTypeForServiceType(service.type)
+  if (!addOnType) throw new Error("Selected add-on type is invalid")
+  await hmoAddOnRateService.upsert(hmoId, addOnType, serviceId, rate)
+}
+
+const removeCustomRate = async (hmoId: number, rate: HmoPriceListRate): Promise<void> => {
+  const service = selectedRateService(rate.serviceId)
+  const serviceType = service?.type ?? rate.serviceType
+  const serviceId = service ? serviceNumericId(service) : serviceNumericIdFromRate(rate)
+  if (!serviceId) throw new Error("Selected custom rate cannot be deleted")
+
+  if (serviceType === "machine") {
+    await hmoMachineRateService.remove(hmoId, serviceId)
+    return
+  }
+  if (serviceType === "technique") {
+    await hmoTechniqueRateService.remove(hmoId, serviceId)
+    return
+  }
+  if (serviceType === "evaluation") {
+    await hmoEvaluationRateService.remove(hmoId, serviceId)
+    return
+  }
+
+  const addOnType = rate.addOnType ?? (serviceType ? hmoAddOnTypeForServiceType(serviceType) : null)
+  if (!addOnType) throw new Error("Selected custom rate cannot be deleted")
+  await hmoAddOnRateService.remove(hmoId, addOnType, serviceId)
+}
+
 const onRateServiceSelected = (serviceId?: string): void => {
   if (!serviceId) return
-  const matched = machineCatalog.value.find(service => String(service.id) === serviceId)
+  const matched = allServices.value.find(service => service.id === serviceId)
   if (matched) {
     rateForm.serviceName = matched.name
   }
+}
+
+const onRateCategorySelected = (): void => {
+  rateForm.serviceId = undefined
+  rateForm.serviceName = ""
 }
 
 const openAddRateDialog = (): void => {
@@ -812,6 +948,7 @@ const openAddRateDialog = (): void => {
     return
   }
   editingRateIndex.value = null
+  rateForm.serviceCategory = undefined
   rateForm.serviceId = undefined
   rateForm.serviceName = ""
   rateForm.rate = 0
@@ -821,6 +958,9 @@ const openAddRateDialog = (): void => {
 const openEditRateDialog = (rate: HmoPriceListRate, index: number): void => {
   if (!ensureConfidentialAccess()) return
   editingRateIndex.value = index
+  rateForm.serviceCategory = rate.serviceType
+    ? normalizeServiceCatalogFilter(rate.serviceType)
+    : undefined
   rateForm.serviceId = rate.serviceId
   rateForm.serviceName = rate.serviceName
   rateForm.rate = rate.rate
@@ -835,7 +975,7 @@ const saveRate = async (): Promise<void> => {
   }
 
   if (!rateForm.serviceId) {
-    errorToast(toast, "Select a machine from the catalog")
+    errorToast(toast, "Select a service from the catalog")
     return
   }
 
@@ -849,19 +989,13 @@ const saveRate = async (): Promise<void> => {
     return
   }
 
-  const machineId = Number(rateForm.serviceId)
-  if (!Number.isFinite(machineId) || machineId <= 0) {
-    errorToast(toast, "Selected machine is invalid")
+  const matchedService = selectedRateService(rateForm.serviceId)
+  if (!matchedService) {
+    errorToast(toast, "Selected service is not available")
     return
   }
 
-  const matchedMachine = machineCatalog.value.find(machine => machine.id === machineId)
-  if (!matchedMachine) {
-    errorToast(toast, "Selected machine is not available")
-    return
-  }
-
-  await hmoMachineRateService.upsert(Number(selectedProfileId.value), machineId, Number(rateForm.rate))
+  await saveCustomRateForService(Number(selectedProfileId.value), matchedService, Number(rateForm.rate))
   await invalidateSelectedProfileRates()
   await loadSelectedProfileRates()
   rateDialogVisible.value = false
@@ -876,13 +1010,7 @@ const confirmDeleteRate = (rate: HmoPriceListRate): void => {
     header: "Confirm",
     icon: "pi pi-exclamation-triangle",
     accept: async () => {
-      const machineId = Number(rate.serviceId)
-      if (!Number.isFinite(machineId) || machineId <= 0) {
-        errorToast(toast, "Selected custom rate cannot be deleted")
-        return
-      }
-
-      await hmoMachineRateService.remove(Number(selectedProfileId.value), machineId)
+      await removeCustomRate(Number(selectedProfileId.value), rate)
       await invalidateSelectedProfileRates()
       await loadSelectedProfileRates()
       successToast(toast, "Custom rate deleted")
@@ -953,7 +1081,7 @@ const onSelectPriceListFile = async (event: Event): Promise<void> => {
       return
     }
 
-    const uploadedRates: Array<{ machineId: number; rate: number }> = []
+    const uploadedRates: Array<{ service: HmoService; rate: number }> = []
     let skippedCount = 0
 
     for (let i = 1; i < lines.length; i++) {
@@ -965,13 +1093,13 @@ const onSelectPriceListFile = async (event: Event): Promise<void> => {
         continue
       }
 
-      const service = machineCatalog.value.find(item => item.name.trim().toLowerCase() === serviceName.toLowerCase())
+      const service = allServices.value.find(item => item.name.trim().toLowerCase() === serviceName.toLowerCase())
       if (!service) {
         skippedCount++
         continue
       }
 
-      uploadedRates.push({ machineId: service.id, rate })
+      uploadedRates.push({ service, rate })
     }
 
     if (!uploadedRates.length) {
@@ -981,7 +1109,7 @@ const onSelectPriceListFile = async (event: Event): Promise<void> => {
 
     await Promise.all(
       uploadedRates.map((entry) =>
-        hmoMachineRateService.upsert(Number(selectedProfileId.value), entry.machineId, entry.rate)
+        saveCustomRateForService(Number(selectedProfileId.value), entry.service, entry.rate)
       )
     )
     await invalidateSelectedProfileRates()
@@ -1004,10 +1132,8 @@ const clearSelectedProfilePriceList = async (): Promise<void> => {
   if (!selectedProfileId.value) return
 
   try {
-    const deleteTasks = selectedProfileRates.value
-      .map(rate => Number(rate.serviceId))
-      .filter(machineId => Number.isFinite(machineId) && machineId > 0)
-      .map(machineId => hmoMachineRateService.remove(Number(selectedProfileId.value), machineId))
+    const hmoId = Number(selectedProfileId.value)
+    const deleteTasks = selectedProfileRates.value.map(rate => removeCustomRate(hmoId, rate))
 
     await Promise.all(deleteTasks)
     await invalidateSelectedProfileRates()
@@ -1189,11 +1315,9 @@ onMounted(async () => {
   void loadServices()
   if (canViewConfidentialRates.value) {
     void loadProfilesAndRates()
-    void loadMachineCatalog()
   } else {
     hmoProfiles.value = []
     selectedProfileRates.value = []
-    machineCatalog.value = []
   }
 })
 

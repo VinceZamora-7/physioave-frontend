@@ -1023,6 +1023,8 @@
       :schedule-appointments="availabilityAppointments"
       :is-availability-loading="isAvailabilityLoading"
       @generate-session-dates="generateSessionDates"
+      @add-session-date="addSessionDate"
+      @remove-session-date="removeSessionDate"
       @add-picked-service="addPickedService"
       @remove-selected-service="removeSelectedService"
       @use-last-services="useLastPatientServices"
@@ -1247,6 +1249,7 @@ const formVisible = ref(false);
 const detailsVisible = ref(false);
 const servicesVisible = ref(false);
 const attendanceVisible = ref(false);
+const attendanceLoadToken = ref(0);
 const appointmentBillingVisible = ref(false);
 const tenderVisible = ref(false);
 const rescheduleVisible = ref(false);
@@ -2549,13 +2552,30 @@ const fallbackSessionCountFromSelectedServices = (): number => {
   return Math.max(1, ...selectedServices.value.map(serviceSessionQuantity));
 };
 
-const estimateSessionCountFromSelectedServices = (): number =>
+const usesManualSessionScheduling = (): boolean =>
+  String(form.payer_type ?? "").toUpperCase() === "SELF_PAY_SINGLE";
+
+const explicitScheduledSessionCount = (): number =>
+  Math.max(1, Number(form.session_dates?.length ?? 0) || 1);
+
+const serviceDerivedSessionCount = (): number =>
   Math.max(
     1,
     Number(
       sessionCountPreview.value || fallbackSessionCountFromSelectedServices(),
     ),
-  ) + (form.add_initial_evaluation_appointment ? 1 : 0);
+  );
+
+const estimateSessionCountFromSelectedServices = (): number =>
+  (usesManualSessionScheduling()
+    ? explicitScheduledSessionCount()
+    : serviceDerivedSessionCount()) +
+  (form.add_initial_evaluation_appointment ? 1 : 0);
+
+const targetScheduleDateCount = (): number =>
+  usesManualSessionScheduling()
+    ? explicitScheduledSessionCount()
+    : estimateSessionCountFromSelectedServices();
 
 const adjustedSessionCountPreview = computed(() =>
   estimateSessionCountFromSelectedServices(),
@@ -2643,7 +2663,7 @@ const normalizeUniqueSessionDates = (
 const syncSessionDateCountFromSelectedServices = (): void => {
   if (isSyncingSessionDates.value) return;
 
-  const targetCount = estimateSessionCountFromSelectedServices();
+  const targetCount = targetScheduleDateCount();
   if (!form.starts_at) return;
 
   try {
@@ -2691,7 +2711,7 @@ const generateSessionDates = (
     return;
   }
 
-  const count = estimateSessionCountFromSelectedServices();
+  const count = targetScheduleDateCount();
   const durationMs = getAppointmentDurationMs();
   const dayStep = mode === "DAILY" ? 1 : mode === "EVERY_OTHER_DAY" ? 2 : 7;
   const firstStart = copyTime(
@@ -2731,9 +2751,35 @@ const generateSessionDates = (
   form.ends_at = new Date(form.starts_at.getTime() + durationMs);
 };
 
+const addSessionDate = (): void => {
+  if (!form.starts_at) {
+    errorToast(toast, "Set the first appointment start time first");
+    return;
+  }
+
+  const durationMs = getAppointmentDurationMs();
+  const baseDate = form.session_dates.length
+    ? new Date(form.session_dates[form.session_dates.length - 1])
+    : new Date(form.starts_at);
+  const next = new Date(baseDate);
+  next.setDate(next.getDate() + 7);
+
+  const nextStart = clampAppointmentStartToClinicHours(
+    copyTime(moveToNextClinicOpenDate(next), form.starts_at),
+    durationMs,
+  );
+
+  form.session_dates = [...form.session_dates, nextStart];
+};
+
+const removeSessionDate = (index: number): void => {
+  if (index <= 0 || index >= form.session_dates.length) return;
+  form.session_dates = form.session_dates.filter((_, dateIndex) => dateIndex !== index);
+};
+
 const buildSessionSchedules = (): AppointmentSessionSchedulePayload[] => {
   const durationMs = getAppointmentDurationMs();
-  const targetCount = estimateSessionCountFromSelectedServices();
+  const targetCount = targetScheduleDateCount();
 
   if (!form.starts_at || !form.ends_at) return [];
 
@@ -2784,6 +2830,9 @@ const buildAppointmentPayload = (date: Date): AppointmentCreatePayload => {
     payer_type: form.payer_type,
     credit_account_id: form.credit_account_id,
     root_appointment_id: followUpRootAppointmentId,
+    total_sessions: usesManualSessionScheduling()
+      ? explicitScheduledSessionCount()
+      : serviceDerivedSessionCount(),
     add_initial_evaluation_appointment:
       Boolean(selectedServices.value.length) &&
       !followUpRootAppointmentId &&
@@ -3684,6 +3733,16 @@ const buildAttendanceItems = (
       quantity: remaining > 0 && appointmentConsumed <= 0 ? 1 : 0,
     };
   });
+
+const buildAttendableItems = (
+  planned: AppointmentPlannedService[],
+): AttendanceItem[] =>
+  buildAttendanceItems(planned).filter(
+    (item) =>
+      item.type !== "PACKAGE" &&
+      item.remaining > 0 &&
+      Number(item.appointmentConsumed ?? item.appointment_consumed_quantity ?? 0) <= 0,
+  );
 
 const loadAppointmentFlowSummary = async (
   appointmentId: number,
@@ -4657,23 +4716,31 @@ const openAttendanceDialog = async (
     return;
   }
 
+  const loadToken = attendanceLoadToken.value + 1;
+  attendanceLoadToken.value = loadToken;
   activeAppointment.value = appointment;
   detailFlowSummary.value = null;
+  attendancePlannedServices.value = [];
+  attendanceItems.value = [];
   attendanceVisible.value = true;
 
   try {
     const summary = await loadAppointmentFlowSummary(appointment.id);
+    if (attendanceLoadToken.value !== loadToken) return;
     const planned = summary.planned_services ?? [];
     attendancePlannedServices.value = planned;
-    attendanceItems.value = buildAttendanceItems(planned);
+    attendanceItems.value = buildAttendableItems(planned);
   } catch {
+    if (attendanceLoadToken.value !== loadToken) return;
     try {
       const planned = await appointmentPhase1Service.getPlannedServices(
         appointment.id,
       );
+      if (attendanceLoadToken.value !== loadToken) return;
       attendancePlannedServices.value = planned;
-      attendanceItems.value = buildAttendanceItems(planned);
+      attendanceItems.value = buildAttendableItems(planned);
     } catch {
+      if (attendanceLoadToken.value !== loadToken) return;
       attendancePlannedServices.value = [];
       attendanceItems.value = [];
       errorToast(toast, "Failed to load planned services");
@@ -4709,7 +4776,7 @@ const saveEncounterTicketDraft = async (
     const summary = await loadAppointmentFlowSummary(
       activeAppointment.value.id,
     );
-    attendanceItems.value = buildAttendanceItems(
+    attendanceItems.value = buildAttendableItems(
       summary.planned_services ?? [],
     );
     successToast(toast, "Encounter ticket saved");
@@ -4827,9 +4894,9 @@ const dropOutActiveAppointment = async (reason: string): Promise<void> => {
       },
     );
     applyAppointmentFlowSummary(summary);
-    attendanceItems.value = buildAttendanceItems(
-      summary.planned_services ?? [],
-    );
+      attendanceItems.value = buildAttendableItems(
+        summary.planned_services ?? [],
+      );
     successToast(
       toast,
       dropoutStatus === "CROSS_MONTH_DROPPED_OUT"
@@ -4864,7 +4931,7 @@ const undoDropOutActiveAppointment = async (): Promise<void> => {
       activeAppointment.value.id,
     );
     applyAppointmentFlowSummary(summary);
-    attendanceItems.value = buildAttendanceItems(
+    attendanceItems.value = buildAttendableItems(
       summary.planned_services ?? [],
     );
     successToast(toast, "LGU drop-out status restored");
@@ -4977,6 +5044,18 @@ watch(
   () => form.patient_id,
   (patientId) => {
     void loadSelectedPatientContext(patientId);
+  },
+);
+
+watch(
+  () => attendanceVisible.value,
+  (visible) => {
+    if (visible) return;
+
+    attendanceLoadToken.value += 1;
+    attendancePlannedServices.value = [];
+    attendanceItems.value = [];
+    detailFlowSummary.value = null;
   },
 );
 
