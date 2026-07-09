@@ -172,7 +172,7 @@
                 {{ data.patient_name || "Unnamed patient" }}
               </div>
               <div class="mt-0.5 text-xs opacity-60">
-                Details include planned services
+                Details include services
               </div>
             </button>
             <div v-else>
@@ -314,10 +314,12 @@
       :can-edit="canEditAppointment"
       :can-reschedule="canRescheduleSpecificAppointment(detailAppointment)"
       :can-mark-attendance="canMarkAttendance"
+      :can-manage-services="canEditAppointment"
       :is-billing-action-loading="isBillingActionLoading"
       @edit="editFromDetails"
       @reschedule="rescheduleFromDetails"
       @attendance="openAttendanceFromDetails"
+      @manage-services="openServicesFromDetails"
       @open-billing="openAppointmentBillingDialog"
       @create-self-pay-appointment-bill="
         createSelfPayAppointmentBillFromDetails
@@ -360,61 +362,223 @@
               </p>
             </div>
             <Tag
-              :value="
-                formatBillingPreparationStatus(
-                  detailBillingPreparation.billing_path.status,
-                )
-              "
+              :value="billingPreparationStatusLabel"
               :severity="billingPreparationSeverity"
             />
           </div>
 
-          <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <div class="app-appointment-summary-card">
-              <p class="app-appointment-muted text-xs uppercase tracking-wide">
-                Charge Scope
-              </p>
-              <p class="app-appointment-value mt-1 text-sm font-semibold">
-                {{
-                  formatBillingPreparationStatus(
-                    detailBillingPreparation.billing_path.charge_scope,
-                  )
-                }}
-              </p>
-            </div>
-            <div class="app-appointment-summary-card">
-              <p class="app-appointment-muted text-xs uppercase tracking-wide">
-                Tendering
-              </p>
-              <p class="app-appointment-value mt-1 text-sm font-semibold">
-                {{
-                  detailBillingPreparation.billing_path.requires_tendering
-                    ? "Required"
-                    : "Not required"
-                }}
-              </p>
-            </div>
-            <div class="app-appointment-summary-card">
-              <p class="app-appointment-muted text-xs uppercase tracking-wide">
-                Consumed
-              </p>
-              <p class="app-appointment-value mt-1 text-sm font-semibold">
-                {{ detailBillingPreparation.consumed_services.count }}
-              </p>
-            </div>
-            <div class="app-appointment-summary-card">
-              <p class="app-appointment-muted text-xs uppercase tracking-wide">
-                Prepared Amount
-              </p>
-              <p class="app-appointment-value mt-1 text-sm font-semibold">
-                {{
-                  formatCurrency(
-                    detailBillingPreparation.consumed_services.subtotal,
-                  )
-                }}
-              </p>
+          <div
+            v-if="isPendingAddOnBill"
+            class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+          >
+            <div class="font-semibold">Pending Add-on Bill</div>
+            <div class="mt-1">
+              Add-ons were added after the original bill. Create and tender the add-on bill separately so the existing invoice stays unchanged.
             </div>
           </div>
+
+          <div class="text-sm">
+            <span class="app-appointment-muted">Charge scope:</span>
+            <strong class="ml-1 text-[rgb(var(--app-fg))]">
+              {{
+                formatBillingPreparationStatus(
+                  detailBillingPreparation.billing_path.charge_scope,
+                )
+              }}
+            </strong>
+          </div>
+        </section>
+
+        <section class="space-y-4">
+          <div class="app-appointment-card space-y-3">
+            <div>
+              <h4 class="app-appointment-title text-base">Availed Services</h4>
+              <p class="app-appointment-muted mt-1 text-sm">
+                Package, bundle, or single services attached to this appointment.
+              </p>
+            </div>
+
+            <div
+              v-if="!billingAvailedServices.length"
+              class="rounded-lg border border-dashed border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] px-3 py-4 text-center text-sm text-[rgb(var(--app-fg))]/60"
+            >
+              No availed services found.
+            </div>
+
+            <div v-else class="space-y-2">
+              <div
+                v-for="charge in billingAvailedServices"
+                :key="`availed-${charge.credit_item_id}`"
+                class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] px-3 py-2"
+              >
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div class="min-w-0">
+                    <div class="break-words text-sm font-semibold text-[rgb(var(--app-fg))]">
+                      {{ charge.service_name }}
+                    </div>
+                  </div>
+                  <div class="flex shrink-0 items-center justify-end gap-2">
+                    <button
+                      v-if="hasBillingChargeChildren(charge)"
+                      type="button"
+                      class="inline-flex h-8 items-center rounded-md border border-[rgb(var(--app-border))] bg-white px-2 text-xs font-semibold text-[rgb(var(--app-fg))]/70 transition hover:border-[rgb(var(--app-accent))] hover:text-[rgb(var(--app-accent))]"
+                      :aria-expanded="isBillingChargeExpanded(charge)"
+                      @click="toggleBillingCharge(charge)"
+                    >
+                      {{ isBillingChargeExpanded(charge) ? "Hide included" : "Show included" }}
+                    </button>
+                    <div class="text-right text-sm font-semibold text-[rgb(var(--app-fg))]">
+                      {{ formatCurrency(charge.line_total) }}
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  v-if="hasBillingChargeChildren(charge) && isBillingChargeExpanded(charge)"
+                  class="mt-2 space-y-2 border-t border-[rgb(var(--app-border))] pt-2"
+                >
+                  <div
+                    v-for="child in charge.children"
+                    :key="`availed-${charge.credit_item_id}-child-${child.credit_item_id}`"
+                    class="rounded-md bg-white px-3 py-2"
+                  >
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div class="min-w-0">
+                        <div class="break-words text-sm font-medium text-[rgb(var(--app-fg))]">
+                          {{ child.service_name }}
+                        </div>
+                      </div>
+                      <div class="flex shrink-0 items-center justify-end gap-2">
+                        <button
+                          v-if="hasBillingChargeChildren(child)"
+                          type="button"
+                          class="inline-flex h-7 items-center rounded-md border border-[rgb(var(--app-border))] bg-white px-2 text-xs font-semibold text-[rgb(var(--app-fg))]/70 transition hover:border-[rgb(var(--app-accent))] hover:text-[rgb(var(--app-accent))]"
+                          :aria-expanded="isBillingChargeExpanded(child)"
+                          @click="toggleBillingCharge(child)"
+                        >
+                          {{ isBillingChargeExpanded(child) ? "Hide included" : "Show included" }}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div
+                      v-if="hasBillingChargeChildren(child) && isBillingChargeExpanded(child)"
+                      class="mt-2 space-y-1 border-t border-[rgb(var(--app-border))] pt-2"
+                    >
+                      <div
+                        v-for="grandchild in child.children"
+                        :key="`availed-${child.credit_item_id}-child-${grandchild.credit_item_id}`"
+                        class="flex flex-col gap-1 rounded-md bg-[rgb(var(--app-bg-soft))] px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div class="min-w-0">
+                          <div class="break-words text-sm font-medium text-[rgb(var(--app-fg))]">
+                            {{ grandchild.service_name }}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+<div class="app-appointment-card divide-y divide-[rgb(var(--app-border))] rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] shadow-sm">
+
+  <!-- Header Section -->
+  <div class="p-4 sm:p-5">
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div class="space-y-1">
+        <h4 class="text-base font-semibold text-[rgb(var(--app-fg))]">Add-ons</h4>
+        <p class="max-w-xl text-sm leading-relaxed text-[rgb(var(--app-fg))]/60">
+          Optional services added outside the base package, bundle, or single service.
+        </p>
+      </div>
+
+      <!-- Actions: Forced side-by-side with flex-row and nowrap -->
+      <div class="flex flex-row items-center gap-2 flex-nowrap self-start sm:self-auto">
+        <Button
+          :label="shouldShowBillingAddOns ? 'Hide' : 'Show'"
+          :icon="shouldShowBillingAddOns ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
+          size="small"
+          severity="secondary"
+          text
+          class="!px-3 whitespace-nowrap"
+          @click="showBillingAddOns = !shouldShowBillingAddOns"
+        >
+          <!-- Optional: Visual badge counting current items inside the toggle button -->
+          <span v-if="billingAddOns.length" class="ml-1.5 inline-flex h-5 items-center justify-center rounded-full bg-[rgb(var(--app-fg))]/10 px-1.5 text-xs font-medium text-[rgb(var(--app-fg))]">
+            {{ billingAddOns.length }}
+          </span>
+        </Button>
+
+        <Button
+          label="Add Add-ons"
+          icon="pi pi-plus"
+          size="small"
+          class="whitespace-nowrap"
+          :pt="ptPrimaryBtn"
+          @click="openAddOnsFromBillingDialog"
+        />
+      </div>
+    </div>
+  </div>
+
+  <!-- Content Section -->
+  <div v-if="shouldShowBillingAddOns" class="bg-[rgb(var(--app-bg-soft))]/30 p-4 sm:p-5">
+
+    <!-- Empty State -->
+    <div
+      v-if="!billingAddOns.length"
+      class="flex flex-col items-center justify-center rounded-xl border border-dashed border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] py-8 px-4 text-center"
+    >
+      <i class="pi pi-box mb-2 text-xl text-[rgb(var(--app-fg))]/40"></i>
+      <p class="text-sm font-medium text-[rgb(var(--app-fg))]/70">No add-ons added yet</p>
+      <p class="mt-0.5 text-xs text-[rgb(var(--app-fg))]/50">Click "Add Add-ons" to include extra services.</p>
+    </div>
+
+    <!-- Add-ons List -->
+    <div v-else class="space-y-2.5">
+      <div
+        v-for="charge in billingAddOns"
+        :key="`addon-${charge.credit_item_id}`"
+        class="group relative flex items-center justify-between gap-4 rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg))] p-3.5 transition-all hover:border-[rgb(var(--app-fg))]/20 hover:shadow-sm"
+      >
+        <div class="min-w-0 flex-1 space-y-1">
+          <div class="truncate text-sm font-semibold text-[rgb(var(--app-fg))]">
+            {{ charge.service_name }}
+          </div>
+          <div class="text-xs text-[rgb(var(--app-fg))]/60">
+            <span class="inline-flex items-center rounded bg-[rgb(var(--app-fg))]/5 px-1.5 py-0.5 font-medium text-[rgb(var(--app-fg))]/80">
+              Qty {{ charge.quantity }}
+            </span>
+            <span class="mx-1.5 text-[rgb(var(--app-fg))]/30">×</span>
+            <span>{{ formatCurrency(charge.unit_price) }}</span>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <div class="text-right text-sm font-bold text-[rgb(var(--app-fg))]">
+            {{ formatCurrency(charge.line_total) }}
+          </div>
+          <Button
+            icon="pi pi-trash"
+            text
+            rounded
+            severity="danger"
+            size="small"
+            :aria-label="`Remove ${charge.service_name}`"
+            :title="`Remove ${charge.service_name}`"
+            :disabled="deletingAddOnCreditItemId === charge.credit_item_id || isBillingActionLoading"
+            :loading="deletingAddOnCreditItemId === charge.credit_item_id"
+            @click="confirmDeleteBillingAddOn(charge)"
+          />
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
         </section>
 
         <section class="app-appointment-card space-y-3">
@@ -423,9 +587,6 @@
           >
             <div>
               <h4 class="app-appointment-title text-base">Billing Actions</h4>
-              <p class="app-appointment-muted mt-1 text-sm">
-                Create, tender, or print the appointment invoice.
-              </p>
             </div>
           </div>
 
@@ -506,39 +667,145 @@
             </div>
           </div>
 
+          <div
+            v-if="
+              detailBillingPreparation.billing_path.payer_type ===
+                'SELF_PAY_SINGLE' ||
+              detailBillingPreparation.billing_path.payer_type ===
+                'SELF_PAY_PACKAGE'
+            "
+            class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3"
+          >
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h4 class="app-appointment-title text-base">Discount</h4>
+                <p class="app-appointment-muted mt-1 text-sm">
+                  Senior/PWD and custom discount adjustments.
+                </p>
+              </div>
+              <Button
+                :label="shouldShowTenderDiscount ? 'Hide discount' : 'Show discount'"
+                :icon="shouldShowTenderDiscount ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
+                size="small"
+                severity="secondary"
+                outlined
+                @click="showTenderDiscount = !shouldShowTenderDiscount"
+              />
+            </div>
+
+            <div v-if="shouldShowTenderDiscount" class="mt-3 space-y-3">
+              <div class="flex items-start gap-2">
+                <input
+                  id="billing-senior-pwd"
+                  v-model="tenderForm.senior_pwd_id_presented"
+                  type="checkbox"
+                  class="mt-1"
+                  :disabled="isTenderDiscountLocked"
+                />
+                <label
+                  for="billing-senior-pwd"
+                  class="text-sm font-semibold text-[rgb(var(--app-fg))]"
+                >
+                  Senior / PWD ID presented
+                  <span
+                    class="block text-xs font-normal text-[rgb(var(--app-fg))]/60"
+                    >Applies 20% privilege discount before custom discount.</span
+                  >
+                </label>
+              </div>
+
+              <InputText
+                v-if="tenderForm.senior_pwd_id_presented"
+                v-model="tenderForm.senior_pwd_id_reference"
+                class="w-full"
+                placeholder="Senior/PWD ID reference"
+                :disabled="isTenderDiscountLocked"
+              />
+
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div class="space-y-1">
+                  <label
+                    class="app-appointment-muted text-xs font-semibold uppercase tracking-wide"
+                    >Custom Discount</label
+                  >
+                  <Select
+                    v-model="tenderForm.custom_discount_type"
+                    :options="discountTypeOptions"
+                    optionLabel="label"
+                    optionValue="value"
+                    placeholder="No custom discount"
+                    showClear
+                    class="w-full"
+                    :disabled="isTenderDiscountLocked"
+                  />
+                </div>
+                <div class="space-y-1">
+                  <label
+                    class="app-appointment-muted text-xs font-semibold uppercase tracking-wide"
+                    >Discount Value</label
+                  >
+                  <InputNumber
+                    v-model="tenderForm.custom_discount_value"
+                    class="w-full"
+                    :min="0"
+                    :suffix="
+                      tenderForm.custom_discount_type === 'PERCENTAGE'
+                        ? '%'
+                        : undefined
+                    "
+                    mode="decimal"
+                    :disabled="isTenderDiscountLocked"
+                  />
+                </div>
+              </div>
+
+              <div
+                v-if="tenderDiscountSummary.discount > 0"
+                class="rounded-md bg-white px-3 py-2 text-sm"
+              >
+                <span class="app-appointment-muted">Estimated discount:</span>
+                <strong class="ml-1 text-orange-500">
+                  {{ formatCurrency(tenderDiscountSummary.discount) }}
+                </strong>
+              </div>
+
+              <div
+                v-if="savedTenderDiscount > 0"
+                class="flex flex-col gap-2 rounded-md bg-white px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
+              >
+                <span class="text-[rgb(var(--app-fg))]/70">
+                  Saved discount: <strong>{{ formatCurrency(savedTenderDiscount) }}</strong>
+                </span>
+                <Button
+                  label="Remove discount"
+                  icon="pi pi-times"
+                  size="small"
+                  severity="danger"
+                  text
+                  :disabled="isTenderDiscountLocked || isBillingActionLoading"
+                  :loading="isBillingActionLoading"
+                  @click="removeSavedTenderDiscount"
+                />
+              </div>
+
+              <div
+                v-if="isTenderDiscountLocked"
+                class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800"
+              >
+                Discount is locked because payment has already been tendered.
+              </div>
+            </div>
+          </div>
+
           <div class="flex flex-wrap gap-2">
             <Button
               v-if="tenderableBillingDocument"
               label="Tender Payment"
               icon="pi pi-credit-card"
               size="small"
-              severity="success"
               :loading="isBillingActionLoading"
+              :pt="ptPrimaryBtn"
               @click="openTenderFromBillingDialog"
-            />
-            <Button
-              v-if="
-                detailBillingPreparation.billing_path.action ===
-                'CREATE_SELF_PAY_APPOINTMENT_BILL'
-              "
-              label="Create Bill / Tender"
-              icon="pi pi-wallet"
-              size="small"
-              :loading="isBillingActionLoading"
-              :pt="ptPrimaryBtn"
-              @click="createSelfPayAppointmentBillFromDetails"
-            />
-            <Button
-              v-if="
-                detailBillingPreparation.billing_path.action ===
-                'CREATE_SELF_PAY_PACKAGE_BILL'
-              "
-              label="Create Package Bill"
-              icon="pi pi-box"
-              size="small"
-              :loading="isBillingActionLoading"
-              :pt="ptPrimaryBtn"
-              @click="createSelfPayPackageBillFromDetails"
             />
             <Button
               v-if="
@@ -593,10 +860,16 @@
             v-if="tenderableBillingDocument"
             class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] px-3 py-2 text-sm"
           >
-            <span class="app-appointment-muted">Open balance:</span>
+            <span class="app-appointment-muted">Amount due:</span>
             <strong class="ml-1">{{
-              formatCurrency(tenderableBillingDocument.totals.balance)
+              formatCurrency(tenderDiscountSummary.amountDue)
             }}</strong>
+            <span
+              v-if="tenderDiscountSummary.discount > 0"
+              class="ml-2 text-orange-500"
+            >
+              after {{ formatCurrency(tenderDiscountSummary.discount) }} discount
+            </span>
             <span class="ml-2 text-[rgb(var(--app-fg))]/50">
               {{
                 tenderableBillingDocument.document_number ||
@@ -660,17 +933,23 @@
                 Total
               </p>
               <p class="app-appointment-value font-semibold">
-                {{ formatCurrency(tenderBillingDocument.totals.total) }}
+                {{ formatCurrency(tenderDiscountSummary.totalAfterDiscount) }}
               </p>
             </div>
             <div>
               <p class="app-appointment-muted text-xs uppercase tracking-wide">
-                Balance
+                Amount Due
               </p>
               <p class="app-appointment-value font-semibold">
-                {{ formatCurrency(tenderBillingDocument.totals.balance) }}
+                {{ formatCurrency(tenderDiscountSummary.amountDue) }}
               </p>
             </div>
+          </div>
+          <div
+            v-if="tenderDiscountSummary.discount > 0"
+            class="rounded-md bg-white px-3 py-2 text-sm text-orange-600"
+          >
+            Discount applied: {{ formatCurrency(tenderDiscountSummary.discount) }}
           </div>
         </section>
 
@@ -688,8 +967,8 @@
               class="w-full"
               inputClass="tender-amount-input"
               :min="0"
-              :minFractionDigits="0"
-              :maxFractionDigits="0"
+              :minFractionDigits="2"
+              :maxFractionDigits="2"
               @focus="selectNumericInputText"
             />
           </div>
@@ -710,135 +989,40 @@
           </div>
         </div>
 
-        <section class="app-appointment-card space-y-3">
-          <div class="flex items-start gap-2">
-            <input
-              id="tender-senior-pwd"
-              v-model="tenderForm.senior_pwd_id_presented"
-              type="checkbox"
-              class="mt-1"
-            />
-            <label
-              for="tender-senior-pwd"
-              class="text-sm font-semibold text-[rgb(var(--app-fg))]"
-            >
-              Senior / PWD ID presented
-              <span
-                class="block text-xs font-normal text-[rgb(var(--app-fg))]/60"
-                >Applies 20% privilege discount before custom discount.</span
-              >
-            </label>
-          </div>
-
-          <InputText
-            v-if="tenderForm.senior_pwd_id_presented"
-            v-model="tenderForm.senior_pwd_id_reference"
-            class="w-full"
-            placeholder="Senior/PWD ID reference"
-          />
-
-          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div class="space-y-1">
-              <label
-                class="app-appointment-muted text-xs font-semibold uppercase tracking-wide"
-                >Custom Discount</label
-              >
-              <Select
-                v-model="tenderForm.custom_discount_type"
-                :options="discountTypeOptions"
-                optionLabel="label"
-                optionValue="value"
-                placeholder="No custom discount"
-                showClear
-                class="w-full"
-              />
-            </div>
-            <div class="space-y-1">
-              <label
-                class="app-appointment-muted text-xs font-semibold uppercase tracking-wide"
-                >Discount Value</label
-              >
-              <InputNumber
-                v-model="tenderForm.custom_discount_value"
-                class="w-full"
-                :min="0"
-                :suffix="
-                  tenderForm.custom_discount_type === 'PERCENTAGE'
-                    ? '%'
-                    : undefined
-                "
-                mode="decimal"
-              />
-            </div>
-          </div>
-
-          <div class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-4">
-            <div>
-              <p class="app-appointment-muted text-xs uppercase tracking-wide">
-                Estimated Discount
-              </p>
-              <p class="font-semibold text-orange-500">
-                {{ formatCurrency(tenderDiscountSummary.discount) }}
-              </p>
-            </div>
-            <div>
-              <p class="app-appointment-muted text-xs uppercase tracking-wide">
-                Amount Due
-              </p>
-              <p class="app-appointment-value font-semibold">
-                {{ formatCurrency(tenderDiscountSummary.amountDue) }}
-              </p>
-            </div>
-            <div>
-              <p class="app-appointment-muted text-xs uppercase tracking-wide">
-                Applied
-              </p>
-              <p class="app-appointment-value font-semibold">
-                {{ formatCurrency(tenderDiscountSummary.applied) }}
-              </p>
-            </div>
-            <div>
-              <p class="app-appointment-muted text-xs uppercase tracking-wide">
-                Change
-              </p>
-              <p class="font-semibold text-green-600">
-                {{ formatCurrency(tenderDiscountSummary.change) }}
-              </p>
-            </div>
-          </div>
-
-          <div
-            v-if="tenderDiscountSummary.applied > 0 && tenderDiscountSummary.remainingAfter > 0"
-            class="text-xs text-orange-600 dark:text-orange-400"
-          >
-            Partial payment - remaining {{ formatCurrency(tenderDiscountSummary.remainingAfter) }}
-          </div>
-        </section>
-
-        <div class="space-y-1">
+        <div v-if="isEWalletPaymentMethod" class="space-y-1">
           <label
             class="app-appointment-muted text-xs font-semibold uppercase tracking-wide"
-            >Reference</label
+            >Reference Number</label
           >
           <InputText
             v-model="tenderForm.payment_reference"
             class="w-full"
-            placeholder="Optional reference number"
+            placeholder="Required for e-wallet payments"
           />
         </div>
 
-        <div class="space-y-1">
-          <label
-            class="app-appointment-muted text-xs font-semibold uppercase tracking-wide"
-            >Notes</label
-          >
+        <section class="app-appointment-card space-y-3">
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h4 class="app-appointment-title text-base">Notes</h4>
+            </div>
+            <Button
+              :label="shouldShowTenderNotes ? 'Hide notes' : 'Show notes'"
+              :icon="shouldShowTenderNotes ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
+              size="small"
+              severity="secondary"
+              outlined
+              @click="showTenderNotes = !shouldShowTenderNotes"
+            />
+          </div>
           <Textarea
+            v-if="shouldShowTenderNotes"
             v-model="tenderForm.notes"
             class="w-full"
             rows="3"
             autoResize
           />
-        </div>
+        </section>
       </div>
 
       <template #footer>
@@ -1037,7 +1221,7 @@
       :appointment="activeAppointment"
       :selected-services="selectedServices"
       :planned-services="servicesModalPlannedServices"
-      :service-type-options="serviceTypeOptions"
+      :service-type-options="plannedServicesModalServiceTypeOptions"
       :service-picker="servicePicker"
       :current-service-options="currentServiceOptions"
       :is-saving="isSavingServices"
@@ -1082,7 +1266,9 @@ import Select from "primevue/select";
 import Tag from "primevue/tag";
 import Textarea from "primevue/textarea";
 import { useToast } from "primevue/usetoast";
+import { useConfirm } from "primevue/useconfirm";
 import { useRouter } from "vue-router";
+import { useQueryClient } from "@tanstack/vue-query";
 import AppointmentScheduleCalendar from "@/features/appointments/components/AppointmentScheduleCalendar.vue";
 import AppointmentDetailsModal from "@/features/appointments/components/AppointmentDetailsModal.vue";
 import AppointmentForm from "@/features/appointments/components/AppointmentForm.vue";
@@ -1091,6 +1277,7 @@ import AttendanceModal from "@/features/appointments/components/AttendanceModal.
 import {
   appointmentBillingService,
   type AppointmentBillingDocument,
+  type AppointmentBillingPreparedCharge,
   type PaymentMethodLookup,
   type AppointmentBillingPreparation,
 } from "@/features/appointments/api/appointment-billing.service";
@@ -1122,6 +1309,7 @@ import { getApiErrorMessage } from "@/utils/actionable-error.util";
 import { pamsAPI } from "@/utils/axios-interceptor";
 import { errorHandler } from "@/utils/error-handler";
 import { Status } from "@/utils/global.type";
+import { BillingTanstackKey } from "@/utils/keys/tanstack-key";
 import { errorToast, successToast } from "@/utils/toast.util";
 import { isPtAppointmentProvider } from "@/utils/appointment-provider.util";
 
@@ -1189,7 +1377,9 @@ type SponsorEligibilityItem = {
 };
 
 const toast = useToast();
+const confirm = useConfirm();
 const router = useRouter();
+const queryClient = useQueryClient();
 const branchStore = clinicStore();
 const authSession = useAuthSessionStore();
 
@@ -1244,6 +1434,7 @@ const isTenderSaving = ref(false);
 const isPaymentMethodsLoading = ref(false);
 const isRescheduling = ref(false);
 const isCopyingLastServices = ref(false);
+const deletingAddOnCreditItemId = ref<number | null>(null);
 
 const formVisible = ref(false);
 const detailsVisible = ref(false);
@@ -1253,6 +1444,9 @@ const attendanceLoadToken = ref(0);
 const appointmentBillingVisible = ref(false);
 const tenderVisible = ref(false);
 const rescheduleVisible = ref(false);
+const showBillingAddOns = ref<boolean | null>(null);
+const showTenderDiscount = ref<boolean | null>(null);
+const showTenderNotes = ref<boolean | null>(null);
 
 const editingId = ref<number | null>(null);
 const activeAppointment = ref<AppointmentListItem | null>(null);
@@ -1298,6 +1492,7 @@ const globalServiceCatalog = ref<AppointmentServiceCatalog>(
   emptyServiceCatalog(),
 );
 const lguServiceCatalog = ref<AppointmentServiceCatalog>(emptyServiceCatalog());
+const hmoServiceCatalogs = ref<Map<number, AppointmentServiceCatalog>>(new Map());
 
 const selectedServices = ref<SelectedService[]>([]);
 const detailFlowSummary = ref<AppointmentFlowSummary | null>(null);
@@ -1305,6 +1500,8 @@ const detailPlannedServices = ref<AppointmentPlannedService[]>([]);
 const detailBillingPreparation = ref<AppointmentBillingPreparation | null>(
   null,
 );
+const billingPreviewDocument = ref<AppointmentBillingDocument | null>(null);
+const expandedBillingChargeIds = ref<Set<number>>(new Set());
 const tenderBillingDocument = ref<AppointmentBillingDocument | null>(null);
 const paymentMethods = ref<PaymentMethodLookup[]>([]);
 const servicesModalPlannedServices = ref<AppointmentPlannedService[]>([]);
@@ -1494,6 +1691,12 @@ const homeCareAddOnTypes = new Set<AppointmentServiceSelectionType>([
   "ADD_ON_HOME_SERVICE",
 ]);
 
+const addOnServiceTypes = new Set<AppointmentServiceSelectionType>([
+  "ADD_ON_MACHINE",
+  "ADD_ON_TECHNIQUE",
+  "ADD_ON_HOME_SERVICE",
+]);
+
 const getAllowedServiceTypes = (
   billingType?: PayerType | null,
 ): AppointmentServiceSelectionType[] =>
@@ -1542,6 +1745,19 @@ const hasActiveHmoSponsor = computed(() =>
     (info) => String(info.sponsor_context ?? "").toUpperCase() === "HMO",
   ),
 );
+
+const activeHmoSponsorInfo = computed(() =>
+  activeSponsorInfos.value.find(
+    (info) =>
+      String(info.sponsor_context ?? "").toUpperCase() === "HMO" &&
+      Number(info.hmo_id ?? 0) > 0,
+  ) ?? null,
+);
+
+const activeHmoSponsorId = computed(() => {
+  const hmoId = Number(activeHmoSponsorInfo.value?.hmo_id ?? 0);
+  return hmoId > 0 ? hmoId : null;
+});
 
 const hasActiveLguSponsor = computed(() =>
   activeSponsorInfos.value.some(
@@ -1708,7 +1924,16 @@ const ptOptions = computed(() =>
         option.providerType === "INTERN" ||
         option.secondaryProviderType === "PHYSICAL_THERAPIST" ||
         option.secondaryProviderType === "PT_ASSISTANT" ||
-        option.secondaryProviderType === "INTERN"),
+      option.secondaryProviderType === "INTERN"),
+  ),
+);
+
+const physicalTherapistOptions = computed(() =>
+  staffOptions.value.filter(
+    (option) =>
+      isOptionInFormBranch(option) &&
+      (option.providerType === "PHYSICAL_THERAPIST" ||
+        option.secondaryProviderType === "PHYSICAL_THERAPIST"),
   ),
 );
 
@@ -1723,7 +1948,7 @@ const doctorOptions = computed(() =>
 
 const ptFilterOptions = computed<Array<SelectOption>>(() => [
   { label: "All PT", value: null },
-  ...ptOptions.value,
+  ...physicalTherapistOptions.value,
 ]);
 
 const currentServiceBillingType = computed(() =>
@@ -1731,6 +1956,25 @@ const currentServiceBillingType = computed(() =>
     ? (activeAppointment.value?.payer_type as PayerType | null)
     : form.payer_type,
 );
+
+const currentServiceHmoId = computed(() => {
+  if (currentServiceBillingType.value !== "HMO") return null;
+
+  const appointmentHmoId = Number((activeAppointment.value as any)?.hmo_id ?? 0);
+  if (servicesVisible.value && appointmentHmoId > 0) return appointmentHmoId;
+
+  const contextPatientId = Number(selectedPatientContext.value?.patient?.id ?? 0);
+  const activeAppointmentPatientId = Number((activeAppointment.value as any)?.patient_id ?? 0);
+  if (
+    servicesVisible.value &&
+    activeAppointmentPatientId > 0 &&
+    contextPatientId !== activeAppointmentPatientId
+  ) {
+    return null;
+  }
+
+  return activeHmoSponsorId.value;
+});
 
 const serviceTypeOptions = computed(() => {
   const allowed = new Set(
@@ -1742,10 +1986,20 @@ const serviceTypeOptions = computed(() => {
   );
 });
 
+const plannedServicesModalServiceTypeOptions = computed(() => {
+  if (!activeAppointment.value?.credit_account_id) return serviceTypeOptions.value;
+
+  return serviceTypeOptions.value.filter((option) =>
+    addOnServiceTypes.has(option.value),
+  );
+});
+
 const currentServiceCatalog = computed(() =>
   currentServiceBillingType.value === "LGU"
     ? lguServiceCatalog.value
-    : globalServiceCatalog.value,
+    : currentServiceBillingType.value === "HMO" && currentServiceHmoId.value
+      ? hmoServiceCatalogs.value.get(currentServiceHmoId.value) ?? emptyServiceCatalog()
+      : globalServiceCatalog.value,
 );
 
 const currentServiceOptions = computed(() => {
@@ -1804,6 +2058,26 @@ const paymentMethodOptions = computed<SelectOption[]>(() =>
     value: method.id,
   })),
 );
+
+const selectedPaymentMethod = computed(() =>
+  paymentMethods.value.find(
+    (method) => Number(method.id) === Number(tenderForm.payment_method_id),
+  ) ?? null,
+);
+
+const isEWalletPaymentMethod = computed(() => {
+  const name = String(selectedPaymentMethod.value?.name ?? "")
+    .trim()
+    .toLowerCase();
+  return (
+    name.includes("e-wallet") ||
+    name.includes("ewallet") ||
+    name.includes("gcash") ||
+    name.includes("maya") ||
+    name.includes("paymaya") ||
+    name.includes("online")
+  );
+});
 
 const combineDateAndTime = (dateValue: Date | null, timeValue: Date | null): Date | null => {
   if (!dateValue || !timeValue) return null;
@@ -1880,30 +2154,38 @@ const rescheduleClinicWarning = computed(() => {
   return withinClinicHours ? "" : `Choose a time within ${clinicHoursLabel}.`;
 });
 
-const largestTenderLineTotal = (
-  lines: AppointmentBillingDocument["lines"] = [],
-): number =>
-  lines.reduce(
-    (max, line) =>
-      Math.max(
-        max,
-        Number(line.line_total ?? 0),
-        largestTenderLineTotal(line.children),
-      ),
-    0,
+const activeTenderDocument = computed<AppointmentBillingDocument | null>(
+  () =>
+    tenderBillingDocument.value ??
+    billingPreviewDocument.value ??
+    tenderableBillingDocument.value,
+);
+
+const savedTenderDiscount = computed(() =>
+  Math.max(0, Number(activeTenderDocument.value?.totals.discount ?? 0)),
+);
+
+const isTenderDiscountLocked = computed(() => {
+  const document = activeTenderDocument.value;
+  if (!document) return false;
+  const status = normalizeBillingDocumentStatus(document.document_status);
+  return (
+    Number(document.totals.paid ?? 0) > 0 ||
+    status === "PAID" ||
+    status === "PARTIALLY_PAID" ||
+    status === "SETTLED"
   );
+});
 
 const tenderDiscountSummary = computed(() => {
-  const document = tenderBillingDocument.value;
+  const document = activeTenderDocument.value;
   const subtotal = Number(
     document?.totals.subtotal ?? document?.totals.total ?? 0,
   );
   const paid = Number(document?.totals.paid ?? 0);
   const existingDiscount = Number(document?.totals.discount ?? 0);
-  const seniorTargetAmount =
-    largestTenderLineTotal(document?.lines) || subtotal;
   const seniorDiscount = tenderForm.senior_pwd_id_presented
-    ? Math.max(0, seniorTargetAmount * 0.2)
+    ? Math.max(0, subtotal * 0.2)
     : 0;
   const remainingAfterSenior = Math.max(0, subtotal - seniorDiscount);
   const customValue = Number(tenderForm.custom_discount_value ?? 0);
@@ -1924,12 +2206,31 @@ const tenderDiscountSummary = computed(() => {
   const applied = Math.min(amountDue, Math.max(0, amountTendered));
   return {
     discount,
+    totalAfterDiscount,
     amountDue,
     applied,
     remainingAfter: Math.max(0, amountDue - applied),
     change: Math.max(0, amountTendered - amountDue),
   };
 });
+
+const hasTenderDiscountValues = computed(
+  () =>
+    tenderForm.senior_pwd_id_presented ||
+    Boolean(tenderForm.senior_pwd_id_reference.trim()) ||
+    Boolean(tenderForm.custom_discount_type) ||
+    Number(tenderForm.custom_discount_value ?? 0) > 0,
+);
+
+const shouldShowTenderDiscount = computed(
+  () =>
+    showTenderDiscount.value ??
+    (hasTenderDiscountValues.value || savedTenderDiscount.value > 0),
+);
+
+const shouldShowTenderNotes = computed(
+  () => showTenderNotes.value ?? Boolean(tenderForm.notes.trim()),
+);
 
 const pendingStatusOption = computed(
   () =>
@@ -2150,6 +2451,9 @@ const billingPreparationSeverity = computed<
 >(() => {
   const preparation = detailBillingPreparation.value;
   if (!preparation) return "info";
+  if (isAddOnBillingPreparationStatus(preparation.billing_path.status)) {
+    return "warn";
+  }
   if (preparation.billing_path.documentation_only) return "info";
   if (
     preparation.billing_path.requires_tendering ||
@@ -2157,6 +2461,91 @@ const billingPreparationSeverity = computed<
   )
     return "warn";
   return "success";
+});
+
+const isPendingAddOnBill = computed(() =>
+  isAddOnBillingPreparationStatus(
+    detailBillingPreparation.value?.billing_path.status,
+  ),
+);
+
+const billingPreparationStatusLabel = computed(() =>
+  isPendingAddOnBill.value
+    ? "Pending Add-on Bill"
+    : formatBillingPreparationStatus(
+        detailBillingPreparation.value?.billing_path.status,
+      ),
+);
+
+const billingAvailedServices = computed<AppointmentBillingPreparedCharge[]>(
+  () => detailBillingPreparation.value?.availed_services ?? [],
+);
+
+const billingAddOns = computed<AppointmentBillingPreparedCharge[]>(
+  () => detailBillingPreparation.value?.add_ons ?? [],
+);
+
+const shouldShowBillingAddOns = computed(
+  () => showBillingAddOns.value ?? billingAddOns.value.length > 0,
+);
+
+const formatBillingChargeType = (value?: string | null): string =>
+  formatBillingPreparationStatus(value);
+
+const isAddOnBillingPreparationStatus = (value?: string | null): boolean =>
+  [
+    "ADD_ONS_READY_FOR_TENDER",
+    "APPOINTMENT_ADD_ONS_READY_FOR_TENDER",
+  ].includes(normalizeTextToken(value));
+
+const isAddOnBillingPricingSource = (value?: string | null): boolean =>
+  ["PACKAGE_ADD_ON_CHARGE", "APPOINTMENT_ADD_ON_CHARGE"].includes(
+    normalizeTextToken(value),
+  );
+
+const hasBillingChargeChildren = (
+  charge: AppointmentBillingPreparedCharge,
+): boolean => (charge.children?.length ?? 0) > 0;
+
+const isBillingChargeExpanded = (
+  charge: AppointmentBillingPreparedCharge,
+): boolean => expandedBillingChargeIds.value.has(Number(charge.credit_item_id));
+
+const toggleBillingCharge = (charge: AppointmentBillingPreparedCharge): void => {
+  const chargeId = Number(charge.credit_item_id);
+  const nextExpandedIds = new Set(expandedBillingChargeIds.value);
+
+  if (nextExpandedIds.has(chargeId)) {
+    nextExpandedIds.delete(chargeId);
+  } else {
+    nextExpandedIds.add(chargeId);
+  }
+
+  expandedBillingChargeIds.value = nextExpandedIds;
+};
+
+const billingIncludedServiceCount = (
+  charge: AppointmentBillingPreparedCharge,
+): number =>
+  (charge.children ?? []).reduce(
+    (total, child) =>
+      total + (hasBillingChargeChildren(child) ? billingIncludedServiceCount(child) : 1),
+    0,
+  );
+
+const billingChargeMetaLabel = (
+  charge: AppointmentBillingPreparedCharge,
+): string => {
+  if (hasBillingChargeChildren(charge)) {
+    const count = billingIncludedServiceCount(charge);
+    return `${formatBillingChargeType(charge.line_type)} - ${count} included`;
+  }
+
+  return `Qty ${charge.quantity} x ${formatCurrency(charge.unit_price)}`;
+};
+
+watch(detailBillingPreparation, () => {
+  expandedBillingChargeIds.value = new Set();
 });
 
 const tenderableBillingDocument = computed<AppointmentBillingDocument | null>(
@@ -2169,14 +2558,18 @@ const tenderableBillingDocument = computed<AppointmentBillingDocument | null>(
     )
       return null;
 
+    const shouldTenderAddOnBill = isAddOnBillingPreparationStatus(
+      preparation.billing_path.status,
+    );
     const document = preparation.existing_documents.find(
       (existing) =>
         ["APPOINTMENT_INVOICE", "PACKAGE_INVOICE"].includes(
           existing.document_type,
         ) &&
-        !["PAID", "VOID", "CANCELLED"].includes(
-          String(existing.document_status).toUpperCase(),
-        ) &&
+        (!shouldTenderAddOnBill ||
+          isAddOnBillingPricingSource(existing.pricing_source)) &&
+        !isVoidBillingDocumentStatus(existing.document_status) &&
+        normalizeBillingDocumentStatus(existing.document_status) !== "PAID" &&
         Number(existing.totals?.balance ?? 0) > 0,
     );
 
@@ -2188,6 +2581,7 @@ const tenderableBillingDocument = computed<AppointmentBillingDocument | null>(
           document_status: document.document_status,
           payer_type: preparation.billing_path.payer_type,
           document_date: document.document_date,
+          pricing_source: document.pricing_source,
           totals: document.totals,
         }
       : null;
@@ -2471,8 +2865,13 @@ const servicePayloadQuantity = (service: SelectedService): number =>
 
 const serviceCatalogForBillingType = (
   billingType: PayerType | null,
+  hmoId: number | null = null,
 ): AppointmentServiceCatalog =>
-  billingType === "LGU" ? lguServiceCatalog.value : globalServiceCatalog.value;
+  billingType === "LGU"
+    ? lguServiceCatalog.value
+    : billingType === "HMO" && hmoId
+      ? hmoServiceCatalogs.value.get(hmoId) ?? globalServiceCatalog.value
+      : globalServiceCatalog.value;
 
 const isSupportedServiceSelectionType = (
   value: unknown,
@@ -2506,13 +2905,15 @@ const plannedServiceQuantity = (
 const plannedServiceToSelectedService = (
   service: AppointmentPlannedService,
   billingType: PayerType,
+  hmoId: number | null = null,
 ): SelectedService | null => {
   if (!isSupportedServiceSelectionType(service.type)) return null;
 
   const allowed = new Set(getAllowedServiceTypes(billingType));
   if (!allowed.has(service.type)) return null;
 
-  const catalogOptions = serviceCatalogForBillingType(billingType)[service.type] ?? [];
+  const catalogOptions =
+    serviceCatalogForBillingType(billingType, hmoId)[service.type] ?? [];
   const serviceId = Number(service.service_id ?? 0);
   const serviceName = normalizeServiceName(service.service_name);
   const option =
@@ -2930,8 +3331,20 @@ const resetForm = (): void => {
   resetServicePicker();
 };
 
-const formatAppointmentTypeLabel = (value: string): string =>
-  value.replace(/^Dr\.?\s+Consultation$/i, "Consultation");
+const appointmentTypeDisplayOrder = [
+  "PT Assessment",
+  "PT Session",
+  "Doctor Consultation",
+  "PT Evaluation",
+  "PT Re-Evaluation",
+];
+
+const appointmentTypeOrder = (value: string): number => {
+  const index = appointmentTypeDisplayOrder.findIndex(
+    (label) => label.toLowerCase() === value.trim().toLowerCase(),
+  );
+  return index === -1 ? appointmentTypeDisplayOrder.length : index;
+};
 
 const loadLookups = async (): Promise<void> => {
   const clinicId = activeBranchId.value ?? undefined;
@@ -3009,12 +3422,16 @@ const loadLookups = async (): Promise<void> => {
     specialtyTagId:
       row.specialty_tag_id == null ? null : Number(row.specialty_tag_id),
   }));
-  appointmentTypeOptions.value = (appointmentTypes.data?.content ?? []).map(
-    (row: { id: number; name: string }) => ({
-      label: formatAppointmentTypeLabel(row.name),
+  appointmentTypeOptions.value = (appointmentTypes.data?.content ?? [])
+    .map((row: { id: number; name: string }): SelectOption => ({
+      label: row.name,
       value: row.id,
-    }),
-  );
+    }))
+    .sort(
+      (left: SelectOption, right: SelectOption) =>
+        appointmentTypeOrder(left.label) - appointmentTypeOrder(right.label) ||
+        left.label.localeCompare(right.label),
+    );
   appointmentStatusOptions.value = (
     appointmentStatuses.data?.content ?? []
   ).map((row: { id: number; name: string }) => ({
@@ -3071,10 +3488,17 @@ const arrayFromUnknown = (value: unknown): Array<Record<string, unknown>> =>
 const serviceNameFromRow = (
   row: Record<string, unknown>,
   fallback = "Included service",
+  resolveName?: (row: Record<string, unknown>) => string | undefined,
 ): string => {
   const direct =
     row.name ??
+    row.display_name ??
+    row.displayName ??
+    row.label ??
     row.service_name ??
+    row.serviceName ??
+    row.item_name ??
+    row.itemName ??
     row.machine_name ??
     row.technique_name ??
     row.evaluation_name ??
@@ -3083,6 +3507,9 @@ const serviceNameFromRow = (
     row.bundle_name;
 
   if (direct) return String(direct);
+
+  const resolved = resolveName?.(row);
+  if (resolved) return resolved;
 
   for (const key of [
     "service",
@@ -3093,7 +3520,7 @@ const serviceNameFromRow = (
     "credit_item",
   ]) {
     const nested = recordFromUnknown(row[key]);
-    if (nested) return serviceNameFromRow(nested, fallback);
+    if (nested) return serviceNameFromRow(nested, fallback, resolveName);
   }
 
   return fallback;
@@ -3128,6 +3555,7 @@ const includedQuantityFromRow = (row: Record<string, unknown>): number =>
 
 const extractIncludedServices = (
   row: Record<string, unknown>,
+  resolveName?: (row: Record<string, unknown>) => string | undefined,
 ): IncludedServicePreview[] => {
   const includedKeys = [
     "included_services",
@@ -3156,7 +3584,7 @@ const extractIncludedServices = (
 
   return includedRows
     .map((item) => ({
-      name: serviceNameFromRow(item),
+      name: serviceNameFromRow(item, "Included service", resolveName),
       quantity: includedQuantityFromRow(item),
       type: serviceTypeFromRow(item),
     }))
@@ -3200,10 +3628,11 @@ const normalizeServiceRows = (
   rows: Array<Record<string, unknown>>,
   type: AppointmentServiceSelectionType,
   priceKeys: string[],
+  resolveIncludedName?: (row: Record<string, unknown>) => string | undefined,
 ): ServiceOption[] =>
   rows
     .map((row) => {
-      const includedServices = extractIncludedServices(row);
+      const includedServices = extractIncludedServices(row, resolveIncludedName);
 
       return {
         label: serviceNameFromRow(row, `Service ${row.id}`),
@@ -3232,48 +3661,99 @@ const recordsFromUnknownArray = (
 
 const serviceCatalogFromContext = (
   context: ServiceCatalogContext | undefined,
-): AppointmentServiceCatalog => ({
-  PACKAGE: normalizeServiceRows(
-    recordsFromUnknownArray(context?.package_offers),
-    "PACKAGE",
-    ["package_price", "price", "effective_price"],
-  ),
-  BUNDLE: normalizeServiceRows(
-    recordsFromUnknownArray(context?.bundles),
-    "BUNDLE",
-    ["bundled_price", "price", "effective_price"],
-  ),
-  MACHINE: normalizeServiceRows(
-    recordsFromUnknownArray(context?.services.machines),
-    "MACHINE",
-    ["effective_price", "price", "base_price"],
-  ),
-  TECHNIQUE: normalizeServiceRows(
-    recordsFromUnknownArray(context?.services.techniques),
-    "TECHNIQUE",
-    ["effective_price", "price", "base_price"],
-  ),
-  EVALUATION: normalizeServiceRows(
-    recordsFromUnknownArray(context?.services.evaluations),
-    "EVALUATION",
-    ["effective_price", "price", "base_price"],
-  ),
-  ADD_ON_MACHINE: normalizeServiceRows(
-    recordsFromUnknownArray(context?.services.add_on_machines),
-    "ADD_ON_MACHINE",
-    ["effective_price", "add_on_price", "price", "base_price"],
-  ),
-  ADD_ON_TECHNIQUE: normalizeServiceRows(
-    recordsFromUnknownArray(context?.services.add_on_techniques),
-    "ADD_ON_TECHNIQUE",
-    ["effective_price", "add_on_price", "price", "base_price"],
-  ),
-  ADD_ON_HOME_SERVICE: normalizeServiceRows(
-    recordsFromUnknownArray(context?.services.add_on_home_services),
-    "ADD_ON_HOME_SERVICE",
-    ["effective_price", "add_on_price", "price", "base_price"],
-  ),
-});
+): AppointmentServiceCatalog => {
+  const machines = recordsFromUnknownArray(context?.services.machines);
+  const techniques = recordsFromUnknownArray(context?.services.techniques);
+  const evaluations = recordsFromUnknownArray(context?.services.evaluations);
+  const addOnMachines = recordsFromUnknownArray(context?.services.add_on_machines);
+  const addOnTechniques = recordsFromUnknownArray(context?.services.add_on_techniques);
+  const addOnHomeServices = recordsFromUnknownArray(context?.services.add_on_home_services);
+
+  const namesByType = new Map<string, Map<number, string>>();
+  const indexRows = (
+    type: AppointmentServiceSelectionType,
+    rows: Array<Record<string, unknown>>,
+  ): void => {
+    namesByType.set(
+      type,
+      new Map(
+        rows
+          .map((row) => [Number(row.id), serviceNameFromRow(row, "")] as const)
+          .filter(([id, name]) => Number.isFinite(id) && id > 0 && name.trim().length > 0),
+      ),
+    );
+  };
+
+  indexRows("MACHINE", machines);
+  indexRows("TECHNIQUE", techniques);
+  indexRows("EVALUATION", evaluations);
+  indexRows("ADD_ON_MACHINE", addOnMachines);
+  indexRows("ADD_ON_TECHNIQUE", addOnTechniques);
+  indexRows("ADD_ON_HOME_SERVICE", addOnHomeServices);
+
+  const bundleIncludedName = (row: Record<string, unknown>): string | undefined => {
+    const rawType = row.item_type ?? row.itemType ?? row.service_type ?? row.type;
+    const normalizedType = String(rawType ?? "").trim().toUpperCase();
+    const id = Number(
+      row.item_id ??
+        row.itemId ??
+        row.service_id ??
+        row.machine_id ??
+        row.technique_id ??
+        row.evaluation_id ??
+        row.add_on_machine_id ??
+        row.add_on_technique_id ??
+        row.add_on_home_service_id,
+    );
+
+    if (!normalizedType || !Number.isFinite(id) || id <= 0) return undefined;
+    return namesByType.get(normalizedType)?.get(id);
+  };
+
+  return {
+    PACKAGE: normalizeServiceRows(
+      recordsFromUnknownArray(context?.package_offers),
+      "PACKAGE",
+      ["package_price", "price", "effective_price"],
+    ),
+    BUNDLE: normalizeServiceRows(
+      recordsFromUnknownArray(context?.bundles),
+      "BUNDLE",
+      ["bundled_price", "price", "effective_price"],
+      bundleIncludedName,
+    ),
+    MACHINE: normalizeServiceRows(
+      machines,
+      "MACHINE",
+      ["effective_price", "price", "base_price"],
+    ),
+    TECHNIQUE: normalizeServiceRows(
+      techniques,
+      "TECHNIQUE",
+      ["effective_price", "price", "base_price"],
+    ),
+    EVALUATION: normalizeServiceRows(
+      evaluations,
+      "EVALUATION",
+      ["effective_price", "price", "base_price"],
+    ),
+    ADD_ON_MACHINE: normalizeServiceRows(
+      addOnMachines,
+      "ADD_ON_MACHINE",
+      ["effective_price", "add_on_price", "price", "base_price"],
+    ),
+    ADD_ON_TECHNIQUE: normalizeServiceRows(
+      addOnTechniques,
+      "ADD_ON_TECHNIQUE",
+      ["effective_price", "add_on_price", "price", "base_price"],
+    ),
+    ADD_ON_HOME_SERVICE: normalizeServiceRows(
+      addOnHomeServices,
+      "ADD_ON_HOME_SERVICE",
+      ["effective_price", "add_on_price", "price", "base_price"],
+    ),
+  };
+};
 
 const loadServiceCatalog = async (): Promise<void> => {
   const [globalContext, lguContext] = await Promise.all([
@@ -3283,6 +3763,18 @@ const loadServiceCatalog = async (): Promise<void> => {
 
   globalServiceCatalog.value = serviceCatalogFromContext(globalContext);
   lguServiceCatalog.value = serviceCatalogFromContext(lguContext);
+};
+
+const ensureHmoServiceCatalog = async (hmoId: number | null): Promise<void> => {
+  if (!hmoId || hmoServiceCatalogs.value.has(hmoId)) return;
+
+  const hmoContext = await serviceCatalogContextService.getContext({
+    scope: "HMO",
+    hmo_id: hmoId,
+  });
+  const nextCatalogs = new Map(hmoServiceCatalogs.value);
+  nextCatalogs.set(hmoId, serviceCatalogFromContext(hmoContext));
+  hmoServiceCatalogs.value = nextCatalogs;
 };
 
 let liveFilterTimer: number | undefined;
@@ -3730,7 +4222,12 @@ const buildAttendanceItems = (
       remaining,
       appointmentConsumed,
       selected: false,
-      quantity: remaining > 0 && appointmentConsumed <= 0 ? 1 : 0,
+      quantity:
+        appointmentConsumed > 0
+          ? appointmentConsumed
+          : remaining > 0
+            ? 1
+            : 0,
     };
   });
 
@@ -3740,8 +4237,8 @@ const buildAttendableItems = (
   buildAttendanceItems(planned).filter(
     (item) =>
       item.type !== "PACKAGE" &&
-      item.remaining > 0 &&
-      Number(item.appointmentConsumed ?? item.appointment_consumed_quantity ?? 0) <= 0,
+      (item.remaining > 0 ||
+        Number(item.appointmentConsumed ?? item.appointment_consumed_quantity ?? 0) > 0),
   );
 
 const loadAppointmentFlowSummary = async (
@@ -3765,6 +4262,7 @@ const openDetailsDialog = async (
   detailFlowSummary.value = null;
   detailPlannedServices.value = [];
   detailBillingPreparation.value = null;
+  billingPreviewDocument.value = null;
   detailsVisible.value = true;
 
   try {
@@ -3807,6 +4305,107 @@ const openAttendanceFromDetails = (): void => {
   void openAttendanceDialog(appointment);
 };
 
+const openServicesFromDetails = (): void => {
+  if (!detailAppointment.value) return;
+
+  const appointment = detailAppointment.value;
+  void openServicesDialog(appointment);
+};
+
+const openAddOnsFromBillingDialog = (): void => {
+  if (!detailAppointment.value) {
+    errorToast(toast, "Open an appointment before adding add-ons.");
+    return;
+  }
+
+  showBillingAddOns.value = true;
+  void openServicesDialog(detailAppointment.value);
+};
+
+const deleteBillingAddOn = async (
+  charge: AppointmentBillingPreparedCharge,
+): Promise<void> => {
+  if (!detailAppointment.value) {
+    errorToast(toast, "Open an appointment before removing add-ons.");
+    return;
+  }
+
+  const creditItemId = Number(charge.credit_item_id);
+  if (!Number.isFinite(creditItemId) || creditItemId <= 0) {
+    errorToast(toast, "This add-on cannot be removed because it has no service reference.");
+    return;
+  }
+
+  try {
+    deletingAddOnCreditItemId.value = creditItemId;
+    const staleBillingDocumentIds = new Set(
+      [
+        activeTenderDocument.value?.id,
+        billingPreviewDocument.value?.id,
+        tenderableBillingDocument.value?.id,
+      ].filter((id): id is number => Number.isFinite(Number(id))),
+    );
+    await appointmentPhase1Service.deleteAddOn(
+      detailAppointment.value.id,
+      creditItemId,
+    );
+    billingPreviewDocument.value = null;
+    tenderBillingDocument.value = null;
+    showBillingAddOns.value = true;
+    await Promise.all(
+      Array.from(staleBillingDocumentIds).map((documentId) =>
+        invalidateBillingContext(documentId),
+      ),
+    );
+    await refreshDetailBillingPreparation();
+    await refreshBillingPreviewDocument();
+    tenderBillingDocument.value = billingPreviewDocument.value;
+    if (tenderVisible.value && !tenderBillingDocument.value) {
+      tenderVisible.value = false;
+    }
+    if (tenderVisible.value && tenderBillingDocument.value) {
+      tenderForm.amount_tendered = Number(
+        Math.max(0, tenderDiscountSummary.value.amountDue).toFixed(2),
+      );
+    }
+    successToast(toast, "Add-on removed");
+    await refreshAppointmentViews();
+  } catch (error) {
+    errorToast(
+      toast,
+      getApiErrorMessage(error, {
+        baseMessage: "Failed to remove add-on",
+        retryHint: "Please try again.",
+      }),
+    );
+  } finally {
+    deletingAddOnCreditItemId.value = null;
+  }
+};
+
+const confirmDeleteBillingAddOn = (
+  charge: AppointmentBillingPreparedCharge,
+): void => {
+  confirm.require({
+    message: `Remove ${charge.service_name} from this appointment? This is only allowed before the add-on is attended or billed.`,
+    header: "Remove Add-on",
+    icon: "pi pi-exclamation-triangle",
+    rejectProps: {
+      label: "Cancel",
+      severity: "secondary",
+      outlined: true,
+    },
+    acceptProps: {
+      label: "Remove",
+      severity: "danger",
+      icon: "pi pi-trash",
+    },
+    accept: () => {
+      void deleteBillingAddOn(charge);
+    },
+  });
+};
+
 const refreshDetailBillingPreparation = async (): Promise<void> => {
   if (!detailAppointment.value || !canManageAppointmentBilling.value) return;
 
@@ -3824,10 +4423,36 @@ const refreshDetailBillingPreparation = async (): Promise<void> => {
   }
 };
 
+const refreshBillingPreviewDocument = async (): Promise<void> => {
+  const document = tenderableBillingDocument.value;
+  if (!document) {
+    billingPreviewDocument.value = null;
+    return;
+  }
+
+  try {
+    billingPreviewDocument.value =
+      await appointmentBillingService.getBillingInvoice(document.id);
+  } catch {
+    billingPreviewDocument.value = document;
+  }
+};
+
 const openAppointmentBillingDialog = async (): Promise<void> => {
   if (!detailAppointment.value || !canManageAppointmentBilling.value) return;
+  showBillingAddOns.value = null;
+  showTenderDiscount.value = null;
+  showTenderNotes.value = null;
+  billingPreviewDocument.value = null;
+  tenderForm.senior_pwd_id_presented = false;
+  tenderForm.senior_pwd_id_reference = "";
+  tenderForm.custom_discount_type = null;
+  tenderForm.custom_discount_value = 0;
+  tenderForm.payment_reference = "";
+  tenderForm.notes = "";
   appointmentBillingVisible.value = true;
   await refreshDetailBillingPreparation();
+  await refreshBillingPreviewDocument();
 };
 
 const openTenderFromBillingDialog = async (): Promise<void> => {
@@ -3837,6 +4462,15 @@ const openTenderFromBillingDialog = async (): Promise<void> => {
     return;
   }
   await openTenderDialog(document);
+};
+
+const invalidateBillingContext = async (billingDocumentId: number): Promise<void> => {
+  await queryClient.invalidateQueries({
+    queryKey: [BillingTanstackKey.BILLING_CONTEXT, billingDocumentId],
+  });
+  queryClient.removeQueries({
+    queryKey: [BillingTanstackKey.BILLING_CONTEXT, billingDocumentId],
+  });
 };
 
 const openInvoicePrintWindow = (document: AppointmentBillingDocument): void => {
@@ -3851,8 +4485,7 @@ const openInvoicePrintWindow = (document: AppointmentBillingDocument): void => {
       ? "hmo-patient-billing-summary-print"
       : document.payer_type === "LGU"
         ? "lgu-patient-invoice-billing-print"
-        : document.payer_type === "SELF_PAY_PACKAGE" ||
-            document.document_type === "PACKAGE_INVOICE"
+        : document.document_type === "PACKAGE_INVOICE"
           ? "self-pay-package-invoice-print"
           : "self-pay-single-invoice-print";
   const routeLocation = router.resolve({
@@ -3969,6 +4602,7 @@ const toAppointmentBillingDocument = (
   document_status: document.document_status,
   payer_type: getExistingDocumentPayerType(document, preparation),
   document_date: document.document_date,
+  pricing_source: document.pricing_source ?? null,
   totals: document.totals,
   lines: document.lines ?? [],
 });
@@ -3978,6 +4612,9 @@ const getPrintableExistingBillingDocument =
     const preparation = detailBillingPreparation.value;
     if (!preparation) return null;
 
+    const shouldPrintAppointmentAddOnBill = isAddOnBillingPreparationStatus(
+      preparation.billing_path.status,
+    );
     const currentPayerType = normalizePayerType(
       preparation.billing_path.payer_type,
     );
@@ -3993,6 +4630,12 @@ const getPrintableExistingBillingDocument =
       )
       .filter((existing) => {
         const documentType = normalizeTextToken(existing.document_type);
+        if (shouldPrintAppointmentAddOnBill) {
+          return (
+            documentType === "APPOINTMENT_INVOICE" &&
+            isAddOnBillingPricingSource(existing.pricing_source)
+          );
+        }
         if (currentPayerType === "LGU") {
           return (
             documentType.includes("LGU") ||
@@ -4102,8 +4745,33 @@ const createInvoiceDocumentForCurrentBillingPath =
 const printAppointmentInvoiceFromBillingDialog = async (): Promise<void> => {
   try {
     isBillingActionLoading.value = true;
-    const document = await createInvoiceDocumentForCurrentBillingPath();
+    let document = await createInvoiceDocumentForCurrentBillingPath();
     if (!document) return;
+
+    if (
+      (document.payer_type === "SELF_PAY_SINGLE" ||
+        document.payer_type === "SELF_PAY_PACKAGE") &&
+      hasTenderDiscountValues.value &&
+      Number(document.totals.paid ?? 0) <= 0
+    ) {
+      document =
+        await appointmentBillingService.updateSelfPayBillingDocumentDiscount(
+          document.id,
+          {
+            senior_pwd_id_presented: tenderForm.senior_pwd_id_presented,
+            senior_pwd_id_reference:
+              tenderForm.senior_pwd_id_reference.trim() || null,
+            custom_discount_type: tenderForm.custom_discount_type,
+            custom_discount_value: Number(
+              tenderForm.custom_discount_value ?? 0,
+            ),
+          },
+        );
+      billingPreviewDocument.value = document;
+      tenderBillingDocument.value = document;
+      await invalidateBillingContext(document.id);
+    }
+
     successToast(toast, "Invoice ready");
     await refreshDetailBillingPreparation();
     await refreshAppointmentViews();
@@ -4111,6 +4779,53 @@ const printAppointmentInvoiceFromBillingDialog = async (): Promise<void> => {
   } catch (error) {
     const message = (error as any)?.response?.data?.message;
     errorToast(toast, message ? String(message) : "Unable to print invoice");
+  } finally {
+    isBillingActionLoading.value = false;
+  }
+};
+
+const removeSavedTenderDiscount = async (): Promise<void> => {
+  const document = activeTenderDocument.value;
+  if (!document) {
+    errorToast(toast, "Open a billing document before removing discount.");
+    return;
+  }
+
+  if (isTenderDiscountLocked.value) {
+    errorToast(toast, "Discount is locked after payment is tendered.");
+    return;
+  }
+
+  try {
+    isBillingActionLoading.value = true;
+    const updatedDocument =
+      await appointmentBillingService.updateSelfPayBillingDocumentDiscount(
+        document.id,
+        {
+          senior_pwd_id_presented: false,
+          senior_pwd_id_reference: null,
+          custom_discount_type: null,
+          custom_discount_value: 0,
+        },
+      );
+    tenderForm.senior_pwd_id_presented = false;
+    tenderForm.senior_pwd_id_reference = "";
+    tenderForm.custom_discount_type = null;
+    tenderForm.custom_discount_value = 0;
+    billingPreviewDocument.value = updatedDocument;
+    tenderBillingDocument.value = updatedDocument;
+    await invalidateBillingContext(updatedDocument.id);
+    await refreshDetailBillingPreparation();
+    await refreshBillingPreviewDocument();
+    successToast(toast, "Discount removed");
+  } catch (error) {
+    errorToast(
+      toast,
+      getApiErrorMessage(error, {
+        baseMessage: "Unable to remove discount",
+        retryHint: "Please try again.",
+      }),
+    );
   } finally {
     isBillingActionLoading.value = false;
   }
@@ -4135,17 +4850,26 @@ const loadPaymentMethods = async (): Promise<void> => {
 
 const openTenderDialog = async (
   document: AppointmentBillingDocument,
-  _fallbackAmountDue = 0,
+  fallbackAmountDue = 0,
 ): Promise<void> => {
-  tenderBillingDocument.value = document;
   tenderForm.amount_tendered = 0;
   tenderForm.payment_method_id = paymentMethods.value[0]?.id ?? null;
   tenderForm.payment_reference = "";
-  tenderForm.notes = "";
-  tenderForm.senior_pwd_id_presented = false;
-  tenderForm.senior_pwd_id_reference = "";
-  tenderForm.custom_discount_type = null;
-  tenderForm.custom_discount_value = 0;
+  showTenderDiscount.value = null;
+  showTenderNotes.value = null;
+  tenderBillingDocument.value = document;
+  try {
+    tenderBillingDocument.value =
+      await appointmentBillingService.getBillingInvoice(document.id);
+    billingPreviewDocument.value = tenderBillingDocument.value;
+  } catch {
+    tenderBillingDocument.value = document;
+  }
+  const amountDue =
+    tenderDiscountSummary.value.amountDue ||
+    fallbackAmountDue ||
+    Number(tenderBillingDocument.value?.totals.balance ?? 0);
+  tenderForm.amount_tendered = Number(Math.max(0, amountDue).toFixed(2));
   tenderVisible.value = true;
   await loadPaymentMethods();
   tenderForm.payment_method_id =
@@ -4194,6 +4918,12 @@ const submitTenderPayment = async (): Promise<void> => {
     return;
   }
 
+  const paymentReference = tenderForm.payment_reference.trim();
+  if (isEWalletPaymentMethod.value && !paymentReference) {
+    errorToast(toast, "Enter the e-wallet reference number.");
+    return;
+  }
+
   try {
     isTenderSaving.value = true;
     const result = await appointmentBillingService.tenderSelfPayBillingDocument(
@@ -4201,7 +4931,9 @@ const submitTenderPayment = async (): Promise<void> => {
       {
         amount_tendered: amountTendered,
         payment_method_id: tenderForm.payment_method_id,
-        payment_reference: tenderForm.payment_reference.trim() || null,
+        payment_reference: isEWalletPaymentMethod.value
+          ? paymentReference
+          : null,
         notes: tenderForm.notes.trim() || null,
         senior_pwd_id_presented: tenderForm.senior_pwd_id_presented,
         senior_pwd_id_reference:
@@ -4211,12 +4943,15 @@ const submitTenderPayment = async (): Promise<void> => {
       },
     );
     tenderBillingDocument.value = result.billing_document;
+    billingPreviewDocument.value = result.billing_document;
+    await invalidateBillingContext(result.billing_document.id);
     tenderVisible.value = false;
     successToast(
       toast,
       `Payment saved${result.receipt.receipt_number ? `: ${result.receipt.receipt_number}` : ""}`,
     );
     await refreshDetailBillingPreparation();
+    await refreshBillingPreviewDocument();
     await refreshAppointmentViews();
   } catch (error) {
     const message = (error as any)?.response?.data?.message;
@@ -4359,7 +5094,7 @@ const saveAppointment = async (): Promise<void> => {
   }
 
   if (selectedServices.value.length && !form.payer_type) {
-    errorToast(toast, "Select a billing type before saving planned services.");
+    errorToast(toast, "Select a billing type before saving services.");
     return;
   }
 
@@ -4518,6 +5253,22 @@ const openServicesDialog = async (
   activeAppointment.value = appointment;
   selectedServices.value = [];
   resetServicePicker(appointment.payer_type);
+
+  if (appointment.credit_account_id) {
+    const appointmentAllowedTypes = new Set(
+      getAllowedServiceTypes(appointment.payer_type as PayerType | null),
+    );
+    const addOnType = allServiceTypeOptions.find((option) =>
+      addOnServiceTypes.has(option.value) &&
+      appointmentAllowedTypes.has(option.value) &&
+      !hiddenServiceTypeOptions.has(option.value),
+    )?.value;
+    if (addOnType) {
+      servicePicker.type = addOnType;
+      servicePicker.id = null;
+      servicePicker.quantity = 1;
+    }
+  }
   servicesVisible.value = true;
 
   try {
@@ -4577,10 +5328,27 @@ const addPickedService = (): void => {
     form.location_context = "HOME_CARE";
   }
 
+  const selectedQuantity = getSelectedServiceQuantity(selected);
+  const existingService = selectedServices.value.find(
+    (service) =>
+      service.type === selected.type &&
+      Number(service.value) === Number(selected.value),
+  );
+  if (existingService) {
+    existingService.quantity = Math.max(
+      1,
+      Number(existingService.quantity ?? 1) + selectedQuantity,
+    );
+    servicePicker.id = null;
+    servicePicker.quantity = 1;
+    void refreshSessionPreview();
+    return;
+  }
+
   selectedServices.value.push({
     ...selected,
     name: selected.label,
-    quantity: getSelectedServiceQuantity(selected),
+    quantity: selectedQuantity,
     typeLabel: serviceTypeLabel(selected.type),
   });
 
@@ -4649,9 +5417,16 @@ const useLastPatientServices = async (): Promise<void> => {
         return;
       }
 
+      const hmoId = billingType === "HMO" ? activeHmoSponsorId.value : null;
+      if (billingType === "HMO" && hmoId) {
+        await ensureHmoServiceCatalog(hmoId);
+      }
+
       const copyableServices = (summary.planned_services ?? [])
         .filter(isTopLevelPlannedService)
-        .map((service) => plannedServiceToSelectedService(service, billingType))
+        .map((service) =>
+          plannedServiceToSelectedService(service, billingType, hmoId),
+        )
         .filter((service): service is SelectedService => Boolean(service));
 
       if (!copyableServices.length) continue;
@@ -4672,7 +5447,7 @@ const useLastPatientServices = async (): Promise<void> => {
       return;
     }
 
-    errorToast(toast, "No previous planned services found for this patient.");
+    errorToast(toast, "No previous services found for this patient.");
   } catch {
     errorToast(toast, "Failed to copy the patient's last services.");
   } finally {
@@ -4688,21 +5463,49 @@ const saveServices = async (): Promise<void> => {
     return;
   }
 
+  const hasOnlyAddOns = selectedServices.value.every((service) =>
+    addOnServiceTypes.has(service.type),
+  );
+
+  if (activeAppointment.value.credit_account_id && !hasOnlyAddOns) {
+    errorToast(
+      toast,
+      "Existing appointments can only append add-ons here. Create a new bundle or package plan separately.",
+    );
+    return;
+  }
+
   try {
     isSavingServices.value = true;
-    await savePlannedServicesForAppointment(
-      activeAppointment.value.id,
-      activeAppointment.value.payer_type,
-    );
+    if (activeAppointment.value.credit_account_id && hasOnlyAddOns) {
+      await appointmentPhase1Service.appendAddOns(activeAppointment.value.id, {
+        payer_type: activeAppointment.value.payer_type,
+        services: selectedServices.value.map((service) => ({
+          type: service.type,
+          id: service.value,
+          quantity: servicePayloadQuantity(service),
+        })),
+      });
+    } else {
+      await savePlannedServicesForAppointment(
+        activeAppointment.value.id,
+        activeAppointment.value.payer_type,
+      );
+    }
     servicesModalPlannedServices.value =
       await appointmentPhase1Service.getPlannedServices(
         activeAppointment.value.id,
       );
     selectedServices.value = [];
-    successToast(toast, "Planned services saved");
+    successToast(toast, "services saved");
+    if (appointmentBillingVisible.value) {
+      showBillingAddOns.value = true;
+      await refreshDetailBillingPreparation();
+      await refreshBillingPreviewDocument();
+    }
     await refreshAppointmentViews();
   } catch {
-    errorToast(toast, "Failed to save planned services");
+    errorToast(toast, "Failed to save services");
   } finally {
     isSavingServices.value = false;
   }
@@ -4743,7 +5546,7 @@ const openAttendanceDialog = async (
       if (attendanceLoadToken.value !== loadToken) return;
       attendancePlannedServices.value = [];
       attendanceItems.value = [];
-      errorToast(toast, "Failed to load planned services");
+      errorToast(toast, "Failed to load services");
     }
   }
 };
@@ -4828,13 +5631,28 @@ const saveAttendance = async (
         !item.parent_credit_item_id ||
         !selectedBundleIds.has(Number(item.parent_credit_item_id)),
     )
-    .map((item) => ({
-      credit_item_id: item.id,
-      quantity: Math.min(
-        item.remaining,
-        Math.max(1, Number(item.quantity ?? 1)),
-      ),
-    }));
+    .map((item) => {
+      const childCreditItemIds =
+        item.type === "BUNDLE"
+          ? attendanceItems.value
+              .filter(
+                (child) =>
+                  Number(child.parent_credit_item_id ?? 0) === Number(item.id) &&
+                  child.remaining > 0 &&
+                  Number(child.appointmentConsumed ?? child.appointment_consumed_quantity ?? 0) <= 0,
+              )
+              .map((child) => Number(child.id))
+          : undefined;
+
+      return {
+        credit_item_id: item.id,
+        quantity: Math.min(
+          item.remaining,
+          Math.max(1, Number(item.quantity ?? 1)),
+        ),
+        ...(childCreditItemIds ? { child_credit_item_ids: childCreditItemIds } : {}),
+      };
+    });
 
   if (!items.length) {
     errorToast(toast, "Select at least one finished service");
@@ -5026,6 +5844,15 @@ watch([ptOptions, doctorOptions], () => {
   }
 });
 
+watch(physicalTherapistOptions, (options) => {
+  if (
+    filters.ptId &&
+    !options.some((option) => Number(option.value) === Number(filters.ptId))
+  ) {
+    filters.ptId = null;
+  }
+});
+
 watch(
   () => form.primary_provider_staff_id,
   (staffId) => {
@@ -5097,6 +5924,17 @@ watch(
     removeDisallowedSelectedServices(billingType);
     resetServicePicker(billingType);
     void refreshSessionPreview();
+  },
+);
+
+watch(
+  () => [currentServiceBillingType.value, currentServiceHmoId.value] as const,
+  ([billingType, hmoId]) => {
+    if (billingType !== "HMO" || !hmoId) return;
+
+    void ensureHmoServiceCatalog(hmoId).catch(() => {
+      errorToast(toast, "Unable to load HMO service rates.");
+    });
   },
 );
 

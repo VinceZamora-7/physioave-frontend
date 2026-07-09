@@ -57,7 +57,7 @@
 
           <Column field="amount_due" header="Amount Due">
             <template #body="{ data }">
-              {{ formatCurrency(data.amount_due) }}
+              {{ formatCurrency(getBillingTotal(data)) }}
             </template>
           </Column>
 
@@ -158,6 +158,9 @@ const formatCurrency = (value?: number): string => {
   if (value == null) return "—"
   return new Intl.NumberFormat("en-PH", {style: "currency", currency: "PHP"}).format(value)
 }
+
+const getBillingTotal = (billing: BillingListItem): number =>
+  Number(billing.total_amount ?? billing.amount_due ?? 0)
 
 const displayBillingType = (type?: string): string =>
   (type ?? "").replace(/_/g, " ").trim() || "—"

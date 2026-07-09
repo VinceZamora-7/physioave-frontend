@@ -2,7 +2,7 @@
   <Dialog
     :visible="visible"
     modal
-    header="Planned Services"
+    header="Services"
     :style="{ width: '58rem', maxWidth: '96vw' }"
     :draggable="false"
     @update:visible="$emit('update:visible', $event)"
@@ -43,8 +43,8 @@
       </DataTable>
 
       <div class="app-appointment-card text-sm">
-        <div class="font-semibold">Saved planned services</div>
-        <div v-if="!plannedServices.length" class="mt-2 opacity-70">No planned services saved for this appointment.</div>
+        <div class="font-semibold">Saved services</div>
+        <div v-if="!plannedServices.length" class="mt-2 opacity-70">No services saved for this appointment.</div>
         <ul v-else class="mt-2 space-y-1">
           <li v-for="item in plannedServices" :key="item.id" class="flex justify-between gap-3">
             <span>
@@ -60,7 +60,7 @@
 
     <template #footer>
       <Button label="Close" severity="secondary" outlined @click="$emit('update:visible', false)" />
-      <Button label="Save Planned Services" icon="pi pi-save" :loading="isSaving" :pt="ptPrimaryBtn" @click="$emit('save')" />
+      <Button label="Save Services" icon="pi pi-save" :loading="isSaving" :pt="ptPrimaryBtn" @click="$emit('save')" />
     </template>
   </Dialog>
 </template>

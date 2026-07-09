@@ -86,6 +86,7 @@ export interface BillingListItem {
   discount_amount?: number
   subtotal_amount?: number
   total_amount?: number
+  balance_amount?: number
   amount_tendered?: number
   change_amount?: number
   pricing_tier?: string
@@ -217,6 +218,7 @@ export interface BillingRequest {
   discount_amount?: number
   subtotal_amount?: number
   total_amount?: number
+  balance_amount?: number
   amount_tendered?: number
   change_amount?: number
   pricing_tier?: string

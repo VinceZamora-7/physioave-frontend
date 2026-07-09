@@ -47,7 +47,7 @@
             <th class="number-column">No.</th>
             <th>Time</th>
             <th>Patient</th>
-            <th>Service</th>
+            <th>Billing description</th>
             <th>Physical Therapist</th>
             <th>Visit Status</th>
             <th>Patient Signature</th>

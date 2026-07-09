@@ -288,6 +288,7 @@
   font-weight: 700;
   color: var(--lgu-text);
   color: var(--lgu-text);
+  margin-right: 10px;
 }
 
 .profile-section-title {
@@ -606,6 +607,7 @@
   .profile-label {
     white-space: nowrap !important;
     font-weight: 700 !important;
+    margin-right: 10px;
   }
 
   .profile-value {

@@ -16,10 +16,10 @@
         </div>
       </div>
 
-      <DataTable :value="attendanceItems" size="small" class="app-data-table">
+      <DataTable :value="visibleAttendanceItems" size="small" class="app-data-table">
         <template #empty>
           <div class="py-8 text-center text-sm opacity-70">
-            No planned services available. Add planned services first.
+            No services available. Add services first.
           </div>
         </template>
 
@@ -35,12 +35,24 @@
 
         <Column header="Service">
           <template #body="{ data }">
-            <div>
-              <div class="font-medium">{{ data.service_name }}</div>
-              <div class="text-xs opacity-60">
-                Planned {{ data.planned_quantity }} -
-                This visit {{ data.appointmentConsumed ?? data.appointment_consumed_quantity ?? 0 }} -
-                Balance {{ data.remaining }}
+            <div class="flex items-start gap-2" :class="{ 'pl-9': isBundleChildAttendanceItem(data) }">
+              <Button
+                v-if="hasBundleChildren(data)"
+                :icon="isBundleExpanded(data) ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
+                text
+                rounded
+                severity="secondary"
+                size="small"
+                class="-ml-1 shrink-0"
+                :aria-expanded="isBundleExpanded(data)"
+                :aria-label="`Toggle ${data.service_name} included services`"
+                @click="toggleBundleChildren(data)"
+              />
+              <span v-else-if="!isBundleChildAttendanceItem(data)" class="w-8 shrink-0" />
+
+              <div class="min-w-0">
+                <div class="font-medium">{{ data.service_name }}</div>
+
               </div>
             </div>
           </template>
@@ -65,11 +77,23 @@
           <div>
             <h4 class="app-appointment-title text-base">Encounter Ticket</h4>
             <p class="app-appointment-muted mt-1 text-sm">
-              Ask the patient to sign below to confirm attendance completion.
+              Open when signatures, confirmation, or notes are needed.
             </p>
           </div>
 
-          <div class="flex flex-wrap gap-2">
+          <Button
+            :label="showEncounterTicket ? 'Hide Ticket' : 'Show Ticket'"
+            :icon="showEncounterTicket ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
+            severity="secondary"
+            outlined
+            size="small"
+            :aria-expanded="showEncounterTicket"
+            @click="toggleEncounterTicket"
+          />
+        </div>
+
+        <div v-show="showEncounterTicket" class="space-y-3">
+          <div class="flex flex-wrap justify-end gap-2">
             <Button
               label="Sign on SP501"
               icon="pi pi-pen-to-square"
@@ -100,129 +124,129 @@
               @click="clearSignature"
             />
           </div>
-        </div>
 
-        <div
-          class="overflow-hidden rounded-xl border border-[rgb(var(--app-border))] bg-white p-2"
-        >
-          <canvas
-            ref="signatureCanvas"
-            class="block h-44 w-full touch-none rounded-lg bg-white"
-            @pointerdown="startSignature"
-            @pointermove="drawSignature"
-            @pointerup="stopSignature"
-            @pointercancel="stopSignature"
-            @pointerleave="stopSignature"
-            @contextmenu.prevent
-          />
-        </div>
+          <div
+            class="overflow-hidden rounded-xl border border-[rgb(var(--app-border))] bg-white p-2"
+          >
+            <canvas
+              ref="signatureCanvas"
+              class="block h-44 w-full touch-none rounded-lg bg-white"
+              @pointerdown="startSignature"
+              @pointermove="drawSignature"
+              @pointerup="stopSignature"
+              @pointercancel="stopSignature"
+              @pointerleave="stopSignature"
+              @contextmenu.prevent
+            />
+          </div>
 
-        <div class="flex flex-col gap-1 text-xs sm:flex-row sm:items-center sm:justify-between">
-          <p class="app-appointment-muted">
-            Signature of {{ appointment.patient_name || "patient" }}
-          </p>
+          <div class="flex flex-col gap-1 text-xs sm:flex-row sm:items-center sm:justify-between">
+            <p class="app-appointment-muted">
+              Signature of {{ appointment.patient_name || "patient" }}
+            </p>
 
-          <p v-if="signatureError" class="font-medium text-red-500">
-            {{ signatureError }}
-          </p>
+            <p v-if="signatureError" class="font-medium text-red-500">
+              {{ signatureError }}
+            </p>
 
-          <p v-else-if="hasSignature" class="font-medium text-green-600">
-            Signature captured
-          </p>
+            <p v-else-if="hasSignature" class="font-medium text-green-600">
+              Signature captured
+            </p>
 
-          <p v-else class="font-medium text-orange-500">
-            Required to complete attendance
-          </p>
-        </div>
-
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h4 class="app-appointment-title text-base">PT / Admin Confirmation</h4>
-            <p class="app-appointment-muted mt-1 text-sm">
-              The attending PT or an authorized admin can sign now, or complete confirmation later.
+            <p v-else class="font-medium text-orange-500">
+              Required to complete attendance
             </p>
           </div>
 
-          <div class="flex flex-wrap gap-2">
-            <Button
-              label="Sign on SP501"
-              icon="pi pi-pen-to-square"
-              severity="secondary"
-              outlined
-              size="small"
-              :loading="isStaffSp501Busy"
-              :disabled="isSaving || isPatientSp501Busy"
-              @click="beginStaffSp501Signature"
-            />
-            <Button
-              label="Manual Capture"
-              icon="pi pi-download"
-              severity="secondary"
-              outlined
-              size="small"
-              :loading="isStaffSp501Busy"
-              :disabled="isSaving || isPatientSp501Busy"
-              @click="captureStaffSp501Signature"
-            />
-            <Button
-              label="Clear Staff Signature"
-              icon="pi pi-eraser"
-              severity="secondary"
-              outlined
-              size="small"
-              :disabled="isSaving"
-              @click="clearStaffSignature"
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h4 class="app-appointment-title text-base">PT / Admin Confirmation</h4>
+              <p class="app-appointment-muted mt-1 text-sm">
+                The attending PT or an authorized admin can sign now, or complete confirmation later.
+              </p>
+            </div>
+
+            <div class="flex flex-wrap gap-2">
+              <Button
+                label="Sign on SP501"
+                icon="pi pi-pen-to-square"
+                severity="secondary"
+                outlined
+                size="small"
+                :loading="isStaffSp501Busy"
+                :disabled="isSaving || isPatientSp501Busy"
+                @click="beginStaffSp501Signature"
+              />
+              <Button
+                label="Manual Capture"
+                icon="pi pi-download"
+                severity="secondary"
+                outlined
+                size="small"
+                :loading="isStaffSp501Busy"
+                :disabled="isSaving || isPatientSp501Busy"
+                @click="captureStaffSp501Signature"
+              />
+              <Button
+                label="Clear Staff Signature"
+                icon="pi pi-eraser"
+                severity="secondary"
+                outlined
+                size="small"
+                :disabled="isSaving"
+                @click="clearStaffSignature"
+              />
+            </div>
+          </div>
+
+          <div class="overflow-hidden rounded-xl border border-[rgb(var(--app-border))] bg-white p-2">
+            <canvas
+              ref="staffSignatureCanvas"
+              class="block h-44 w-full touch-none rounded-lg bg-white"
+              @pointerdown="startStaffSignature"
+              @pointermove="drawStaffSignature"
+              @pointerup="stopStaffSignature"
+              @pointercancel="stopStaffSignature"
+              @pointerleave="stopStaffSignature"
+              @contextmenu.prevent
             />
           </div>
-        </div>
 
-        <div class="overflow-hidden rounded-xl border border-[rgb(var(--app-border))] bg-white p-2">
-          <canvas
-            ref="staffSignatureCanvas"
-            class="block h-44 w-full touch-none rounded-lg bg-white"
-            @pointerdown="startStaffSignature"
-            @pointermove="drawStaffSignature"
-            @pointerup="stopStaffSignature"
-            @pointercancel="stopStaffSignature"
-            @pointerleave="stopStaffSignature"
-            @contextmenu.prevent
-          />
-        </div>
+          <div class="flex flex-col gap-1 text-xs sm:flex-row sm:items-center sm:justify-between">
+            <p class="app-appointment-muted">Signature of PT / Admin</p>
 
-        <div class="flex flex-col gap-1 text-xs sm:flex-row sm:items-center sm:justify-between">
-          <p class="app-appointment-muted">Signature of PT / Admin</p>
+            <p v-if="staffSignatureError" class="font-medium text-red-500">
+              {{ staffSignatureError }}
+            </p>
 
-          <p v-if="staffSignatureError" class="font-medium text-red-500">
-            {{ staffSignatureError }}
-          </p>
+            <p v-else-if="hasStaffSignature" class="font-medium text-green-600">
+              Staff confirmation captured
+            </p>
 
-          <p v-else-if="hasStaffSignature" class="font-medium text-green-600">
-            Staff confirmation captured
-          </p>
+            <p v-else class="font-medium text-orange-500">
+              Optional; can be filled later
+            </p>
+          </div>
 
-          <p v-else class="font-medium text-orange-500">
-            Optional; can be filled later
-          </p>
-        </div>
+          <div class="space-y-1">
+            <label class="app-appointment-muted text-xs font-semibold uppercase tracking-wide">Encounter Notes</label>
+            <Textarea
+              v-model="encounterNotes"
+              class="w-full"
+              rows="2"
+              autoResize
+              :disabled="isSaving"
+              placeholder="Optional attendance notes"
+            />
+          </div>
 
-        <div class="space-y-1">
-          <label class="app-appointment-muted text-xs font-semibold uppercase tracking-wide">Encounter Notes</label>
-          <Textarea
-            v-model="encounterNotes"
-            class="w-full"
-            rows="2"
-            autoResize
-            :disabled="isSaving"
-            placeholder="Optional attendance notes"
-          />
-        </div>
-
-        <div
-          v-if="encounterTicket"
-          class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] px-3 py-2 text-xs"
-        >
-          <span class="font-semibold">{{ isTicketLocked ? "Completed encounter ticket" : "Saved encounter ticket draft" }}</span>
-          <span v-if="encounterTicket.slip_number" class="ml-2 opacity-70">{{ encounterTicket.slip_number }}</span>
+          <div
+            v-if="encounterTicket"
+            class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] px-3 py-2 text-xs"
+          >
+            <span class="font-semibold">{{ isTicketLocked ? "Completed encounter ticket" : "Saved encounter ticket draft" }}</span>
+            <span v-if="encounterTicket.slip_number" class="ml-2 opacity-70">{{ encounterTicket.slip_number }}</span>
+          </div>
         </div>
       </section>
 
@@ -398,6 +422,9 @@ const staffSignatureError = ref("")
 const patientSignatureDataUrl = ref<string | null>(null)
 const staffSignatureDataUrl = ref<string | null>(null)
 const encounterNotes = ref("")
+const expandedBundleIds = ref<Set<number>>(new Set())
+const showEncounterTicket = ref(false)
+const hasInitializedEncounterCanvases = ref(false)
 
 const isTicketLocked = computed(() => Boolean(props.encounterTicket?.record_locked))
 
@@ -447,6 +474,53 @@ const selectedBundleIds = computed(() =>
       .filter(item => item.selected && item.type === "BUNDLE")
       .map(item => Number(item.id))
   )
+)
+
+const attendanceItemId = (item: AttendanceItem): number =>
+  Number(item.credit_item_id ?? item.id)
+
+const attendanceItemParentId = (item: AttendanceItem): number =>
+  Number(item.parent_credit_item_id ?? 0)
+
+const bundleParentIds = computed(() =>
+  new Set(
+    props.attendanceItems
+      .filter(item => item.type === "BUNDLE")
+      .map(item => attendanceItemId(item))
+      .filter(id => Number.isFinite(id) && id > 0)
+  )
+)
+
+const isBundleChildAttendanceItem = (item: AttendanceItem): boolean =>
+  bundleParentIds.value.has(attendanceItemParentId(item))
+
+const hasBundleChildren = (item: AttendanceItem): boolean => {
+  const itemId = attendanceItemId(item)
+  return item.type === "BUNDLE" && props.attendanceItems.some(child =>
+    attendanceItemParentId(child) === itemId &&
+    child.type !== "PACKAGE" &&
+    child.type !== "BUNDLE"
+  )
+}
+
+const isBundleExpanded = (item: AttendanceItem): boolean =>
+  expandedBundleIds.value.has(attendanceItemId(item))
+
+const toggleBundleChildren = (item: AttendanceItem): void => {
+  const itemId = attendanceItemId(item)
+  if (!Number.isFinite(itemId) || itemId <= 0) return
+
+  const next = new Set(expandedBundleIds.value)
+  if (next.has(itemId)) next.delete(itemId)
+  else next.add(itemId)
+  expandedBundleIds.value = next
+}
+
+const visibleAttendanceItems = computed(() =>
+  props.attendanceItems.filter(item => {
+    if (!isBundleChildAttendanceItem(item)) return true
+    return expandedBundleIds.value.has(attendanceItemParentId(item))
+  })
 )
 
 const isAttendanceItemDisabled = (item: AttendanceItem): boolean =>
@@ -562,6 +636,30 @@ const initializeStaffSignatureCanvas = (): void => {
 const initializeSignatureCanvases = (): void => {
   initializeSignatureCanvas()
   initializeStaffSignatureCanvas()
+}
+
+const hydrateEncounterTicketState = (): void => {
+  encounterNotes.value = props.encounterTicket?.notes ?? ""
+  patientSignatureDataUrl.value = props.encounterTicket?.patient_signature_data_url ?? null
+  staffSignatureDataUrl.value = props.encounterTicket?.pt_signature_data_url ?? null
+  hasSignature.value = Boolean(patientSignatureDataUrl.value)
+  hasStaffSignature.value = Boolean(staffSignatureDataUrl.value)
+  signatureError.value = ""
+  staffSignatureError.value = ""
+}
+
+const ensureEncounterTicketCanvases = async (): Promise<void> => {
+  if (hasInitializedEncounterCanvases.value) return
+  await nextTick()
+  initializeSignatureCanvases()
+  hasInitializedEncounterCanvases.value = true
+}
+
+const toggleEncounterTicket = (): void => {
+  showEncounterTicket.value = !showEncounterTicket.value
+  if (showEncounterTicket.value) {
+    void ensureEncounterTicketCanvases()
+  }
 }
 
 const resetPatientSignatureState = (): void => {
@@ -828,6 +926,8 @@ const submitAttendance = (): void => {
   if (!props.appointment) return
 
   if (!hasSignature.value) {
+    showEncounterTicket.value = true
+    void ensureEncounterTicketCanvases()
     signatureError.value = "Patient signature is required to complete attendance."
     return
   }
@@ -845,17 +945,32 @@ watch(
     props.encounterTicket?.pt_signature_data_url,
     props.encounterTicket?.notes
   ],
-  async ([visible]) => {
+  async ([visible, appointmentId], oldValues) => {
     if (visible) {
+      const wasVisible = Boolean(oldValues?.[0])
+      const previousAppointmentId = oldValues?.[1]
+      const shouldResetDisclosure = !wasVisible || appointmentId !== previousAppointmentId
       dropoutReason.value = props.appointment?.dropout_reason ?? ""
-      encounterNotes.value = props.encounterTicket?.notes ?? ""
+      if (shouldResetDisclosure) {
+        expandedBundleIds.value = new Set()
+        showEncounterTicket.value = false
+      }
+      hasInitializedEncounterCanvases.value = false
+      hydrateEncounterTicketState()
 
-      await nextTick()
-      initializeSignatureCanvases()
+      if (showEncounterTicket.value) {
+        await ensureEncounterTicketCanvases()
+      }
     }
   },
   { immediate: true }
 )
+
+watch(showEncounterTicket, (visible) => {
+  if (visible && props.visible) {
+    void ensureEncounterTicketCanvases()
+  }
+})
 
 onBeforeUnmount(() => {
   isSigning.value = false

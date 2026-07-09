@@ -2025,7 +2025,7 @@ const canEditReceipt     = computed(() =>
 
 const isBillingStatusPaid = (value?: string): boolean => normalizeBillingStatusLabel(value) === "PAID"
 const isBillingStatusLocked = (value?: string): boolean =>
-  ["BILLED", "PARTIALLY_PAID", "PAID", "VOID", "CANCELLED", "DROPPED_OUT", "CROSS_MONTH_DROPPED_OUT"].includes(normalizeBillingStatusLabel(value))
+  ["BILLED", "PARTIALLY_PAID", "PAID", "VOID", "VOIDED", "CANCELLED", "CANCELED", "DROPPED_OUT", "CROSS_MONTH_DROPPED_OUT"].includes(normalizeBillingStatusLabel(value))
 const isSelectedBillingPaid = computed(() => isBillingStatusPaid(selectedBillingDetail.value?.billing_status))
 const canOfferLockedBillingOverride = computed(() => authSession.isOwnerEquivalent && isEditingLockedBilling.value)
 const canOverrideLockedBillingEdit = computed(() =>
@@ -2566,14 +2566,38 @@ const selectedBillingOriginalTotal = computed(() =>
   selectedBillingLines.value.reduce((sum, l) => sum + Number(l.originalPrice ?? l.price ?? 0) * Number(l.quantity ?? 1), 0)
 )
 const selectedBillingTotalDue = computed(() =>
-  Number(selectedBillingDetail.value?.total_amount ?? selectedBillingDetail.value?.amount_due ?? 0)
+  selectedBillingDetail.value ? getBillingDocumentTotal(selectedBillingDetail.value) : 0
 )
 const selectedBillingAmountPaid = computed(() =>
   Number(selectedBillingDetail.value?.amount_paid ?? 0)
 )
 const selectedBillingOutstanding = computed(() =>
-  Math.max(0, selectedBillingTotalDue.value - selectedBillingAmountPaid.value)
+  selectedBillingDetail.value ? getBillingDocumentBalance(selectedBillingDetail.value) : 0
 )
+
+const getBillingDocumentTotal = (
+  billing: Pick<BillingListItem, "total_amount" | "amount_due">,
+): number => {
+  const total = Number(billing.total_amount ?? billing.amount_due ?? 0)
+  return Number.isFinite(total) ? total : 0
+}
+
+const getBillingDocumentBalance = (
+  billing: Pick<
+    BillingListItem,
+    "balance_amount" | "total_amount" | "amount_due" | "amount_paid"
+  >,
+): number => {
+  const savedBalance = Number(billing.balance_amount)
+  if (Number.isFinite(savedBalance) && savedBalance >= 0) {
+    return savedBalance
+  }
+
+  return Math.max(
+    0,
+    Number((getBillingDocumentTotal(billing) - Number(billing.amount_paid ?? 0)).toFixed(2)),
+  )
+}
 
 type BillingPackageGroupSummary = {
   id: number
@@ -2726,7 +2750,7 @@ const isSelectedBillingHmo = computed(() => {
 const canShowMarkBillingAsBilledAction = computed(() =>
   !!selectedBillingDetail.value &&
   isClaimBillingType(selectedBillingDetail.value.billing_type) &&
-  !["PAID","VOID","CANCELLED","DROPPED_OUT","CROSS_MONTH_DROPPED_OUT"].includes(selectedBillingNormalizedStatus.value)
+  !["PAID","VOID","VOIDED","CANCELLED","CANCELED","DROPPED_OUT","CROSS_MONTH_DROPPED_OUT"].includes(selectedBillingNormalizedStatus.value)
 )
 const canMarkSelectedBillingAsBilled = computed(() => canShowMarkBillingAsBilledAction.value && !isSelectedBillingMarkedBilled.value)
 const canSubmitMarkBilledLoa = computed(() => canMarkSelectedBillingAsBilled.value && !!markBilledLoaNumber.value.trim() && !!markBilledLoaDate.value)
@@ -2887,7 +2911,7 @@ const billingStatusSeverity = (value?: string): "success"|"warn"|"danger"|"info"
   const n = normalizeBillingStatusLabel(value)
   if (n === "PAID")    return "success"
   if (["PARTIAL","PENDING","UNBILLED"].includes(n)) return "warn"
-  if (["VOID","CANCELLED","DROPPED_OUT","CROSS_MONTH_DROPPED_OUT","VOIDED_DROPOUT"].includes(n)) return "danger"
+  if (["VOID","VOIDED","CANCELLED","CANCELED","DROPPED_OUT","CROSS_MONTH_DROPPED_OUT","VOIDED_DROPOUT"].includes(n)) return "danger"
   return "info"
 }
 
@@ -3012,11 +3036,11 @@ const filteredBillings = computed(() => {
     const createdAt = billing.created_at ? new Date(billing.created_at) : undefined
     if (fromDate && (!createdAt || createdAt < fromDate)) return false
     if (toDate   && (!createdAt || createdAt > toDate))   return false
-    const amountDue  = Number(billing.amount_due ?? 0)
-    const amountPaid = Number(billing.amount_paid ?? 0)
+    const amountDue = getBillingDocumentTotal(billing)
+    const amountOutstanding = getBillingDocumentBalance(billing)
     if (tableFilterMinDue.value != null && amountDue < Number(tableFilterMinDue.value)) return false
     if (tableFilterMaxDue.value != null && amountDue > Number(tableFilterMaxDue.value)) return false
-    if (tableFilterOutstandingOnly.value && amountPaid >= amountDue) return false
+    if (tableFilterOutstandingOnly.value && amountOutstanding <= 0) return false
     return true
   })
 })
@@ -3094,11 +3118,13 @@ const getPackageLineFullPrice = (billing: BillingListItem): number => {
 const buildPackageGroupTableRow = (groupId: number, rows: BillingListItem[]): BillingTableRow => {
   const sortedRows = [...rows].sort((a, b) => packageGroupSortValue(a) - packageGroupSortValue(b))
   const representative = sortedRows[0] ?? rows[0]
-  const summedSessionDue = Number(sortedRows.reduce((sum, row) => sum + Number(row.total_amount ?? row.amount_due ?? 0), 0).toFixed(2))
+  const summedSessionDue = Number(sortedRows.reduce((sum, row) => sum + getBillingDocumentTotal(row), 0).toFixed(2))
   const packageLineFullPrice = getPackageLineFullPrice(representative)
-  const totalDue = packageLineFullPrice > 0 ? packageLineFullPrice : summedSessionDue
+  const hasSavedDiscount = sortedRows.some(row => Number(row.discount_amount ?? 0) > 0)
+  const totalDue = !hasSavedDiscount && packageLineFullPrice > 0 ? packageLineFullPrice : summedSessionDue
   const totalPaid = Number(sortedRows.reduce((sum, row) => sum + Number(row.amount_paid ?? 0), 0).toFixed(2))
-  const balance = Math.max(0, Number((totalDue - totalPaid).toFixed(2)))
+  const savedBalanceTotal = Number(sortedRows.reduce((sum, row) => sum + getBillingDocumentBalance(row), 0).toFixed(2))
+  const balance = savedBalanceTotal >= 0 ? savedBalanceTotal : Math.max(0, Number((totalDue - totalPaid).toFixed(2)))
   const packageStatus = resolvePackageGroupStatus(sortedRows)
   const totalSessions = Math.max(
     Number(representative.total_sessions ?? 0),
@@ -3117,6 +3143,7 @@ const buildPackageGroupTableRow = (groupId: number, rows: BillingListItem[]): Bi
     amount_due: totalDue,
     total_amount: totalDue,
     amount_paid: totalPaid,
+    balance_amount: balance,
     is_package_group_row: true,
     representative_billing_id: representative.id,
     package_group_billing_count: sortedRows.length,
@@ -3137,9 +3164,9 @@ const buildLguAppointmentGroupTableRow = (groupKey: string, rows: BillingListIte
     return Number(a.id ?? 0) - Number(b.id ?? 0)
   })
   const representative = sortedRows[0] ?? rows[0]
-  const totalDue = Number(sortedRows.reduce((sum, row) => sum + Number(row.total_amount ?? row.amount_due ?? 0), 0).toFixed(2))
+  const totalDue = Number(sortedRows.reduce((sum, row) => sum + getBillingDocumentTotal(row), 0).toFixed(2))
   const totalPaid = Number(sortedRows.reduce((sum, row) => sum + Number(row.amount_paid ?? 0), 0).toFixed(2))
-  const balance = Math.max(0, Number((totalDue - totalPaid).toFixed(2)))
+  const balance = Number(sortedRows.reduce((sum, row) => sum + getBillingDocumentBalance(row), 0).toFixed(2))
   const groupStatus = resolvePackageGroupStatus(sortedRows)
   const totalSessions = Math.max(
     Number(representative.total_sessions ?? 0),
@@ -3160,6 +3187,7 @@ const buildLguAppointmentGroupTableRow = (groupKey: string, rows: BillingListIte
     amount_due: totalDue,
     total_amount: totalDue,
     amount_paid: totalPaid,
+    balance_amount: balance,
     is_lgu_group_row: true,
     representative_billing_id: representative.id,
     package_group_billing_count: sortedRows.length,
@@ -4129,10 +4157,10 @@ const buildBillingUpdatePayload = (detail: BillingListItem, overrides?: Partial<
   patient_id: detail.patient_id, appointment_id: detail.appointment_id, package_id: detail.package_id,
   billing_type: normalizeBillingType(detail.billing_type), service_type: normalizeServiceType(detail.service_type),
   service_name: detail.service_name || undefined, line_items_json: detail.line_items_json,
-  amount_due: Number(detail.amount_due ?? detail.total_amount ?? 0), amount_paid: Number(detail.amount_paid ?? 0),
+  amount_due: getBillingDocumentTotal(detail), amount_paid: Number(detail.amount_paid ?? 0),
   payment_method_id: detail.payment_method_id, payment_reference: detail.payment_reference || undefined,
   discount_type: detail.discount_type, discount_value: detail.discount_value, discount_amount: detail.discount_amount,
-  subtotal_amount: detail.subtotal_amount, total_amount: detail.total_amount ?? detail.amount_due,
+  subtotal_amount: detail.subtotal_amount, total_amount: getBillingDocumentTotal(detail), balance_amount: detail.balance_amount,
   amount_tendered: detail.amount_tendered, change_amount: detail.change_amount,
   pricing_tier: detail.pricing_tier, pricing_source: detail.pricing_source, receipt_number: detail.receipt_number,
   senior_pwd_id_presented: detail.senior_pwd_id_presented, senior_pwd_id_reference: detail.senior_pwd_id_reference,
@@ -4193,7 +4221,8 @@ const openBillingPrintableRoute = (detail: BillingListItem): void => {
       }
     })
         : router.resolve({
-            name: normalizedBillingType === "SELF_PAY_PACKAGE"
+            name: normalizedBillingType === "SELF_PAY_PACKAGE" &&
+              String(detail.pricing_source ?? "").trim().toUpperCase() !== "PACKAGE_ADD_ON_CHARGE"
               ? "self-pay-package-invoice-print"
               : "self-pay-single-invoice-print",
             query: commonQuery

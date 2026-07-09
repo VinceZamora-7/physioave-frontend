@@ -71,6 +71,7 @@ export interface LguPatientBilling {
   line_items_json?: string | null
   consumed_services_json?: string | null
   amount_due: number
+  total_amount?: number | null
   billing_status: string
   pricing_source?: string | null
   created_at: string

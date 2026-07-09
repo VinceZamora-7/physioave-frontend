@@ -17,7 +17,7 @@
               {{ editingId ? "Update appointment" : "Create appointment" }}
             </h3>
             <p class="mt-1 text-sm text-[rgb(var(--app-fg))]/60">
-              Choose the patient, billing path, planned services, care details, and schedule. Time slots are suggestions; manual scheduling is still allowed.
+              Choose the patient, billing path, Services, care details, and schedule. Time slots are suggestions; manual scheduling is still allowed.
             </p>
           </div>
 
@@ -134,12 +134,12 @@
           </div>
         </section>
 
-        <!-- Section 2: Billing Type and Planned Services -->
+        <!-- Section 2: Billing Type and Services -->
         <section class="app-appointment-card app-appointment-card-secondary sm:p-5">
           <div class="flex items-start justify-between gap-3">
             <FormSectionHeader
               index="2"
-              title="Billing Type and Planned Services"
+              title="Billing Type and Services"
               description="Pick the billing path first. The service picker will adjust to what that billing type allows."
             />
             <span class="app-appointment-chip font-black uppercase tracking-widest">
@@ -304,7 +304,7 @@
                 <!-- Selected Services Header -->
                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <p class="text-[10px] font-black uppercase tracking-widest text-[rgb(var(--app-fg))]/45">Planned services</p>
+                    <p class="text-[10px] font-black uppercase tracking-widest text-[rgb(var(--app-fg))]/45">Services</p>
                     <h5 class="mt-1 text-base font-black text-[rgb(var(--app-fg))]">Added to this appointment</h5>
                   </div>
                   <div class="flex flex-wrap items-center gap-2 sm:justify-end">
@@ -330,7 +330,7 @@
                   class="mt-4 rounded-xl border border-dashed border-[rgb(var(--app-border))] p-6 text-center"
                 >
                   <i class="pi pi-plus-circle text-2xl text-[rgb(var(--app-fg))]/40" />
-                  <div class="mt-2 text-sm font-semibold text-[rgb(var(--app-fg))]/60">No planned services yet</div>
+                  <div class="mt-2 text-sm font-semibold text-[rgb(var(--app-fg))]/60">No Services yet</div>
                   <p class="mt-1 text-xs text-[rgb(var(--app-fg))]/50">Select a billing type and service category above</p>
                 </div>
 
@@ -510,18 +510,6 @@
                 </div>
 
                 <div class="space-y-1.5">
-                  <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">Visit Phase</label>
-                  <Select
-                    v-model="form.appointment_phase"
-                    :options="phaseOptions"
-                    optionLabel="label"
-                    optionValue="value"
-                    fluid
-                    placeholder="Select phase"
-                  />
-                </div>
-
-                <div class="space-y-1.5">
                   <label class="block text-xs font-black uppercase tracking-wider text-[rgb(var(--app-fg))]/55">Specialty</label>
                   <Select
                     v-model="form.specialty_tag_id"
@@ -665,7 +653,7 @@
                 </div>
               </div>
 
-              <label
+              <!-- <label
                 v-if="!editingId && !isFollowUpMode"
                 class="flex cursor-pointer items-start gap-3 rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4 text-sm text-[rgb(var(--app-fg))] transition hover:bg-[rgb(var(--app-hover-bg))]"
               >
@@ -681,7 +669,7 @@
                     Adds one extra appointment date before the main treatment sessions. Attendance will still consume the selected planned service credit.
                   </span>
                 </span>
-              </label>
+              </label> -->
 
               <div class="flex flex-wrap gap-2">
                 <Button

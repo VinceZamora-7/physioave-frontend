@@ -58,7 +58,7 @@
 
           <Column header="Total" style="width: 140px">
             <template #body="{ data }">
-              <div class="text-right font-semibold">{{ asCurrency(Number(data.total_amount ?? 0)) }}</div>
+              <div class="text-right font-semibold">{{ asCurrency(getBillingTotal(data)) }}</div>
             </template>
           </Column>
 
@@ -90,12 +90,15 @@ const transactions = ref<BillingListItem[]>([])
 const router = useRouter()
 
 const totalAmount = computed(() =>
-  transactions.value.reduce((sum, row) => sum + Number(row.total_amount ?? 0), 0)
+  transactions.value.reduce((sum, row) => sum + getBillingTotal(row), 0)
 )
 
 const totalPaid = computed(() =>
   transactions.value.reduce((sum, row) => sum + Number(row.amount_paid ?? 0), 0)
 )
+
+const getBillingTotal = (billing: BillingListItem): number =>
+  Number(billing.total_amount ?? billing.amount_due ?? 0)
 
 const asCurrency = (value: number): string =>
   Number(value ?? 0).toLocaleString("en-PH", { style: "currency", currency: "PHP" })

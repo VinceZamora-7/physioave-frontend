@@ -255,7 +255,7 @@
             <template #body="{ data }"><div class="text-right font-bold">{{ asCurrency(data.total_amount) }}</div></template>
           </Column>
           <Column header="Outstanding" style="width: 150px">
-            <template #body="{ data }"><div class="text-right font-semibold text-amber-700 dark:text-amber-300">{{ asCurrency(Math.max(0, Number(data.total_amount ?? 0) - Number(data.amount_paid ?? 0))) }}</div></template>
+            <template #body="{ data }"><div class="text-right font-semibold text-amber-700 dark:text-amber-300">{{ asCurrency(getBillingOutstanding(data)) }}</div></template>
           </Column>
         </DataTable>
       </div>
@@ -464,7 +464,7 @@ const totalPaid = computed(() =>
 )
 
 const totalOutstanding = computed(() =>
-  Math.max(0, Number((totalAmount.value - totalPaid.value).toFixed(2)))
+  transactions.value.reduce((sum, item) => sum + getBillingOutstanding(item), 0)
 )
 
 type HmoPrintableEvent =
@@ -540,8 +540,18 @@ const openHmoPrintRoute = (
 const getBillingReference = (billing: Pick<BillingListItem, "id" | "public_id" | "receipt_number">): string =>
   billing.public_id || billing.receipt_number || `BILLING-${billing.id}`
 
-const getBillingOutstanding = (billing: Pick<BillingListItem, "total_amount" | "amount_due" | "amount_paid">): number =>
-  Math.max(0, Number((Number(billing.total_amount ?? billing.amount_due ?? 0) - Number(billing.amount_paid ?? 0)).toFixed(2)))
+const getBillingOutstanding = (
+  billing: {
+    balance_amount?: number | null
+    total_amount?: number | null
+    amount_due?: number | null
+    amount_paid?: number | null
+  },
+): number => {
+  const savedBalance = Number(billing.balance_amount)
+  if (Number.isFinite(savedBalance) && savedBalance >= 0) return savedBalance
+  return Math.max(0, Number((Number(billing.total_amount ?? billing.amount_due ?? 0) - Number(billing.amount_paid ?? 0)).toFixed(2)))
+}
 
 
 const getSelectedMonthRange = (): { from: Date; to: Date } => {
@@ -609,7 +619,7 @@ const claimOutstandingHmoBillings = async (): Promise<void> => {
   const outstanding = transactions.value
     .map(row => ({
       billingId: Number(row.id),
-      outstanding: Number(Math.max(0, Number(row.total_amount ?? 0) - Number(row.amount_paid ?? 0)).toFixed(2))
+      outstanding: getBillingOutstanding(row)
     }))
     .filter(row => Number.isFinite(row.billingId) && row.billingId > 0 && row.outstanding > 0)
 

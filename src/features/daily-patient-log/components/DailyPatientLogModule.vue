@@ -1416,12 +1416,15 @@ const bundleSessionQuantityLabel = (item: AppointmentDailyLogItem): string => {
 }
 
 const sessionLabel = (item: AppointmentDailyLogItem): string => {
+  const sessionSequence = Number(item.session_sequence)
+  const totalSessions = Number(item.total_sessions)
+  if (Number.isFinite(sessionSequence) && sessionSequence > 0 && Number.isFinite(totalSessions) && totalSessions > 0) {
+    return `Session ${sessionSequence} of ${totalSessions}`
+  }
+
   const bundleLabel = bundleSessionQuantityLabel(item)
   if (bundleLabel) return bundleLabel
 
-  if (item.session_sequence && item.total_sessions) {
-    return `Session ${item.session_sequence} of ${item.total_sessions}`
-  }
   return String(item.appointment_phase ?? "Single visit").replace(/_/g, " ")
 }
 

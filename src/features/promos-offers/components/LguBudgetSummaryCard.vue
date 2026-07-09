@@ -874,7 +874,7 @@ const isCrossMonthDroppedOutSession = (option: LguInvoiceSessionOption): boolean
 
 const getPrintableBillingTotal = (billing?: LguPatientBilling): number => {
   if (!billing) return 0
-  const fallbackTotal = Number(billing.amount_due ?? 0)
+  const fallbackTotal = Number(billing.total_amount ?? billing.amount_due ?? 0)
   if (!isDropoutClaimBilling(billing) && fallbackTotal > 0) return fallbackTotal
   const lines = parseClaimLineItems(billing.line_items_json ?? undefined)
   const lineTotal = lines.reduce((sum, line) => {
@@ -1198,7 +1198,7 @@ const renderBillingRows = (): string => {
       <td>${escapeHtml(billing.pricing_source || "-")}</td>
       <td>${escapeHtml(billing.billing_status || "-")}</td>
       <td>${escapeHtml(formatDateTime(billing.created_at))}</td>
-      <td class="right">${escapeHtml(asCurrency(billing.amount_due))}</td>
+      <td class="right">${escapeHtml(asCurrency(getPrintableBillingTotal(billing)))}</td>
     </tr>
   `).join("")
 }

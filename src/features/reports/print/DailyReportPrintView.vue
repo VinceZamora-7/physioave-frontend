@@ -1,7 +1,6 @@
 <template>
   <SponsorInvoiceLayout
     title="Daily Report"
-    :subtitle="`Finance and end-of-day closeout for ${selectedDateLabel}`"
     :has-error="!!error"
   >
     <template #meta>
@@ -142,27 +141,6 @@
         </div>
       </section>
 
-      <section class="daily-report-section">
-        <h2 class="daily-report-section-title">Daily Totals</h2>
-        <div class="daily-report-metrics daily-report-metrics--totals">
-          <div class="daily-report-metric">
-            <div class="daily-report-metric__label">Gross Charge</div>
-            <div class="daily-report-metric__value">{{ asCurrency(summary.gross_income) }}</div>
-          </div>
-          <div class="daily-report-metric">
-            <div class="daily-report-metric__label">Outstanding</div>
-            <div class="daily-report-metric__value">{{ asCurrency(summary.outstanding_balance) }}</div>
-          </div>
-          <div class="daily-report-metric">
-            <div class="daily-report-metric__label">Net Cash</div>
-            <div class="daily-report-metric__value">{{ asCurrency(summary.net_cash) }}</div>
-          </div>
-          <div class="daily-report-metric">
-            <div class="daily-report-metric__label">Expense Total</div>
-            <div class="daily-report-metric__value">{{ asCurrency(summary.expense_total) }}</div>
-          </div>
-        </div>
-      </section>
     </template>
 
     <template v-if="!error" #bottom>
@@ -522,12 +500,13 @@ onMounted(async () => {
 }
 
 .report-number-column {
-  width: 24px !important;
-  min-width: 24px !important;
-  max-width: 24px !important;
-  padding-left: 2px !important;
-  padding-right: 2px !important;
+  width: 36px !important;
+  min-width: 36px !important;
+  max-width: 36px !important;
+  padding-left: 4px !important;
+  padding-right: 4px !important;
   white-space: nowrap;
+  text-align: center;
 }
 
 .daily-report-signatures {
@@ -598,11 +577,13 @@ onMounted(async () => {
   }
 
   .report-number-column {
-    width: 18px !important;
-    min-width: 18px !important;
-    max-width: 18px !important;
-    padding-left: 1px !important;
-    padding-right: 1px !important;
+    width: 34px !important;
+    min-width: 34px !important;
+    max-width: 34px !important;
+    padding-left: 3px !important;
+    padding-right: 3px !important;
+    white-space: nowrap;
+    text-align: center;
   }
 }
 </style>

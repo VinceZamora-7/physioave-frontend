@@ -32,27 +32,43 @@
         </div>
       </section>
 
-      <section class="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div class="app-appointment-card space-y-3 lg:col-span-2">
-          <h4 class="app-appointment-title text-base">Schedule and Care Team</h4>
-          <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <DetailField label="Clinic" :value="appointment.clinic_name" />
-            <DetailField label="Location" :value="displayLocationContext(appointment.location_context)" />
-            <DetailField label="PT" :value="appointment.provider_name || appointment.doctor_name" />
-            <DetailField label="Referring Staff" :value="appointment.referring_staff_name || appointment.referring_doctor_name" />
-            <DetailField label="Support Staff" :value="appointment.support_staff_name" />
-            <DetailField label="Specialty" :value="appointment.specialty_tag_name" />
-            <DetailField label="Clinic Area" :value="appointment.treatment_area_name" />
-            <DetailField label="Appointment Type" :value="appointment.appointment_type" />
-          </div>
+      <section class="app-appointment-card space-y-3">
+        <div class="flex items-center justify-between gap-3">
+          <h4 class="app-appointment-title text-base">Schedule, Care Team and Status</h4>
+          <Button
+            :icon="showScheduleCareTeamStatus ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
+            text
+            rounded
+            severity="secondary"
+            size="small"
+            :aria-expanded="showScheduleCareTeamStatus"
+            aria-label="Toggle schedule, care team and status"
+            @click="showScheduleCareTeamStatus = !showScheduleCareTeamStatus"
+          />
         </div>
 
-        <div class="app-appointment-card space-y-3">
-          <h4 class="app-appointment-title text-base">Status</h4>
-          <DetailField label="Billing Status" :value="appointment.billing_status" />
-          <DetailField label="Billing Type" :value="displayBillingType" />
-          <DetailField v-if="isLguAppointment" label="Dropout Status" :value="appointment.dropout_status" />
-          <DetailField label="Reschedule Count" :value="String(appointment.reschedule_count ?? 0)" />
+        <div v-show="showScheduleCareTeamStatus" class="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div class="space-y-3 lg:col-span-2">
+            <h5 class="app-appointment-title text-sm">Schedule and Care Team</h5>
+            <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <DetailField label="Clinic" :value="appointment.clinic_name" />
+              <DetailField label="Location" :value="displayLocationContext(appointment.location_context)" />
+              <DetailField label="PT" :value="appointment.provider_name || appointment.doctor_name" />
+              <DetailField label="Referring Staff" :value="appointment.referring_staff_name || appointment.referring_doctor_name" />
+              <DetailField label="Support Staff" :value="appointment.support_staff_name" />
+              <DetailField label="Specialty" :value="appointment.specialty_tag_name" />
+              <DetailField label="Clinic Area" :value="appointment.treatment_area_name" />
+              <DetailField label="Appointment Type" :value="appointment.appointment_type" />
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <h5 class="app-appointment-title text-sm">Status</h5>
+            <DetailField label="Billing Status" :value="appointment.billing_status" />
+            <DetailField label="Billing Type" :value="displayBillingType" />
+            <DetailField v-if="isLguAppointment" label="Dropout Status" :value="appointment.dropout_status" />
+            <DetailField label="Reschedule Count" :value="String(appointment.reschedule_count ?? 0)" />
+          </div>
         </div>
       </section>
 
@@ -83,63 +99,94 @@
 <section class="app-appointment-card space-y-3">
   <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
     <div>
-      <h4 class="app-appointment-title text-base">Planned Services</h4>
+      <h4 class="app-appointment-title text-base">Services</h4>
       <p class="app-appointment-muted mt-1 text-sm">
         Services and credits attached to this appointment.
       </p>
     </div>
 
-    <Button
-      v-if="canMarkAttendance"
-      label="Attendance"
-      icon="pi pi-check-square"
-      severity="success"
-      outlined
-      size="small"
-      @click="$emit('attendance')"
-    />
+    <div class="flex flex-wrap items-center gap-2">
+      <Button
+        v-if="canManageServices"
+        label="Add Add-ons"
+        icon="pi pi-plus"
+        severity="secondary"
+        outlined
+        size="small"
+        @click="$emit('manage-services')"
+      />
+      <Button
+        v-if="canMarkAttendance"
+        label="Attendance"
+        icon="pi pi-check-square"
+        severity="success"
+        outlined
+        size="small"
+        @click="$emit('attendance')"
+      />
+    </div>
   </div>
 
   <div
     v-if="!plannedServicesList.length"
     class="rounded-lg border border-dashed border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] px-4 py-4 text-center text-sm text-[rgb(var(--app-fg))]/60"
   >
-    No planned services recorded.
+    No services recorded.
   </div>
 
   <div v-else class="space-y-2">
     <article
-      v-for="service in plannedServicesList"
-      :key="plannedServiceKey(service)"
-      class="flex flex-col gap-2 rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+      v-for="group in plannedServiceGroups"
+      :key="group.key"
+      class="rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))]"
     >
-      <div class="min-w-0">
-        <div class="break-words text-sm font-semibold text-[rgb(var(--app-fg))]">
-          {{ plannedServiceName(service) }}
-        </div>
+      <div class="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex min-w-0 items-start gap-2">
+          <Button
+            v-if="group.children.length"
+            :icon="isPlannedServiceGroupExpanded(group.key) ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
+            text
+            rounded
+            severity="secondary"
+            size="small"
+            class="-ml-1 shrink-0"
+            :aria-expanded="isPlannedServiceGroupExpanded(group.key)"
+            :aria-label="`Toggle ${plannedServiceName(group.service)} included services`"
+            @click="togglePlannedServiceGroup(group.key)"
+          />
+          <span v-else class="w-8 shrink-0" />
 
-        <div class="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-[rgb(var(--app-fg))]/50">
-          {{ plannedServiceType(service) }}
+          <div class="min-w-0">
+            <div class="break-words text-sm font-semibold text-[rgb(var(--app-fg))]">
+              {{ plannedServiceName(group.service) }}
+            </div>
+
+            <div class="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-[rgb(var(--app-fg))]/50">
+              {{ group.children.length ? 'Bundle' : plannedServiceType(group.service) }}
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="flex flex-wrap items-center gap-2 text-xs">
-        <span class="rounded-full bg-[rgb(var(--app-card))] px-2.5 py-1 font-semibold text-[rgb(var(--app-fg))]/70">
-          Planned: {{ plannedQuantity(service) }}
-        </span>
+      <div v-show="group.children.length && isPlannedServiceGroupExpanded(group.key)" class="border-t border-[rgb(var(--app-border))] px-3 py-2">
+        <div class="space-y-2">
+          <div
+            v-for="child in group.children"
+            :key="plannedServiceKey(child)"
+            class="flex flex-col gap-2 rounded-md bg-[rgb(var(--app-card))] px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div class="min-w-0">
+              <div class="break-words text-sm font-semibold text-[rgb(var(--app-fg))]">
+                {{ plannedServiceName(child) }}
+              </div>
 
-        <span class="rounded-full bg-[rgb(var(--app-card))] px-2.5 py-1 font-semibold text-[rgb(var(--app-fg))]/70">
-          Used: {{ consumedQuantity(service) }}
-        </span>
+              <div class="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-[rgb(var(--app-fg))]/50">
+                {{ plannedServiceType(child) }}
+              </div>
+            </div>
 
-        <span class="rounded-full bg-[rgb(var(--app-card))] px-2.5 py-1 font-semibold text-[rgb(var(--app-fg))]/70">
-          Left: {{ remainingQuantity(service) }}
-        </span>
-
-        <Tag
-          :value="plannedServiceStatus(service)"
-          :severity="plannedServiceSeverity(service)"
-        />
+          </div>
+        </div>
       </div>
     </article>
   </div>
@@ -156,7 +203,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h, type PropType } from "vue"
+import { computed, defineComponent, h, ref, watch, type PropType } from "vue"
 import Button from "primevue/button"
 import Dialog from "primevue/dialog"
 import Tag from "primevue/tag"
@@ -165,6 +212,11 @@ import type { AppointmentListItem } from "@/features/appointments/api/appointmen
 import type { AppointmentBillingPreparation } from "@/features/appointments/api/appointment-billing.service"
 
 type PlannedServiceRecord = Record<string, any>
+type PlannedServiceGroup = {
+  key: string
+  service: PlannedServiceRecord
+  children: PlannedServiceRecord[]
+}
 
 const props = withDefaults(defineProps<{
   visible: boolean
@@ -190,6 +242,7 @@ const props = withDefaults(defineProps<{
   canEdit?: boolean
   canReschedule?: boolean
   canMarkAttendance?: boolean
+  canManageServices?: boolean
 }>(), {
   plannedServices: () => [],
   consumedServices: () => [],
@@ -198,7 +251,8 @@ const props = withDefaults(defineProps<{
   isBillingActionLoading: false,
   canEdit: true,
   canReschedule: true,
-  canMarkAttendance: true
+  canMarkAttendance: true,
+  canManageServices: true
 })
 
 defineEmits<{
@@ -206,6 +260,7 @@ defineEmits<{
   edit: []
   reschedule: []
   attendance: []
+  "manage-services": []
   "open-billing": []
   "create-self-pay-appointment-bill": []
   "create-self-pay-package-bill": []
@@ -214,6 +269,20 @@ defineEmits<{
 
 const plannedServicesList = computed(() => props.plannedServices ?? [])
 const consumedServicesList = computed(() => props.consumedServices ?? [])
+const showScheduleCareTeamStatus = ref(false)
+const expandedPlannedServiceGroups = ref<Set<string>>(new Set())
+
+watch(() => props.visible, (visible) => {
+  if (visible) {
+    showScheduleCareTeamStatus.value = false
+    expandedPlannedServiceGroups.value = new Set()
+  }
+})
+
+watch(() => props.appointment?.id, () => {
+  showScheduleCareTeamStatus.value = false
+  expandedPlannedServiceGroups.value = new Set()
+})
 
 const normalizeToken = (value?: string | null): string =>
   String(value ?? "").trim().toUpperCase()
@@ -262,6 +331,95 @@ const plannedServiceType = (service: PlannedServiceRecord): string =>
   String(firstValue(service, ["type", "service_type", "service_category", "credit_type"]) ?? "Service")
     .split("_")
     .join(" ")
+
+const plannedServiceId = (service: PlannedServiceRecord): number | null => {
+  const id = Number(firstValue(service, ["credit_item_id", "id"]))
+  return Number.isFinite(id) && id > 0 ? id : null
+}
+
+const plannedServiceParentId = (service: PlannedServiceRecord): number | null => {
+  const id = Number(firstValue(service, ["parent_credit_item_id"]))
+  return Number.isFinite(id) && id > 0 ? id : null
+}
+
+const plannedServiceTypeToken = (service: PlannedServiceRecord): string =>
+  normalizeToken(String(firstValue(service, ["type", "service_type", "service_category", "credit_type"]) ?? ""))
+
+const isPackagePlannedService = (service: PlannedServiceRecord): boolean =>
+  plannedServiceTypeToken(service) === "PACKAGE"
+
+const isBundlePlannedService = (service: PlannedServiceRecord): boolean =>
+  plannedServiceTypeToken(service) === "BUNDLE"
+
+const plannedServiceGroupKey = (service: PlannedServiceRecord, fallbackIndex = 0): string =>
+  `planned-service-group-${plannedServiceId(service) ?? `${plannedServiceName(service)}-${fallbackIndex}`}`
+
+const plannedServiceGroups = computed<PlannedServiceGroup[]>(() => {
+  const services = plannedServicesList.value
+  const byId = new Map<number, PlannedServiceRecord>()
+  services.forEach((service) => {
+    const id = plannedServiceId(service)
+    if (id) byId.set(id, service)
+  })
+
+  const hasPackage = services.some(isPackagePlannedService)
+  const groups: PlannedServiceGroup[] = []
+  const groupedChildIds = new Set<number>()
+  const groupedParentIds = new Set<number>()
+
+  services
+    .filter(isBundlePlannedService)
+    .forEach((bundle, index) => {
+      const bundleId = plannedServiceId(bundle)
+      const children = services.filter((service) =>
+        !isPackagePlannedService(service) &&
+        !isBundlePlannedService(service) &&
+        bundleId !== null &&
+        plannedServiceParentId(service) === bundleId
+      )
+
+      children.forEach((child) => {
+        const childId = plannedServiceId(child)
+        if (childId) groupedChildIds.add(childId)
+      })
+      if (bundleId) groupedParentIds.add(bundleId)
+
+      groups.push({
+        key: plannedServiceGroupKey(bundle, index),
+        service: bundle,
+        children
+      })
+    })
+
+  services.forEach((service, index) => {
+    const serviceId = plannedServiceId(service)
+    if (serviceId && groupedParentIds.has(serviceId)) return
+    if (serviceId && groupedChildIds.has(serviceId)) return
+    if (isPackagePlannedService(service)) return
+
+    const parent = plannedServiceParentId(service)
+    const parentService = parent ? byId.get(parent) : null
+    if (hasPackage && parentService && isPackagePlannedService(parentService)) return
+
+    groups.push({
+      key: plannedServiceGroupKey(service, index),
+      service,
+      children: []
+    })
+  })
+
+  return groups
+})
+
+const isPlannedServiceGroupExpanded = (key: string): boolean =>
+  expandedPlannedServiceGroups.value.has(key)
+
+const togglePlannedServiceGroup = (key: string): void => {
+  const next = new Set(expandedPlannedServiceGroups.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  expandedPlannedServiceGroups.value = next
+}
 
 const plannedQuantity = (service: PlannedServiceRecord): number =>
   numberValue(firstValue(service, ["planned_quantity", "quantity", "qty", "total_quantity"]), 0)

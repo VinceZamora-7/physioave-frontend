@@ -749,6 +749,25 @@ export const appointmentPhase1Service = {
     return data
   },
 
+  async appendAddOns(
+    id: number,
+    payload: AppointmentServiceSelectionPayload
+  ): Promise<{ credit_account_id: number; planned_services: unknown[] }> {
+    try {
+      const { data } = await pamsAPI.post(`/appointments/${id}/add-ons`, payload)
+      return data
+    } catch (error) {
+      if ((error as any)?.response?.status !== 404) throw error
+
+      const { data } = await pamsAPI.post(`/appointments/${id}/planned-services`, payload)
+      return data
+    }
+  },
+
+  async deleteAddOn(id: number, creditItemId: number): Promise<void> {
+    await pamsAPI.delete(`/appointments/${id}/add-ons/${creditItemId}`)
+  },
+
   async getPlannedServices(id: number): Promise<AppointmentPlannedService[]> {
     const { data } = await pamsAPI.get<AppointmentPlannedService[]>(`/appointments/${id}/planned-services`)
     return data

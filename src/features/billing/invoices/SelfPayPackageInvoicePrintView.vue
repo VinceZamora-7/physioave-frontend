@@ -1,7 +1,6 @@
 <template>
   <SponsorInvoiceLayout
-    title="Self Pay-Package Service Invoice"
-    :subtitle="`Package service printable record for ${patientName}`"
+    title="Self Pay: Package Service Invoice"
     :has-error="!!error"
   >
     <template #meta>
@@ -24,34 +23,34 @@
           <div class="profile-grid">
             <div class="profile-group">
               <div class="profile-row">
-                <span class="profile-label">Patient Name:</span>
+                <span class="profile-label">Patient Name: </span>
                 <span class="profile-value">{{ patientName }}</span>
               </div>
 
               <div class="profile-row">
-                <span class="profile-label">Address:</span>
+                <span class="profile-label">Address: </span>
                 <span class="profile-value">{{ patientAddress }}</span>
               </div>
 
               <div class="profile-row">
-                <span class="profile-label">Age:</span>
+                <span class="profile-label">Age: </span>
                 <span class="profile-value">{{ patientAge }}</span>
               </div>
             </div>
 
             <div class="profile-group">
               <div class="profile-row profile-row--wide-label">
-                <span class="profile-label">Physical Therapist:</span>
+                <span class="profile-label">Physical Therapist: </span>
                 <span class="profile-value">{{ physicalTherapist }}</span>
               </div>
 
               <div class="profile-row profile-row--wide-label">
-                <span class="profile-label">Doctor:</span>
+                <span class="profile-label">Doctor: </span>
                 <span class="profile-value">{{ doctor }}</span>
               </div>
 
               <div class="profile-row profile-row--wide-label">
-                <span class="profile-label">Diagnosis:</span>
+                <span class="profile-label">Diagnosis: </span>
                 <span class="profile-value">{{ diagnosis }}</span>
               </div>
             </div>
@@ -123,6 +122,22 @@
           </tbody>
 
           <tfoot>
+            <tr v-if="hasInvoiceDiscount" class="invoice-subtotal-row">
+              <td colspan="4" class="text-right">
+                Subtotal:
+              </td>
+              <td class="text-center">
+                {{ formatCurrency(invoiceSubtotal) }}
+              </td>
+            </tr>
+            <tr v-if="hasInvoiceDiscount" class="invoice-discount-row">
+              <td colspan="4" class="text-right">
+                Less Discount:
+              </td>
+              <td class="text-center">
+                -{{ formatCurrency(invoiceDiscount) }}
+              </td>
+            </tr>
             <tr class="grand-total-row">
               <td colspan="4" class="text-right">
                 Grand Total:
@@ -143,6 +158,7 @@
           <div><span class="self-pay-bottom-text">Billing Type:</span> {{ billingTypeLabel }}</div>
           <div><span class="self-pay-bottom-text">Payment Method:</span> {{ paymentMethodLabel }}</div>
           <div><span class="self-pay-bottom-text">Payment Reference:</span> {{ paymentReferenceLabel }}</div>
+          <div v-if="hasInvoiceDiscount"><span class="self-pay-bottom-text">Discount:</span> {{ formatCurrency(invoiceDiscount) }}</div>
           <div><span class="self-pay-bottom-text">Amount Paid:</span> {{ formatCurrency(amountPaid) }}</div>
         </section>
 
@@ -179,6 +195,7 @@ import type { BillingListItem } from "@/features/billing/api/billing-phase1.serv
 import { billingContextTanstackService } from "@/features/billing/queries/billing-context.tanstack.service"
 import SponsorInvoiceLayout from "@/features/shared/invoices/SponsorInvoiceLayout.vue"
 import { useHmoInvoicePrintActions } from "@/features/hmo-billing/invoices/hmo-invoice.shared"
+import { BillingTanstackKey } from "@/utils/keys/tanstack-key"
 
 type SelfPaySummaryRow = {
   key: string
@@ -645,16 +662,20 @@ const dateSigned = computed(() =>
 
 const grandTotal = computed(() => {
   const billing = billingDetail.value
-  if (billing && isSessionScopedPackageBilling(billing)) {
-    const packageTotal = getPackageGroupTotal(billing)
-    if (packageTotal > 0) return packageTotal
-  }
-
   const billingTotal = Number(
     billing?.total_amount ??
     billing?.amount_due ??
     0
   )
+
+  if (invoiceDiscount.value > 0 && Number.isFinite(billingTotal) && billingTotal > 0) {
+    return billingTotal
+  }
+
+  if (billing && isSessionScopedPackageBilling(billing)) {
+    const packageTotal = getPackageGroupTotal(billing)
+    if (packageTotal > 0) return packageTotal
+  }
 
   if (Number.isFinite(billingTotal) && billingTotal > 0) {
     return billingTotal
@@ -663,6 +684,19 @@ const grandTotal = computed(() => {
   return rows.value.reduce((sum, row) => {
     return sum + (row.isIncluded ? 0 : Number(row.unitTotal ?? 0))
   }, 0)
+})
+
+const invoiceDiscount = computed(() => {
+  const discount = Number(billingDetail.value?.discount_amount ?? 0)
+  return Number.isFinite(discount) && discount > 0 ? discount : 0
+})
+
+const hasInvoiceDiscount = computed(() => invoiceDiscount.value > 0)
+
+const invoiceSubtotal = computed(() => {
+  const subtotal = Number(billingDetail.value?.subtotal_amount ?? 0)
+  if (Number.isFinite(subtotal) && subtotal > 0) return subtotal
+  return grandTotal.value + invoiceDiscount.value
 })
 
 const getServiceName = (
@@ -1003,6 +1037,20 @@ const appendIncludedServiceRows = (
       isPackageParent: false,
       isBundleParent: childIsBundle
     })
+
+    const nestedChildren = getDirectChildren(child)
+    if (nestedChildren.length > 0) {
+      appendIncludedServiceRows(
+        nestedChildren,
+        billingIdValue,
+        parentIndex,
+        billingDate,
+        output,
+        level + 1,
+        childPath,
+        child
+      )
+    }
   })
 }
 
@@ -1085,19 +1133,6 @@ const buildRows = (billing: BillingListItem): SelfPaySummaryRow[] => {
     })
 
     itemNo += 1
-
-    if (children.length > 0 && !isBundleLikeLine(line)) {
-      appendIncludedServiceRows(
-        children,
-        billing.id,
-        Number(String(indexPath).replace(/\D/g, "")) || itemNo,
-        billingDate,
-        output,
-        1,
-        "included",
-        line
-      )
-    }
   }
 
   if (!lineItems.length) {
@@ -1155,16 +1190,6 @@ const buildRows = (billing: BillingListItem): SelfPaySummaryRow[] => {
         ...sessionLine,
         children: []
       }, `${index}-package-session`, packageDisplayName || "Package Service")
-      appendIncludedServiceRows(
-        children,
-        billing.id,
-        index,
-        billingDate,
-        output,
-        1,
-        "included",
-        line
-      )
 
       return
     }
@@ -1186,6 +1211,12 @@ const load = async (): Promise<void> => {
   }
 
   try {
+    await queryClient.invalidateQueries({
+      queryKey: [BillingTanstackKey.BILLING_CONTEXT, billingId.value]
+    })
+    queryClient.removeQueries({
+      queryKey: [BillingTanstackKey.BILLING_CONTEXT, billingId.value]
+    })
     const context = await billingContextTanstackService.fetchContext(queryClient, billingId.value)
 
     billingDetail.value = context?.billing ?? null
@@ -1256,6 +1287,15 @@ onMounted(() => {
   text-align: center;
   color: #6b7280;
   font-style: italic;
+}
+
+.invoice-subtotal-row td,
+.invoice-discount-row td {
+  font-weight: 700;
+}
+
+.invoice-discount-row td {
+  color: #b91c1c;
 }
 
 .self-pay-bottom {

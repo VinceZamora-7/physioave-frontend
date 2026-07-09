@@ -48,12 +48,15 @@ export interface AppointmentBillingPreparation {
     pricing_mode: string
     subtotal: number
   }
+  availed_services?: AppointmentBillingPreparedCharge[]
+  add_ons?: AppointmentBillingPreparedCharge[]
   existing_documents: Array<{
     id: number
     document_number: string | null
     document_type: string
     document_status: string
     document_date: string
+    pricing_source?: string | null
     totals: {
       subtotal: number
       discount: number
@@ -66,6 +69,16 @@ export interface AppointmentBillingPreparation {
   }>
 }
 
+export interface AppointmentBillingPreparedCharge {
+  credit_item_id: number
+  line_type: string
+  service_name: string
+  quantity: number
+  unit_price: number
+  line_total: number
+  children?: AppointmentBillingPreparedCharge[]
+}
+
 export interface AppointmentBillingDocument {
   id: number
   document_number: string | null
@@ -73,6 +86,7 @@ export interface AppointmentBillingDocument {
   document_status: string
   payer_type: string
   document_date: string
+  pricing_source?: string | null
   totals: {
     subtotal: number
     discount: number
@@ -247,6 +261,30 @@ export const appointmentBillingService = {
     const { data } = await pamsAPI.post<TenderSelfPayBillingResult>(
       `/printables/billing-documents/${billingDocumentId}/tender`,
       payload
+    )
+    return data
+  },
+
+  async updateSelfPayBillingDocumentDiscount(
+    billingDocumentId: number,
+    payload: Pick<
+      TenderSelfPayBillingPayload,
+      | "senior_pwd_id_presented"
+      | "senior_pwd_id_reference"
+      | "custom_discount_type"
+      | "custom_discount_value"
+    >
+  ): Promise<AppointmentBillingDocument> {
+    const { data } = await pamsAPI.post<AppointmentBillingDocument>(
+      `/printables/billing-documents/${billingDocumentId}/discount`,
+      payload
+    )
+    return data
+  },
+
+  async getBillingInvoice(billingDocumentId: number): Promise<AppointmentBillingDocument> {
+    const { data } = await pamsAPI.get<AppointmentBillingDocument>(
+      `/printables/billing-invoices/${billingDocumentId}`
     )
     return data
   },
