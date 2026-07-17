@@ -42,6 +42,31 @@
         </Column>
       </DataTable>
 
+      <div v-if="showAddOnSchedule" class="app-appointment-card space-y-3">
+        <div>
+          <div class="font-semibold">When will these add-ons be performed?</div>
+          <div class="text-sm opacity-70">Same day keeps them on this appointment. Another day creates one linked appointment.</div>
+        </div>
+        <SelectButton
+          :model-value="addOnScheduleMode"
+          :options="scheduleModeOptions"
+          option-label="label"
+          option-value="value"
+          :allow-empty="false"
+          @update:model-value="$emit('update:addOnScheduleMode', $event)"
+        />
+        <DatePicker
+          v-if="addOnScheduleMode === 'ANOTHER_DAY'"
+          :model-value="addOnStartsAt"
+          show-time
+          hour-format="12"
+          :min-date="new Date()"
+          fluid
+          placeholder="Select add-on date and time"
+          @update:model-value="updateAddOnStartsAt"
+        />
+      </div>
+
       <div class="app-appointment-card text-sm">
         <div class="font-semibold">Saved services</div>
         <div v-if="!plannedServices.length" class="mt-2 opacity-70">No services saved for this appointment.</div>
@@ -69,9 +94,11 @@
 import Button from "primevue/button"
 import Column from "primevue/column"
 import DataTable from "primevue/datatable"
+import DatePicker from "primevue/datepicker"
 import Dialog from "primevue/dialog"
 import InputNumber from "primevue/inputnumber"
 import Select from "primevue/select"
+import SelectButton from "primevue/selectbutton"
 import { ptPrimaryBtn } from "@/features/shared/table-header.styles"
 import type { AppointmentListItem, AppointmentPlannedService } from "@/features/appointments/api/appointment-phase1.service"
 
@@ -86,15 +113,29 @@ defineProps<{
   servicePicker: Record<string, any>
   currentServiceOptions: Array<Record<string, any>>
   isSaving: boolean
+  showAddOnSchedule: boolean
+  addOnScheduleMode: "SAME_DAY" | "ANOTHER_DAY"
+  addOnStartsAt: Date | null
   formatDate: (value: string) => string
   formatTime: (value: string) => string
   formatCurrency: (value: number) => string
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   "update:visible": [value: boolean]
   "add-picked-service": []
   "remove-selected-service": [index: number]
+  "update:addOnScheduleMode": [value: "SAME_DAY" | "ANOTHER_DAY"]
+  "update:addOnStartsAt": [value: Date | null]
   save: []
 }>()
+
+const updateAddOnStartsAt = (value: Date | Date[] | (Date | null)[] | null | undefined): void => {
+  emit("update:addOnStartsAt", value instanceof Date ? value : null)
+}
+
+const scheduleModeOptions = [
+  { label: "Same day", value: "SAME_DAY" },
+  { label: "Another day", value: "ANOTHER_DAY" },
+]
 </script>

@@ -79,7 +79,10 @@ export const pamsBaseURL =
 
 export const pamsAPI = axios.create({
   baseURL: pamsBaseURL,
-  withCredentials: true
+  withCredentials: true,
+  withXSRFToken: true,
+  xsrfCookieName: "csrfToken",
+  xsrfHeaderName: "X-CSRF-Token"
 })
 
 let refreshTokenPromise: Promise<void> | null = null

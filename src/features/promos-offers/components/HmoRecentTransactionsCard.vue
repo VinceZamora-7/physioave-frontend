@@ -336,6 +336,62 @@
         </DataTable>
       </div>
     </Dialog>
+
+    <Dialog
+      v-model:visible="hmoSoaRangeDialogVisible"
+      header="Create HMO Statement of Account"
+      modal
+      :style="{ width: 'min(94vw, 520px)' }"
+    >
+      <div class="space-y-4">
+        <div class="rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-4">
+          <p class="m-0 text-xs font-semibold uppercase tracking-wide text-[rgb(var(--app-fg))]/50">HMO Profile</p>
+          <p class="m-0 mt-1 font-bold text-[rgb(var(--app-fg))]">{{ selectedHmoName || 'All HMO profiles' }}</p>
+        </div>
+
+        <div class="space-y-2">
+          <label class="block text-sm font-semibold text-[rgb(var(--app-fg))]">Transaction date range</label>
+          <DatePicker
+            v-model="hmoSoaDateRange"
+            selectionMode="range"
+            dateFormat="M d, yy"
+            :manualInput="false"
+            showIcon
+            showButtonBar
+            fluid
+            placeholder="Select start and end dates"
+          />
+          <p class="m-0 text-xs leading-5 text-[rgb(var(--app-fg))]/60">
+            Both dates are inclusive. Only HMO transactions dated within this period will appear on the SOA.
+          </p>
+        </div>
+
+        <Message v-if="hmoSoaRangeError" severity="warn" :closable="false" size="small">
+          {{ hmoSoaRangeError }}
+        </Message>
+
+        <div v-if="selectedHmoSoaRange" class="grid grid-cols-2 gap-3 text-sm">
+          <div class="rounded-xl border border-[rgb(var(--app-border))] p-3">
+            <div class="text-xs uppercase tracking-wide opacity-55">From</div>
+            <div class="mt-1 font-semibold">{{ selectedHmoSoaRange.from.toLocaleDateString('en-PH') }}</div>
+          </div>
+          <div class="rounded-xl border border-[rgb(var(--app-border))] p-3">
+            <div class="text-xs uppercase tracking-wide opacity-55">To</div>
+            <div class="mt-1 font-semibold">{{ selectedHmoSoaRange.to.toLocaleDateString('en-PH') }}</div>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <Button label="Cancel" text @click="hmoSoaRangeDialogVisible = false" />
+        <Button
+          label="Generate SOA"
+          icon="pi pi-print"
+          :disabled="!selectedHmoSoaRange"
+          @click="generateHmoSoa"
+        />
+      </template>
+    </Dialog>
   </section>
 </template>
 
@@ -377,6 +433,9 @@ const claimingHmoPayments = ref(false)
 const error = ref("")
 const transactionsVisible = ref(false)
 const patientBillingsVisible = ref(false)
+const hmoSoaRangeDialogVisible = ref(false)
+const hmoSoaDateRange = ref<Date[] | null>(null)
+const hmoSoaRangeError = ref("")
 const selectedPatient = ref<Patient | null>(null)
 const selectedPatientBillings = ref<BillingListItem[]>([])
 const loadingPatientBillings = ref(false)
@@ -397,6 +456,14 @@ const loadingAny = computed(() => loadingProfiles.value || loadingPatients.value
 
 const selectedPeriodYear = computed(() => selectedMonth.value.getFullYear())
 const selectedPeriodMonth = computed(() => selectedMonth.value.getMonth() + 1)
+
+const selectedHmoSoaRange = computed<{from: Date; to: Date} | null>(() => {
+  const from = hmoSoaDateRange.value?.[0]
+  const to = hmoSoaDateRange.value?.[1]
+  if (!(from instanceof Date) || !(to instanceof Date)) return null
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from.getTime() > to.getTime()) return null
+  return {from, to}
+})
 
 const selectedPatientName = computed(() =>
   formatPatientName(resolvePatientName(selectedPatient.value), "Selected HMO Patient")
@@ -684,23 +751,38 @@ const refreshPatientBillings = async (): Promise<void> => {
   await loadPatientBillings()
 }
 
-const openHmoSoaDialog = async (): Promise<void> => {
+const openHmoSoaDialog = (): void => {
   const { from, to } = getSelectedMonthRange()
+  hmoSoaDateRange.value = [new Date(from), new Date(to)]
+  hmoSoaRangeError.value = ""
+  hmoSoaRangeDialogVisible.value = true
+}
+
+const generateHmoSoa = (): void => {
+  const range = selectedHmoSoaRange.value
+  if (!range) {
+    hmoSoaRangeError.value = "Select both a start date and an end date."
+    return
+  }
+
+  hmoSoaRangeError.value = ""
   const href = router.resolve({
     name: "hmo-soa-print",
     query: {
       hmo_id: selectedHmoId.value ? String(selectedHmoId.value) : undefined,
       hmo_name: selectedHmoName.value || undefined,
-      from: formatYmd(from),
-      to: formatYmd(to),
+      from: formatYmd(range.from),
+      to: formatYmd(range.to),
       autoprint: "1"
     }
   }).href
 
   const popup = window.open(href, "_blank")
   if (!popup || popup.closed) {
-    patientBillingError.value = "Unable to open the HMO SOA print view. Allow pop-ups for this site, then try again."
+    hmoSoaRangeError.value = "Unable to open the HMO SOA print view. Allow pop-ups for this site, then try again."
+    return
   }
+  hmoSoaRangeDialogVisible.value = false
 }
 
 const openPatientBillings = async (patient: Patient): Promise<void> => {

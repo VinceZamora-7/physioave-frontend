@@ -149,50 +149,6 @@
                 </button>
               </a>
 
-              <div
-                v-if="showDevCrmLogin"
-                class="mt-4 rounded-2xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-4"
-              >
-                <div class="flex items-start justify-between gap-3">
-                  <div>
-                    <p class="text-sm font-semibold">Temporary CRM access</p>
-                    <p class="app-muted-text mt-1 text-xs">
-                      Uses a local dashboard account while Google sign-in is being stabilized.
-                    </p>
-                  </div>
-                  <i class="pi pi-key mt-0.5 text-sm text-[rgb(var(--app-secondary))]" />
-                </div>
-
-                <dl class="mt-3 grid gap-2 text-xs sm:grid-cols-2">
-                  <div>
-                    <dt class="app-muted-text font-semibold uppercase">Email</dt>
-                    <dd class="break-all font-medium">{{ devCrmEmail }}</dd>
-                  </div>
-                  <div>
-                    <dt class="app-muted-text font-semibold uppercase">Password</dt>
-                    <dd class="font-medium">{{ devCrmPassword }}</dd>
-                  </div>
-                </dl>
-
-                <button
-                  type="button"
-                  class="app-primary-action mt-4 w-full justify-center py-2.5"
-                  :disabled="devLoginLoading"
-                  @click="onDevCrmLogin"
-                >
-                  <i
-                    class="pi"
-                    :class="devLoginLoading ? 'pi-spin pi-spinner' : 'pi-sign-in'"
-                    aria-hidden="true"
-                  />
-                  <span>{{ devLoginLoading ? "Signing in..." : "Open CRM dashboard" }}</span>
-                </button>
-
-                <p v-if="devLoginError" class="mt-3 text-xs font-medium text-red-600">
-                  {{ devLoginError }}
-                </p>
-              </div>
-
               <!-- Security badges -->
               <div class="app-subtle-text mt-5 flex flex-wrap items-center justify-center gap-4 text-xs">
                 <span class="inline-flex items-center gap-1.5">
@@ -236,20 +192,11 @@
 import { computed, onMounted, ref } from "vue"
 import { useRouter } from "vue-router"
 import { getSetupStatus } from "@/app/setup-status"
-import { useAuthSessionStore } from "@/stores/auth-session.store"
-import { pamsAPI, pamsBaseURL } from "@/utils/axios-interceptor.ts"
+import { pamsBaseURL } from "@/utils/axios-interceptor.ts"
 
 const router = useRouter()
-const authSession = useAuthSessionStore()
-
 const isDark = ref(false)
 const loading = ref(false)
-const devLoginLoading = ref(false)
-const devLoginError = ref("")
-
-const devCrmEmail = "crm@physioave.local"
-const devCrmPassword = "crm-dashboard"
-const showDevCrmLogin = import.meta.env.DEV
 
 const href = computed(() => {
   const redirectOrigin = encodeURIComponent(window.location.origin)
@@ -278,30 +225,6 @@ const onGoogleContinue = () => {
 
   window.location.href =
     `${pamsBaseURL}/oauth2/authorization/google?redirect_origin=${redirectOrigin}`
-}
-
-const onDevCrmLogin = async () => {
-  if (devLoginLoading.value) return
-
-  devLoginLoading.value = true
-  devLoginError.value = ""
-
-  try {
-    await pamsAPI.post(
-      "/auth/login",
-      {
-        email: devCrmEmail,
-        password: devCrmPassword
-      },
-      { skipAuthRefresh: true }
-    )
-    await authSession.refresh()
-    await router.replace({ name: "dashboard" })
-  } catch {
-    devLoginError.value = "Temporary CRM login failed. Please confirm the backend is running in development mode."
-  } finally {
-    devLoginLoading.value = false
-  }
 }
 
 onMounted(async () => {

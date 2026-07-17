@@ -474,6 +474,8 @@ export interface LguServiceConsumptionResult {
 export interface AppointmentServiceSelectionPayload {
   services: AppointmentServiceCreatePayload[]
   payer_type?: string | null
+  schedule_mode?: "SAME_DAY" | "ANOTHER_DAY"
+  starts_at?: string
 }
 
 export interface AppointmentConsumedService {
@@ -752,16 +754,9 @@ export const appointmentPhase1Service = {
   async appendAddOns(
     id: number,
     payload: AppointmentServiceSelectionPayload
-  ): Promise<{ credit_account_id: number; planned_services: unknown[] }> {
-    try {
-      const { data } = await pamsAPI.post(`/appointments/${id}/add-ons`, payload)
-      return data
-    } catch (error) {
-      if ((error as any)?.response?.status !== 404) throw error
-
-      const { data } = await pamsAPI.post(`/appointments/${id}/planned-services`, payload)
-      return data
-    }
+  ): Promise<{ credit_account_id: number; planned_services: unknown[]; appointment_id?: number; created_appointment?: boolean }> {
+    const { data } = await pamsAPI.post(`/appointments/${id}/add-ons`, payload)
+    return data
   },
 
   async deleteAddOn(id: number, creditItemId: number): Promise<void> {

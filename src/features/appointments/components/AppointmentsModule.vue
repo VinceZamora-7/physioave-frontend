@@ -1037,8 +1037,9 @@
           label="Save Payment"
           icon="pi pi-check"
           :loading="isTenderSaving"
+          :disabled="isTenderSaving"
           :pt="ptPrimaryBtn"
-          @click="submitTenderPayment"
+          @click="confirmTenderPayment"
         />
       </template>
     </Dialog>
@@ -1225,6 +1226,9 @@
       :service-picker="servicePicker"
       :current-service-options="currentServiceOptions"
       :is-saving="isSavingServices"
+      :show-add-on-schedule="Boolean(activeAppointment?.credit_account_id) && selectedServices.length > 0 && selectedServices.every((service) => addOnServiceTypes.has(service.type))"
+      v-model:add-on-schedule-mode="addOnScheduleMode"
+      v-model:add-on-starts-at="addOnStartsAt"
       :format-date="formatDate"
       :format-time="formatTime"
       :format-currency="formatCurrency"
@@ -1427,6 +1431,8 @@ const isCalendarLoading = ref(false);
 const isAvailabilityLoading = ref(false);
 const isSaving = ref(false);
 const isSavingServices = ref(false);
+const addOnScheduleMode = ref<"SAME_DAY" | "ANOTHER_DAY">("SAME_DAY");
+const addOnStartsAt = ref<Date | null>(null);
 const isSavingAttendance = ref(false);
 const isDroppingOut = ref(false);
 const isBillingActionLoading = ref(false);
@@ -3264,6 +3270,8 @@ const clearDisallowedBillingSelection = (): void => {
 
   form.payer_type = null;
   selectedServices.value = [];
+  addOnScheduleMode.value = "SAME_DAY";
+  addOnStartsAt.value = null;
   resetServicePicker(null);
 };
 
@@ -4961,6 +4969,39 @@ const submitTenderPayment = async (): Promise<void> => {
   }
 };
 
+const confirmTenderPayment = (): void => {
+  const document = tenderBillingDocument.value;
+  if (!document || isTenderSaving.value) return;
+
+  const amountTendered = Number(tenderForm.amount_tendered ?? 0);
+  if (!Number.isFinite(amountTendered) || amountTendered <= 0) {
+    errorToast(toast, "Enter a valid tendered amount.");
+    return;
+  }
+  if (!tenderForm.payment_method_id) {
+    errorToast(toast, "Select a payment method.");
+    return;
+  }
+  const paymentReference = tenderForm.payment_reference.trim();
+  if (isEWalletPaymentMethod.value && !paymentReference) {
+    errorToast(toast, "Enter the e-wallet reference number.");
+    return;
+  }
+
+  const paymentMethod = paymentMethods.value.find(
+    (method) => Number(method.id) === Number(tenderForm.payment_method_id),
+  );
+  const documentLabel = document.document_number || `Document #${document.id}`;
+  confirm.require({
+    header: "Confirm Payment Tender",
+    icon: "pi pi-exclamation-circle",
+    message: `Record ${formatCurrency(amountTendered)} as ${paymentMethod?.name ?? "the selected payment method"} for ${documentLabel}? This will create an official receipt and update the billing status.`,
+    acceptLabel: "Confirm & Save Payment",
+    rejectLabel: "Review Payment",
+    accept: () => { void submitTenderPayment(); },
+  });
+};
+
 watch(
   () => [
     tenderForm.senior_pwd_id_presented,
@@ -5003,7 +5044,7 @@ const createSelfPayAppointmentBillFromDetails = (): void => {
   void runBillingActionFromDetails(
     appointmentBillingService.createSelfPayAppointmentBill,
     "Self Pay appointment bill created",
-    true,
+    false,
   );
 };
 
@@ -5011,7 +5052,7 @@ const createSelfPayPackageBillFromDetails = (): void => {
   void runBillingActionFromDetails(
     appointmentBillingService.createSelfPayPackageBill,
     "Self Pay package bill created",
-    true,
+    false,
   );
 };
 
@@ -5475,17 +5516,32 @@ const saveServices = async (): Promise<void> => {
     return;
   }
 
+  if (activeAppointment.value.credit_account_id && hasOnlyAddOns && addOnScheduleMode.value === "ANOTHER_DAY" && !addOnStartsAt.value) {
+    errorToast(toast, "Select the date and time for the add-on appointment");
+    return;
+  }
+
   try {
     isSavingServices.value = true;
     if (activeAppointment.value.credit_account_id && hasOnlyAddOns) {
-      await appointmentPhase1Service.appendAddOns(activeAppointment.value.id, {
+      const result = await appointmentPhase1Service.appendAddOns(activeAppointment.value.id, {
         payer_type: activeAppointment.value.payer_type,
+        schedule_mode: addOnScheduleMode.value,
+        starts_at: addOnScheduleMode.value === "ANOTHER_DAY"
+          ? toDateTimePayload(addOnStartsAt.value)
+          : undefined,
         services: selectedServices.value.map((service) => ({
           type: service.type,
           id: service.value,
           quantity: servicePayloadQuantity(service),
         })),
       });
+      successToast(
+        toast,
+        result.created_appointment
+          ? `Add-ons scheduled for ${formatDate(addOnStartsAt.value?.toISOString() ?? "")}.`
+          : `Add-ons added to ${formatDate(activeAppointment.value.starts_at)}. No new appointment was created.`,
+      );
     } else {
       await savePlannedServicesForAppointment(
         activeAppointment.value.id,
@@ -5497,7 +5553,9 @@ const saveServices = async (): Promise<void> => {
         activeAppointment.value.id,
       );
     selectedServices.value = [];
-    successToast(toast, "services saved");
+    if (!(activeAppointment.value.credit_account_id && hasOnlyAddOns)) {
+      successToast(toast, "Services saved");
+    }
     if (appointmentBillingVisible.value) {
       showBillingAddOns.value = true;
       await refreshDetailBillingPreparation();

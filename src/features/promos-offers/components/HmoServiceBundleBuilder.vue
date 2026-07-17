@@ -46,6 +46,20 @@
         <div class="flex flex-wrap gap-2">
           <Button label="Create HMO Profile" icon="pi pi-id-card" outlined @click="openProfileDialog" />
           <Button label="Add Custom Rate" icon="pi pi-plus" text :disabled="!selectedProfileId" @click="openAddRateDialog" />
+          <Button
+            label="Copy Price List"
+            icon="pi pi-copy"
+            text
+            :disabled="!selectedProfileId || !selectedProfileRates.length || copyDestinationOptions.length === 0 || priceListActionBusy"
+            @click="openCopyPriceListDialog"
+          />
+          <Button
+            label="Export Selected Price List"
+            icon="pi pi-download"
+            text
+            :disabled="!selectedProfileId || !selectedProfileRates.length || priceListActionBusy"
+            @click="exportSelectedProfilePriceList"
+          />
           <Button label="Download CSV Template" icon="pi pi-download" text @click="downloadTemplate" />
         </div>
       </div>
@@ -67,8 +81,8 @@
 
         <div class="flex flex-wrap gap-2 items-end">
           <input ref="fileInputRef" type="file" accept=".csv,text/csv" class="hidden" @change="onSelectPriceListFile" />
-          <Button label="Upload Price List CSV" icon="pi pi-upload" :disabled="!selectedProfileId" @click="openFilePicker" />
-          <Button label="Clear Uploaded List" icon="pi pi-trash" text severity="danger" :disabled="!selectedProfileId || !selectedProfileRates.length" @click="clearSelectedProfilePriceList" />
+          <Button label="Upload Price List CSV" icon="pi pi-upload" :loading="uploadingPriceList" :disabled="!selectedProfileId || priceListActionBusy" @click="confirmOpenFilePicker" />
+          <Button label="Clear Uploaded List" icon="pi pi-trash" text severity="danger" :loading="clearingPriceList" :disabled="!selectedProfileId || !selectedProfileRates.length || priceListActionBusy" @click="confirmClearSelectedProfilePriceList" />
         </div>
       </div>
 
@@ -101,7 +115,7 @@
           <template #body="{data}">
             <div class="flex gap-1">
               <Button size="small" text icon="pi pi-pencil" @click="openEditRateDialog(data, selectedProfileRates.findIndex(item => item.serviceId === data.serviceId))" v-tooltip="'Edit rate'" />
-              <Button size="small" text severity="danger" icon="pi pi-trash" @click="confirmDeleteRate(data)" v-tooltip="'Delete rate'" />
+              <Button size="small" text severity="danger" icon="pi pi-trash" :loading="deletingRateServiceId === data.serviceId" :disabled="priceListActionBusy" @click="confirmDeleteRate(data)" v-tooltip="'Delete rate'" />
             </div>
           </template>
         </Column>
@@ -402,6 +416,65 @@
       </template>
     </Dialog>
 
+    <Dialog
+      v-model:visible="copyPriceListDialogVisible"
+      header="Copy HMO Price List"
+      modal
+      :style="{width: 'min(92vw, 560px)'}"
+      :closable="!copyingPriceList"
+    >
+      <div class="space-y-4">
+        <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3 text-sm">
+          Copying <strong>{{ selectedProfileRates.length }}</strong> rates from
+          <strong>{{ selectedProfileName }}</strong>.
+        </div>
+
+        <IftaLabel>
+          <MultiSelect
+            v-model="copyDestinationIds"
+            :options="copyDestinationOptions"
+            optionLabel="name"
+            optionValue="id"
+            filter
+            display="chip"
+            fluid
+            :disabled="copyingPriceList"
+            placeholder="Select destination profiles"
+          />
+          <label>Destination HMO Profiles</label>
+        </IftaLabel>
+
+        <IftaLabel>
+          <Select
+            v-model="copyPriceListMode"
+            :options="copyModeOptions"
+            optionLabel="label"
+            optionValue="value"
+            fluid
+            :disabled="copyingPriceList"
+          />
+          <label>Copy Mode</label>
+        </IftaLabel>
+
+        <p class="m-0 text-xs leading-5 opacity-70">
+          {{ copyPriceListMode === 'replace'
+            ? 'Replace removes every existing custom rate from each destination before copying.'
+            : 'Merge keeps destination-only rates and overwrites rates that match the source.' }}
+        </p>
+      </div>
+
+      <template #footer>
+        <Button label="Cancel" text :disabled="copyingPriceList" @click="copyPriceListDialogVisible = false" />
+        <Button
+          label="Review & Copy"
+          icon="pi pi-copy"
+          :loading="copyingPriceList"
+          :disabled="!copyDestinationIds.length"
+          @click="confirmCopyPriceList"
+        />
+      </template>
+    </Dialog>
+
   </main>
 </template>
 
@@ -416,6 +489,7 @@ import Dialog from "primevue/dialog"
 import IftaLabel from "primevue/iftalabel"
 import InputNumber from "primevue/inputnumber"
 import InputText from "primevue/inputtext"
+import MultiSelect from "primevue/multiselect"
 import Select from "primevue/select"
 import Tag from "primevue/tag"
 import { useConfirm } from "primevue/useconfirm"
@@ -427,6 +501,7 @@ import { hmoTechniqueRateService } from "@/services/hmo-technique-rate.service"
 import { hmoService } from "@/services/hmo.service"
 import { Status } from "@/utils/global.type"
 import { errorToast, successToast } from "@/utils/toast.util"
+import { getApiErrorMessage } from "@/utils/actionable-error.util"
 import PromosCatalogManagerDialog from "@/features/promos-offers/components/PromosCatalogManagerDialog.vue"
 import { ptPrimaryBtn } from "@/features/shared/table-header.styles"
 import { isLocalEditablePromosService } from "@/features/promos-offers/composables/promos-master-catalog.composable"
@@ -485,6 +560,13 @@ const dialogVisible = ref(false)
 const editingId = ref<string | null>(null)
 const profileDialogVisible = ref(false)
 const rateDialogVisible = ref(false)
+const copyPriceListDialogVisible = ref(false)
+const copyDestinationIds = ref<string[]>([])
+const copyPriceListMode = ref<"merge" | "replace">("merge")
+const copyingPriceList = ref(false)
+const uploadingPriceList = ref(false)
+const clearingPriceList = ref(false)
+const deletingRateServiceId = ref<string>()
 const editingRateIndex = ref<number | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
@@ -534,6 +616,19 @@ const activeProfiles = computed(() =>
 
 const selectedProfileName = computed(() =>
   activeProfiles.value.find(profile => profile.id === selectedProfileId.value)?.name
+)
+
+const copyDestinationOptions = computed(() =>
+  activeProfiles.value.filter(profile => profile.id !== selectedProfileId.value)
+)
+
+const copyModeOptions = [
+  {label: "Merge and overwrite matches", value: "merge"},
+  {label: "Replace entire destination list", value: "replace"}
+]
+
+const priceListActionBusy = computed(() =>
+  uploadingPriceList.value || clearingPriceList.value || !!deletingRateServiceId.value || copyingPriceList.value
 )
 
 const hmoRateOptions = computed(() =>
@@ -600,6 +695,10 @@ const ensureConfidentialAccess = (): boolean => {
 const invalidateSelectedProfileRates = async (): Promise<void> => {
   const hmoId = Number(selectedProfileId.value)
   if (!Number.isFinite(hmoId) || hmoId <= 0) return
+  await queryClient.invalidateQueries({queryKey: [ServiceCatalogTanstackKey.SERVICE_CATALOG_CONTEXT, "HMO", hmoId]})
+}
+
+const invalidateProfileRates = async (hmoId: number): Promise<void> => {
   await queryClient.invalidateQueries({queryKey: [ServiceCatalogTanstackKey.SERVICE_CATALOG_CONTEXT, "HMO", hmoId]})
 }
 
@@ -747,18 +846,7 @@ const loadServices = async (): Promise<void> => {
   }
 }
 
-const loadSelectedProfileRates = async (): Promise<void> => {
-  if (!selectedProfileId.value) {
-    selectedProfileRates.value = []
-    return
-  }
-
-  const hmoId = Number(selectedProfileId.value)
-  if (!Number.isFinite(hmoId) || hmoId <= 0) {
-    selectedProfileRates.value = []
-    return
-  }
-
+const fetchProfileRates = async (hmoId: number): Promise<HmoPriceListRate[]> => {
   const catalogContext = await serviceCatalogContextTanstackService.fetchContext(queryClient, {scope: "HMO", hmo_id: hmoId})
   const mapRates = (
     items: ServiceCatalogItem[],
@@ -775,7 +863,7 @@ const loadSelectedProfileRates = async (): Promise<void> => {
         rate: Number(item.hmo_rate)
       }))
 
-  selectedProfileRates.value = [
+  return [
     ...mapRates(catalogContext?.services.machines ?? [], "machine"),
     ...mapRates(catalogContext?.services.techniques ?? [], "technique"),
     ...mapRates(catalogContext?.services.evaluations ?? [], "evaluation"),
@@ -783,6 +871,21 @@ const loadSelectedProfileRates = async (): Promise<void> => {
     ...mapRates(catalogContext?.services.add_on_techniques ?? [], "add-on-technique", "ADD_ON_TECHNIQUE"),
     ...mapRates(catalogContext?.services.add_on_home_services ?? [], "add-on-home-service", "ADD_ON_HOME_SERVICE"),
   ].sort((left, right) => left.serviceName.localeCompare(right.serviceName))
+}
+
+const loadSelectedProfileRates = async (): Promise<void> => {
+  if (!selectedProfileId.value) {
+    selectedProfileRates.value = []
+    return
+  }
+
+  const hmoId = Number(selectedProfileId.value)
+  if (!Number.isFinite(hmoId) || hmoId <= 0) {
+    selectedProfileRates.value = []
+    return
+  }
+
+  selectedProfileRates.value = await fetchProfileRates(hmoId)
 }
 
 const loadProfilesAndRates = async (): Promise<void> => {
@@ -928,6 +1031,81 @@ const removeCustomRate = async (hmoId: number, rate: HmoPriceListRate): Promise<
   await hmoAddOnRateService.remove(hmoId, addOnType, serviceId)
 }
 
+const openCopyPriceListDialog = (): void => {
+  if (!ensureConfidentialAccess()) return
+  if (!selectedProfileId.value || !selectedProfileRates.value.length) {
+    errorToast(toast, "Select an HMO profile with custom rates first")
+    return
+  }
+  copyDestinationIds.value = []
+  copyPriceListMode.value = "merge"
+  copyPriceListDialogVisible.value = true
+}
+
+const copyPriceListToDestinations = async (): Promise<void> => {
+  const destinationIds = copyDestinationIds.value
+    .map(Number)
+    .filter(id => Number.isFinite(id) && id > 0)
+  if (!destinationIds.length || !selectedProfileRates.value.length) return
+
+  copyingPriceList.value = true
+  let completedProfiles = 0
+  const failedProfiles: string[] = []
+
+  try {
+    for (const hmoId of destinationIds) {
+      const profile = activeProfiles.value.find(item => Number(item.id) === hmoId)
+      try {
+        if (copyPriceListMode.value === "replace") {
+          const destinationRates = await fetchProfileRates(hmoId)
+          for (const rate of destinationRates) {
+            await removeCustomRate(hmoId, rate)
+          }
+        }
+
+        for (const rate of selectedProfileRates.value) {
+          const service = selectedRateService(rate.serviceId)
+          if (!service) throw new Error(`Service ${rate.serviceName} is unavailable`)
+          await saveCustomRateForService(hmoId, service, rate.rate)
+        }
+        await invalidateProfileRates(hmoId)
+        completedProfiles++
+      } catch {
+        failedProfiles.push(profile?.name ?? `HMO #${hmoId}`)
+        await invalidateProfileRates(hmoId)
+      }
+    }
+
+    if (completedProfiles > 0) {
+      successToast(toast, `Copied ${selectedProfileRates.value.length} rates to ${completedProfiles} HMO profile${completedProfiles === 1 ? "" : "s"}.`)
+    }
+    if (failedProfiles.length > 0) {
+      errorToast(toast, `Copy could not be completed for: ${failedProfiles.join(", ")}. Review those profiles before retrying.`)
+    } else {
+      copyPriceListDialogVisible.value = false
+      copyDestinationIds.value = []
+    }
+  } finally {
+    copyingPriceList.value = false
+  }
+}
+
+const confirmCopyPriceList = (): void => {
+  if (!copyDestinationIds.value.length) return
+  const destinationNames = copyDestinationIds.value
+    .map(id => activeProfiles.value.find(profile => profile.id === id)?.name)
+    .filter((name): name is string => !!name)
+
+  confirm.require({
+    header: "Confirm Price List Copy",
+    icon: copyPriceListMode.value === "replace" ? "pi pi-exclamation-triangle" : "pi pi-copy",
+    message: `${copyPriceListMode.value === "replace" ? "Replace" : "Merge"} ${selectedProfileRates.value.length} rates from ${selectedProfileName.value} to ${destinationNames.join(", ")}?${copyPriceListMode.value === "replace" ? " Existing destination rates will be removed first." : " Matching rates will be overwritten."}`,
+    acceptLabel: copyPriceListMode.value === "replace" ? "Replace & Copy" : "Merge & Copy",
+    rejectLabel: "Cancel",
+    accept: () => { void copyPriceListToDestinations() }
+  })
+}
+
 const onRateServiceSelected = (serviceId?: string): void => {
   if (!serviceId) return
   const matched = allServices.value.find(service => service.id === serviceId)
@@ -1006,14 +1184,26 @@ const confirmDeleteRate = (rate: HmoPriceListRate): void => {
   if (!ensureConfidentialAccess()) return
   if (!selectedProfileId.value) return
   confirm.require({
-    message: `Delete custom rate for "${getRateServiceLabel(rate)}"?`,
-    header: "Confirm",
+    message: `Remove the ${asCurrency(rate.rate)} custom rate for "${getRateServiceLabel(rate)}" from ${selectedProfileName.value}? New billings will use the service's base price. Historical billings will not change.`,
+    header: "Remove Custom HMO Rate?",
     icon: "pi pi-exclamation-triangle",
+    acceptLabel: "Remove Rate",
+    rejectLabel: "Keep Rate",
     accept: async () => {
-      await removeCustomRate(Number(selectedProfileId.value), rate)
-      await invalidateSelectedProfileRates()
-      await loadSelectedProfileRates()
-      successToast(toast, "Custom rate deleted")
+      deletingRateServiceId.value = rate.serviceId
+      try {
+        await removeCustomRate(Number(selectedProfileId.value), rate)
+        await invalidateSelectedProfileRates()
+        await loadSelectedProfileRates()
+        successToast(toast, `Removed the custom rate for ${getRateServiceLabel(rate)} from ${selectedProfileName.value}.`)
+      } catch (error: unknown) {
+        errorToast(toast, getApiErrorMessage(error, {
+          baseMessage: `Could not remove the custom rate from ${selectedProfileName.value}`,
+          permissionHint: "HMO update permission"
+        }))
+      } finally {
+        deletingRateServiceId.value = undefined
+      }
     }
   })
 }
@@ -1021,6 +1211,18 @@ const confirmDeleteRate = (rate: HmoPriceListRate): void => {
 const openFilePicker = (): void => {
   if (!ensureConfidentialAccess()) return
   fileInputRef.value?.click()
+}
+
+const confirmOpenFilePicker = (): void => {
+  if (!ensureConfidentialAccess() || !selectedProfileId.value) return
+  confirm.require({
+    header: "Import HMO Price List?",
+    icon: "pi pi-upload",
+    message: `Choose a CSV to import into ${selectedProfileName.value}. Matching service rates will be overwritten; rates not included in the file will remain unchanged.`,
+    acceptLabel: "Choose CSV",
+    rejectLabel: "Cancel",
+    accept: openFilePicker
+  })
 }
 
 const parseCsvRow = (line: string): string[] => {
@@ -1054,6 +1256,40 @@ const toRate = (raw: string): number | undefined => {
   return Number.isFinite(value) ? value : undefined
 }
 
+const normalizeCsvServiceType = (raw: string): ServiceType | undefined => {
+  const normalized = raw.trim().toLowerCase().replace(/[_\s]+/g, "-")
+  const supported: ServiceType[] = [
+    "machine",
+    "technique",
+    "evaluation",
+    "add-on-machine",
+    "add-on-technique",
+    "add-on-home-service"
+  ]
+  return supported.find(type => type === normalized)
+}
+
+const resolveImportedService = (input: {
+  serviceId: string
+  serviceType?: ServiceType
+  serviceName: string
+}): HmoService | undefined => {
+  if (input.serviceId) {
+    const fullId = input.serviceType && !input.serviceId.startsWith(`${input.serviceType}-`)
+      ? `${input.serviceType}-${input.serviceId}`
+      : input.serviceId
+    const byId = allServices.value.find(item => item.id === fullId)
+    if (byId && (!input.serviceType || byId.type === input.serviceType)) return byId
+  }
+
+  const normalizedName = input.serviceName.toLowerCase()
+  const nameMatches = allServices.value.filter(item =>
+    item.name.trim().toLowerCase() === normalizedName &&
+    (!input.serviceType || item.type === input.serviceType)
+  )
+  return nameMatches.length === 1 ? nameMatches[0] : undefined
+}
+
 const onSelectPriceListFile = async (event: Event): Promise<void> => {
   if (!ensureConfidentialAccess()) return
   const input = event.target as HTMLInputElement
@@ -1064,6 +1300,7 @@ const onSelectPriceListFile = async (event: Event): Promise<void> => {
     return
   }
 
+  uploadingPriceList.value = true
   try {
     const text = await file.text()
     const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0)
@@ -1074,6 +1311,8 @@ const onSelectPriceListFile = async (event: Event): Promise<void> => {
 
     const headers = parseCsvRow(lines[0]).map(header => header.trim().toLowerCase())
     const serviceNameIndex = headers.findIndex(header => ["service", "service_name", "name"].includes(header))
+    const serviceTypeIndex = headers.findIndex(header => ["service_type", "type", "category"].includes(header))
+    const serviceIdIndex = headers.findIndex(header => ["service_id", "id"].includes(header))
     const priceIndex = headers.findIndex(header => ["rate", "price", "hmo_rate", "negotiated_rate"].includes(header))
 
     if (serviceNameIndex < 0 || priceIndex < 0) {
@@ -1087,13 +1326,16 @@ const onSelectPriceListFile = async (event: Event): Promise<void> => {
     for (let i = 1; i < lines.length; i++) {
       const cols = parseCsvRow(lines[i])
       const serviceName = String(cols[serviceNameIndex] ?? "").trim()
+      const serviceTypeRaw = serviceTypeIndex >= 0 ? String(cols[serviceTypeIndex] ?? "") : ""
+      const serviceType = serviceTypeRaw ? normalizeCsvServiceType(serviceTypeRaw) : undefined
+      const serviceId = serviceIdIndex >= 0 ? String(cols[serviceIdIndex] ?? "").trim() : ""
       const rate = toRate(String(cols[priceIndex] ?? ""))
-      if (!serviceName || rate == null || rate < 0) {
+      if (!serviceName || rate == null || rate < 0 || (serviceTypeRaw && !serviceType)) {
         skippedCount++
         continue
       }
 
-      const service = allServices.value.find(item => item.name.trim().toLowerCase() === serviceName.toLowerCase())
+      const service = resolveImportedService({ serviceId, serviceType, serviceName })
       if (!service) {
         skippedCount++
         continue
@@ -1107,22 +1349,36 @@ const onSelectPriceListFile = async (event: Event): Promise<void> => {
       return
     }
 
-    await Promise.all(
-      uploadedRates.map((entry) =>
-        saveCustomRateForService(Number(selectedProfileId.value), entry.service, entry.rate)
-      )
-    )
+    let savedCount = 0
+    let failedCount = 0
+    for (const entry of uploadedRates) {
+      try {
+        await saveCustomRateForService(Number(selectedProfileId.value), entry.service, entry.rate)
+        savedCount++
+      } catch {
+        failedCount++
+      }
+    }
     await invalidateSelectedProfileRates()
     await loadSelectedProfileRates()
 
-    if (skippedCount > 0) {
-      successToast(toast, `Price list uploaded (${uploadedRates.length} rows). Skipped ${skippedCount} invalid row(s).`)
-    } else {
-      successToast(toast, `Price list uploaded (${uploadedRates.length} rows).`)
+    if (savedCount === 0) {
+      errorToast(toast, `No rates were saved. ${failedCount} row(s) failed and ${skippedCount} row(s) were invalid or unmatched.`)
+      return
     }
-  } catch {
-    errorToast(toast, "Failed to parse CSV")
+
+    const issues = [
+      skippedCount ? `${skippedCount} invalid or unmatched` : "",
+      failedCount ? `${failedCount} failed to save` : ""
+    ].filter(Boolean)
+    successToast(toast, `Price list uploaded to ${selectedProfileName.value ?? "the selected HMO"}: ${savedCount} saved${issues.length ? `; ${issues.join(", ")}` : ""}.`)
+  } catch (error: unknown) {
+    errorToast(toast, getApiErrorMessage(error, {
+      baseMessage: `Could not import the price list into ${selectedProfileName.value}`,
+      invalidInputHint: "Check the CSV headers, service identifiers, and rates, then try again."
+    }))
   } finally {
+    uploadingPriceList.value = false
     input.value = ""
   }
 }
@@ -1131,6 +1387,7 @@ const clearSelectedProfilePriceList = async (): Promise<void> => {
   if (!ensureConfidentialAccess()) return
   if (!selectedProfileId.value) return
 
+  clearingPriceList.value = true
   try {
     const hmoId = Number(selectedProfileId.value)
     const deleteTasks = selectedProfileRates.value.map(rate => removeCustomRate(hmoId, rate))
@@ -1138,10 +1395,27 @@ const clearSelectedProfilePriceList = async (): Promise<void> => {
     await Promise.all(deleteTasks)
     await invalidateSelectedProfileRates()
     await loadSelectedProfileRates()
-    successToast(toast, "Custom price list cleared")
-  } catch {
-    errorToast(toast, "Failed to clear custom price list")
+    successToast(toast, `Cleared ${deleteTasks.length} custom rate${deleteTasks.length === 1 ? "" : "s"} from ${selectedProfileName.value}.`)
+  } catch (error: unknown) {
+    errorToast(toast, getApiErrorMessage(error, {
+      baseMessage: `Could not clear the price list for ${selectedProfileName.value}`,
+      permissionHint: "HMO update permission"
+    }))
+  } finally {
+    clearingPriceList.value = false
   }
+}
+
+const confirmClearSelectedProfilePriceList = (): void => {
+  if (!selectedProfileId.value || !selectedProfileRates.value.length) return
+  confirm.require({
+    header: "Clear Entire HMO Price List?",
+    icon: "pi pi-exclamation-triangle",
+    message: `Remove all ${selectedProfileRates.value.length} custom rates from ${selectedProfileName.value}? New billings will use base prices. Historical billings will not change.`,
+    acceptLabel: "Clear All Rates",
+    rejectLabel: "Cancel",
+    accept: () => { void clearSelectedProfilePriceList() }
+  })
 }
 
 const getCustomRate = (service: HmoService): number | undefined => {
@@ -1171,14 +1445,45 @@ const getEffectivePrice = (service: HmoService): number => {
 
 const downloadTemplate = (): void => {
   if (!ensureConfidentialAccess()) return
-  const csv = "service_name,rate\nSample Evaluation,1200\nSample Technique,800\n"
+  const csv = "service_type,service_id,service_name,rate\nevaluation,,Sample Evaluation,1200\ntechnique,,Sample Technique,800\n"
+  downloadCsv(csv, "hmo-price-list-template.csv")
+}
+
+const escapeCsvCell = (value: unknown): string =>
+  `"${String(value ?? "").replace(/"/g, '""')}"`
+
+const sanitizeFileName = (value: string): string =>
+  value.trim().replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "hmo"
+
+const downloadCsv = (csv: string, fileName: string): void => {
   const blob = new Blob([csv], {type: "text/csv;charset=utf-8;"})
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement("a")
   anchor.href = url
-  anchor.download = "hmo-price-list-template.csv"
+  anchor.download = fileName
   anchor.click()
   URL.revokeObjectURL(url)
+}
+
+const exportSelectedProfilePriceList = (): void => {
+  if (!ensureConfidentialAccess()) return
+  if (!selectedProfileId.value || !selectedProfileRates.value.length) {
+    errorToast(toast, "Select an HMO profile with custom rates first")
+    return
+  }
+
+  const header = ["service_type", "service_id", "service_name", "rate"]
+  const rows = selectedProfileRates.value.map(rate => [
+    rate.serviceType ?? "",
+    serviceNumericIdFromRate(rate) || "",
+    getRateServiceLabel(rate),
+    rate.rate
+  ])
+  const csv = [header, ...rows]
+    .map(row => row.map(escapeCsvCell).join(","))
+    .join("\r\n")
+  downloadCsv(`\uFEFF${csv}\r\n`, `${sanitizeFileName(selectedProfileName.value ?? "hmo")}-price-list.csv`)
+  successToast(toast, `${rows.length} custom rate${rows.length === 1 ? "" : "s"} exported`)
 }
 
 const openAddDialog = (): void => {

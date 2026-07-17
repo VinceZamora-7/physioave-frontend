@@ -507,6 +507,9 @@ export const billingPhase1Service = {
   async updatePaymentLog(id: number, lineId: number, payload: UpdatePaymentLogRequest): Promise<void> {
     await pamsAPI.put(`/billings/${id}/payment-log/${lineId}`, payload)
   },
+  async voidPaymentLog(id: number, lineId: number): Promise<void> {
+    await pamsAPI.delete(`/billings/${id}/payment-log/${lineId}`)
+  },
   async delete(id: number): Promise<void> {
     await pamsAPI.delete(`/billings/${id}`)
   },

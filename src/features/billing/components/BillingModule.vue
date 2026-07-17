@@ -1615,7 +1615,7 @@
                     />
                   </div>
                 </div>
-                <div v-else class="mt-2 flex justify-end">
+                <div v-else class="mt-2 flex justify-end gap-2">
                   <Button
                     label="Correct Tender Info"
                     icon="pi pi-pencil"
@@ -1623,6 +1623,16 @@
                     text
                     :disabled="!canEditReceipt"
                     @click="startPaymentLogCorrection(entry)"
+                  />
+                  <Button
+                    label="Void Payment"
+                    icon="pi pi-ban"
+                    size="small"
+                    text
+                    severity="danger"
+                    :loading="voidingPaymentLogEntryId === entry.id"
+                    :disabled="!canEditReceipt || voidingPaymentLogEntryId === entry.id"
+                    @click="confirmVoidPayment(entry)"
                   />
                 </div>
               </div>
@@ -1860,6 +1870,7 @@ import Message from "primevue/message"
 import Select from "primevue/select"
 import Tag from "primevue/tag"
 import {useToast} from "primevue/usetoast"
+import {useConfirm} from "primevue/useconfirm"
 import {patientService} from "@/features/patients/api/patient.service"
 import {
   billingPhase1Service,
@@ -1902,6 +1913,7 @@ import type {
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
+const confirm = useConfirm()
 const queryClient = useQueryClient()
 
 type BillingTableRow = BillingListItem & {
@@ -1936,6 +1948,7 @@ const billingEditDrawerVisible = ref(false)
 const lockedBillingOverrideEnabled = ref(false)
 const editingPaymentLogEntryId = ref<number | null>(null)
 const savingPaymentLogEntryId = ref<number | null>(null)
+const voidingPaymentLogEntryId = ref<number | null>(null)
 const paymentLogEditForm = reactive({
   paymentType: "",
   referenceNo: "",
@@ -4378,6 +4391,37 @@ const savePaymentLogCorrection = async (entry: BillingPaymentLogEntry): Promise<
   } finally {
     savingPaymentLogEntryId.value = null
   }
+}
+
+const confirmVoidPayment = (entry: BillingPaymentLogEntry): void => {
+  const billingId = editingBillingId.value
+  if (!billingId || !canEditReceipt.value || voidingPaymentLogEntryId.value) return
+  confirm.require({
+    header: "Void Tendered Payment?",
+    icon: "pi pi-exclamation-triangle",
+    message: `Void the ${asCurrency(entry.amountApplied)} applied payment? The receipt will be retained as voided for audit, the invoice balance will be restored, and the bill can be tendered again.`,
+    acceptLabel: "Void & Restore Balance",
+    rejectLabel: "Keep Payment",
+    accept: async () => {
+      try {
+        voidingPaymentLogEntryId.value = entry.id
+        await billingPhase1Service.voidPaymentLog(billingId, entry.id)
+        await invalidateBillingContext(billingId)
+        const {detail, paymentLog} = await fetchBillingContextDetail(billingId)
+        if (detail) {
+          selectedBillingDetail.value = detail
+          editingBillingStatus.value = resolveBillingRuntimeStatus(detail)
+        }
+        editBillingPaymentLog.value = paymentLog
+        selectedBillingPaymentLog.value = paymentLog
+        successToast(toast, "Payment voided and invoice balance restored")
+      } catch (e) {
+        errorToast(toast, extractApiErrorMessage(e, "Failed to void payment"))
+      } finally {
+        voidingPaymentLogEntryId.value = null
+      }
+    }
+  })
 }
 
 // â”€â”€ Save tender â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
