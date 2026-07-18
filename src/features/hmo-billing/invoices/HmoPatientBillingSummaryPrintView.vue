@@ -321,14 +321,25 @@ const doctor = computed(() =>
   formatPrintableName(billingDetail.value?.doctor?.trim(), "N/A")
 )
 
-const formatDiagnosis = (value?: string | null): string => {
+const formatDiagnosis = (
+  value?: string | null,
+  diagnosisLaterality?: string | null
+): string => {
   const diagnosis = String(value ?? "").trim()
   if (!diagnosis) return "N/A"
 
-  const markerMatch = diagnosis.match(/^\(?\s*(L|R|B|LEFT|RIGHT|BOTH|BILATERAL)\s*\)?[\s,:-]*(.*)$/i)
-  if (!markerMatch) return diagnosis
+  const explicitLaterality = formatLateralityForTable(diagnosisLaterality)
+  const markerMatch = diagnosis.match(
+    /^\s*(?:\(\s*(L|R|B|LEFT|RIGHT|BOTH|BILATERAL)\s*\)|\b(LEFT|RIGHT|BOTH|BILATERAL)\b)[\s,:-]*(.*)$/i
+  )
 
-  const marker = markerMatch[1].toUpperCase()
+  if (!markerMatch) {
+    return explicitLaterality !== "N/A"
+      ? `${normalizeBodyArea(diagnosis)} (${explicitLaterality})`
+      : diagnosis
+  }
+
+  const marker = (markerMatch[1] || markerMatch[2]).toUpperCase()
   const laterality =
     marker === "L" || marker === "LEFT"
       ? "L"
@@ -338,8 +349,9 @@ const formatDiagnosis = (value?: string | null): string => {
           ? "B"
           : ""
 
-  const name = markerMatch[2]?.trim() || diagnosis
-  return laterality ? `${name} (${laterality})` : name
+  const name = markerMatch[3]?.trim() || diagnosis
+  const resolvedLaterality = explicitLaterality !== "N/A" ? explicitLaterality : laterality
+  return resolvedLaterality ? `${name} (${resolvedLaterality})` : name
 }
 
 const diagnosisSource = computed(() => {
@@ -415,7 +427,7 @@ const diagnosis = computed(() => {
   const value = String(diagnosisSource.value ?? "").trim()
   if (!value) return "N/A"
 
-  return formatDiagnosis(value)
+  return formatDiagnosis(value, billingDetail.value?.diagnosis_laterality)
 })
 
 const formatCurrency = (value?: number | null): string =>
