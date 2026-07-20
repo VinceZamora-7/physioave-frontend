@@ -1,7 +1,6 @@
 <template>
   <SponsorInvoiceLayout
     :title="title"
-    :subtitle="subtitle"
     :has-error="hasError"
   >
     <template #meta>

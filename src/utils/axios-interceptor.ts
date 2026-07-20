@@ -5,11 +5,13 @@ declare module "axios" {
   export interface AxiosRequestConfig {
     skipAuthRefresh?: boolean
     authRefreshRetry?: boolean
+    skipCsrf?: boolean
   }
 
   export interface InternalAxiosRequestConfig {
     skipAuthRefresh?: boolean
     authRefreshRetry?: boolean
+    skipCsrf?: boolean
   }
 }
 
@@ -83,6 +85,36 @@ export const pamsAPI = axios.create({
   withXSRFToken: true,
   xsrfCookieName: "csrfToken",
   xsrfHeaderName: "X-CSRF-Token"
+})
+
+const SAFE_METHODS = new Set(["get", "head", "options"])
+let csrfTokenPromise: Promise<string> | null = null
+
+const getCsrfToken = async (): Promise<string> => {
+  if (!csrfTokenPromise) {
+    csrfTokenPromise = axios
+      .get<{ csrfToken: string }>(`${pamsBaseURL}/auth/csrf`, { withCredentials: true })
+      .then(({ data }) => {
+        const token = String(data?.csrfToken ?? "").trim()
+        if (!token) throw new Error("The server did not provide a CSRF token")
+        return token
+      })
+      .finally(() => {
+        csrfTokenPromise = null
+      })
+  }
+
+  return csrfTokenPromise
+}
+
+pamsAPI.interceptors.request.use(async config => {
+  const method = String(config.method ?? "get").toLowerCase()
+  if (config.skipCsrf || SAFE_METHODS.has(method) || config.headers.has("Authorization")) {
+    return config
+  }
+
+  config.headers.set("X-CSRF-Token", await getCsrfToken())
+  return config
 })
 
 let refreshTokenPromise: Promise<void> | null = null
