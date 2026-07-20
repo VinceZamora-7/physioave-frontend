@@ -446,7 +446,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from "vue"
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { storeToRefs } from "pinia"
 import { useRoute, useRouter } from "vue-router"
 import Button from "primevue/button"
@@ -880,6 +880,7 @@ const openPtSignatureDialog = async (item: AppointmentDailyLogItem): Promise<voi
 }
 
 const resetPtSignatureDialog = (): void => {
+  void sp501SignaturePad.returnToIdlePage()
   selectedPtSignatureRow.value = null
   isDrawingPtSignature.value = false
   hasPtSignatureDraft.value = false
@@ -1520,5 +1521,9 @@ watch(
 
 onMounted(() => {
   void loadDailyLog()
+})
+
+onBeforeUnmount(() => {
+  void sp501SignaturePad.returnToIdlePage()
 })
 </script>

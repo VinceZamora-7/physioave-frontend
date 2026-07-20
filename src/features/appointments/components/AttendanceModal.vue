@@ -5,7 +5,7 @@
     header="Attendance"
     :style="{ width: '58rem', maxWidth: '96vw' }"
     :draggable="false"
-    @update:visible="$emit('update:visible', $event)"
+    @update:visible="handleVisibilityChange"
   >
     <div v-if="appointment" class="space-y-4">
       <div class="app-appointment-card">
@@ -302,7 +302,7 @@
         label="Close"
         severity="secondary"
         outlined
-        @click="$emit('update:visible', false)"
+        @click="handleVisibilityChange(false)"
       />
 
       <Button
@@ -659,7 +659,13 @@ const toggleEncounterTicket = (): void => {
   showEncounterTicket.value = !showEncounterTicket.value
   if (showEncounterTicket.value) {
     void ensureEncounterTicketCanvases()
+  } else {
+    void sp501SignaturePad.returnToIdlePage()
   }
+}
+
+const handleVisibilityChange = (visible: boolean): void => {
+  emit("update:visible", visible)
 }
 
 const resetPatientSignatureState = (): void => {
@@ -964,6 +970,15 @@ watch(
     }
   },
   { immediate: true }
+)
+
+watch(
+  () => props.visible,
+  (visible, wasVisible) => {
+    if (wasVisible && !visible) {
+      void sp501SignaturePad.returnToIdlePage()
+    }
+  }
 )
 
 watch(showEncounterTicket, (visible) => {
