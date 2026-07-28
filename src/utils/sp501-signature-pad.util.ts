@@ -49,15 +49,21 @@ const DEFAULT_SIGN_BOUNDS: Sp501SignBounds = {
 
 const SIGN_BOUNDS_STORAGE_KEY = "sp501-sign-bounds-v2"
 const CAPTURED_IDLE_HOLD_MS = 5000
+const IDLE_PAGE_VERSION = "4"
+
+const withIdlePageVersion = (url: string): string => {
+  const separator = url.includes("?") ? "&" : "?"
+  return `${url}${separator}sp501v=${IDLE_PAGE_VERSION}`
+}
 
 const configuredIdlePageUrl = (): string => {
   const configuredUrl = String(import.meta.env.VITE_SP501_IDLE_PAGE_URL ?? "").trim()
-  return configuredUrl || `${window.location.origin}/sp501-loading.html`
+  return withIdlePageVersion(configuredUrl || `${window.location.origin}/sp501-loading.html`)
 }
 
 const configuredCapturedPageUrl = (): string => {
   const configuredUrl = String(import.meta.env.VITE_SP501_CAPTURED_PAGE_URL ?? "").trim()
-  if (configuredUrl) return configuredUrl
+  if (configuredUrl) return withIdlePageVersion(configuredUrl)
 
   const idlePageUrl = configuredIdlePageUrl()
   const separator = idlePageUrl.includes("?") ? "&" : "?"
