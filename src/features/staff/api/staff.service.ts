@@ -23,7 +23,7 @@ interface StaffService {
     payload: StaffEditRequestPayload
   ): Promise<void | undefined>
 
-  save(body: StaffRequestBody): Promise<void | undefined>
+  save(body: StaffRequestBody): Promise<{id: number} | undefined>
 
   toggleStatus(id: number): Promise<void | undefined>
 
@@ -86,9 +86,9 @@ export const staffService: StaffService = {
     }
   },
 
-  async save(body: StaffRequestBody): Promise<void | undefined> {
+  async save(body: StaffRequestBody): Promise<{id: number} | undefined> {
     try {
-      const {data: response} = await pamsAPI.post<void, AxiosResponse<void>, StaffRequestBody>(`/${ResourceKey.STAFFS}`, body)
+      const {data: response} = await pamsAPI.post<{id: number}, AxiosResponse<{id: number}>, StaffRequestBody>(`/${ResourceKey.STAFFS}`, body)
 
       return response
     } catch (error: unknown) {

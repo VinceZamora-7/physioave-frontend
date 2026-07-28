@@ -125,6 +125,46 @@
         </IftaLabel>
       </FormField>
 
+      <section v-if="isPtForm" class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] p-4">
+        <h3 class="text-sm font-semibold">Administrative Access</h3>
+        <p class="mt-1 text-xs opacity-60">Optional administrative permissions in addition to this PT job title.</p>
+        <div class="mt-3 grid gap-3">
+          <Select
+            v-model="adminAccessType"
+            :options="adminAccessTypeOptions"
+            option-label="label"
+            option-value="value"
+            placeholder="Select access duration"
+            fluid
+          />
+          <Select
+            v-if="adminAccessType !== 'NONE'"
+            v-model="adminAccessRole"
+            :options="adminRoles"
+            option-label="name"
+            placeholder="Select admin role"
+            filter
+            fluid
+          />
+          <InputText
+            v-if="adminAccessType === 'TEMPORARY'"
+            v-model="adminAccessExpiresAt"
+            type="datetime-local"
+            fluid
+          />
+          <InputText
+            v-if="adminAccessType !== 'NONE'"
+            v-model="adminAccessReason"
+            maxlength="500"
+            placeholder="Reason for granting administrative access"
+            fluid
+          />
+          <Message v-if="adminAccessError" severity="error" size="small" variant="simple">
+            {{ adminAccessError }}
+          </Message>
+        </div>
+      </section>
+
       <FormField v-if="showAdminPtToggle" v-slot="$field" name="also_pt">
         <div class="rounded-xl border border-[rgb(var(--app-border))] bg-[rgb(var(--app-card))] px-4 py-3">
           <div class="flex items-center gap-2">
@@ -318,7 +358,7 @@ const form = useTemplateRef<FormInstance>('form')
 
 const emit = defineEmits<StaffFormEmits>()
 const props = defineProps<StaffFormProps>()
-const {selectedStaff, isLoading: isParentLoading, roles, ptRoles, clinics, specialties} = toRefs(props)
+const {selectedStaff, isLoading: isParentLoading, roles, ptRoles, adminRoles, clinics, specialties} = toRefs(props)
 
 const toast = useToast()
 const isClinicsLoading = useIsLoading(ClinicTanstackKey.CLINICS)
@@ -331,6 +371,16 @@ const newSpecialtyName = ref("")
 const isAddingSpecialty = ref(false)
 const localAddedSpecialties = ref<SpecialtyTag[]>([])
 const calendarColor = ref("#2563EB")
+const adminAccessType = ref<"NONE" | "TEMPORARY" | "PERMANENT">("NONE")
+const adminAccessRole = ref<{id: number; name: string} | null>(null)
+const adminAccessExpiresAt = ref("")
+const adminAccessReason = ref("")
+const adminAccessError = ref("")
+const adminAccessTypeOptions = [
+  { label: "No admin access", value: "NONE" },
+  { label: "Temporary admin access", value: "TEMPORARY" },
+  { label: "Permanent admin access", value: "PERMANENT" },
+]
 
 const allSpecialties = computed<SpecialtyTag[]>(() => {
   const base = specialties.value ?? []
@@ -481,6 +531,26 @@ const cancelInlineSpecialtyAdd = (): void => {
  * When editing fetch the APIs and populate from the currently selected values
  */
 const onShow = async (): Promise<void> => {
+  adminAccessError.value = ""
+  adminAccessType.value = "NONE"
+  adminAccessRole.value = null
+  adminAccessExpiresAt.value = ""
+  adminAccessReason.value = ""
+  if (isPtForm.value && selectedStaff.value?.id) {
+    try {
+      const { data } = await pamsAPI.get(`/staffs/${selectedStaff.value.id}/admin-access`)
+      if (data) {
+        adminAccessType.value = data.access_type
+        adminAccessRole.value = adminRoles.value?.find(role => role.id === Number(data.role_id)) ?? null
+        adminAccessExpiresAt.value = data.expires_at
+          ? new Date(data.expires_at).toISOString().slice(0, 16)
+          : ""
+        adminAccessReason.value = String(data.reason ?? "")
+      }
+    } catch {
+      adminAccessError.value = "Unable to load current administrative access."
+    }
+  }
   if (!isEditing.value) {
     await populateOnDraft()
     return
@@ -519,7 +589,28 @@ const populateOnDraft = async (): Promise<void> => {
 
 const onSubmit = (event: FormSubmitEvent) => {
   if (!event.valid) return
+  adminAccessError.value = ""
+  if (isPtForm.value && adminAccessType.value !== "NONE") {
+    if (!adminAccessRole.value?.id) {
+      adminAccessError.value = "Admin role is required."
+      return
+    }
+    if (!adminAccessReason.value.trim()) {
+      adminAccessError.value = "Reason is required."
+      return
+    }
+    if (adminAccessType.value === "TEMPORARY" && (!adminAccessExpiresAt.value || new Date(adminAccessExpiresAt.value) <= new Date())) {
+      adminAccessError.value = "Temporary access must expire at a future date and time."
+      return
+    }
+  }
   event.values.calendar_color = calendarColor.value
+  event.values.admin_access = {
+    access_type: adminAccessType.value,
+    role_id: adminAccessRole.value?.id,
+    expires_at: adminAccessType.value === "TEMPORARY" ? new Date(adminAccessExpiresAt.value).toISOString() : null,
+    reason: adminAccessReason.value.trim(),
+  }
   emit('onSubmit', event)
 }
 

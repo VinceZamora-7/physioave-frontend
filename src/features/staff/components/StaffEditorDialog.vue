@@ -22,6 +22,7 @@ import { createDraftService } from "@/services/draft.service"
 import { IndexedDBKey } from "@/utils/keys/indexeddb-key"
 import { StaffTanstackKey } from "@/utils/keys/tanstack-key"
 import { errorToast, successToast } from "@/utils/toast.util"
+import { pamsAPI } from "@/utils/axios-interceptor"
 
 const isPtProviderType = (providerType?: string | null): boolean =>
   providerType === "PHYSICAL_THERAPIST" || providerType === "PT_ASSISTANT" || providerType === "INTERN"
@@ -29,6 +30,7 @@ const isPtProviderType = (providerType?: string | null): boolean =>
 const props = defineProps<{
   roles: Role[]
   ptRoles: Role[]
+  adminRoles?: Role[]
   clinics: Lookup[]
   specialties: SpecialtyTag[]
   isLoading: boolean
@@ -72,6 +74,7 @@ const staffFormProps = computed(
       highestRoleIds: props.highestRoleIds ?? [],
       roles: props.roles,
       ptRoles: props.ptRoles,
+      adminRoles: props.adminRoles ?? [],
       clinics: props.clinics,
       specialties: props.specialties,
     }) satisfies StaffFormProps
@@ -79,6 +82,11 @@ const staffFormProps = computed(
 
 const resetQueries = async () => {
   await queryClient.invalidateQueries({ queryKey: [StaffTanstackKey.STAFFS] })
+}
+
+const saveAdminAccess = async (staffId: number, values: Record<string, any>): Promise<void> => {
+  if ((props.formMode ?? "ADMIN") !== "PT") return
+  await pamsAPI.put(`/staffs/${staffId}/admin-access`, values.admin_access ?? { access_type: "NONE" })
 }
 
 const closeDialog = () => {
@@ -144,6 +152,12 @@ const onSubmit = (event: FormSubmitEvent) => {
         const payload: StaffEditRequestPayload = { id: selectedStaff.value.id, ...body }
         editMutation(payload, {
           async onSuccess() {
+            try {
+              await saveAdminAccess(payload.id, event.values)
+            } catch (error) {
+              errorToast(toast, (error as Error).message || "Staff was updated, but administrative access could not be saved")
+              return
+            }
             closeDialog()
             successToast(toast, "Edit success")
             event.reset()
@@ -159,7 +173,14 @@ const onSubmit = (event: FormSubmitEvent) => {
       }
 
       saveMutation(body, {
-        async onSuccess() {
+        async onSuccess(result) {
+          if (!result?.id) throw new Error("Created staff ID was not returned")
+          try {
+            await saveAdminAccess(result.id, event.values)
+          } catch (error) {
+            errorToast(toast, (error as Error).message || "Staff was created, but administrative access could not be saved")
+            return
+          }
           closeDialog()
           successToast(toast, "Save success")
           event.reset()

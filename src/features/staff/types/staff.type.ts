@@ -24,6 +24,7 @@ export interface StaffFormProps {
 
   roles: Role[]
   ptRoles: Role[]
+  adminRoles?: Role[]
   clinics: Lookup[]
   specialties: SpecialtyTag[]
 }

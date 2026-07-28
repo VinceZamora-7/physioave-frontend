@@ -404,6 +404,7 @@
       formMode="PT"
       :roles="activeCareTeamRoles"
       :ptRoles="activePtOnlyRoles"
+      :adminRoles="activeAdminRoles"
       :clinics="clinicLookups"
       :specialties="activeSpecialties"
       :isLoading="isModalBusy"
@@ -608,6 +609,9 @@ const activeCareTeamRoles = computed(() =>
 )
 const activePtOnlyRoles = computed(() =>
   careTeamRoles.value.filter(role => role.is_active && isPtProviderType(role.appointment_provider_type))
+)
+const activeAdminRoles = computed(() =>
+  roles.value.filter(role => role.is_active && role.appointment_provider_type === "NONE")
 )
 const orderedRoles = computed(() =>
   [...careTeamRoles.value].sort((left, right) => left.name.localeCompare(right.name))

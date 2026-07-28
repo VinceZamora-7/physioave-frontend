@@ -96,7 +96,7 @@ export const staffTanstackService = {
 
   save(key: StaffTanstackKey = StaffTanstackKey.STAFFS
   ) {
-    return useMutation<void | undefined, Error, StaffRequestBody>({
+    return useMutation<{id: number} | undefined, Error, StaffRequestBody>({
       mutationKey: [key],
       mutationFn: staffService.save
     })
