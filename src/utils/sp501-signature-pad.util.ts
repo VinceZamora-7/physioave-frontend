@@ -50,16 +50,20 @@ const DEFAULT_SIGN_BOUNDS: Sp501SignBounds = {
 const SIGN_BOUNDS_STORAGE_KEY = "sp501-sign-bounds-v2"
 const CAPTURED_IDLE_HOLD_MS = 5000
 
-const configuredIdlePageUrl = (): string => {
+const configuredIdlePageUrl = (): string | null => {
   const configuredUrl = String(import.meta.env.VITE_SP501_IDLE_PAGE_URL ?? "").trim()
-  if (configuredUrl) return configuredUrl
-  return `${window.location.origin}/sp501-loading.html`
+  return configuredUrl || null
 }
 
-const configuredCapturedPageUrl = (): string => {
+const configuredCapturedPageUrl = (): string | null => {
   const configuredUrl = String(import.meta.env.VITE_SP501_CAPTURED_PAGE_URL ?? "").trim()
   if (configuredUrl) return configuredUrl
-  return `${configuredIdlePageUrl()}?state=captured`
+
+  const idlePageUrl = configuredIdlePageUrl()
+  if (!idlePageUrl) return null
+
+  const separator = idlePageUrl.includes("?") ? "&" : "?"
+  return `${idlePageUrl}${separator}state=captured`
 }
 
 const isSuccess = (message: Sp501Message): boolean =>
@@ -193,12 +197,21 @@ class Sp501SignaturePad {
   async showIdlePage(url = configuredIdlePageUrl(), options: ShowIdlePageOptions = {}): Promise<void> {
     if (this.isSignatureActive && !options.force) return
     if (!options.force && Date.now() < this.capturedIdleHoldUntil) return
+
+    if (!url) {
+      await this.sendAndWait({ function: "ZCCloseHtmlAB" }, "ZCCloseHtmlAB", 1500).catch(() => {})
+      return
+    }
+
     await this.sendAndWait({ function: "ZCShowHtmlAB", url }, "ZCShowHtmlAB", 1500).catch(() => {})
   }
 
   async showCapturedPage(): Promise<void> {
+    const capturedPageUrl = configuredCapturedPageUrl()
+    if (!capturedPageUrl) return
+
     this.capturedIdleHoldUntil = Date.now() + CAPTURED_IDLE_HOLD_MS
-    await this.showIdlePage(configuredCapturedPageUrl(), { force: true })
+    await this.showIdlePage(capturedPageUrl, { force: true })
   }
 
   async returnToIdlePage(): Promise<void> {
@@ -208,6 +221,11 @@ class Sp501SignaturePad {
   }
 
   startIdlePageKeepalive(intervalMs = 5000): () => void {
+    if (!configuredIdlePageUrl()) {
+      void this.showIdlePage()
+      return () => {}
+    }
+
     void this.showIdlePage()
     const intervalId = window.setInterval(() => {
       void this.showIdlePage()
