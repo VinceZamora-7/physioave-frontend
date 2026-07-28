@@ -49,7 +49,7 @@ const DEFAULT_SIGN_BOUNDS: Sp501SignBounds = {
 
 const SIGN_BOUNDS_STORAGE_KEY = "sp501-sign-bounds-v2"
 const CAPTURED_IDLE_HOLD_MS = 5000
-const IDLE_PAGE_VERSION = "4"
+const IDLE_PAGE_VERSION = "6"
 
 const withIdlePageVersion = (url: string): string => {
   const separator = url.includes("?") ? "&" : "?"

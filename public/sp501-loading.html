@@ -28,79 +28,11 @@
         width: 800px;
       }
       .logo {
-        align-items: center;
-        display: flex;
-        height: 146px;
-        justify-content: center;
-        width: 570px;
-      }
-      .logo-mark {
-        align-items: center;
-        border: 8px solid #26a9cf;
-        border-radius: 50%;
-        display: flex;
-        height: 122px;
-        justify-content: center;
-        margin-right: 20px;
-        position: relative;
-        width: 122px;
-      }
-      .logo-mark::before {
-        border: 8px solid #c82377;
-        border-bottom-color: transparent;
-        border-left-color: transparent;
-        border-radius: 50%;
-        content: "";
-        height: 105px;
-        left: 0;
-        position: absolute;
-        top: -8px;
-        transform: rotate(-35deg);
-        width: 105px;
-      }
-      .logo-mark::after {
-        background: #c82377;
-        border-radius: 50%;
-        content: "";
-        height: 14px;
-        position: absolute;
-        right: 3px;
-        top: -5px;
-        width: 14px;
-      }
-      .logo-monogram {
-        color: #050505;
-        font-size: 48px;
-        font-weight: 900;
-        letter-spacing: -8px;
-        line-height: 1;
-        padding-right: 8px;
-        position: relative;
-        z-index: 1;
-      }
-      .logo-copy {
-        color: #050505;
-        text-align: left;
-        width: 390px;
-      }
-      .logo-name {
-        border-bottom: 4px solid #c82377;
-        font-size: 42px;
-        font-weight: 900;
-        letter-spacing: -2px;
-        line-height: 1.05;
-        padding-bottom: 7px;
-        white-space: nowrap;
-      }
-      .logo-name-blue {
-        color: #1ba8d0;
-      }
-      .logo-tagline {
-        font-size: 23px;
-        font-weight: 800;
-        letter-spacing: 1px;
-        padding-top: 7px;
-        white-space: nowrap;
+        display: block;
+        height: auto;
+        image-rendering: auto;
+        max-height: 180px;
+        width: 615px;
       }
       .loader {
         animation: spin 1s linear infinite;
@@ -119,15 +51,13 @@
   </head>
   <body>
     <main class="screen" aria-label="Signature pad waiting screen">
-      <div class="logo" role="img" aria-label="PhysioAve Physical Therapy">
-        <div class="logo-mark" aria-hidden="true">
-          <span class="logo-monogram">PA</span>
-        </div>
-        <div class="logo-copy">
-          <div class="logo-name">PHYSIO<span class="logo-name-blue">AVE</span></div>
-          <div class="logo-tagline">PHYSICAL THERAPY</div>
-        </div>
-      </div>
+      <img
+        class="logo"
+        src="https://res.cloudinary.com/hrgbdojb/image/upload/v1785230249/physioave-logo-dark-updated_pidl0i.png"
+        alt=""
+        width="615"
+        height="180"
+      />
       <div class="loader" aria-hidden="true"></div>
       <div class="message">
         <div class="status">Signature captured</div>
