@@ -50,18 +50,16 @@ const DEFAULT_SIGN_BOUNDS: Sp501SignBounds = {
 const SIGN_BOUNDS_STORAGE_KEY = "sp501-sign-bounds-v2"
 const CAPTURED_IDLE_HOLD_MS = 5000
 
-const configuredIdlePageUrl = (): string | null => {
+const configuredIdlePageUrl = (): string => {
   const configuredUrl = String(import.meta.env.VITE_SP501_IDLE_PAGE_URL ?? "").trim()
-  return configuredUrl || null
+  return configuredUrl || `${window.location.origin}/sp501-loading.html`
 }
 
-const configuredCapturedPageUrl = (): string | null => {
+const configuredCapturedPageUrl = (): string => {
   const configuredUrl = String(import.meta.env.VITE_SP501_CAPTURED_PAGE_URL ?? "").trim()
   if (configuredUrl) return configuredUrl
 
   const idlePageUrl = configuredIdlePageUrl()
-  if (!idlePageUrl) return null
-
   const separator = idlePageUrl.includes("?") ? "&" : "?"
   return `${idlePageUrl}${separator}state=captured`
 }
@@ -208,8 +206,6 @@ class Sp501SignaturePad {
 
   async showCapturedPage(): Promise<void> {
     const capturedPageUrl = configuredCapturedPageUrl()
-    if (!capturedPageUrl) return
-
     this.capturedIdleHoldUntil = Date.now() + CAPTURED_IDLE_HOLD_MS
     await this.showIdlePage(capturedPageUrl, { force: true })
   }
@@ -220,18 +216,11 @@ class Sp501SignaturePad {
     await this.showIdlePage(undefined, { force: true })
   }
 
-  startIdlePageKeepalive(intervalMs = 5000): () => void {
-    if (!configuredIdlePageUrl()) {
-      void this.showIdlePage()
-      return () => {}
-    }
-
+  startIdlePageKeepalive(_intervalMs = 5000): () => void {
+    // Loading the idle screen once avoids repeatedly navigating the SP501's
+    // embedded browser, which can trigger Vercel's browser-security checkpoint.
     void this.showIdlePage()
-    const intervalId = window.setInterval(() => {
-      void this.showIdlePage()
-    }, intervalMs)
-
-    return () => window.clearInterval(intervalId)
+    return () => {}
   }
 
   async stopDevice(): Promise<void> {
