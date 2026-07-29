@@ -106,10 +106,10 @@
     <Dialog v-model:visible="showCompose" modal header="Notify billing managers" :style="{ width: 'min(94vw, 560px)' }">
       <div class="space-y-4">
         <p class="text-sm text-surface-600">
-          Choose the unfinished HMO or LGU billing. Managers assigned to its clinic will be notified.
+          Choose an HMO or LGU billing that has not been billed yet. Managers assigned to its clinic will be notified.
         </p>
         <div>
-          <label class="mb-1 block text-sm font-medium">Unfinished billing</label>
+          <label class="mb-1 block text-sm font-medium">Not-billed HMO/LGU record</label>
           <Select
             v-model="selectedBillingId"
             :options="outstandingBillings"
@@ -135,7 +135,7 @@
             </template>
           </Select>
           <p v-if="!loadingBillings && !outstandingBillings.length" class="mt-2 text-xs text-surface-500">
-            No unfinished HMO or LGU billing records were found.
+            No not-billed HMO or LGU records were found.
           </p>
         </div>
         <div v-if="chosenBilling" class="selected-billing-card">
