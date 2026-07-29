@@ -157,12 +157,15 @@
               aria-label="Filter pending EOD assignments by date"
             />
           </div>
-          <Select
-            v-model="selectedEodAppointmentId"
+          <MultiSelect
+            v-model="selectedEodAppointmentIds"
             :options="filteredEodAssignments"
             option-value="appointment_id"
             :loading="loadingEod"
             filter
+            display="chip"
+            :max-selected-labels="2"
+            selected-items-label="{0} EOD assignments selected"
             placeholder="Select an EOD blocker"
             class="w-full"
           >
@@ -172,7 +175,17 @@
                 <div class="text-xs text-surface-500">{{ option.clinic_name }} · {{ option.blockers.join(", ") }}</div>
               </div>
             </template>
-          </Select>
+          </MultiSelect>
+          <div v-if="filteredEodAssignments.length" class="mt-2 flex items-center justify-between">
+            <span class="text-xs text-surface-500">{{ selectedEodAppointmentIds.length }} of {{ filteredEodAssignments.length }} selected</span>
+            <button
+              type="button"
+              class="text-xs font-semibold text-primary-700 hover:text-primary-900"
+              @click="toggleAllVisibleEod"
+            >
+              {{ allVisibleEodSelected ? "Clear all" : "Select all" }}
+            </button>
+          </div>
           <p v-if="!loadingEod && !filteredEodAssignments.length" class="mt-2 text-xs text-surface-500">
             {{ eodDateFilter === "today" ? "All of today’s EOD work is finished." : "No pending EOD assignments were found for this filter." }}
           </p>
@@ -193,15 +206,14 @@
             <span><i class="pi pi-wallet mr-1 text-primary-600" />Balance {{ formatMoney(chosenBilling.balance_amount) }}</span>
           </div>
         </div>
-        <div v-if="composeType === 'eod' && chosenEod" class="selected-billing-card">
+        <div v-if="composeType === 'eod' && selectedEodAssignments.length" class="selected-billing-card">
           <p class="text-xs font-semibold uppercase tracking-wide text-primary-700">EOD assignment</p>
-          <h4 class="mt-1 font-bold text-surface-900">{{ chosenEod.patient_name }}</h4>
-          <p class="mt-1 text-sm text-surface-600">{{ chosenEod.blockers.join(" · ") }}</p>
-          <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
-            <span><i class="pi pi-user mr-1 text-primary-600" />{{ chosenEod.assigned_staff_name || "Unassigned PT" }}</span>
-            <span><i class="pi pi-map-marker mr-1 text-primary-600" />{{ chosenEod.clinic_name }}</span>
-            <span><i class="pi pi-calendar mr-1 text-primary-600" />{{ formatDate(chosenEod.starts_at) }}</span>
-            <span><i class="pi pi-info-circle mr-1 text-primary-600" />{{ formatStatus(chosenEod.appointment_status) }}</span>
+          <h4 class="mt-1 font-bold text-surface-900">{{ selectedEodAssignments.length }} reminder{{ selectedEodAssignments.length === 1 ? "" : "s" }} ready</h4>
+          <div class="mt-2 max-h-36 space-y-2 overflow-y-auto">
+            <div v-for="item in selectedEodAssignments" :key="item.appointment_id" class="rounded-lg bg-white/80 p-2 text-xs">
+              <div class="font-semibold text-surface-800">{{ item.patient_name }} · {{ item.assigned_staff_name || "Unassigned PT" }}</div>
+              <div class="mt-0.5 text-surface-500">{{ item.clinic_name }} · {{ item.blockers.join(", ") }}</div>
+            </div>
           </div>
         </div>
         <div>
@@ -225,6 +237,7 @@ import { useRouter } from "vue-router"
 import Button from "primevue/button"
 import Dialog from "primevue/dialog"
 import Popover from "primevue/popover"
+import MultiSelect from "primevue/multiselect"
 import Select from "primevue/select"
 import Textarea from "primevue/textarea"
 import { useToast } from "primevue/usetoast"
@@ -244,7 +257,7 @@ const notifications = ref<StaffNotification[]>([])
 const outstandingBillings = ref<OutstandingSponsorBilling[]>([])
 const pendingEodAssignments = ref<PendingEodAssignment[]>([])
 const selectedBillingId = ref<number | null>(null)
-const selectedEodAppointmentId = ref<number | null>(null)
+const selectedEodAppointmentIds = ref<number[]>([])
 const composeType = ref<"billing" | "eod">("billing")
 const eodDateFilter = ref<"today" | "previous" | "all">("today")
 const eodDateFilterOptions = [
@@ -271,7 +284,10 @@ const visibleNotifications = computed(() =>
   activeFilter.value === "unread" ? notifications.value.filter(item => !item.read_at) : notifications.value
 )
 const chosenBilling = computed(() => selectedBilling(selectedBillingId.value))
-const chosenEod = computed(() => pendingEodAssignments.value.find(item => item.appointment_id === selectedEodAppointmentId.value))
+const selectedEodAssignments = computed(() => {
+  const selectedIds = new Set(selectedEodAppointmentIds.value)
+  return pendingEodAssignments.value.filter(item => selectedIds.has(item.appointment_id))
+})
 const localDateKey = (value: string | Date) => {
   const date = value instanceof Date ? value : new Date(value)
   const year = date.getFullYear()
@@ -289,8 +305,12 @@ const filteredEodAssignments = computed(() => {
       : localDateKey(item.starts_at) < today
   )
 })
+const allVisibleEodSelected = computed(() =>
+  filteredEodAssignments.value.length > 0 &&
+  filteredEodAssignments.value.every(item => selectedEodAppointmentIds.value.includes(item.appointment_id))
+)
 const canSubmitCompose = computed(() =>
-  composeType.value === "billing" ? Boolean(selectedBillingId.value) : Boolean(selectedEodAppointmentId.value)
+  composeType.value === "billing" ? Boolean(selectedBillingId.value) : selectedEodAppointmentIds.value.length > 0
 )
 const toggle = (event: Event) => popover.value?.toggle(event)
 
@@ -356,20 +376,24 @@ const sendNotification = async () => {
           billing_document_id: Number(selectedBillingId.value),
           message: message.value.trim() || undefined
         })
-      : await notificationService.sendEodReminder({
-          appointment_id: Number(selectedEodAppointmentId.value),
-          message: message.value.trim() || undefined
-        })
+      : {
+          recipients: (await Promise.all(selectedEodAppointmentIds.value.map(appointmentId =>
+            notificationService.sendEodReminder({
+              appointment_id: appointmentId,
+              message: message.value.trim() || undefined
+            })
+          ))).reduce((total, response) => total + response.recipients, 0)
+        }
     showCompose.value = false
     message.value = ""
     selectedBillingId.value = null
-    selectedEodAppointmentId.value = null
+    selectedEodAppointmentIds.value = []
     toast.add({
       severity: "success",
       summary: "Notification sent",
       detail: composeType.value === "billing"
         ? `Notified ${result.recipients} billing manager(s) assigned to this clinic.`
-        : "The assigned therapist was notified about the EOD blocker.",
+        : `Sent ${result.recipients} EOD reminder${result.recipients === 1 ? "" : "s"} to assigned therapists.`,
       life: 3500
     })
   } catch (error) {
@@ -405,10 +429,18 @@ watch(showCompose, visible => {
   }
 })
 watch(eodDateFilter, () => {
-  if (selectedEodAppointmentId.value && !filteredEodAssignments.value.some(item => item.appointment_id === selectedEodAppointmentId.value)) {
-    selectedEodAppointmentId.value = null
-  }
+  const visibleIds = new Set(filteredEodAssignments.value.map(item => item.appointment_id))
+  selectedEodAppointmentIds.value = selectedEodAppointmentIds.value.filter(id => visibleIds.has(id))
 })
+const toggleAllVisibleEod = () => {
+  const visibleIds = filteredEodAssignments.value.map(item => item.appointment_id)
+  if (allVisibleEodSelected.value) {
+    const visibleSet = new Set(visibleIds)
+    selectedEodAppointmentIds.value = selectedEodAppointmentIds.value.filter(id => !visibleSet.has(id))
+    return
+  }
+  selectedEodAppointmentIds.value = [...new Set([...selectedEodAppointmentIds.value, ...visibleIds])]
+}
 onMounted(() => {
   void refreshCount()
   pollTimer = window.setInterval(() => void refreshCount(), 30_000)
