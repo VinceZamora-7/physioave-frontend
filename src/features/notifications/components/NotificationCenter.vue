@@ -145,10 +145,21 @@
           </p>
         </div>
         <div v-else>
-          <label class="mb-1 block text-sm font-medium">Pending EOD assignment</label>
+          <div class="mb-2 flex items-end justify-between gap-3">
+            <label class="block text-sm font-medium">Pending EOD assignment</label>
+            <Select
+              v-model="eodDateFilter"
+              :options="eodDateFilterOptions"
+              option-label="label"
+              option-value="value"
+              size="small"
+              class="w-40"
+              aria-label="Filter pending EOD assignments by date"
+            />
+          </div>
           <Select
             v-model="selectedEodAppointmentId"
-            :options="pendingEodAssignments"
+            :options="filteredEodAssignments"
             option-value="appointment_id"
             :loading="loadingEod"
             filter
@@ -162,7 +173,9 @@
               </div>
             </template>
           </Select>
-          <p v-if="!loadingEod && !pendingEodAssignments.length" class="mt-2 text-xs text-surface-500">No pending EOD assignments were found.</p>
+          <p v-if="!loadingEod && !filteredEodAssignments.length" class="mt-2 text-xs text-surface-500">
+            {{ eodDateFilter === "today" ? "All of today’s EOD work is finished." : "No pending EOD assignments were found for this filter." }}
+          </p>
         </div>
         <div v-if="composeType === 'billing' && chosenBilling" class="selected-billing-card">
           <div class="flex items-start justify-between gap-3">
@@ -233,6 +246,12 @@ const pendingEodAssignments = ref<PendingEodAssignment[]>([])
 const selectedBillingId = ref<number | null>(null)
 const selectedEodAppointmentId = ref<number | null>(null)
 const composeType = ref<"billing" | "eod">("billing")
+const eodDateFilter = ref<"today" | "previous" | "all">("today")
+const eodDateFilterOptions = [
+  { label: "Today", value: "today" },
+  { label: "Previous days", value: "previous" },
+  { label: "All pending", value: "all" }
+]
 const unreadCount = ref(0)
 const activeFilter = ref<"all" | "unread">("all")
 const loading = ref(false)
@@ -253,6 +272,23 @@ const visibleNotifications = computed(() =>
 )
 const chosenBilling = computed(() => selectedBilling(selectedBillingId.value))
 const chosenEod = computed(() => pendingEodAssignments.value.find(item => item.appointment_id === selectedEodAppointmentId.value))
+const localDateKey = (value: string | Date) => {
+  const date = value instanceof Date ? value : new Date(value)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+const todayDateKey = () => localDateKey(new Date())
+const filteredEodAssignments = computed(() => {
+  if (eodDateFilter.value === "all") return pendingEodAssignments.value
+  const today = todayDateKey()
+  return pendingEodAssignments.value.filter(item =>
+    eodDateFilter.value === "today"
+      ? localDateKey(item.starts_at) === today
+      : localDateKey(item.starts_at) < today
+  )
+})
 const canSubmitCompose = computed(() =>
   composeType.value === "billing" ? Boolean(selectedBillingId.value) : Boolean(selectedEodAppointmentId.value)
 )
@@ -366,6 +402,11 @@ watch(showCompose, visible => {
   if (visible) {
     composeType.value = canSendReview.value ? "billing" : "eod"
     void Promise.all([loadOutstandingBillings(), loadPendingEod()])
+  }
+})
+watch(eodDateFilter, () => {
+  if (selectedEodAppointmentId.value && !filteredEodAssignments.value.some(item => item.appointment_id === selectedEodAppointmentId.value)) {
+    selectedEodAppointmentId.value = null
   }
 })
 onMounted(() => {
