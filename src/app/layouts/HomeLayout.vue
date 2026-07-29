@@ -55,6 +55,9 @@
             </div>
 
             <!-- Online indicator -->
+            <NotificationCenter />
+
+            <!-- Online indicator -->
             <div class="app-header-online hidden sm:flex items-center gap-1.5 text-xs">
               <span class="app-header-online-dot" />
               Online
@@ -82,6 +85,7 @@ import Select from "primevue/select"
 import { storeToRefs } from "pinia"
 import { clinicStore } from "@/stores/clinic.store"
 import { pamsAPI } from "@/utils/axios-interceptor"
+import NotificationCenter from "@/features/notifications/components/NotificationCenter.vue"
 
 type SideBarExpose = { toggleMobile: () => void }
 
