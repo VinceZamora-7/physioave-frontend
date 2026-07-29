@@ -8,7 +8,7 @@
     </button>
 
     <Popover ref="popover" @show="loadNotifications">
-      <section class="w-[min(92vw,390px)]">
+      <section class="w-[min(92vw,410px)]">
         <div class="flex items-center justify-between border-b border-surface-200 pb-3">
           <div>
             <h3 class="font-semibold text-surface-900">Notifications</h3>
@@ -17,8 +17,8 @@
           <button v-if="unreadCount" class="text-xs font-medium text-primary-600" @click="markAllRead">Mark all read</button>
         </div>
 
-        <div class="max-h-[420px] overflow-y-auto">
-          <p v-if="loading" class="py-8 text-center text-sm text-surface-500">Loading notifications…</p>
+        <div class="max-h-[440px] overflow-y-auto">
+          <p v-if="loading" class="py-8 text-center text-sm text-surface-500">Loading notifications...</p>
           <p v-else-if="!notifications.length" class="py-8 text-center text-sm text-surface-500">No notifications yet.</p>
           <button
             v-for="item in notifications"
@@ -33,9 +33,13 @@
               <span class="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary-100 text-primary-700">
                 <i class="pi pi-wallet text-sm" />
               </span>
-              <span class="min-w-0">
+              <span class="min-w-0 flex-1">
                 <span class="block text-sm font-semibold text-surface-900">{{ item.title }}</span>
                 <span class="mt-1 block text-sm text-surface-600">{{ item.message }}</span>
+                <span v-if="item.metadata?.clinic_name" class="mt-1.5 block text-xs font-medium text-primary-700">
+                  <i class="pi pi-map-marker mr-1" />{{ item.metadata.clinic_name }}
+                  <template v-if="item.metadata.billing_status"> · {{ formatStatus(item.metadata.billing_status) }}</template>
+                </span>
                 <span class="mt-1 block text-xs text-surface-400">
                   {{ item.created_by_name }} · {{ formatDate(item.created_at) }}
                 </span>
@@ -56,49 +60,83 @@
       </section>
     </Popover>
 
-    <Dialog v-model:visible="showCompose" modal header="Notify billing managers" :style="{ width: 'min(92vw, 480px)' }">
+    <Dialog v-model:visible="showCompose" modal header="Notify billing managers" :style="{ width: 'min(94vw, 560px)' }">
       <div class="space-y-4">
-        <p class="text-sm text-surface-600">Send a direct reminder to active staff who can manage HMO billing status.</p>
-        <div class="flex gap-5">
-          <label class="flex items-center gap-2"><Checkbox v-model="payerTypes" input-id="notify-hmo" value="HMO" /><span>HMO</span></label>
-          <label class="flex items-center gap-2"><Checkbox v-model="payerTypes" input-id="notify-lgu" value="LGU" /><span>LGU</span></label>
+        <p class="text-sm text-surface-600">
+          Choose the unfinished HMO or LGU billing. Managers assigned to its clinic will be notified.
+        </p>
+        <div>
+          <label class="mb-1 block text-sm font-medium">Unfinished billing</label>
+          <Select
+            v-model="selectedBillingId"
+            :options="outstandingBillings"
+            option-value="id"
+            :loading="loadingBillings"
+            filter
+            placeholder="Select a billing record"
+            class="w-full"
+          >
+            <template #option="{ option }">
+              <div class="min-w-0 py-1">
+                <div class="font-medium">{{ billingOptionTitle(option) }}</div>
+                <div class="text-xs text-surface-500">
+                  {{ option.patient_name }} · {{ option.clinic_name || "Unassigned clinic" }} · {{ formatStatus(option.document_status) }}
+                </div>
+              </div>
+            </template>
+            <template #value="{ value, placeholder }">
+              <span v-if="selectedBilling(value)">
+                {{ billingOptionTitle(selectedBilling(value)!) }} — {{ selectedBilling(value)!.clinic_name || "Unassigned clinic" }}
+              </span>
+              <span v-else>{{ placeholder }}</span>
+            </template>
+          </Select>
+          <p v-if="!loadingBillings && !outstandingBillings.length" class="mt-2 text-xs text-surface-500">
+            No unfinished HMO or LGU billing records were found.
+          </p>
         </div>
         <div>
           <label for="notification-message" class="mb-1 block text-sm font-medium">Message (optional)</label>
-          <Textarea id="notification-message" v-model="message" rows="4" maxlength="1000" fluid placeholder="Add details about what needs to be checked…" />
+          <Textarea id="notification-message" v-model="message" rows="4" maxlength="1000" fluid placeholder="Add details about what needs to be checked..." />
           <p class="mt-1 text-right text-xs text-surface-400">{{ message.length }}/1000</p>
         </div>
         <p v-if="sendError" class="text-sm text-red-600">{{ sendError }}</p>
       </div>
       <template #footer>
         <Button label="Cancel" severity="secondary" text @click="showCompose = false" />
-        <Button label="Send notification" icon="pi pi-send" :loading="sending" :disabled="!payerTypes.length" @click="sendNotification" />
+        <Button label="Send notification" icon="pi pi-send" :loading="sending" :disabled="!selectedBillingId" @click="sendNotification" />
       </template>
     </Dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue"
+import { computed, onMounted, onUnmounted, ref, watch } from "vue"
 import { useRouter } from "vue-router"
 import Button from "primevue/button"
-import Checkbox from "primevue/checkbox"
 import Dialog from "primevue/dialog"
 import Popover from "primevue/popover"
+import Select from "primevue/select"
 import Textarea from "primevue/textarea"
 import { useToast } from "primevue/usetoast"
 import { useAuthSessionStore } from "@/stores/auth-session.store"
-import { notificationService, type StaffNotification } from "@/features/notifications/api/notification.service"
+import {
+  notificationService,
+  type OutstandingSponsorBilling,
+  type StaffNotification
+} from "@/features/notifications/api/notification.service"
 
 const router = useRouter()
 const auth = useAuthSessionStore()
 const toast = useToast()
 const popover = ref<InstanceType<typeof Popover> | null>(null)
 const notifications = ref<StaffNotification[]>([])
+const outstandingBillings = ref<OutstandingSponsorBilling[]>([])
+const selectedBillingId = ref<number | null>(null)
 const unreadCount = ref(0)
 const loading = ref(false)
+const loadingBillings = ref(false)
 const showCompose = ref(false)
-const payerTypes = ref<string[]>(["HMO", "LGU"])
 const message = ref("")
 const sending = ref(false)
 const sendError = ref("")
@@ -108,7 +146,7 @@ const canSend = computed(() => auth.isOwnerEquivalent)
 const toggle = (event: Event) => popover.value?.toggle(event)
 
 const refreshCount = async () => {
-  try { unreadCount.value = await notificationService.unreadCount() } catch { /* regular auth flow handles errors */ }
+  try { unreadCount.value = await notificationService.unreadCount() } catch { /* handled by auth flow */ }
 }
 const loadNotifications = async () => {
   loading.value = true
@@ -117,6 +155,15 @@ const loadNotifications = async () => {
     unreadCount.value = notifications.value.filter(item => !item.read_at).length
   } finally {
     loading.value = false
+  }
+}
+const loadOutstandingBillings = async () => {
+  if (!canSend.value) return
+  loadingBillings.value = true
+  try {
+    outstandingBillings.value = await notificationService.outstandingBillings()
+  } finally {
+    loadingBillings.value = false
   }
 }
 const markAllRead = async () => {
@@ -134,17 +181,21 @@ const openNotification = async (item: StaffNotification) => {
   if (item.action_path) await router.push(item.action_path)
 }
 const sendNotification = async () => {
+  if (!selectedBillingId.value) return
   sending.value = true
   sendError.value = ""
   try {
-    const result = await notificationService.sendBillingReview({ payer_types: payerTypes.value, message: message.value.trim() || undefined })
+    const result = await notificationService.sendBillingReview({
+      billing_document_id: selectedBillingId.value,
+      message: message.value.trim() || undefined
+    })
     showCompose.value = false
     message.value = ""
-    payerTypes.value = ["HMO", "LGU"]
+    selectedBillingId.value = null
     toast.add({
       severity: "success",
       summary: "Notification sent",
-      detail: `Notified ${result.recipients} billing manager(s).`,
+      detail: `Notified ${result.recipients} billing manager(s) assigned to this clinic.`,
       life: 3500
     })
   } catch (error) {
@@ -153,8 +204,17 @@ const sendNotification = async () => {
     sending.value = false
   }
 }
-const formatDate = (value: string) => new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value))
+const formatDate = (value: string) =>
+  new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value))
+const formatStatus = (value: string) =>
+  String(value || "").replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (letter: string) => letter.toUpperCase())
+const selectedBilling = (id: unknown) => outstandingBillings.value.find(item => item.id === Number(id))
+const billingOptionTitle = (item: OutstandingSponsorBilling) =>
+  `${item.payer_type} · ${item.document_number || `Billing #${item.id}`}${item.sponsor_name ? ` · ${item.sponsor_name}` : ""}`
 
+watch(showCompose, visible => {
+  if (visible) void loadOutstandingBillings()
+})
 onMounted(() => {
   void refreshCount()
   pollTimer = window.setInterval(() => void refreshCount(), 30_000)

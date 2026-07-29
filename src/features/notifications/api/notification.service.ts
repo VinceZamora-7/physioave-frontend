@@ -9,7 +9,29 @@ export interface StaffNotification {
   read_at: string | null
   created_at: string
   created_by_name: string
-  metadata?: { payer_types?: string[] } | null
+  metadata?: {
+    billing_document_id?: number
+    document_number?: string | null
+    payer_type?: "HMO" | "LGU"
+    billing_status?: string
+    patient_name?: string
+    sponsor_name?: string | null
+    clinic_name?: string | null
+    balance_amount?: number
+  } | null
+}
+
+export interface OutstandingSponsorBilling {
+  id: number
+  document_number: string | null
+  document_status: string
+  payer_type: "HMO" | "LGU"
+  patient_name: string
+  clinic_id: number | null
+  clinic_name: string | null
+  sponsor_name: string | null
+  document_date: string
+  balance_amount: number
 }
 
 export const notificationService = {
@@ -27,7 +49,11 @@ export const notificationService = {
   async markAllRead(): Promise<void> {
     await pamsAPI.patch("/notifications/read-all")
   },
-  async sendBillingReview(payload: { payer_types: string[]; message?: string }): Promise<{ recipients: number }> {
+  async outstandingBillings(): Promise<OutstandingSponsorBilling[]> {
+    const { data } = await pamsAPI.get<OutstandingSponsorBilling[]>("/notifications/outstanding-billings")
+    return data
+  },
+  async sendBillingReview(payload: { billing_document_id: number; message?: string }): Promise<{ recipients: number }> {
     const { data } = await pamsAPI.post<{ recipients: number }>("/notifications/billing-review", payload)
     return data
   }
