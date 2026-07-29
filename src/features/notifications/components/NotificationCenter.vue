@@ -322,6 +322,9 @@ onUnmounted(() => {
   margin: -12px;
   overflow: hidden;
   border-radius: 14px;
+  color: var(--p-surface-900);
+  background: #ffffff;
+  box-shadow: 0 18px 45px rgba(46, 16, 101, .18);
 }
 .notification-panel-header {
   display: flex;
@@ -374,10 +377,11 @@ onUnmounted(() => {
   text-align: left;
   border-bottom: 1px solid var(--p-surface-100);
   transition: background .15s ease, transform .15s ease;
+  background: #ffffff;
 }
 .notification-item:hover { background: var(--p-surface-50); }
 .notification-item.unread {
-  background: linear-gradient(90deg, rgba(250, 232, 255, .72), rgba(255, 255, 255, .8));
+  background: linear-gradient(90deg, #fae8ff, #ffffff);
 }
 .notification-item.unread::before {
   position: absolute;
