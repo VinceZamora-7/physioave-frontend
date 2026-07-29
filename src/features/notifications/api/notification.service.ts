@@ -18,6 +18,9 @@ export interface StaffNotification {
     sponsor_name?: string | null
     clinic_name?: string | null
     balance_amount?: number
+    blockers?: string[]
+    assigned_staff_name?: string | null
+    eod_date?: string
   } | null
 }
 
@@ -32,6 +35,18 @@ export interface OutstandingSponsorBilling {
   sponsor_name: string | null
   document_date: string
   balance_amount: number
+}
+
+export interface PendingEodAssignment {
+  appointment_id: number
+  starts_at: string
+  patient_name: string
+  clinic_id: number
+  clinic_name: string
+  assigned_staff_id: number | null
+  assigned_staff_name: string | null
+  appointment_status: string
+  blockers: string[]
 }
 
 export const notificationService = {
@@ -53,8 +68,16 @@ export const notificationService = {
     const { data } = await pamsAPI.get<OutstandingSponsorBilling[]>("/notifications/outstanding-billings")
     return data
   },
+  async pendingEod(): Promise<PendingEodAssignment[]> {
+    const { data } = await pamsAPI.get<PendingEodAssignment[]>("/notifications/pending-eod")
+    return data
+  },
   async sendBillingReview(payload: { billing_document_id: number; message?: string }): Promise<{ recipients: number }> {
     const { data } = await pamsAPI.post<{ recipients: number }>("/notifications/billing-review", payload)
+    return data
+  },
+  async sendEodReminder(payload: { appointment_id: number; message?: string }): Promise<{ recipients: number }> {
+    const { data } = await pamsAPI.post<{ recipients: number }>("/notifications/eod-reminder", payload)
     return data
   }
 }

@@ -172,6 +172,7 @@ export const SYSTEM_ADMIN_PERMISSIONS = [
   "Staff::MANAGE_STATUS",
 
   "BillingNotification::SEND_REVIEW",
+  "BillingNotification::SEND_EOD",
 
   "Patient::LOOKUP",
   "Patient::READ",

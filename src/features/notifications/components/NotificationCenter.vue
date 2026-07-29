@@ -73,7 +73,7 @@
           >
             <div class="flex gap-3.5">
               <span class="notification-item-icon">
-                <i class="pi pi-wallet text-sm" />
+                <i :class="item.notification_type === 'EOD_REMINDER' ? 'pi pi-clock' : 'pi pi-wallet'" class="text-sm" />
               </span>
               <span class="min-w-0 flex-1">
                 <span class="mb-1 flex flex-wrap items-center gap-1.5">
@@ -105,10 +105,16 @@
 
     <Dialog v-model:visible="showCompose" modal header="Notify billing managers" :style="{ width: 'min(94vw, 560px)' }">
       <div class="space-y-4">
+        <div class="notification-tabs w-fit" role="tablist" aria-label="Notification type">
+          <button v-if="canSendReview" type="button" :class="{ active: composeType === 'billing' }" @click="composeType = 'billing'">Billing review</button>
+          <button v-if="canSendEod" type="button" :class="{ active: composeType === 'eod' }" @click="composeType = 'eod'">Pending EOD</button>
+        </div>
         <p class="text-sm text-surface-600">
-          Choose an HMO or LGU billing that has not been billed yet. Managers assigned to its clinic will be notified.
+          {{ composeType === "billing"
+            ? "Choose an HMO or LGU billing that has not been billed yet. Managers assigned to its clinic will be notified."
+            : "Choose an unresolved EOD appointment. Its assigned therapist will be notified directly." }}
         </p>
-        <div>
+        <div v-if="composeType === 'billing'">
           <label class="mb-1 block text-sm font-medium">Not-billed HMO/LGU record</label>
           <Select
             v-model="selectedBillingId"
@@ -138,7 +144,27 @@
             No not-billed HMO or LGU records were found.
           </p>
         </div>
-        <div v-if="chosenBilling" class="selected-billing-card">
+        <div v-else>
+          <label class="mb-1 block text-sm font-medium">Pending EOD assignment</label>
+          <Select
+            v-model="selectedEodAppointmentId"
+            :options="pendingEodAssignments"
+            option-value="appointment_id"
+            :loading="loadingEod"
+            filter
+            placeholder="Select an EOD blocker"
+            class="w-full"
+          >
+            <template #option="{ option }">
+              <div class="min-w-0 py-1">
+                <div class="font-medium">{{ option.patient_name }} · {{ option.assigned_staff_name || "Unassigned PT" }}</div>
+                <div class="text-xs text-surface-500">{{ option.clinic_name }} · {{ option.blockers.join(", ") }}</div>
+              </div>
+            </template>
+          </Select>
+          <p v-if="!loadingEod && !pendingEodAssignments.length" class="mt-2 text-xs text-surface-500">No pending EOD assignments were found.</p>
+        </div>
+        <div v-if="composeType === 'billing' && chosenBilling" class="selected-billing-card">
           <div class="flex items-start justify-between gap-3">
             <div>
               <p class="text-xs font-semibold uppercase tracking-wide text-primary-700">Selected assignment</p>
@@ -154,6 +180,17 @@
             <span><i class="pi pi-wallet mr-1 text-primary-600" />Balance {{ formatMoney(chosenBilling.balance_amount) }}</span>
           </div>
         </div>
+        <div v-if="composeType === 'eod' && chosenEod" class="selected-billing-card">
+          <p class="text-xs font-semibold uppercase tracking-wide text-primary-700">EOD assignment</p>
+          <h4 class="mt-1 font-bold text-surface-900">{{ chosenEod.patient_name }}</h4>
+          <p class="mt-1 text-sm text-surface-600">{{ chosenEod.blockers.join(" · ") }}</p>
+          <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
+            <span><i class="pi pi-user mr-1 text-primary-600" />{{ chosenEod.assigned_staff_name || "Unassigned PT" }}</span>
+            <span><i class="pi pi-map-marker mr-1 text-primary-600" />{{ chosenEod.clinic_name }}</span>
+            <span><i class="pi pi-calendar mr-1 text-primary-600" />{{ formatDate(chosenEod.starts_at) }}</span>
+            <span><i class="pi pi-info-circle mr-1 text-primary-600" />{{ formatStatus(chosenEod.appointment_status) }}</span>
+          </div>
+        </div>
         <div>
           <label for="notification-message" class="mb-1 block text-sm font-medium">Message (optional)</label>
           <Textarea id="notification-message" v-model="message" rows="4" maxlength="1000" fluid placeholder="Add details about what needs to be checked..." />
@@ -163,7 +200,7 @@
       </div>
       <template #footer>
         <Button label="Cancel" severity="secondary" text @click="showCompose = false" />
-        <Button label="Send notification" icon="pi pi-send" :loading="sending" :disabled="!selectedBillingId" @click="sendNotification" />
+        <Button label="Send notification" icon="pi pi-send" :loading="sending" :disabled="!canSubmitCompose" @click="sendNotification" />
       </template>
     </Dialog>
   </div>
@@ -182,6 +219,7 @@ import { useAuthSessionStore } from "@/stores/auth-session.store"
 import {
   notificationService,
   type OutstandingSponsorBilling,
+  type PendingEodAssignment,
   type StaffNotification
 } from "@/features/notifications/api/notification.service"
 
@@ -191,23 +229,33 @@ const toast = useToast()
 const popover = ref<InstanceType<typeof Popover> | null>(null)
 const notifications = ref<StaffNotification[]>([])
 const outstandingBillings = ref<OutstandingSponsorBilling[]>([])
+const pendingEodAssignments = ref<PendingEodAssignment[]>([])
 const selectedBillingId = ref<number | null>(null)
+const selectedEodAppointmentId = ref<number | null>(null)
+const composeType = ref<"billing" | "eod">("billing")
 const unreadCount = ref(0)
 const activeFilter = ref<"all" | "unread">("all")
 const loading = ref(false)
 const loadError = ref("")
 const loadingBillings = ref(false)
+const loadingEod = ref(false)
 const showCompose = ref(false)
 const message = ref("")
 const sending = ref(false)
 const sendError = ref("")
 let pollTimer: number | undefined
 
-const canSend = computed(() => auth.hasAnyPermission("BillingNotification::SEND_REVIEW"))
+const canSendReview = computed(() => auth.hasAnyPermission("BillingNotification::SEND_REVIEW"))
+const canSendEod = computed(() => auth.hasAnyPermission("BillingNotification::SEND_EOD"))
+const canSend = computed(() => canSendReview.value || canSendEod.value)
 const visibleNotifications = computed(() =>
   activeFilter.value === "unread" ? notifications.value.filter(item => !item.read_at) : notifications.value
 )
 const chosenBilling = computed(() => selectedBilling(selectedBillingId.value))
+const chosenEod = computed(() => pendingEodAssignments.value.find(item => item.appointment_id === selectedEodAppointmentId.value))
+const canSubmitCompose = computed(() =>
+  composeType.value === "billing" ? Boolean(selectedBillingId.value) : Boolean(selectedEodAppointmentId.value)
+)
 const toggle = (event: Event) => popover.value?.toggle(event)
 
 const refreshCount = async () => {
@@ -231,12 +279,21 @@ const openCompose = () => {
   showCompose.value = true
 }
 const loadOutstandingBillings = async () => {
-  if (!canSend.value) return
+  if (!canSendReview.value) return
   loadingBillings.value = true
   try {
     outstandingBillings.value = await notificationService.outstandingBillings()
   } finally {
     loadingBillings.value = false
+  }
+}
+const loadPendingEod = async () => {
+  if (!canSendEod.value) return
+  loadingEod.value = true
+  try {
+    pendingEodAssignments.value = await notificationService.pendingEod()
+  } finally {
+    loadingEod.value = false
   }
 }
 const markAllRead = async () => {
@@ -254,21 +311,29 @@ const openNotification = async (item: StaffNotification) => {
   if (item.action_path) await router.push(item.action_path)
 }
 const sendNotification = async () => {
-  if (!selectedBillingId.value) return
+  if (!canSubmitCompose.value) return
   sending.value = true
   sendError.value = ""
   try {
-    const result = await notificationService.sendBillingReview({
-      billing_document_id: selectedBillingId.value,
-      message: message.value.trim() || undefined
-    })
+    const result = composeType.value === "billing"
+      ? await notificationService.sendBillingReview({
+          billing_document_id: Number(selectedBillingId.value),
+          message: message.value.trim() || undefined
+        })
+      : await notificationService.sendEodReminder({
+          appointment_id: Number(selectedEodAppointmentId.value),
+          message: message.value.trim() || undefined
+        })
     showCompose.value = false
     message.value = ""
     selectedBillingId.value = null
+    selectedEodAppointmentId.value = null
     toast.add({
       severity: "success",
       summary: "Notification sent",
-      detail: `Notified ${result.recipients} billing manager(s) assigned to this clinic.`,
+      detail: composeType.value === "billing"
+        ? `Notified ${result.recipients} billing manager(s) assigned to this clinic.`
+        : "The assigned therapist was notified about the EOD blocker.",
       life: 3500
     })
   } catch (error) {
@@ -298,7 +363,10 @@ const billingOptionTitle = (item: OutstandingSponsorBilling) =>
   `${item.payer_type} · ${item.document_number || `Billing #${item.id}`}${item.sponsor_name ? ` · ${item.sponsor_name}` : ""}`
 
 watch(showCompose, visible => {
-  if (visible) void loadOutstandingBillings()
+  if (visible) {
+    composeType.value = canSendReview.value ? "billing" : "eod"
+    void Promise.all([loadOutstandingBillings(), loadPendingEod()])
+  }
 })
 onMounted(() => {
   void refreshCount()
