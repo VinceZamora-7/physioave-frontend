@@ -65,6 +65,29 @@
 
           </div>
         </div>
+
+        <!-- Mobile branch selector -->
+        <div class="border-t border-purple-100/70 px-4 pb-3 pt-2 sm:hidden">
+          <label for="mobile-branch-selector" class="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-brand-purple/70">
+            <i class="pi pi-map-marker text-[11px]" />
+            Current branch
+          </label>
+          <Select
+            v-model="selectedClinicIdProxy"
+            input-id="mobile-branch-selector"
+            :options="clinicSelectOptions"
+            optionLabel="name"
+            optionValue="id"
+            filter
+            placeholder="Select branch"
+            :loading="isLoadingClinics"
+            :disabled="isLoadingClinics || isBranchLocked || !clinicOptions.length"
+            class="app-header-select w-full"
+          />
+          <p v-if="isBranchLocked" class="mt-1.5 text-[11px] text-surface-500">
+            Your account is assigned to this branch.
+          </p>
+        </div>
       </header>
 
       <!-- ── MAIN CONTENT ─────────────────────────────────────── -->
