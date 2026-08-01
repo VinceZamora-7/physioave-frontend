@@ -138,12 +138,16 @@
                 -{{ formatCurrency(invoiceDiscount) }}
               </td>
             </tr>
+            <tr v-if="serviceFeeAmount > 0" class="invoice-subtotal-row">
+              <td colspan="4" class="text-right">POS Service Fee (3.5%):</td>
+              <td class="text-center">{{ formatCurrency(serviceFeeAmount) }}</td>
+            </tr>
             <tr class="grand-total-row">
               <td colspan="4" class="text-right">
                 Grand Total:
               </td>
               <td class="text-center">
-                {{ formatCurrency(grandTotal) }}
+                {{ formatCurrency(grandTotal + serviceFeeAmount) }}
               </td>
             </tr>
           </tfoot>
@@ -159,6 +163,7 @@
           <div><span class="self-pay-bottom-text">Payment Method:</span> {{ paymentMethodLabel }}</div>
           <div><span class="self-pay-bottom-text">Payment Reference:</span> {{ paymentReferenceLabel }}</div>
           <div v-if="hasInvoiceDiscount"><span class="self-pay-bottom-text">Discount:</span> {{ formatCurrency(invoiceDiscount) }}</div>
+          <div v-if="serviceFeeAmount > 0"><span class="self-pay-bottom-text">POS Service Fee:</span> {{ formatCurrency(serviceFeeAmount) }}</div>
           <div><span class="self-pay-bottom-text">Amount Paid:</span> {{ formatCurrency(amountPaid) }}</div>
         </section>
 
@@ -600,14 +605,16 @@ const normalizePaymentMethodLabel = (value?: string | null): string => {
   if (!normalized) return ""
   const methodMap: Record<string, string> = {
     cash: "Cash",
-    gcash: "E-wallet",
-    maya: "E-wallet",
-    "e-wallet": "E-wallet",
-    "e-wallets": "E-wallet",
-    ewallet: "E-wallet",
-    ewallets: "E-wallet",
-    "e wallet": "E-wallet",
-    "e wallets": "E-wallet",
+    gcash: "QRPH",
+    maya: "QRPH",
+    qrph: "QRPH",
+    "qr ph": "QRPH",
+    "e-wallet": "QRPH",
+    "e-wallets": "QRPH",
+    ewallet: "QRPH",
+    ewallets: "QRPH",
+    "e wallet": "QRPH",
+    "e wallets": "QRPH",
     card: "Debit/Credit",
     credit: "Debit/Credit",
     "credit card": "Debit/Credit",
@@ -647,6 +654,8 @@ const amountPaid = computed(() => {
 
   return Number(billing?.amount_paid ?? 0)
 })
+
+const serviceFeeAmount = computed(() => Number(billingDetail.value?.service_fee_amount ?? 0))
 
 const dateSigned = computed(() =>
   new Date().toLocaleDateString("en-PH", {

@@ -272,7 +272,7 @@ const pendingPtRows = computed<PendingPtRow[]>(() =>
 const financeMetrics = computed<Metric[]>(() => [
   { label: "Gross Charges", value: asCurrency(summary.value.gross_income) },
   { label: "Cash", value: asCurrency(summary.value.tendered_cash) },
-  { label: "E-wallets", value: asCurrency(summary.value.tendered_ewallet) },
+  { label: "QRPH", value: asCurrency(summary.value.tendered_ewallet) },
   { label: "Debit/Credit", value: asCurrency(summary.value.tendered_debit_credit) },
   { label: "Self-Pay Outstanding", value: asCurrency(outstandingByRoute.value.selfPay) },
   { label: "HMO Outstanding", value: asCurrency(outstandingByRoute.value.hmo) },

@@ -131,9 +131,9 @@ const summaryCards = computed(() => [
     caption: "Cash tendered today"
   },
   {
-    label: "E-wallets",
+    label: "QRPH",
     value: asCurrency(report.value?.summary.tendered_ewallet ?? 0),
-    caption: "E-wallet tendered today"
+    caption: "QRPH tendered today"
   },
   {
     label: "Debit/Credit",
@@ -179,9 +179,9 @@ const monthlySummaryCards = computed(() => [
     caption: "Cash tendered within the month"
   },
   {
-    label: "E-wallets",
+    label: "QRPH",
     value: asCurrency(monthlyReport.value?.summary.tendered_ewallet ?? 0),
-    caption: "E-wallet tendered within the month"
+    caption: "QRPH tendered within the month"
   },
   {
     label: "Debit/Credit",

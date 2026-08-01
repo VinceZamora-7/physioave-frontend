@@ -946,6 +946,19 @@
             </div>
           </div>
           <div
+            v-if="isDebitCreditPaymentMethod"
+            class="grid grid-cols-2 gap-3 rounded-md bg-white px-3 py-2 text-sm"
+          >
+            <div>
+              <p class="app-appointment-muted text-xs uppercase tracking-wide">POS Service Fee (3.5%)</p>
+              <p class="app-appointment-value font-semibold">{{ formatCurrency(tenderPosServiceFee) }}</p>
+            </div>
+            <div>
+              <p class="app-appointment-muted text-xs uppercase tracking-wide">Total Payable</p>
+              <p class="app-appointment-value font-semibold">{{ formatCurrency(tenderTotalPayable) }}</p>
+            </div>
+          </div>
+          <div
             v-if="tenderDiscountSummary.discount > 0"
             class="rounded-md bg-white px-3 py-2 text-sm text-orange-600"
           >
@@ -989,7 +1002,7 @@
           </div>
         </div>
 
-        <div v-if="isEWalletPaymentMethod" class="space-y-1">
+        <div v-if="isQrphPaymentMethod" class="space-y-1">
           <label
             class="app-appointment-muted text-xs font-semibold uppercase tracking-wide"
             >Reference Number</label
@@ -997,7 +1010,7 @@
           <InputText
             v-model="tenderForm.payment_reference"
             class="w-full"
-            placeholder="Required for e-wallet payments"
+            placeholder="Required for QRPH payments"
           />
         </div>
 
@@ -2071,11 +2084,13 @@ const selectedPaymentMethod = computed(() =>
   ) ?? null,
 );
 
-const isEWalletPaymentMethod = computed(() => {
+const isQrphPaymentMethod = computed(() => {
   const name = String(selectedPaymentMethod.value?.name ?? "")
     .trim()
     .toLowerCase();
   return (
+    name.includes("qrph") ||
+    name.includes("qr ph") ||
     name.includes("e-wallet") ||
     name.includes("ewallet") ||
     name.includes("gcash") ||
@@ -2084,6 +2099,20 @@ const isEWalletPaymentMethod = computed(() => {
     name.includes("online")
   );
 });
+
+const isDebitCreditPaymentMethod = computed(() =>
+  String(selectedPaymentMethod.value?.name ?? "").trim() === "Debit/Credit",
+);
+
+const tenderPosServiceFee = computed(() =>
+  isDebitCreditPaymentMethod.value
+    ? Number((Number(tenderDiscountSummary.value.amountDue ?? 0) * 0.035).toFixed(2))
+    : 0,
+);
+
+const tenderTotalPayable = computed(() =>
+  Number((Number(tenderDiscountSummary.value.amountDue ?? 0) + tenderPosServiceFee.value).toFixed(2)),
+);
 
 const combineDateAndTime = (dateValue: Date | null, timeValue: Date | null): Date | null => {
   if (!dateValue || !timeValue) return null;
@@ -4927,8 +4956,8 @@ const submitTenderPayment = async (): Promise<void> => {
   }
 
   const paymentReference = tenderForm.payment_reference.trim();
-  if (isEWalletPaymentMethod.value && !paymentReference) {
-    errorToast(toast, "Enter the e-wallet reference number.");
+  if (isQrphPaymentMethod.value && !paymentReference) {
+    errorToast(toast, "Enter the QRPH reference number.");
     return;
   }
 
@@ -4939,7 +4968,7 @@ const submitTenderPayment = async (): Promise<void> => {
       {
         amount_tendered: amountTendered,
         payment_method_id: tenderForm.payment_method_id,
-        payment_reference: isEWalletPaymentMethod.value
+        payment_reference: isQrphPaymentMethod.value
           ? paymentReference
           : null,
         notes: tenderForm.notes.trim() || null,
@@ -4983,8 +5012,8 @@ const confirmTenderPayment = (): void => {
     return;
   }
   const paymentReference = tenderForm.payment_reference.trim();
-  if (isEWalletPaymentMethod.value && !paymentReference) {
-    errorToast(toast, "Enter the e-wallet reference number.");
+  if (isQrphPaymentMethod.value && !paymentReference) {
+    errorToast(toast, "Enter the QRPH reference number.");
     return;
   }
 
@@ -5012,6 +5041,16 @@ watch(
   () => {
     if (!tenderVisible.value || !tenderBillingDocument.value) return;
     tenderForm.amount_tendered = Number(tenderForm.amount_tendered ?? 0);
+  },
+);
+
+watch(
+  () => tenderForm.payment_method_id,
+  () => {
+    if (!tenderVisible.value || !tenderBillingDocument.value) return;
+    tenderForm.amount_tendered = isDebitCreditPaymentMethod.value
+      ? tenderTotalPayable.value
+      : Number(tenderDiscountSummary.value.amountDue ?? 0);
   },
 );
 

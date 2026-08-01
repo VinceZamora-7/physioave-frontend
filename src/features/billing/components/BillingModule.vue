@@ -709,7 +709,7 @@
                       inputClass="tender-amount-input"
                       :min="0"
                       :minFractionDigits="0"
-                      :maxFractionDigits="0"
+                      :maxFractionDigits="2"
                       @focus="selectNumericInputText"
                     />
                     <label>Amount Tendered</label>
@@ -769,9 +769,13 @@
                     <div class="font-semibold">{{ asCurrency(posSummary.vatAmount) }}</div>
                   </div>
                 </template>
+                <div v-if="posSummary.serviceFeeAmount > 0">
+                  <div class="text-xs opacity-60">POS Service Fee (3.5%)</div>
+                  <div class="font-semibold">{{ asCurrencyWithCents(posSummary.serviceFeeAmount) }}</div>
+                </div>
                 <div>
-                  <div class="text-xs opacity-60">Total Due</div>
-                  <div class="font-bold text-base">{{ asCurrency(posSummary.totalDue) }}</div>
+                  <div class="text-xs opacity-60">Total Payable</div>
+                  <div class="font-bold text-base">{{ asCurrencyWithCents(posSummary.totalDue) }}</div>
                 </div>
                 <div v-if="isSelfPay">
                   <div class="text-xs opacity-60">Change</div>
@@ -2956,14 +2960,16 @@ const normalizePaymentType = (value?: string): string => {
     "debit card": "Debit/Credit",
     "debit/credit": "Debit/Credit",
     "debit / credit": "Debit/Credit",
-    gcash: "E-wallet",
-    maya: "E-wallet",
-    "e-wallet": "E-wallet",
-    "e-wallets": "E-wallet",
-    ewallet: "E-wallet",
-    ewallets: "E-wallet",
-    "e wallet": "E-wallet",
-    "e wallets": "E-wallet",
+    gcash: "QRPH",
+    maya: "QRPH",
+    qrph: "QRPH",
+    "qr ph": "QRPH",
+    "e-wallet": "QRPH",
+    "e-wallets": "QRPH",
+    ewallet: "QRPH",
+    ewallets: "QRPH",
+    "e wallet": "QRPH",
+    "e wallets": "QRPH",
     hmo: "HMO",
     lgu: "LGU",
     other: "Other"
@@ -3427,9 +3433,8 @@ const resetTableFilters = (): void => {
 // â”€â”€ Static options â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const selfPayPaymentOptions = [
   {label: "Cash",     value: "Cash"},
-  {label: "E-wallet", value: "E-wallet"},
   {label: "Debit/Credit", value: "Debit/Credit"},
-  {label: "Other",    value: "Other"},
+  {label: "QRPH", value: "QRPH"},
 ]
 const discountTypeOptions: Array<{label:string;value:DiscountType}> = [
   {label: "Percentage",    value: "PERCENTAGE"},
@@ -3577,6 +3582,14 @@ const asCurrency = (value: unknown) =>
     currency: "PHP",
     minimumFractionDigits: 0,
     maximumFractionDigits: 0
+  })
+
+const asCurrencyWithCents = (value: unknown) =>
+  Number(value ?? 0).toLocaleString("en-PH", {
+    style: "currency",
+    currency: "PHP",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
   })
 
 const selectNumericInputText = (event: Event): void => {
@@ -3913,12 +3926,16 @@ const posSummary = computed(() => {
   const discountAmount = Math.min(subtotal, seniorDiscountAmount + customDiscountAmount)
   const vatableAmount  = Math.max(0, subtotal - discountAmount)
   const vatAmount      = vatEnabled.value ? toWholePeso(vatableAmount * VAT_RATE) : 0
-  const totalDue       = toWholePeso(vatableAmount + vatAmount)
+  const billingTotal   = toWholePeso(vatableAmount + vatAmount)
+  const serviceFeeAmount = form.value.payment_type === "Debit/Credit"
+    ? Number((billingTotal * 0.035).toFixed(2))
+    : 0
+  const totalDue       = billingTotal + serviceFeeAmount
   const tendered       = toWholePeso(form.value.amount_tendered)
   const changeAmount   = Math.max(0, tendered - totalDue)
   // Derive amount_paid from tendered, capped at total due
-  const amountPaid     = Math.min(totalDue, tendered)
-  return {originalSubtotal, subtotal, discountAmount, vatableAmount, vatAmount, totalDue, changeAmount, seniorDiscountAmount, customDiscountAmount, amountPaid}
+  const amountPaid     = Math.min(billingTotal, form.value.payment_type === "Debit/Credit" ? toWholePeso(tendered / 1.035) : tendered)
+  return {originalSubtotal, subtotal, discountAmount, vatableAmount, vatAmount, billingTotal, serviceFeeAmount, totalDue, changeAmount, seniorDiscountAmount, customDiscountAmount, amountPaid}
 })
 
 // â”€â”€ LGU budget helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -4078,7 +4095,7 @@ const createBilling = async (): Promise<void> => {
     service_type: form.value.service_type,
     service_name: form.value.service_name?.trim() || undefined,
     line_items_json: JSON.stringify(lineItemsAsPayload.value),
-    amount_due: summary.totalDue,
+    amount_due: summary.billingTotal,
     // FIX: derive amount_paid from tendered; do not accept a separate field
     amount_paid: summary.amountPaid,
     payment_reference: form.value.payment_type,
@@ -4086,8 +4103,8 @@ const createBilling = async (): Promise<void> => {
     discount_value: manualDiscountEnabled.value ? Number(manualDiscountValue.value ?? 0) : (form.value.senior_pwd_id_presented ? 20 : undefined),
     discount_amount: summary.discountAmount,
     subtotal_amount: summary.subtotal,
-    total_amount: summary.totalDue,
-    amount_tendered: toWholePeso(form.value.amount_tendered),
+    total_amount: summary.billingTotal,
+    amount_tendered: Number(Number(form.value.amount_tendered ?? 0).toFixed(2)),
     change_amount: summary.changeAmount,
     senior_pwd_id_presented: !!form.value.senior_pwd_id_presented,
     senior_pwd_id_reference: form.value.senior_pwd_id_reference?.trim() || undefined,
@@ -4641,6 +4658,11 @@ watch(() => form.value.billing_type, (value) => {
     form.value.payment_type = undefined
   }
   seniorDiscountTargetKey.value = null
+})
+
+watch(() => form.value.payment_type, (value, previous) => {
+  if (!isSelfPay.value || !value || value === previous) return
+  form.value.amount_tendered = posSummary.value.totalDue
 })
 
 // Clear senior discount target if the targeted line is removed

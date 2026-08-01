@@ -165,7 +165,7 @@ const days = computed<MonthlyIncomeExpenseDay[]>(() => report.value?.days ?? [])
 const financeMetrics = computed<Metric[]>(() => [
   { label: "Gross Charges", value: asCurrency(summary.value.gross_income) },
   { label: "Cash", value: asCurrency(summary.value.tendered_cash) },
-  { label: "E-wallets", value: asCurrency(summary.value.tendered_ewallet) },
+  { label: "QRPH", value: asCurrency(summary.value.tendered_ewallet) },
   { label: "Debit/Credit", value: asCurrency(summary.value.tendered_debit_credit) },
   { label: "Outstanding", value: asCurrency(summary.value.outstanding_balance) },
   { label: "Incomplete Billings", value: `${summary.value.incomplete_billing_count} / ${asCurrency(summary.value.incomplete_billing_balance)}` },

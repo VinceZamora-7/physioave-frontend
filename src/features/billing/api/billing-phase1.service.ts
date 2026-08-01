@@ -88,6 +88,7 @@ export interface BillingListItem {
   total_amount?: number
   balance_amount?: number
   amount_tendered?: number
+  service_fee_amount?: number
   change_amount?: number
   pricing_tier?: string
   pricing_source?: string
@@ -220,6 +221,7 @@ export interface BillingRequest {
   total_amount?: number
   balance_amount?: number
   amount_tendered?: number
+  service_fee_amount?: number
   change_amount?: number
   pricing_tier?: string
   pricing_source?: string
