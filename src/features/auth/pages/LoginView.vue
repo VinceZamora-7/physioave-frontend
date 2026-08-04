@@ -197,6 +197,20 @@ import { pamsBaseURL } from "@/utils/axios-interceptor.ts"
 const router = useRouter()
 const isDark = ref(false)
 const loading = ref(false)
+const canonicalPublicOrigin = String(
+  import.meta.env.VITE_CANONICAL_APP_ORIGIN || "https://app.physioave.com"
+).replace(/\/+$/, "")
+
+const redirectToCanonicalPublicApp = (): boolean => {
+  if (!window.location.hostname.toLowerCase().endsWith(".vercel.app")) return false
+
+  const canonicalUrl = new URL(
+    `${window.location.pathname}${window.location.search}${window.location.hash}`,
+    canonicalPublicOrigin
+  )
+  window.location.replace(canonicalUrl.toString())
+  return true
+}
 
 const href = computed(() => {
   const redirectOrigin = encodeURIComponent(window.location.origin)
@@ -228,6 +242,8 @@ const onGoogleContinue = () => {
 }
 
 onMounted(async () => {
+  if (redirectToCanonicalPublicApp()) return
+
   syncIsDark()
 
   const params = new URLSearchParams(window.location.search)
