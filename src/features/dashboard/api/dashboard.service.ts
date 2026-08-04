@@ -145,9 +145,9 @@ export const dashboardService = {
     return data
   },
 
-  async getPtTodayAssignedAppointments(clinicId?: number): Promise<DashboardPtAssignedAppointments | undefined> {
+  async getPtAssignedAppointmentsForDate(date: string, clinicId?: number): Promise<DashboardPtAssignedAppointments | undefined> {
     const {data} = await pamsAPI.get<DashboardPtAssignedAppointments>("/pt-dashboard/assigned-appointments", {
-      params: {today: true, limit: 50, ...branchParams(clinicId)},
+      params: {date, limit: 50, ...branchParams(clinicId)},
     })
     return data
   },

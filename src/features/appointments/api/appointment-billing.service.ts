@@ -112,6 +112,7 @@ export interface PaymentMethodLookup {
 export interface TenderSelfPayBillingPayload {
   amount_tendered: number
   payment_method_id: number
+  apply_service_fee?: boolean
   payment_reference?: string | null
   notes?: string | null
   senior_pwd_id_presented?: boolean

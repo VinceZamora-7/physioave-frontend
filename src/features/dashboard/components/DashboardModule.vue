@@ -1,37 +1,61 @@
 <template>
   <main class="app-page-shell space-y-5">
-    <section v-if="isPtDashboard" class="app-section-card-comfy space-y-4">
-      <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <h2 class="app-section-title">Therapist Dashboard</h2>
-          <p class="app-muted-text text-sm">
-            Weekly and monthly attendance for {{ staffName || "your account" }}
-          </p>
-        </div>
-        <div class="flex flex-wrap items-end gap-2">
-          <span class="app-filter-pill">
-            Branch: {{ selectedClinic?.name || "All branches" }}
-          </span>
-          <Button label="Refresh" icon="pi pi-refresh" severity="secondary" outlined :loading="isLoading" @click="refreshDashboard" />
-        </div>
-      </div>
+    <DailyPatientLogModule v-if="isPtDashboard" />
+    <template v-if="false">
+      <section class="app-appointment-card app-appointment-card-accent p-4 sm:p-5">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div class="space-y-2">
+            <h2 class="app-appointment-title text-xl">My Attendance Dashboard</h2>
+            <p class="app-appointment-muted max-w-2xl text-sm leading-6">
+              View only the schedule assigned to {{ staffName || "your PT account" }}.
+            </p>
+            <div class="flex flex-wrap gap-2 text-xs">
+              <span class="app-appointment-chip">Date: {{ selectedPtDateLabel }}</span>
+              <span class="app-appointment-chip">Branch: {{ selectedClinic?.name || "My assigned branches" }}</span>
+            </div>
+          </div>
 
-      <div v-if="canViewPtAttendance" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <article
-          v-for="item in ptAttendanceCards"
-          :key="item.label"
-          class="app-dashboard-kpi-card"
-          :style="{
-            borderLeftWidth: '4px',
-            borderLeftColor: item.accent,
-            background: `linear-gradient(135deg, ${item.accent}18, rgb(var(--app-surface)), ${item.accent}0a)`
-          }"
-        >
-          <p class="text-xs uppercase tracking-wide opacity-60">{{ item.label }}</p>
-          <p class="mt-1 text-2xl font-semibold" :style="{color: item.accent}">{{ item.value }}</p>
-          <p class="app-muted-text mt-1 text-xs">{{ item.range }}</p>
-        </article>
-      </div>
+          <div class="grid w-full grid-cols-2 gap-3 sm:grid-cols-4 lg:w-auto">
+            <article v-for="item in ptScheduleSummaryCards" :key="item.label" class="app-appointment-summary-card">
+              <p class="app-appointment-muted text-xs font-medium uppercase tracking-wide">{{ item.label }}</p>
+              <p class="app-appointment-value mt-1 text-2xl font-semibold">{{ item.value }}</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section v-if="canViewPtAssignedAppointments" class="app-appointment-card space-y-4 p-4 sm:p-5">
+        <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h3 class="app-appointment-title text-lg">My Schedule</h3>
+            <p class="app-appointment-muted text-sm">Appointments assigned to your logged-in PT account.</p>
+          </div>
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <DatePicker v-model="selectedPtDate" dateFormat="yy-mm-dd" showIcon :manualInput="false" class="w-full sm:w-48" />
+            <Button label="Refresh" icon="pi pi-refresh" severity="secondary" outlined :loading="isLoading" @click="refreshDashboard" />
+          </div>
+        </div>
+
+        <DataTable class="app-data-table" :value="sortedPtSchedule" dataKey="appointment_id" size="small" :loading="isLoading" scrollable>
+          <template #empty><div class="py-10 text-center text-sm opacity-70">No appointments assigned to you for this day.</div></template>
+          <Column header="Time" style="min-width: 170px">
+            <template #body="{ data }">
+              <div class="font-medium">{{ formatTimeRange(data.starts_at, data.ends_at) }}</div>
+              <div class="text-xs opacity-60">{{ formatDateKey(data.starts_at) }}</div>
+            </template>
+          </Column>
+          <Column header="Patient" style="min-width: 240px">
+            <template #body="{ data }">
+              <div class="font-semibold text-[rgb(var(--app-fg))]">{{ data.patient_name || "Unnamed patient" }}</div>
+              <div class="text-xs opacity-60">Patient #{{ data.patient_id }}</div>
+            </template>
+          </Column>
+          <Column field="clinic_name" header="Branch" style="min-width: 200px" />
+          <Column header="Visit Status" style="min-width: 180px">
+            <template #body="{ data }"><Tag :value="data.appointment_status" :severity="ptScheduleStatusSeverity(data.appointment_status)" /></template>
+          </Column>
+        </DataTable>
+      </section>
 
       <article v-if="canViewPtDocumentationReminders" class="app-dashboard-panel space-y-3">
         <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -75,35 +99,6 @@
         </DataTable>
       </article>
 
-      <article v-if="canViewPtAssignedAppointments" class="app-dashboard-panel space-y-3">
-        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h3 class="text-sm font-semibold">Today's Assigned Appointments</h3>
-            <p class="app-muted-text mt-1 text-xs">Appointments assigned to you for today.</p>
-          </div>
-          <Tag
-            :value="`${ptTodayAssignedAppointments.length} assigned`"
-            :severity="ptTodayAssignedAppointments.length > 0 ? 'info' : 'secondary'"
-          />
-        </div>
-
-        <DataTable class="app-data-table" :value="ptTodayAssignedAppointments" size="small" :loading="isLoading">
-          <template #empty>
-            <div class="py-6 text-center text-sm opacity-70">No assigned appointments for today.</div>
-          </template>
-          <Column field="patient_name" header="Patient" />
-          <Column field="starts_at" header="Schedule">
-            <template #body="{ data }">{{ formatTimeRange(data.starts_at, data.ends_at) }}</template>
-          </Column>
-          <Column field="clinic_name" header="Branch" />
-          <Column field="appointment_status" header="Status">
-            <template #body="{ data }">
-              <Tag :value="data.appointment_status" severity="secondary" />
-            </template>
-          </Column>
-        </DataTable>
-      </article>
-
       <div v-if="canViewPtAttendance" class="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <article class="app-dashboard-panel space-y-3">
           <h3 class="text-sm font-semibold">Weekly Attendance</h3>
@@ -135,7 +130,7 @@
       <article v-if="!hasAnyPtDashboardWidget" class="app-dashboard-panel py-8 text-center text-sm opacity-70">
         No dashboard cards are enabled for this position yet.
       </article>
-    </section>
+    </template>
 
     <section v-if="!isPtDashboard" class="app-section-card-comfy  space-y-3">
       <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -394,6 +389,7 @@ import {
 import { clinicStore } from "@/stores/clinic.store"
 import {useAuthSessionStore} from "@/stores/auth-session.store"
 import {isPtAppointmentProvider} from "@/utils/appointment-provider.util"
+import DailyPatientLogModule from "@/features/daily-patient-log/components/DailyPatientLogModule.vue"
 
 const toast = useToast()
 const router = useRouter()
@@ -630,6 +626,40 @@ const ptAttendanceCards = computed(() => [
   },
 ])
 
+const selectedPtDate = ref(new Date())
+const selectedPtDateLabel = computed(() =>
+  selectedPtDate.value.toLocaleDateString("en-PH", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  })
+)
+const sortedPtSchedule = computed(() =>
+  [...ptTodayAssignedAppointments.value].sort(
+    (left, right) => new Date(left.starts_at).getTime() - new Date(right.starts_at).getTime()
+  )
+)
+const ptScheduleSummaryCards = computed(() => {
+  const rows = ptTodayAssignedAppointments.value
+  const isCompleted = (status: string): boolean => /COMPLETED|ATTENDED|DONE/i.test(status)
+  const isCancelled = (status: string): boolean => /CANCELLED|CANCELED|NO SHOW|NO_SHOW/i.test(status)
+  return [
+    {label: "Assigned", value: rows.length},
+    {label: "Completed", value: rows.filter(item => isCompleted(item.appointment_status)).length},
+    {label: "Pending", value: rows.filter(item => !isCompleted(item.appointment_status) && !isCancelled(item.appointment_status)).length},
+    {label: "Canceled", value: rows.filter(item => isCancelled(item.appointment_status)).length},
+  ]
+})
+
+const ptScheduleStatusSeverity = (status: string): "success" | "warn" | "danger" | "info" | "secondary" => {
+  if (/COMPLETED|ATTENDED|DONE/i.test(status)) return "success"
+  if (/CANCELLED|CANCELED|NO SHOW|NO_SHOW/i.test(status)) return "danger"
+  if (/RESCHEDULE/i.test(status)) return "info"
+  if (/PENDING|SCHEDULED/i.test(status)) return "warn"
+  return "secondary"
+}
+
 const openPatientDocumentation = (item: DashboardPtDocumentationReminderItem): void => {
   void router.push({
     name: "patients",
@@ -814,7 +844,9 @@ const loadPtDocumentationReminders = async (): Promise<void> => {
 }
 
 const loadPtTodayAssignedAppointments = async (): Promise<void> => {
-  ptTodayAssignedAppointments.value = (await dashboardService.getPtTodayAssignedAppointments(selectedClinicId.value))?.appointments ?? []
+  ptTodayAssignedAppointments.value = (
+    await dashboardService.getPtAssignedAppointmentsForDate(toDateParam(selectedPtDate.value), selectedClinicId.value)
+  )?.appointments ?? []
 }
 
 let assignmentPollTimer: number | undefined
@@ -952,6 +984,10 @@ watch(selectedClinicId, () => {
   if (!isPtDashboard.value && canViewReferringDoctorSessions.value) {
     void refreshDoctorSessionsReport()
   }
+})
+
+watch(selectedPtDate, () => {
+  if (isPtDashboard.value) void refreshDashboard()
 })
 
 onBeforeUnmount(() => {

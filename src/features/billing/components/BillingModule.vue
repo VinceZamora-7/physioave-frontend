@@ -770,7 +770,7 @@
                   </div>
                 </template>
                 <div v-if="posSummary.serviceFeeAmount > 0">
-                  <div class="text-xs opacity-60">POS Service Fee (3.5%)</div>
+                  <div class="text-xs opacity-60">POS Service Fee ({{ serviceChargeRate }}%)</div>
                   <div class="font-semibold">{{ asCurrencyWithCents(posSummary.serviceFeeAmount) }}</div>
                 </div>
                 <div>
@@ -1854,12 +1854,14 @@ import {useRoute, useRouter} from "vue-router"
 import {storeToRefs} from "pinia"
 import {useQueryClient} from "@tanstack/vue-query"
 import {clinicStore} from "@/stores/clinic.store"
+import {systemSettingsService} from "@/features/general-settings/api/system-settings.service"
 
 const props = withDefaults(defineProps<{embedded?: boolean; overlayOnly?: boolean; initialView?: 'detail' | 'edit'}>(), {embedded: false, overlayOnly: false, initialView: 'edit'})
 const emit = defineEmits<{
   (e: "close-overlay"): void
   (e: "billing-updated", payload: { billingId?: number; appointmentId?: number; billingStatus?: string }): void
 }>()
+const serviceChargeRate = ref(systemSettingsService.getCachedServiceChargeRate())
 
 import Button from "primevue/button"
 import Column from "primevue/column"
@@ -3928,13 +3930,13 @@ const posSummary = computed(() => {
   const vatAmount      = vatEnabled.value ? toWholePeso(vatableAmount * VAT_RATE) : 0
   const billingTotal   = toWholePeso(vatableAmount + vatAmount)
   const serviceFeeAmount = form.value.payment_type === "Debit/Credit"
-    ? Number((billingTotal * 0.035).toFixed(2))
+    ? Number((billingTotal * serviceChargeRate.value / 100).toFixed(2))
     : 0
   const totalDue       = billingTotal + serviceFeeAmount
   const tendered       = toWholePeso(form.value.amount_tendered)
   const changeAmount   = Math.max(0, tendered - totalDue)
   // Derive amount_paid from tendered, capped at total due
-  const amountPaid     = Math.min(billingTotal, form.value.payment_type === "Debit/Credit" ? toWholePeso(tendered / 1.035) : tendered)
+  const amountPaid     = Math.min(billingTotal, form.value.payment_type === "Debit/Credit" ? toWholePeso(tendered / (1 + serviceChargeRate.value / 100)) : tendered)
   return {originalSubtotal, subtotal, discountAmount, vatableAmount, vatAmount, billingTotal, serviceFeeAmount, totalDue, changeAmount, seniorDiscountAmount, customDiscountAmount, amountPaid}
 })
 
@@ -4696,6 +4698,11 @@ watch(editingBillingId, (v) => {
 
 // â”€â”€ Mount â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 onMounted(async () => {
+  serviceChargeRate.value = (
+    await systemSettingsService.getServiceCharge().catch(() => ({
+      rate: systemSettingsService.getCachedServiceChargeRate()
+    }))
+  ).rate
   await loadCurrentUser()
 
   // Initialize billing type filter from route query if present

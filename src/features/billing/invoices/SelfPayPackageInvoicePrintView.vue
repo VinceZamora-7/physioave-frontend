@@ -139,7 +139,7 @@
               </td>
             </tr>
             <tr v-if="serviceFeeAmount > 0" class="invoice-subtotal-row">
-              <td colspan="4" class="text-right">POS Service Fee (3.5%):</td>
+              <td colspan="4" class="text-right">POS Service Fee ({{ serviceChargeRate }}%):</td>
               <td class="text-center">{{ formatCurrency(serviceFeeAmount) }}</td>
             </tr>
             <tr class="grand-total-row">
@@ -201,6 +201,7 @@ import { billingContextTanstackService } from "@/features/billing/queries/billin
 import SponsorInvoiceLayout from "@/features/shared/invoices/SponsorInvoiceLayout.vue"
 import { useHmoInvoicePrintActions } from "@/features/hmo-billing/invoices/hmo-invoice.shared"
 import { BillingTanstackKey } from "@/utils/keys/tanstack-key"
+import { systemSettingsService } from "@/features/general-settings/api/system-settings.service"
 
 type SelfPaySummaryRow = {
   key: string
@@ -306,6 +307,8 @@ const queryClient = useQueryClient()
 const { printPage, goBack } = useHmoInvoicePrintActions()
 
 const billingDetail = ref<BillingListItem | null>(null)
+const serviceChargeRate = ref(systemSettingsService.getCachedServiceChargeRate())
+const combinedBillingDetails = ref<BillingListItem[]>([])
 const rows = ref<SelfPaySummaryRow[]>([])
 const error = ref("")
 
@@ -380,6 +383,23 @@ const billingId = computed(() => {
   const parsed = Number(String(route.query.billing_id ?? route.query.id ?? "").trim())
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 })
+
+const combinedBillingIds = computed(() => {
+  const ids = String(route.query.combined_billing_ids ?? "")
+    .split(",")
+    .map(value => Number(value.trim()))
+    .filter(value => Number.isFinite(value) && value > 0)
+
+  return [...new Set([billingId.value, ...ids])]
+})
+
+const billingDocuments = computed(() =>
+  combinedBillingDetails.value.length
+    ? combinedBillingDetails.value
+    : billingDetail.value
+      ? [billingDetail.value]
+      : []
+)
 
 const firstNonBlank = (...values: unknown[]): string => {
   for (const value of values) {
@@ -632,13 +652,13 @@ const normalizePaymentMethodLabel = (value?: string | null): string => {
 }
 
 const paymentMethodLabel = computed(() =>
-  normalizePaymentMethodLabel(
-    firstNonBlank(
-      billingDetail.value?.payment_method_name,
-      billingDetail.value?.payment_reference,
-      "Self Pay"
-    )
-  )
+  [...new Set(
+    billingDocuments.value
+      .map(billing => normalizePaymentMethodLabel(
+        firstNonBlank(billing.payment_method_name, billing.payment_reference)
+      ))
+      .filter(Boolean)
+  )].join(", ") || "Self Pay"
 )
 
 const paymentReferenceLabel = computed(() =>
@@ -650,6 +670,13 @@ const paymentReferenceLabel = computed(() =>
 )
 
 const amountPaid = computed(() => {
+  if (combinedBillingDetails.value.length > 1) {
+    return combinedBillingDetails.value.reduce(
+      (sum, billing) => sum + Number(billing.amount_paid ?? 0),
+      0
+    )
+  }
+
   const billing = billingDetail.value
   if (billing && isSessionScopedPackageBilling(billing)) {
     const packagePaid = getPackageGroupPaid(billing)
@@ -659,7 +686,12 @@ const amountPaid = computed(() => {
   return Number(billing?.amount_paid ?? 0)
 })
 
-const serviceFeeAmount = computed(() => Number(billingDetail.value?.service_fee_amount ?? 0))
+const serviceFeeAmount = computed(() =>
+  billingDocuments.value.reduce(
+    (sum, billing) => sum + Number(billing.service_fee_amount ?? 0),
+    0
+  )
+)
 
 const dateSigned = computed(() =>
   new Date().toLocaleDateString("en-PH", {
@@ -670,6 +702,13 @@ const dateSigned = computed(() =>
 )
 
 const grandTotal = computed(() => {
+  if (combinedBillingDetails.value.length > 1) {
+    return combinedBillingDetails.value.reduce((sum, billing) => {
+      const total = Number(billing.total_amount ?? billing.amount_due ?? 0)
+      return sum + (Number.isFinite(total) ? total : 0)
+    }, 0)
+  }
+
   const billing = billingDetail.value
   const billingTotal = Number(
     billing?.total_amount ??
@@ -696,13 +735,25 @@ const grandTotal = computed(() => {
 })
 
 const invoiceDiscount = computed(() => {
-  const discount = Number(billingDetail.value?.discount_amount ?? 0)
-  return Number.isFinite(discount) && discount > 0 ? discount : 0
+  return billingDocuments.value.reduce((sum, billing) => {
+    const discount = Number(billing.discount_amount ?? 0)
+    return sum + (Number.isFinite(discount) && discount > 0 ? discount : 0)
+  }, 0)
 })
 
 const hasInvoiceDiscount = computed(() => invoiceDiscount.value > 0)
 
 const invoiceSubtotal = computed(() => {
+  if (combinedBillingDetails.value.length > 1) {
+    return combinedBillingDetails.value.reduce((sum, billing) => {
+      const subtotal = Number(billing.subtotal_amount ?? 0)
+      if (Number.isFinite(subtotal) && subtotal > 0) return sum + subtotal
+      const total = Number(billing.total_amount ?? billing.amount_due ?? 0)
+      const discount = Number(billing.discount_amount ?? 0)
+      return sum + (Number.isFinite(total) ? total : 0) + (Number.isFinite(discount) ? discount : 0)
+    }, 0)
+  }
+
   const subtotal = Number(billingDetail.value?.subtotal_amount ?? 0)
   if (Number.isFinite(subtotal) && subtotal > 0) return subtotal
   return grandTotal.value + invoiceDiscount.value
@@ -1212,6 +1263,7 @@ const buildRows = (billing: BillingListItem): SelfPaySummaryRow[] => {
 const load = async (): Promise<void> => {
   error.value = ""
   billingDetail.value = null
+  combinedBillingDetails.value = []
   rows.value = []
 
   if (!billingId.value) {
@@ -1226,16 +1278,31 @@ const load = async (): Promise<void> => {
     queryClient.removeQueries({
       queryKey: [BillingTanstackKey.BILLING_CONTEXT, billingId.value]
     })
-    const context = await billingContextTanstackService.fetchContext(queryClient, billingId.value)
+    const contexts = await Promise.all(
+      combinedBillingIds.value.map(async id => {
+        await queryClient.invalidateQueries({
+          queryKey: [BillingTanstackKey.BILLING_CONTEXT, id]
+        })
+        queryClient.removeQueries({
+          queryKey: [BillingTanstackKey.BILLING_CONTEXT, id]
+        })
+        return billingContextTanstackService.fetchContext(queryClient, id)
+      })
+    )
+    const details = contexts
+      .map(context => context?.billing)
+      .filter((billing): billing is BillingListItem => Boolean(billing))
+    const mainDetail = details.find(billing => billing.id === billingId.value) ?? null
 
-    billingDetail.value = context?.billing ?? null
+    billingDetail.value = mainDetail
+    combinedBillingDetails.value = details
 
     if (!billingDetail.value) {
       error.value = "Billing record was not found."
       return
     }
 
-    rows.value = buildRows(billingDetail.value)
+    rows.value = details.flatMap(buildRows)
   } catch (err: unknown) {
     error.value = err instanceof Error
       ? err.message
@@ -1244,7 +1311,12 @@ const load = async (): Promise<void> => {
 }
 
 onMounted(() => {
-  void load().then(() => {
+  void Promise.all([
+    load(),
+    systemSettingsService.getServiceCharge().then(setting => {
+      serviceChargeRate.value = setting.rate
+    }).catch(() => undefined)
+  ]).then(() => {
     if (String(route.query.autoprint ?? "1") !== "0") {
       window.setTimeout(() => printPage(), 50)
     }

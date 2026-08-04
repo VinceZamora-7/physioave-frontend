@@ -316,8 +316,8 @@ const userInitials = computed(() =>
 const hasPermissionData = computed(() => permissionSet.value.size > 0)
 
 const ADMIN_NAV_ROUTE_NAMES = [
-  "dashboard", "general-settings", "pt-team-setup", "admin-setup",
-  "clinics", "patients", "billing", "reports",
+  "general-settings", "pt-team-setup", "admin-setup",
+  "clinics", "billing", "reports",
   "promos-offers", "promos-offers-single-service",
   "promos-offers-package-service", "promos-offers-hmo", "promos-offers-lgu",
 ]

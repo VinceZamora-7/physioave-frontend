@@ -15,7 +15,7 @@
             <h3 class="app-appointment-title mt-1 truncate text-xl">{{ appointment.patient_name }}</h3>
             <div class="mt-2 flex flex-wrap gap-2">
               <Tag :value="appointment.appointment_status" :severity="statusSeverity(appointment.appointment_status)" />
-              <Tag :value="formatPayer(appointment.payer_type)" severity="info" />
+              <Tag v-if="canViewFinancialDetails" :value="formatPayer(appointment.payer_type)" severity="info" />
               <Tag :value="displayAppointmentPhase(appointment.appointment_phase)" severity="secondary" />
               <Tag
                 v-if="appointment.reschedule_flag || Number(appointment.reschedule_count ?? 0) > 0"
@@ -48,7 +48,7 @@
         </div>
 
         <div v-show="showScheduleCareTeamStatus" class="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div class="space-y-3 lg:col-span-2">
+          <div class="space-y-3" :class="canViewFinancialDetails ? 'lg:col-span-2' : 'lg:col-span-3'">
             <h5 class="app-appointment-title text-sm">Schedule and Care Team</h5>
             <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
               <DetailField label="Clinic" :value="appointment.clinic_name" />
@@ -62,7 +62,7 @@
             </div>
           </div>
 
-          <div class="space-y-3">
+          <div v-if="canViewFinancialDetails" class="space-y-3">
             <h5 class="app-appointment-title text-sm">Status</h5>
             <DetailField label="Billing Status" :value="appointment.billing_status" />
             <DetailField label="Billing Type" :value="displayBillingType" />
@@ -72,7 +72,7 @@
         </div>
       </section>
 
-      <section v-if="billingPreparation" class="app-appointment-card space-y-3">
+      <section v-if="canViewFinancialDetails && billingPreparation" class="app-appointment-card space-y-3">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h4 class="app-appointment-title text-base">Billing</h4>
@@ -243,6 +243,7 @@ const props = withDefaults(defineProps<{
   canReschedule?: boolean
   canMarkAttendance?: boolean
   canManageServices?: boolean
+  canViewFinancialDetails?: boolean
 }>(), {
   plannedServices: () => [],
   consumedServices: () => [],
@@ -252,7 +253,8 @@ const props = withDefaults(defineProps<{
   canEdit: true,
   canReschedule: true,
   canMarkAttendance: true,
-  canManageServices: true
+  canManageServices: true,
+  canViewFinancialDetails: true
 })
 
 defineEmits<{

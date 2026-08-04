@@ -112,6 +112,7 @@
           filter
         />
         <Select
+          v-if="canManageAppointmentBilling"
           v-model="filters.payerType"
           :options="payerOptionsWithAll"
           optionLabel="label"
@@ -120,6 +121,7 @@
           showClear
         />
         <Select
+          v-if="canManageAppointmentBilling"
           v-model="filters.billingStatus"
           :options="billingStatusOptions"
           optionLabel="label"
@@ -209,6 +211,7 @@
         </Column>
         <Column field="clinic_name" header="Clinic" style="min-width: 160px" />
         <Column
+          v-if="canManageAppointmentBilling"
           field="payer_type"
           header="Billing Type"
           style="min-width: 150px"
@@ -217,7 +220,7 @@
             <Tag :value="formatPayer(data.payer_type)" severity="info" />
           </template>
         </Column>
-        <Column header="Billing Status" style="min-width: 150px">
+        <Column v-if="canManageAppointmentBilling" header="Billing Status" style="min-width: 150px">
           <template #body="{ data }">
             <Tag
               :value="displayBillingStatus(data)"
@@ -315,6 +318,7 @@
       :can-reschedule="canRescheduleSpecificAppointment(detailAppointment)"
       :can-mark-attendance="canMarkAttendance"
       :can-manage-services="canEditAppointment"
+      :can-view-financial-details="canManageAppointmentBilling"
       :is-billing-action-loading="isBillingActionLoading"
       @edit="editFromDetails"
       @reschedule="rescheduleFromDetails"
@@ -579,6 +583,37 @@
 
   </div>
 </div>
+        </section>
+
+        <section v-if="printableExistingBillingDocuments.length" class="app-appointment-card space-y-3">
+          <div>
+            <h4 class="app-appointment-title text-base">Existing Invoices</h4>
+            <p class="app-appointment-muted mt-1 text-sm">Print the original services invoice or any later add-on invoice separately.</p>
+          </div>
+          <div class="space-y-2">
+            <article
+              v-for="document in printableExistingBillingDocuments"
+              :key="document.id"
+              class="flex flex-col gap-3 rounded-lg border border-[rgb(var(--app-border))] bg-[rgb(var(--app-bg-soft))] p-3 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div>
+                <div class="font-semibold">{{ document.document_number || `Document #${document.id}` }}</div>
+                <div class="app-appointment-muted mt-1 text-xs">
+                  {{ document.document_type === 'PACKAGE_INVOICE' ? 'Main services' : isAddOnBillingPricingSource(document.pricing_source) ? 'Add-ons' : formatBillingPreparationStatus(document.document_type) }}
+                  · {{ formatCurrency(document.totals.total) }}
+                  · {{ formatBillingPreparationStatus(document.document_status) }}
+                </div>
+              </div>
+              <Button
+                :label="document.document_type === 'PACKAGE_INVOICE' ? 'Print Main Invoice' : 'Print Invoice'"
+                icon="pi pi-print"
+                size="small"
+                severity="secondary"
+                outlined
+                @click="printExistingBillingDocument(document)"
+              />
+            </article>
+          </div>
         </section>
 
         <section class="app-appointment-card space-y-3">
@@ -852,7 +887,7 @@
               severity="secondary"
               outlined
               :loading="isBillingActionLoading"
-              @click="printAppointmentInvoiceFromBillingDialog"
+              @click="printMainInvoiceFromBillingDialog"
             />
           </div>
 
@@ -949,8 +984,30 @@
             v-if="isDebitCreditPaymentMethod"
             class="grid grid-cols-2 gap-3 rounded-md bg-white px-3 py-2 text-sm"
           >
+            <label class="col-span-2 flex items-center justify-between gap-3 border-b border-[rgb(var(--app-border))] pb-2">
+              <span>
+                <span class="block font-semibold">Add POS service charge</span>
+                <span class="app-appointment-muted text-xs">Automatically adds {{ serviceChargeRate }}% to this card payment.</span>
+              </span>
+              <button
+                type="button"
+                role="switch"
+                :aria-checked="tenderForm.apply_service_fee"
+                :aria-label="tenderForm.apply_service_fee ? 'Disable POS service charge' : 'Enable POS service charge'"
+                class="relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition-colors"
+                :class="tenderForm.apply_service_fee
+                  ? 'border-[rgb(var(--app-primary))] bg-[rgb(var(--app-primary))]'
+                  : 'border-[rgb(var(--app-border))] bg-slate-300'"
+                @click="tenderForm.apply_service_fee = !tenderForm.apply_service_fee"
+              >
+                <span
+                  class="inline-block h-5 w-5 rounded-full bg-white shadow transition-transform"
+                  :class="tenderForm.apply_service_fee ? 'translate-x-6' : 'translate-x-1'"
+                />
+              </button>
+            </label>
             <div>
-              <p class="app-appointment-muted text-xs uppercase tracking-wide">POS Service Fee (3.5%)</p>
+              <p class="app-appointment-muted text-xs uppercase tracking-wide">POS Service Fee ({{ serviceChargeRate }}%)</p>
               <p class="app-appointment-value font-semibold">{{ formatCurrency(tenderPosServiceFee) }}</p>
             </div>
             <div>
@@ -1272,6 +1329,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
+import { systemSettingsService } from "@/features/general-settings/api/system-settings.service";
 import Button from "primevue/button";
 import Column from "primevue/column";
 import DataTable, { type DataTablePageEvent } from "primevue/datatable";
@@ -1451,6 +1509,7 @@ const isDroppingOut = ref(false);
 const isBillingActionLoading = ref(false);
 const isTenderSaving = ref(false);
 const isPaymentMethodsLoading = ref(false);
+const serviceChargeRate = ref(systemSettingsService.getCachedServiceChargeRate());
 const isRescheduling = ref(false);
 const isCopyingLastServices = ref(false);
 const deletingAddOnCreditItemId = ref<number | null>(null);
@@ -1572,6 +1631,7 @@ const form = reactive({
 const tenderForm = reactive({
   amount_tendered: 0 as number | null,
   payment_method_id: null as number | null,
+  apply_service_fee: true,
   payment_reference: "",
   notes: "",
   senior_pwd_id_presented: false,
@@ -2105,8 +2165,8 @@ const isDebitCreditPaymentMethod = computed(() =>
 );
 
 const tenderPosServiceFee = computed(() =>
-  isDebitCreditPaymentMethod.value
-    ? Number((Number(tenderDiscountSummary.value.amountDue ?? 0) * 0.035).toFixed(2))
+  isDebitCreditPaymentMethod.value && tenderForm.apply_service_fee
+    ? Number((Number(tenderDiscountSummary.value.amountDue ?? 0) * serviceChargeRate.value / 100).toFixed(2))
     : 0,
 );
 
@@ -2231,12 +2291,14 @@ const tenderDiscountSummary = computed(() => {
         : customValue
       : 0;
   const requestedDiscount = Math.min(subtotal, seniorDiscount + customDiscount);
-  const discount = requestedDiscount > 0 ? requestedDiscount : existingDiscount;
-  const totalAfterDiscount = Math.max(
-    0,
-    subtotal - discount + Number(document?.totals.tax ?? 0),
-  );
-  const amountDue = Math.max(0, totalAfterDiscount - paid);
+  const hasPendingDiscount = requestedDiscount > 0;
+  const discount = hasPendingDiscount ? requestedDiscount : existingDiscount;
+  const totalAfterDiscount = hasPendingDiscount
+    ? Math.max(0, subtotal - discount + Number(document?.totals.tax ?? 0))
+    : Math.max(0, Number(document?.totals.total ?? subtotal - discount + Number(document?.totals.tax ?? 0)));
+  const amountDue = hasPendingDiscount
+    ? Math.max(0, totalAfterDiscount - paid)
+    : Math.max(0, Number(document?.totals.balance ?? totalAfterDiscount - paid));
   const amountTendered = Number(tenderForm.amount_tendered ?? 0);
   const applied = Math.min(amountDue, Math.max(0, amountTendered));
   return {
@@ -2512,8 +2574,28 @@ const billingPreparationStatusLabel = computed(() =>
       ),
 );
 
-const billingAvailedServices = computed<AppointmentBillingPreparedCharge[]>(
-  () => detailBillingPreparation.value?.availed_services ?? [],
+const mainPackageBillingDocument = computed(() =>
+  detailBillingPreparation.value?.existing_documents.find(
+    (document) => document.document_type === "PACKAGE_INVOICE" && !isVoidBillingDocumentStatus(document.document_status),
+  ) ?? null,
+);
+
+const billingAvailedServices = computed<AppointmentBillingPreparedCharge[]>(() => {
+  const services = detailBillingPreparation.value?.availed_services ?? [];
+  const savedPackageTotal = mainPackageBillingDocument.value?.totals.total;
+  if (savedPackageTotal === undefined) return services;
+
+  return services.map((service) =>
+    normalizeTextToken(service.line_type) === "PACKAGE"
+      ? { ...service, unit_price: Number(savedPackageTotal), line_total: Number(savedPackageTotal) }
+      : service,
+  );
+});
+
+const printableExistingBillingDocuments = computed(() =>
+  (detailBillingPreparation.value?.existing_documents ?? []).filter(
+    (document) => !isVoidBillingDocumentStatus(document.document_status),
+  ),
 );
 
 const billingAddOns = computed<AppointmentBillingPreparedCharge[]>(
@@ -4510,7 +4592,10 @@ const invalidateBillingContext = async (billingDocumentId: number): Promise<void
   });
 };
 
-const openInvoicePrintWindow = (document: AppointmentBillingDocument): void => {
+const openInvoicePrintWindow = (
+  document: AppointmentBillingDocument,
+  combinedBillingDocumentIds: number[] = [],
+): void => {
   const patientId =
     detailAppointment.value?.patient_id ??
     detailBillingPreparation.value?.appointment.patient_id;
@@ -4531,10 +4616,29 @@ const openInvoicePrintWindow = (document: AppointmentBillingDocument): void => {
       billing_id: String(document.id),
       ...(patientId ? { patient_id: String(patientId) } : {}),
       ...(appointmentId ? { appointment_id: String(appointmentId) } : {}),
+      ...(combinedBillingDocumentIds.length > 1
+        ? { combined_billing_ids: combinedBillingDocumentIds.join(",") }
+        : {}),
       autoprint: "1",
     },
   });
   window.open(routeLocation.href, "_blank", "noopener,noreferrer");
+};
+
+const printExistingBillingDocument = (
+  document: AppointmentBillingPreparation["existing_documents"][number],
+): void => {
+  const payerType = detailBillingPreparation.value?.billing_path.payer_type ?? "SELF_PAY_SINGLE";
+  openInvoicePrintWindow({
+    id: document.id,
+    document_number: document.document_number,
+    document_type: document.document_type,
+    document_status: document.document_status,
+    payer_type: payerType,
+    document_date: document.document_date,
+    pricing_source: document.pricing_source,
+    totals: document.totals,
+  });
 };
 
 const buildHmoClaimPayload = () => {
@@ -4821,6 +4925,31 @@ const printAppointmentInvoiceFromBillingDialog = async (): Promise<void> => {
   }
 };
 
+const printMainInvoiceFromBillingDialog = async (): Promise<void> => {
+  const preparation = detailBillingPreparation.value;
+  if (!preparation) return;
+
+  const activeSelfPayInvoices = preparation.existing_documents.filter(
+    (document) =>
+      !isVoidBillingDocumentStatus(document.document_status) &&
+      normalizeTextToken(document.document_type).includes("INVOICE"),
+  );
+  const mainInvoice = activeSelfPayInvoices.find(
+    (document) => normalizeTextToken(document.document_type) === "PACKAGE_INVOICE",
+  );
+
+  if (!mainInvoice) {
+    await printAppointmentInvoiceFromBillingDialog();
+    return;
+  }
+
+  const document = toAppointmentBillingDocument(mainInvoice, preparation);
+  openInvoicePrintWindow(
+    document,
+    activeSelfPayInvoices.map((invoice) => invoice.id),
+  );
+};
+
 const removeSavedTenderDiscount = async (): Promise<void> => {
   const document = activeTenderDocument.value;
   if (!document) {
@@ -4892,6 +5021,7 @@ const openTenderDialog = async (
   tenderForm.amount_tendered = 0;
   tenderForm.payment_method_id = paymentMethods.value[0]?.id ?? null;
   tenderForm.payment_reference = "";
+  tenderForm.apply_service_fee = true;
   showTenderDiscount.value = null;
   showTenderNotes.value = null;
   tenderBillingDocument.value = document;
@@ -4968,6 +5098,7 @@ const submitTenderPayment = async (): Promise<void> => {
       {
         amount_tendered: amountTendered,
         payment_method_id: tenderForm.payment_method_id,
+        apply_service_fee: tenderForm.apply_service_fee,
         payment_reference: isQrphPaymentMethod.value
           ? paymentReference
           : null,
@@ -5045,7 +5176,7 @@ watch(
 );
 
 watch(
-  () => tenderForm.payment_method_id,
+  () => [tenderForm.payment_method_id, tenderForm.apply_service_fee],
   () => {
     if (!tenderVisible.value || !tenderBillingDocument.value) return;
     tenderForm.amount_tendered = isDebitCreditPaymentMethod.value
@@ -5864,6 +5995,11 @@ const undoDropOutActiveAppointment = async (): Promise<void> => {
 
 onMounted(async () => {
   try {
+    serviceChargeRate.value = (
+      await systemSettingsService.getServiceCharge().catch(() => ({
+        rate: systemSettingsService.getCachedServiceChargeRate(),
+      }))
+    ).rate;
     await branchStore.initializeFromAuthSession();
     await loadLookups();
     resetForm();

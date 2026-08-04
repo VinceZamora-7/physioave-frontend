@@ -26,6 +26,42 @@
 
     <Message v-if="loadError" severity="error" :closable="false">{{ loadError }}</Message>
 
+    <section class="app-section-card-comfy space-y-4">
+      <div>
+        <h3 class="app-section-title">Payment Service Charge</h3>
+        <p class="text-sm opacity-70">
+          Set the percentage automatically added when Debit/Credit payment uses the POS service charge.
+        </p>
+      </div>
+
+      <div class="flex max-w-xl flex-col gap-3 sm:flex-row sm:items-end">
+        <div class="flex-1">
+          <label for="service-charge-rate" class="mb-1 block text-sm font-medium">Service charge rate</label>
+          <InputNumber
+            id="service-charge-rate"
+            v-model="serviceChargeRate"
+            suffix="%"
+            :min="0"
+            :max="100"
+            :minFractionDigits="0"
+            :maxFractionDigits="4"
+            :disabled="!isOwner || savingServiceCharge"
+          />
+        </div>
+        <Button
+          v-if="isOwner"
+          label="Save Service Charge"
+          icon="pi pi-save"
+          :loading="savingServiceCharge"
+          :pt="ptPrimaryBtn"
+          @click="saveServiceCharge"
+        />
+      </div>
+      <Message v-if="!isOwner" severity="info" :closable="false">
+        Only the Owner account can change this setting.
+      </Message>
+    </section>
+
     <section v-if="canClearAppointmentsAndBillings" class="app-section-card-comfy space-y-4 border-red-200/80 bg-red-50/60 dark:border-red-900/40 dark:bg-red-950/20">
       <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
@@ -319,6 +355,7 @@ import { storeToRefs } from "pinia"
 import Button from "primevue/button"
 import ConfirmDialog from "primevue/confirmdialog"
 import Message from "primevue/message"
+import InputNumber from "primevue/inputnumber"
 import Tag from "primevue/tag"
 import { useConfirm } from "primevue/useconfirm"
 import { useToast } from "primevue/usetoast"
@@ -331,6 +368,7 @@ import ModeOfReferralManagerDialog from "@/features/general-settings/components/
 import ExpenseItemManagerDialog from "@/features/general-settings/components/ExpenseItemManagerDialog.vue"
 import MedicalReferenceManagerDialog from "@/features/general-settings/components/MedicalReferenceManagerDialog.vue"
 import EvaluationDropdownManagerDialog from "@/features/general-settings/components/EvaluationDropdownManagerDialog.vue"
+import { systemSettingsService } from "@/features/general-settings/api/system-settings.service"
 
 const authSession = useAuthSessionStore()
 const { currentUser } = storeToRefs(authSession)
@@ -339,6 +377,8 @@ const toast = useToast()
 
 const loadError = ref("")
 const clearingAppointmentsAndBillings = ref(false)
+const serviceChargeRate = ref(3.5)
+const savingServiceCharge = ref(false)
 const modeOfReferralManager = ref<InstanceType<typeof ModeOfReferralManagerDialog> | null>(null)
 const expenseItemManager = ref<InstanceType<typeof ExpenseItemManagerDialog> | null>(null)
 const medicalCategoryManager = ref<InstanceType<typeof MedicalReferenceManagerDialog> | null>(null)
@@ -346,6 +386,20 @@ const medicalDiagnosisManager = ref<InstanceType<typeof MedicalReferenceManagerD
 const ptCaseImpressionManager = ref<InstanceType<typeof MedicalReferenceManagerDialog> | null>(null)
 const evaluationDropdownManager = ref<InstanceType<typeof EvaluationDropdownManagerDialog> | null>(null)
 const clearConfirmationPhrase = "CLEAR_APPOINTMENTS_AND_BILLINGS"
+const isOwner = computed(() => currentUser.value?.role_name?.trim().toLowerCase() === "owner")
+
+const saveServiceCharge = async (): Promise<void> => {
+  savingServiceCharge.value = true
+  try {
+    const setting = await systemSettingsService.updateServiceCharge(Number(serviceChargeRate.value ?? 0))
+    serviceChargeRate.value = setting.rate
+    toast.add({ severity: "success", summary: "Service charge updated", detail: `Debit/Credit service charge is now ${setting.rate}%.`, life: 3500 })
+  } catch (error) {
+    toast.add({ severity: "error", summary: "Update failed", detail: extractApiErrorMessage(error, "Failed to update service charge"), life: 5000 })
+  } finally {
+    savingServiceCharge.value = false
+  }
+}
 
 const canClearAppointmentsAndBillings = computed(() => {
   const permissions = currentUser.value?.permissions ?? []
@@ -421,6 +475,7 @@ const confirmClearAppointmentsAndBillings = (): void => {
 onMounted(async () => {
   try {
     await authSession.ensureLoaded()
+    serviceChargeRate.value = (await systemSettingsService.getServiceCharge()).rate
   } catch {
     loadError.value = "Could not load account information."
   }

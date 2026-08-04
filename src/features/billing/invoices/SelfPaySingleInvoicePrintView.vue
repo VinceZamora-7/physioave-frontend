@@ -139,7 +139,7 @@
               </td>
             </tr>
             <tr v-if="serviceFeeAmount > 0" class="invoice-subtotal-row">
-              <td colspan="4" class="text-right">POS Service Fee (3.5%):</td>
+              <td colspan="4" class="text-right">POS Service Fee ({{ serviceChargeRate }}%):</td>
               <td class="text-center">{{ formatCurrency(serviceFeeAmount) }}</td>
             </tr>
             <tr class="grand-total-row">
@@ -201,6 +201,7 @@ import { billingContextTanstackService } from "@/features/billing/queries/billin
 import SponsorInvoiceLayout from "@/features/shared/invoices/SponsorInvoiceLayout.vue"
 import { useHmoInvoicePrintActions } from "@/features/hmo-billing/invoices/hmo-invoice.shared"
 import { BillingTanstackKey } from "@/utils/keys/tanstack-key"
+import { systemSettingsService } from "@/features/general-settings/api/system-settings.service"
 
 type SelfPaySummaryRow = {
   key: string
@@ -302,6 +303,7 @@ const queryClient = useQueryClient()
 const { printPage, goBack } = useHmoInvoicePrintActions()
 
 const billingDetail = ref<BillingListItem | null>(null)
+const serviceChargeRate = ref(systemSettingsService.getCachedServiceChargeRate())
 const rows = ref<SelfPaySummaryRow[]>([])
 const error = ref("")
 
@@ -1091,7 +1093,12 @@ const load = async (): Promise<void> => {
 }
 
 onMounted(() => {
-  void load().then(() => {
+  void Promise.all([
+    load(),
+    systemSettingsService.getServiceCharge().then(setting => {
+      serviceChargeRate.value = setting.rate
+    }).catch(() => undefined)
+  ]).then(() => {
     if (String(route.query.autoprint ?? "1") !== "0") {
       window.setTimeout(() => printPage(), 50)
     }
